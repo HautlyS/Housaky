@@ -5,7 +5,7 @@ edition.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Distributed consensus protocol"
+description = "Distributed consensus protocol with quantum-inspired voting and learning"
 
 [dependencies]
 tokio = { workspace = true }
@@ -15,6 +15,9 @@ anyhow = { workspace = true }
 tracing = { workspace = true }
 blake3 = { workspace = true }
 ed25519-dalek = { workspace = true }
+chrono = { workspace = true }
+uuid = { workspace = true }
+rand = { workspace = true }
 housaky-core = { path = "../housaky-core" }
 housaky-p2p = { path = "../housaky-p2p" }
 

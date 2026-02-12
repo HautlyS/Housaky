@@ -5,7 +5,7 @@ edition.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Self-improvement and code evolution system"
+description = "Self-improvement and code evolution system with singularity detection"
 
 [dependencies]
 tokio = { workspace = true }
@@ -17,7 +17,9 @@ rayon = { workspace = true }
 tokio-util = { workspace = true }
 housaky-core = { path = "../housaky-core" }
 tempfile = "3"
-# AST manipulation
+blake3 = { workspace = true }
+chrono = { workspace = true }
+uuid = { workspace = true }
 syn = { version = "2.0", features = ["full", "visit", "visit-mut", "fold"] }
 quote = "1.0"
 proc-macro2 = "1.0"

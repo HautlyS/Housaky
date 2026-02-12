@@ -5,7 +5,7 @@ edition.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Core quantum-inspired primitives and state management"
+description = "Core quantum-inspired primitives and state management for AGI"
 
 [dependencies]
 tokio = { workspace = true }
@@ -19,6 +19,8 @@ blake3 = { workspace = true }
 ed25519-dalek = { workspace = true }
 rand = { workspace = true }
 hex = { workspace = true }
+chrono = { workspace = true }
+uuid = { workspace = true }
 
 [dev-dependencies]
 tokio-test = "0.4"

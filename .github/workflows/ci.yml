@@ -8,6 +8,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 1
 
 jobs:
   test:
@@ -18,40 +19,38 @@ jobs:
       
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
-        
-      - name: Cache cargo registry
-        uses: actions/cache@v3
+      
+      - name: Cache cargo
+        uses: actions/cache@v4
         with:
-          path: ~/.cargo/registry
-          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
-          
-      - name: Cache cargo index
-        uses: actions/cache@v3
-        with:
-          path: ~/.cargo/git
-          key: ${{ runner.os }}-cargo-git-${{ hashFiles('**/Cargo.lock') }}
-          
-      - name: Cache target
-        uses: actions/cache@v3
-        with:
-          path: target
-          key: ${{ runner.os }}-target-${{ hashFiles('**/Cargo.lock') }}
-          
-      - name: Build
-        run: cargo build --release --verbose
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: test-cargo-${{ hashFiles('**/Cargo.lock') }}-${{ hashFiles('**/*.rs') }}
+          restore-keys: |
+            test-cargo-${{ hashFiles('**/Cargo.lock') }}-
+            test-cargo-
+      
+      - name: Build workspace
+        run: cargo build --workspace --verbose
         
       - name: Run tests
-        run: cargo test --release --verbose
+        run: cargo test --workspace --verbose
         
       - name: Check formatting
-        run: cargo fmt -- --check
+        run: cargo fmt --all -- --check
         
       - name: Run clippy
-        run: cargo clippy --release -- -D warnings
+        run: cargo clippy --workspace --all-targets -- -D warnings
 
   build:
-    name: Build
+    name: Build (${{ matrix.os }})
+    needs: test
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
@@ -60,17 +59,32 @@ jobs:
       
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
-        
+      
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ matrix.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}-${{ hashFiles('**/*.rs') }}
+          restore-keys: |
+            ${{ matrix.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}-
+            ${{ matrix.os }}-cargo-
+      
       - name: Build release
-        run: cargo build --release --verbose
-        
+        run: cargo build --release --workspace --verbose
+      
       - name: Upload artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: housaky-${{ matrix.os }}
           path: |
             target/release/housaky
             target/release/housaky.exe
+          if-no-files-found: ignore
 
   security:
     name: Security Audit
@@ -78,8 +92,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
+      - name: Cache cargo-audit
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/cargo-audit
+          key: ${{ runner.os }}-cargo-audit
+      
       - name: Install cargo-audit
-        run: cargo install cargo-audit
+        run: cargo install cargo-audit --locked || true
         
       - name: Run security audit
         run: cargo audit
