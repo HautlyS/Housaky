@@ -155,7 +155,7 @@ jobs:
           restore-keys: android-${{ matrix.target }}-cargo-
       
       - name: Build
-        run: cargo build --release --target ${{ matrix.target }}
+        run: cargo build --release --target ${{ matrix.target }} --no-default-features --features metrics
         env:
           ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
       
@@ -208,7 +208,7 @@ jobs:
           restore-keys: ios-${{ matrix.target }}-cargo-
       
       - name: Build
-        run: cargo build --release --target ${{ matrix.target }}
+        run: cargo build --release --target ${{ matrix.target }} --no-default-features --features metrics
       
       - name: Package artifact
         run: |

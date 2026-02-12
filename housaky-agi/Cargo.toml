@@ -1,0 +1,24 @@
+[package]
+name = "housaky-agi"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Integrated AGI system with quantum consciousness and self-improvement"
+
+[dependencies]
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+chrono = { workspace = true }
+uuid = { workspace = true }
+rand = { workspace = true }
+housaky-core = { path = "../housaky-core" }
+housaky-evolution = { path = "../housaky-evolution" }
+housaky-consensus = { path = "../housaky-consensus" }
+
+[dev-dependencies]
+tokio-test = "0.4"

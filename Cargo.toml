@@ -29,7 +29,7 @@ rayon = "1.10"
 
 # Image processing
 image = "0.25"
-nokhwa = { version = "0.10", features = ["input-native"] }
+nokhwa = { version = "0.10", features = ["input-native"], optional = true }
 
 # Cryptography
 blake3 = "1.5"
@@ -68,9 +68,9 @@ wasm-bindgen = { version = "0.2", optional = true }
 default = ["metrics"]
 metrics = ["dep:metrics", "dep:metrics-exporter-prometheus"]
 web = ["dep:wasm-bindgen"]
-full = ["metrics", "web"]
+camera = ["dep:nokhwa"]
+full = ["metrics", "web", "camera"]
 full-crypto = []
-camera = []
 
 [profile.dev]
 opt-level = 0
