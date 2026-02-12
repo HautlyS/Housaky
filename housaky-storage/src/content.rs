@@ -46,7 +46,7 @@ pub mod multihash {
     }
 
     /// Decode multihash
-    pub fn decode(data: &[u8]) -> Result<(HashCode, Vec<u8>)> {
+    pub fn decode(data: &[u8]) -> anyhow::Result<(HashCode, Vec<u8>)> {
         let (code, offset) = decode_varint(data)?;
         let (length, offset2) = decode_varint(&data[offset..])?;
         let offset = offset + offset2;
@@ -76,7 +76,7 @@ pub mod multihash {
     }
 
     /// Decode varint from buffer
-    fn decode_varint(data: &[u8]) -> Result<(u64, usize)> {
+    fn decode_varint(data: &[u8]) -> anyhow::Result<(u64, usize)> {
         let mut result: u64 = 0;
         let mut shift = 0;
         let mut i = 0;
@@ -205,7 +205,7 @@ pub mod cid {
         }
 
         /// Parse CID from string
-        pub fn from_str(s: &str) -> Result<Self> {
+        pub fn from_str(s: &str) -> anyhow::Result<Self> {
             if s.len() == 46 && s.starts_with("Qm") {
                 // CID v0 (base58btc)
                 let bytes = bs58::decode(s).into_vec()?;
@@ -400,12 +400,13 @@ impl StorageClient {
 
             match self.http_client.get(&url).send().await {
                 Ok(response) if response.status().is_success() => {
-                    let data = response.bytes().await?;
+                    let data_bytes = response.bytes().await?;
+                    let data = data_bytes.to_vec();
 
                     // Verify hash
                     let hash = blake3::hash(&data);
                     if hash.as_bytes() == &address.hash {
-                        return Ok(data.to_vec());
+                        return Ok(data);
                     }
                 }
                 _ => continue,

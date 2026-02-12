@@ -9,6 +9,9 @@ description = "Distributed consensus protocol with quantum-inspired voting and l
 
 [dependencies]
 tokio = { workspace = true }
+tokio-util = "0.7"
+bytes = "1.0"
+metrics = "0.21"
 serde = { workspace = true }
 serde_json = { workspace = true }
 anyhow = { workspace = true }
@@ -18,8 +21,9 @@ ed25519-dalek = { workspace = true }
 chrono = { workspace = true }
 uuid = { workspace = true }
 rand = { workspace = true }
+futures = "0.3"
 housaky-core = { path = "../housaky-core" }
-housaky-p2p = { path = "../housaky-p2p" }
+serde_bytes = "0.11"
 
 [dev-dependencies]
 tokio-test = "0.4"

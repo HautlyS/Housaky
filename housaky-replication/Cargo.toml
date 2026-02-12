@@ -13,8 +13,8 @@ serde = { workspace = true }
 anyhow = { workspace = true }
 tracing = { workspace = true }
 housaky-core = { path = "../housaky-core" }
-housaky-p2p = { path = "../housaky-p2p" }
 housaky-storage = { path = "../housaky-storage" }
+reed-solomon-erasure = "6.0"
 
 [dev-dependencies]
 tokio-test = "0.4"

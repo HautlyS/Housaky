@@ -13,10 +13,7 @@ members = [
     "housaky-core",
     "housaky-evolution",
     "housaky-consensus",
-    "housaky-p2p",
     "housaky-storage",
-    "housaky-security",
-    "housaky-api",
     "housaky-rlm",
     "housaky-photonics",
     "housaky-lifi",
@@ -27,9 +24,16 @@ members = [
     "housaky-energy",
     "housaky-verification",
     "housaky-photon-db",
-    "housaky-llm",
-    "housaky-network",
+    "housaky-api",
+    "housaky-p2p",
+    "housaky-security",
     "housaky-agi",
+    "housaky-reasoning",
+    "housaky-swarm",
+    "housaky-neuromorphic",
+    "housaky-network",
+    "housaky-llm",
+    "housaky-multimodal",
 ]
 
 [workspace.package]
@@ -58,13 +62,6 @@ chrono = { version = "0.4", features = ["serde"] }
 clap = { version = "4.5", features = ["derive"] }
 async-trait = "0.1"
 hex = "0.4"
-libp2p = { version = "0.53", features = ["gossipsub", "kad", "mdns", "noise", "tcp", "tokio", "yamux"] }
-tokenizers = "0.15"
-tempfile = "3"
-syn = { version = "2.0", features = ["full", "visit", "visit-mut", "fold"] }
-quote = "1.0"
-proc-macro2 = "1.0"
-quinn = "0.10"
 futures = "0.3"
 
 [[bin]]
@@ -93,8 +90,15 @@ image = "0.25"
 housaky-core = { path = "housaky-core" }
 housaky-evolution = { path = "housaky-evolution" }
 housaky-consensus = { path = "housaky-consensus" }
+housaky-api = { path = "housaky-api" }
+housaky-p2p = { path = "housaky-p2p" }
+housaky-storage = { path = "housaky-storage" }
+housaky-rlm = { path = "housaky-rlm" }
+housaky-reasoning = { path = "housaky-reasoning" }
+housaky-agi = { path = "housaky-agi" }
 housaky-llm = { path = "housaky-llm" }
-housaky-network = { path = "housaky-network" }
+housaky-energy = { path = "housaky-energy" }
+housaky-lifi = { path = "housaky-lifi" }
 
 [features]
 default = []
@@ -140,4 +144,3 @@ inherits = "release"
 lto = "fat"
 codegen-units = 1
 panic = "abort"
-

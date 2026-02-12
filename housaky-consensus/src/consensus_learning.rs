@@ -300,7 +300,7 @@ impl QuantumVoting {
         Self {
             superposition_weights: HashMap::new(),
             entanglement_matrix: vec![vec![0.0; size]; size],
-            coherence_threshold: QUANTUM_COHERENCE_MIN,
+			coherence_threshold: 0.5,
         }
     }
 
@@ -392,10 +392,9 @@ impl ConsensusLearningEngine {
         (engine, rx)
     }
 
-    pub fn create_proposal(
+    pub async fn create_proposal(
         &mut self,
-        content: Vec<u8>,
-        proposal_type: ProposalType,
+        proposal: Proposal,
     ) -> Result<String> {
         let proposal = Proposal::new(
             self.config.node_id.clone(),

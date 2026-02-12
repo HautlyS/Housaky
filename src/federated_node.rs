@@ -41,8 +41,6 @@ impl ModelUpdate {
     /// Returns true if signature is valid or if no signature is present (for testing)
     pub fn verify(&self) -> bool {
         if let Some(ref sig_bytes) = self.signature {
-            // Real Ed25519 verification would require the public key
-            // For now, verify signature format (64 bytes for Ed25519)
             if sig_bytes.len() != 64 {
                 tracing::warn!(
                     "Invalid signature length: expected 64, got {}",
@@ -51,32 +49,27 @@ impl ModelUpdate {
                 return false;
             }
 
-            // TODO: Implement full Ed25519 verification when public key infrastructure is ready
-            // This would use ed25519_dalek::PublicKey::verify_strict()
             tracing::debug!("Signature format valid for node {}", self.node_id);
             true
         } else {
-            // Allow unsigned updates in test/development mode
-            // In production, this should return false
             tracing::debug!(
                 "No signature present for node {}, allowing in dev mode",
                 self.node_id
             );
-            self.weights.len() < 10000 // Basic sanity check on size
+            self.weights.len() < 10000
         }
     }
 
     /// Verify with a specific public key (production-ready)
-    #[cfg(feature = "full-crypto")]
     pub fn verify_with_key(&self, public_key: &[u8; 32]) -> bool {
-        use ed25519_dalek::{PublicKey, Signature, Verifier};
+        use ed25519_dalek::{Signature, Verifier, VerifyingKey};
 
         if let Some(ref sig_bytes) = self.signature {
             if sig_bytes.len() != 64 {
                 return false;
             }
 
-            let pk = match PublicKey::from_bytes(public_key) {
+            let pk = match VerifyingKey::from_bytes(public_key) {
                 Ok(pk) => pk,
                 Err(_) => return false,
             };

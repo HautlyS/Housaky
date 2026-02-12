@@ -16,7 +16,10 @@ anyhow = { workspace = true }
 tracing = { workspace = true }
 futures = { workspace = true }
 async-trait = { workspace = true }
+uuid = { workspace = true }
+rand = { workspace = true }
 housaky-core = { path = "../housaky-core" }
+libp2p = { version = "0.54", features = ["tcp", "noise", "yamux", "gossipsub", "kad", "identify", "ping"] }
 
 [dev-dependencies]
 tokio-test = "0.4"

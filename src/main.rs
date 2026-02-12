@@ -64,6 +64,17 @@ use photon_detector::PseudoQubit;
 use quantum_state::QuantumInspiredState;
 use reasoning::ReasoningEngine;
 
+// External crate imports
+use housaky_api::ApiState;
+use housaky_agi::AGIOrchestrator;
+use housaky_core::{init as init_core, QuantumState};
+use housaky_consensus::ConsensusLearning;
+use housaky_evolution::DarwinGodelMachine;
+use housaky_llm::QuantumLLM;
+use housaky_p2p::{DiscoveryService, GossipHandler};
+use housaky_reasoning::{ChainOfThoughtEngine, ConsciousnessDetector};
+use housaky_storage::ShardManager;
+
 /// Command line arguments
 #[derive(Parser, Debug)]
 #[command(name = "housaky")]
@@ -303,6 +314,9 @@ async fn run_agi_system(
     _event_tx: mpsc::Sender<SystemEvent>,
     shutdown_flag: Arc<AtomicBool>,
 ) -> Result<()> {
+    // Initialize core
+    init_core();
+    
     // Initialize quantum state
     let quantum_state = QuantumInspiredState::new(256);
     tracing::info!(
@@ -313,6 +327,14 @@ async fn run_agi_system(
     // Initialize reasoning engine
     let _reasoning = ReasoningEngine::new();
     tracing::info!("Reasoning engine initialized");
+    
+    // Initialize advanced reasoning
+    let cot_engine = ChainOfThoughtEngine::new();
+    tracing::info!("Chain-of-thought reasoning initialized");
+    
+    // Initialize consciousness detector
+    let consciousness = ConsciousnessDetector::new();
+    tracing::info!("Consciousness detection initialized");
 
     // Initialize blockchain
     let mut blockchain = Blockchain::new();
@@ -324,6 +346,21 @@ async fn run_agi_system(
         "Code evolver initialized (sandbox: {})",
         evolver.is_sandbox_enabled()
     );
+    
+    // Initialize P2P components
+    let gossip_handler = GossipHandler::new();
+    let discovery_service = if let Some(ref peers) = args.peers {
+        DiscoveryService::with_bootstrap(
+            peers.split(',').map(|s| s.trim().to_string()).collect()
+        )
+    } else {
+        DiscoveryService::new()
+    };
+    tracing::info!("P2P networking initialized");
+    
+    // Initialize storage
+    let shard_manager = ShardManager::default();
+    tracing::info!("Storage sharding initialized with {} shards", shard_manager.shard_count());
 
     // Add initial transaction
     blockchain.add_transaction(Transaction {
@@ -379,18 +416,21 @@ async fn run_agi_system(
             .await
             .map_err(|e| anyhow::anyhow!("Federated node error: {}", e))?;
     } else {
-        // Run in standalone mode
-        tracing::info!("Running in standalone mode");
+        // Run in standalone mode with full AGI integration
+        tracing::info!("Running in standalone AGI mode");
 
         // Simulate quantum operations
         let state = QuantumInspiredState::new(256);
 
-        // Run main loop
+        // Run main loop with integrated components
         let mut interval = tokio::time::interval(Duration::from_secs(1));
+        let mut tick_count = 0u64;
 
         while !shutdown_flag.load(Ordering::SeqCst) {
             tokio::select! {
                 _ = interval.tick() => {
+                    tick_count += 1;
+                    
                     // Perform quantum computation
                     let _result = state.superposition_compute(|i| {
                         (i as f64).sin() * 0.01
@@ -400,6 +440,18 @@ async fn run_agi_system(
                     if rand::random::<f64>() < 0.1 {
                         let idx = state.measure();
                         tracing::debug!("Measured state: {}", idx);
+                    }
+                    
+                    // Periodic consciousness check
+                    if tick_count % 10 == 0 {
+                        let phi = consciousness.calculate_phi(&[0.5, 0.3, 0.2]);
+                        tracing::debug!("Consciousness Phi: {:.3}", phi);
+                    }
+                    
+                    // Periodic reasoning
+                    if tick_count % 5 == 0 {
+                        let _chain = cot_engine.reason("system_status");
+                        tracing::debug!("Reasoning cycle completed");
                     }
                 }
                 _ = tokio::time::sleep(Duration::from_millis(100)) => {

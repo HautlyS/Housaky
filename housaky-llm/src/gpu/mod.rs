@@ -1,327 +1,405 @@
-//! GPU-accelerated LLM inference engine for distributed computing
+//! GPU-accelerated tensor operations and distributed computing framework
 //! 
-//! This module implements GPU-accelerated LLM inference using CUDA and
-//! provides distributed inference capabilities across multiple GPU nodes.
+//! This module provides GPU-accelerated tensor operations using CUDA and
+//! OpenCL, along with distributed computing capabilities for large-scale
+//! AGI computations across multiple GPU nodes.
 
 use anyhow::Result;
-use async_trait::async_trait;
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::{RwLock, Mutex};
-use tracing::{info, error, debug};
+use tokio::sync::RwLock;
+use tracing::{info, debug, error};
 use log::LevelFilter;
 use thiserror::Error;
 
 #[cfg(feature = "cuda")]
 use rust_cuda::prelude::*;
 #[cfg(feature = "cuda")]
-use tch::Device;
+use tch::Tensor;
+#[cfg(feature = "opencl")]
+use ocl::{ProQue, Buffer, Context};
 
-pub mod gpu_kernels;
-pub mod distributed;
-pub mod quantization;
-pub mod kv_cache;
+#[cfg(feature = "cuda")]
+pub mod cuda_tensor;
+#[cfg(feature = "opencl")]
+pub mod opencl_tensor;
+pub mod distributed_computing;
+pub mod gpu_cluster;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GPUConfig {
     pub device_id: usize,
-    pub stream_count: usize,
-    pub batch_size: usize,
-    pub max_tokens_per_batch: usize,
-    pub enable_quantization: bool,
-    pub quantization_type: quantization::QuantizationType,
-    pub enable_kv_cache: bool,
+    pub compute_backend: ComputeBackend,
+    pub memory_limit_gb: f64,
+    pub enable_mixed_precision: bool,
     pub enable_parallel_streams: bool,
-}
-
-impl Default for GPUConfig {
-    fn default() -> Self {
-        Self {
-            device_id: 0,
-            stream_count: 4,
-            batch_size: 256,
-            max_tokens_per_batch: 2048,
-            enable_quantization: true,
-            quantization_type: quantization::QuantizationType::INT8,
-            enable_kv_cache: true,
-            enable_parallel_streams: true,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GPUInferenceRequest {
-    pub prompt: String,
-    pub max_tokens: usize,
-    pub temperature: f32,
-    pub top_p: f32,
-    pub top_k: usize,
-    pub stop_tokens: Vec<u32>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GPUInferenceResponse {
-    pub text: String,
-    pub tokens: Vec<u32>,
-    pub logprobs: Vec<f32>,
-    pub finish_reason: FinishReason,
-    pub usage: TokenUsage,
-    pub latency_ms: u64,
+    pub enable_distributed: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub enum FinishReason {
-    Stop,
-    Length,
-    ContentFilter,
-    GPU_OOM,
-    CUDA_Error,
+pub enum ComputeBackend {
+    CUDA,
+    OpenCL,
+    Hybrid,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TokenUsage {
-    pub prompt_tokens: usize,
-    pub completion_tokens: usize,
-    pub total_tokens: usize,
+pub struct TensorOperation {
+    pub op_type: TensorOperationType,
+    pub inputs: Vec<TensorRef>,
+    pub output: TensorRef,
+    pub parameters: HashMap<String, f64>,
 }
 
-#[async_trait]
-pub trait GPUInferenceBackend: Send + Sync {
-    async fn generate(&self, request: &GPUInferenceRequest) -> Result<GPUInferenceResponse>;
-    async fn generate_batch(&self, requests: Vec<GPUInferenceRequest>) -> Result<Vec<GPUInferenceResponse>>;
-    async fn embed(&self, text: &str) -> Result<Vec<f32>>;
-    async fn get_device_info(&self) -> Result<GPUDeviceInfo>;
-    fn is_available(&self) -> bool;
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum TensorOperationType {
+    Add,
+    Multiply,
+    MatMul,
+    Conv2D,
+    Attention,
+    ReduceSum,
+    ReduceMean,
+    Transpose,
+    Slice,
+    Concat,
+    Split,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TensorRef {
+    pub id: String,
+    pub shape: Vec<usize>,
+    pub dtype: TensorDataType,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum TensorDataType {
+    Float32,
+    Float16,
+    Int32,
+    Int64,
+    Bool,
+}
+
+#[derive(Debug, Error)]
+pub enum GPUComputeError {
+    #[error("CUDA error: {0}")]
+    CudaError(String),
+    #[error("OpenCL error: {0}")]
+    OpenCLError(String),
+    #[error("Tensor shape mismatch: expected {expected:?}, got {actual:?}")]
+    ShapeMismatch { expected: Vec<usize>, actual: Vec<usize> },
+    #[error("Memory allocation failed: requested {requested} bytes, available {available}")]
+    MemoryAllocationError { requested: usize, available: usize },
+    #[error("Invalid operation: {0}")]
+    InvalidOperation(String),
+    #[error("Device not available")]
+    DeviceNotAvailable,
+    #[error("Distributed computation failed: {0}")]
+    DistributedError(String),
+}
+
+pub struct GPUComputeEngine {
+    config: GPUConfig,
+    device: Device,
+    context: Arc<Rctx>,
+    stream_pool: Arc<Mutex<Vec<CudaStream>>,
+    tensor_cache: Arc<Rwmux<TensorCache>>,
+    cluster_manager: Option<Arc<Mutex<GPUClusterManager>>>,
+}
+
+#[derive(Debug)]
+struct TensorCache {
+    tensors: HashMap<String, CachedTensor>,
+    memory_usage: usize,
+    max_memory: usize,
+}
+
+#[derive(Debug)]
+enum CachedTensor {
+    #[cfg(feature = "cuda")]
+    CudaTensor { tensor: Tensor, timestamp: std::time::Instant },
+    #[cfg(feature = "opencl")]
+    OpenCLTensor { buffer: Buffer<f32>, timestamp: std::time::Instant },
+}
+
+impl GPUComputeEngine {
+    pub fn new(config: GPUConfig) -> Result<Self> {
+        #[cfg(feature = "cuda")] {
+            // Initialize CUDA context
+            rust_cuda::init().map_err(|e| GPUComputeError::CudaError(e.to_string()))?;
+            
+            let device = Device::cuda(config.device_id as i64);
+            let context = device.ctx();
+            
+            // Create stream pool
+            let mut streams = Vec::new();
+            for _ in 0..4 {
+                let stream = CudaStream::new().map_err(|e| GPUComputeError::CudaError(e.to_string()))?;
+                streams.push(stream);
+            }
+            
+            // Initialize tensor cache
+            let tensor_cache = TensorCache {
+                tensors: HashMap::new(),
+                memory_usage: 0,
+                max_memory: (config.memory_limit_gb * 1024.0 * 1024.0 * 1024.0) as usize,
+            };
+            
+            // Initialize cluster manager if distributed
+            let cluster_manager = if config.enable_distributed {
+                Some(Arc::new(Mutex::new(GPUClusterManager::new())))
+            } else {
+                None
+            };
+            
+            Ok(Self {
+                config,
+                device,
+                context: Arc::new(context),
+                stream_pool: Arc::new(Mutex::new(streams)),
+                tensor_cache: Arc::new(RwLock::new(tensor_cache)),
+                cluster_manager,
+            })
+        }
+        #[cfg(feature = "opencl")] {
+            // Initialize OpenCL context
+            let context = Context::builder()
+                .platform(ocl::Platform::default())
+                .device_type(ocl::DeviceType::GPU)
+                .build()?;
+            
+            // Create stream pool (OpenCL command queues)
+            let mut queues = Vec::new();
+            for _ in 0..4 {
+                let queue = context.create_command_queue()?;
+                queues.push(queue);
+            }
+            
+            // Initialize tensor cache
+            let tensor_cache = TensorCache {
+                tensors: HashMap::new(),
+                memory_usage: 0,
+                max_memory: (config.memory_limit_gb * 1024.0 * 1024.0 * 1024.0) as usize,
+            };
+            
+            Ok(Self {
+                config,
+                device: Device::opencl(0),
+                context: Arc::new(context),
+                stream_pool: Arc::new(Mutex::new(queues)),
+                tensor_cache: Arc::new(RwLock::new(tensor_cache)),
+                cluster_manager: None,
+            })
+        }
+        #[cfg(not(any(feature = "cuda", feature = "opencl")))] {
+            Err(GPUComputeError::DeviceNotAvailable.into())
+        }
+    }
+
+    pub async fn execute_operation(&self, operation: TensorOperation) -> Result<TensorRef> {
+        match operation.op_type {
+            TensorOperationType::Add >> self.execute_add(operation).await,
+            TensorOperationType::Multiply >> self.execute_multiply(operation).await,
+            TensorOperationType::MatMul >> self.execute_matmul(operation).await,
+            TensorOperationType::Conv2D >> self.execute_conv2d(operation).await,
+            TensorOperationType::Attention >> self.execute_attention(operation).await,
+            _ >> Err(GPUComputeError::InvalidOperation("Operation not implemented".to_string()).into()),
+        }
+    }
+
+    #[cfg(feature = "cuda")]
+    async fn execute_add(&self, operation: TensorOperation) -> Result<TensorRef> {
+        let input1 = self.get_tensor(&operation.inputs[0]).await?;
+        let input2 = self.get_tensor(&operation.inputs[1]).await?;
+        
+        // Check shapes
+        if input1.size() != input2.size() {
+            return Err(GPUComputeError::ShapeMismatch {
+                expected: input1.size().to_vec(),
+                actual: input2.size().to_vec(),
+            }.into());
+        }
+        
+        // Get available stream
+        let stream = self.get_available_stream().await?;
+        
+        // Perform addition on GPU
+        let output_tensor = input1 + input2;
+        
+        // Cache result
+        let output_ref = self.cache_tensor(output_tensor, &stream).await?;
+        
+        Ok(output_ref)
+    }
+
+    #[cfg(feature = "cuda")]
+    async fn execute_matmul(&self, operation: TensorOperation) -> Result<TensorRef> {
+        let input1 = self.get_tensor(&operation.inputs[0]).await?;
+        let input2 = self.get_tensor(&operation.inputs[1]).await?;
+        
+        // Check shapes for matrix multiplication
+        if input1.size()[1] != input2.size()[0] {
+            return Err(GPUComputeError::ShapeMismatch {
+                expected: vec![input1.size()[0], input2.size()[1]],
+                actual: input2.size().to_vec(),
+            }.into());
+        }
+        
+        // Get available stream
+        let stream = self.get_available_stream().await?;
+        
+        // Perform matrix multiplication on GPU
+        let output_tensor = input1.matmul(&input2);
+        
+        // Cache result
+        let output_ref = self.cache_tensor(output_tensor, &stream).await?;
+        
+        Ok(output_ref)
+    }
+
+    #[cfg(feature = "cuda")]
+    async fn execute_attention(&self, operation: TensorOperation) -> Result<TensorRef> {
+        let queries = self.get_tensor(&operation.inputs[0]).await?;
+        let keys = self.get_tensor(&operation.inputs[1]).await?;
+        let values = self.get_tensor(&operation.inputs[2]).await?;
+        
+        // Check shapes
+        let seq_len = queries.size()[1];
+        if keys.size() != [seq_len, self.config.hidden_dim] || values.size() != [seq_len, self.config.hidden_dim] {
+            return Err(GPUComputeError::ShapeMismatch {
+                expected: vec![seq_len, self.config.hidden_dim],
+                actual: keys.size().to_vec(),
+            }.into());
+        }
+        
+        // Get available stream
+        let stream = self.get_available_stream().await?;
+        
+        // Compute attention scores
+        let scores = queries.matmul(&keys.transpose(1, 2));
+        let attention = scores.softmax(-1, tch::kind::FLOAT_CPU);
+        
+        // Apply attention to values
+        let output_tensor = attention.matmul(&values);
+        
+        // Cache result
+        let output_ref = self.cache_tensor(output_tensor, &stream).await?;
+        
+        Ok(output_ref)
+    }
+
+    #[cfg(feature = "cuda")]
+    async fn get_available_stream(&self) -> Result<CudaStream> {
+        let mut stream_pool = self.stream_pool.lock().await;
+        stream_pool.pop().ok_or(GPUComputeError::MemoryAllocationError {
+            requested: 1,
+            available: 0,
+        })
+    }
+
+    #[cfg(feature = "cuda")]
+    async fn get_tensor(&self, tensor_ref: &TensorRef) -> Result<Tensor> {
+        let tensor_cache = self.tensor_cache.read().await;
+        if let Some(cached) = tensor_cache.tensors.get(&tensor_ref.id) {
+            match cached {
+                CachedTensor::CudaTensor { tensor, .. } >> Ok(tensor.clone()),
+            }
+        } else {
+            // Load from storage or create new tensor
+            Err(GPUComputeError::InvalidOperation("Tensor not found in cache".to_string()).into())
+        }
+    }
+
+    #[cfg(feature = "cuda")]
+    async fn cache_tensor(&self, tensor: Tensor, stream: &CudaStream) -> Result<TensorRef> {
+        let tensor_id = format!("tensor_{}", std::time::SystemTime::now().elapsed()?.as_nanos());
+        let tensor_ref = TensorRef {
+            id: tensor_id.clone(),
+            shape: tensor.size().to_vec(),
+            dtype: TensorDataType::Float32,
+        };
+        
+        // Add to cache
+        {
+            let mut tensor_cache = self.tensor_cache.write().await;
+            tensor_cache.tensors.insert(
+                tensor_id,
+                CachedTensor::CudaTensor {
+                    tensor: tensor.clone(),
+                    timestamp: std::time::Instant::now(),
+                },
+            );
+            tensor_cache.memory_usage += tensor.nbytes()?;
+        }
+        
+        Ok(tensor_ref)
+    }
+
+    pub async fn execute_distributed_operation(&self, operation: TensorOperation) -> Result<TensorRef> {
+        if let Some(cluster_manager) = &self.cluster_manager {
+            let mut manager = cluster_manager.lock().await;
+            manager.execute_distributed_operation(operation).await
+        } else {
+            Err(GPUComputeError::InvalidOperation("Distributed computing not enabled".to_string()).into())
+        }
+    }
+
+    pub async fn get_device_info(&self) -> Result<GPUDeviceInfo> {
+        #[cfg(feature = "cuda")] {
+            let total_memory = self.device.total_memory()?;
+            let free_memory = self.device.free_memory()?;
+            
+            Ok(GPUDeviceInfo {
+                device_id: self.config.device_id,
+                name: self.device.name(),
+                total_memory_gb: (total_memory as f64) / (1024.0 * 1024.0 * 1024.0),
+                free_memory_gb: (free_memory as f64) / (1024.0 * 1024.0 * 1024.0),
+                compute_capability: self.device.compute_capability(),
+                memory_bandwidth_gb_s: self.device.memory_bandwidth()?,
+                temperature_c: self.device.temperature()?,
+            })
+        }
+        #[cfg(feature = "opencl")] {
+            // OpenCL implementation
+            Ok(GPUDeviceInfo::default())
+        }
+    }
+
+    pub async fn cleanup(&self) {
+        #[cfg(feature = "cuda")] {
+            // Release CUDA resources
+            let mut stream_pool = self.stream_pool.lock().await;
+            for stream in stream_pool.iter() {
+                stream.sync()?;
+            }
+            
+            debug!("CUDA resources cleaned up");
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GPUDeviceInfo {
     pub device_id: usize,
     pub name: String,
-    pub total_memory_mb: u64,
-    pub free_memory_mb: u64,
+    pub total_memory_gb: f64,
+    pub free_memory_gb: f64,
     pub compute_capability: String,
-    pub multiprocessors: u32,
-    pub max_threads_per_block: u32,
+    pub memory_bandwidth_gb_s: f64,
+    pub temperature_c: f32,
 }
 
-#[derive(Debug, Error)]
-pub enum GPUInferenceError {
-    #[error("CUDA error: {0}")]
-    CudaError(String),
-    #[error("GPU memory allocation failed")]
-    GPUMemoryError,
-    #[error("Tensor shape mismatch")]
-    ShapeMismatch,
-    #[error("Invalid quantization parameters")]
-    InvalidQuantization,
-    #[error("Stream synchronization failed")]
-    StreamSyncError,
-    #[error("Model not loaded")]
-    ModelNotLoaded,
-    #[error("Batch size exceeds GPU capacity")]
-    BatchTooLarge,
-}
-
-pub struct GPUInferenceEngine {
-    config: GPUConfig,
-    device: Device,
-    model: Arc<RwLock<Option<GPUModel>>>,
-    kv_cache: Arc<RwLock<kv_cache::KVCache>>,
-    quantization: Arc<RwLock<quantization::Quantizer>>,
-    stream_pool: Arc<Mutex<Vec<CudaStream>>>,
-    current_batch: Arc<Mutex<Vec<GPUInferenceRequest>>>,
-}
-
-#[derive(Debug)]
-struct GPUModel {
-    weights: CudaTensor,
-    embeddings: CudaTensor,
-    attention_weights: Vec<CudaTensor>,
-    #[cfg(feature = "cuda")]
-    stream: CudaStream,
-}
-
-impl GPUInferenceEngine {
-    pub fn new(config: GPUConfig) -> Result<Self> {
-        #[cfg(feature = "cuda")] {
-            let device = Device::cuda(config.device_id as i64);
-            
-            // Initialize CUDA context
-            rust_cuda::init().map_err(|e| GPUInferenceError::CudaError(e.to_string()))?;
-            
-            // Create stream pool
-            let mut streams = Vec::new();
-            for _ in 0..config.stream_count {
-                let stream = CudaStream::new().map_err(|e| GPUInferenceError::CudaError(e.to_string()))?;
-                streams.push(stream);
-            }
-            
-            Ok(Self {
-                config,
-                device,
-                model: Arc::new(RwLock::new(None)),
-                kv_cache: Arc::new(RwLock::new(kv_cache::KVCache::new(4096, 64, 128))),
-                quantization: Arc::new(RwLock::new(quantization::Quantizer::new(config.quantization_type))),
-                stream_pool: Arc::new(Mutex::new(streams)),
-                current_batch: Arc::new(Mutex::new(Vec::new())),
-            })
-        }
-        #[cfg(not(feature = "cuda"))] {
-            return Err(GPUInferenceError::CudaError("CUDA support not enabled".to_string()).into());
-        }
-    }
-
-    pub async fn load_model(&self, model_path: &str) -> Result<()> {
-        #[cfg(feature = "cuda")] {
-            let mut model_lock = self.model.write().await;
-            
-            // Load model weights from file
-            let weights = CudaTensor::load_from_file(model_path)
-                .map_err(|e| GPUInferenceError::CudaError(e.to_string()))?;
-            
-            // Initialize embeddings
-            let embeddings = CudaTensor::zeros((50400, 4096), tch::kind::FLOAT_CPU);
-            
-            // Initialize attention weights
-            let attention_weights = vec![
-                CudaTensor::zeros((64, 64, 64), tch::kind::FLOAT_CPU),
-                CudaTensor::zeros((64, 64, 64), tch::kind::FLOAT_CPU),
-            ];
-            
-            *model_lock = Some(GPUModel {
-                weights,
-                embeddings,
-                attention_weights,
-                stream: CudaStream::new().map_err(|e| GPUInferenceError::CudaError(e.to_string()))?,
-            });
-            
-            info!("Model loaded successfully on GPU {}", self.config.device_id);
-            Ok(())
-        }
-        #[cfg(not(feature = "cuda"))] {
-            Err(GPUInferenceError::CudaError("CUDA support not enabled".to_string()).into())
-        }
-    }
-
-    pub async fn generate(&self, request: &GPUInferenceRequest) -> Result<GPUInferenceResponse> {
-        #[cfg(feature = "cuda")] {
-            let start_time = std::time::Instant::now();
-            
-            // Get available stream
-            let mut stream_pool = self.stream_pool.lock().await;
-            let stream = stream_pool.pop().ok_or(GPUInferenceError::StreamSyncError)?;
-            
-            // Load model if not loaded
-            let model = self.model.read().await.as_ref().ok_or(GPUInferenceError::ModelNotLoaded)?;
-            
-            // Tokenize prompt
-            let tokenizer = Tokenizer::new("models/vocabulary.json");
-            let prompt_tokens = tokenizer.encode(&request.prompt)?;
-            
-            // Quantize if enabled
-            let (weights, embeddings) = if self.config.enable_quantization {
-                let quantizer = self.quantization.read().await;
-                let quantized_weights = quantizer.quantize(&model.weights)?;
-                let quantized_embeddings = quantizer.quantize(&model.embeddings)?;
-                (quantized_weights, quantized_embeddings)
-            } else {
-                (model.weights.clone(), model.embeddings.clone())
-            };
-            
-            // Generate tokens
-            let mut generated_tokens = Vec::new();
-            let mut logprobs = Vec::new();
-            
-            for _ in 0..request.max_tokens {
-                // Attention mechanism
-                let attention_scores = self.attention_step(
-                    &weights, &embeddings, &prompt_tokens, &generated_tokens, &stream
-                )?;
-                
-                // Sampling
-                let next_token = self.sample_from_distribution(&attention_scores, request.temperature)?;
-                
-                generated_tokens.push(next_token);
-                logprobs.push(-1.0); // Placeholder
-                
-                if request.stop_tokens.contains(&next_token) {
-                    break;
-                }
-            }
-            
-            // Cleanup
-            stream_pool.push(stream);
-            
-            let latency_ms = start_time.elapsed().as_millis() as u64;
-            
-            Ok(GPUInferenceResponse {
-                text: tokenizer.decode(&generated_tokens)?,
-                tokens: generated_tokens,
-                logprobs,
-                finish_reason: FinishReason::Stop,
-                usage: TokenUsage {
-                    prompt_tokens: prompt_tokens.len(),
-                    completion_tokens: generated_tokens.len(),
-                    total_tokens: prompt_tokens.len() + generated_tokens.len(),
-                },
-                latency_ms,
-            })
-        }
-        #[cfg(not(feature = "cuda"))] {
-            Err(GPUInferenceError::CudaError("CUDA support not enabled".to_string()).into())
-        }
-    }
-
-    #[cfg(feature = "cuda")]
-    fn attention_step(
-        &self,
-        weights: &CudaTensor,
-        embeddings: &CudaTensor,
-        prompt_tokens: &[u32],
-        generated_tokens: &[u32],
-        stream: &CudaStream,
-    ) -> Result<CudaTensor> {
-        // Implement attention mechanism on GPU
-        // This would involve matrix multiplications and softmax operations
-        // using CUDA kernels
-        
-        // For demonstration, return a dummy tensor
-        Ok(CudaTensor::zeros((1, 50400), tch::kind::FLOAT_CPU))
-    }
-
-    #[cfg(feature = "cuda")]
-    fn sample_from_distribution(
-        &self,
-        scores: &CudaTensor,
-        temperature: f32,
-    ) -> Result<u32> {
-        // Implement sampling from probability distribution on GPU
-        // This would involve temperature scaling and sampling operations
-        
-        // For demonstration, return a random token
-        Ok((std::time::SystemTime::now().elapsed().unwrap().as_nanos() % 50400) as u32)
-    }
-
-    pub async fn get_device_info(&self) -> Result<GPUDeviceInfo> {
-        #[cfg(feature = "cuda")] {
-            let device = Device::cuda(self.config.device_id as i64);
-            let total_memory = device.total_memory()?;
-            let free_memory = device.free_memory()?;
-            
-            Ok(GPUDeviceInfo {
-                device_id: self.config.device_id,
-                name: device.name(),
-                total_memory_mb: total_memory / (1024 * 1024),
-                free_memory_mb: free_memory / (1024 * 1024),
-                compute_capability: device.compute_capability(),
-                multiprocessors: device.multiprocessor_count(),
-                max_threads_per_block: device.max_threads_per_block(),
-            })
-        }
-        #[cfg(not(feature = "cuda"))] {
-            Err(GPUInferenceError::CudaError("CUDA support not enabled".to_string()).into())
+impl Default for GPUDeviceInfo {
+    fn default() -> Self {
+        Self {
+            device_id: 0,
+            name: "Unknown".to_string(),
+            total_memory_gb: 0.0,
+            free_memory_gb: 0.0,
+            compute_capability: "0.0".to_string(),
+            memory_bandwidth_gb_s: 0.0,
+            temperature_c: 0.0,
         }
     }
 }
@@ -331,27 +409,44 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    async fn test_gpu_inference_engine_creation() {
-        let config = GPUConfig::default();
-        let engine = GPUInferenceEngine::new(config);
+    async fn test_gpu_compute_engine_creation() {
+        let config = GPUConfig {
+            device_id: 0,
+            compute_backend: ComputeBackend::CUDA,
+            memory_limit_gb: 16.0,
+            ..Default::default()
+        };
+        
+        let engine = GPUComputeEngine::new(config);
         assert!(engine.is_ok());
     }
 
     #[tokio::test]
     #[cfg(feature = "cuda")]
-    async fn test_gpu_device_info() {
+    async fn test_tensor_addition() {
         let config = GPUConfig::default();
-        let engine = GPUInferenceEngine::new(config).unwrap();
-        let info = engine.get_device_info().await;
-        assert!(info.is_ok());
+        let engine = GPUComputeEngine::new(config).unwrap();
+        
+        let operation = TensorOperation {
+            op_type: TensorOperationType::Add,
+            inputs: vec![
+                TensorRef { id: "tensor1".to_string(), shape: vec![2, 2], dtype: TensorDataType::Float32 },
+                TensorRef { id: "tensor2".to_string(), shape: vec![2, 2], dtype: TensorDataType::Float32 },
+            ],
+            output: TensorRef { id: "output".to_string(), shape: vec![2, 2], dtype: TensorDataType::Float32 },
+            parameters: HashMap::new(),
+        };
+        
+        let result = engine.execute_operation(operation).await;
+        assert!(result.is_err()); // Should fail because tensors are not in cache
     }
 
     #[test]
     fn test_gpu_config_defaults() {
         let config = GPUConfig::default();
         assert_eq!(config.device_id, 0);
-        assert_eq!(config.stream_count, 4);
-        assert!(config.enable_quantization);
+        assert_eq!(config.compute_backend, ComputeBackend::CUDA);
+        assert!(config.enable_mixed_precision);
     }
 }
 
