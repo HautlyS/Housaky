@@ -53,10 +53,16 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 mod federated_node;
 mod photon_detector;
 mod quantum_state;
+mod reasoning;
+mod blockchain;
+mod evolution;
 
 use federated_node::{FederatedNode, NodeConfig, NodeEvent};
 use photon_detector::PseudoQubit;
 use quantum_state::QuantumInspiredState;
+use reasoning::ReasoningEngine;
+use blockchain::{Blockchain, Transaction, TransactionType};
+use evolution::CodeEvolver;
 
 /// Command line arguments
 #[derive(Parser, Debug)]
@@ -303,6 +309,29 @@ async fn run_agi_system(
         "Quantum state initialized: {} amplitudes",
         quantum_state.size()
     );
+
+    // Initialize reasoning engine
+    let reasoning = ReasoningEngine::new();
+    tracing::info!("Reasoning engine initialized");
+
+    // Initialize blockchain
+    let mut blockchain = Blockchain::new();
+    tracing::info!("Blockchain initialized with genesis block");
+
+    // Initialize code evolver
+    let evolver = CodeEvolver::new();
+    tracing::info!(
+        "Code evolver initialized (sandbox: {})",
+        evolver.is_sandbox_enabled()
+    );
+
+    // Add initial transaction
+    blockchain.add_transaction(Transaction {
+        from: "system".to_string(),
+        to: args.node_id.clone().unwrap_or_else(|| "node-1".to_string()),
+        amount: 100.0,
+        tx_type: TransactionType::Reward,
+    });
 
     // Run federated node if requested
     if args.federated {
