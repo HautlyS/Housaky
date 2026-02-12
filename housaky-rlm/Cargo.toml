@@ -1,0 +1,23 @@
+[package]
+name = "housaky-rlm"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Reasoning Language Model - local transformer inference"
+
+[dependencies]
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+candle-core = { workspace = true }
+candle-nn = { workspace = true }
+candle-transformers = { workspace = true }
+rayon = { workspace = true }
+half = "2.3"
+
+[dev-dependencies]
+tokio-test = "0.4"

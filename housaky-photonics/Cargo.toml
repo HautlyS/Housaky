@@ -1,0 +1,22 @@
+[package]
+name = "housaky-photonics"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Photon detection and light-based processing"
+
+[dependencies]
+tokio = { workspace = true }
+serde = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+image = { workspace = true }
+nokhwa = { workspace = true }
+opencv = { workspace = true }
+rayon = { workspace = true }
+housaky-core = { path = "../housaky-core" }
+
+[dev-dependencies]
+tokio-test = "0.4"

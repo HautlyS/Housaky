@@ -1,0 +1,21 @@
+[package]
+name = "housaky-verification"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Code verification and formal methods"
+
+[dependencies]
+tokio = { workspace = true }
+serde = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+tempfile = "3"
+tokio-process = "0.2"
+housaky-core = { path = "../housaky-core" }
+housaky-evolution = { path = "../housaky-evolution" }
+
+[dev-dependencies]
+tokio-test = "0.4"

@@ -1,0 +1,22 @@
+[package]
+name = "housaky-photon-db"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Photon-state database for light-based storage"
+
+[dependencies]
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+sled = { workspace = true }
+blake3 = { workspace = true }
+housaky-core = { path = "../housaky-core" }
+housaky-photonics = { path = "../housaky-photonics" }
+
+[dev-dependencies]
+tokio-test = "0.4"

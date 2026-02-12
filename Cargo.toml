@@ -1,0 +1,121 @@
+# Housaky AGI Workspace
+
+[workspace]
+members = [
+    ".",
+    "housaky-core",
+    "housaky-rlm",
+    "housaky-lifi",
+    "housaky-evolution",
+    "housaky-consensus",
+    "housaky-p2p",
+    "housaky-economy",
+    "housaky-energy",
+    "housaky-api",
+]
+resolver = "2"
+
+[workspace.package]
+version = "2.0.0"
+edition = "2021"
+authors = ["Housaky Contributors"]
+license = "Apache-2.0"
+repository = "https://github.com/housaky/housaky"
+rust-version = "1.75"
+
+[workspace.dependencies]
+# Async runtime
+tokio = { version = "1.40", features = ["full", "rt-multi-thread"] }
+tokio-util = "0.7"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Parallelism
+rayon = "1.10"
+
+# Cryptography
+blake3 = "1.5"
+rand = "0.8"
+ed25519-dalek = { version = "2.1", features = ["rand_core"] }
+
+# UUID
+uuid = { version = "1.10", features = ["v4", "serde"] }
+
+# Tracing
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Error handling
+anyhow = "1.0"
+thiserror = "1.0"
+
+# Time
+chrono = { version = "0.4", features = ["serde"] }
+
+[package]
+name = "housaky"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Housaky AGI - Autonomous Self-Improving Distributed Intelligence"
+rust-version.workspace = true
+
+[[bin]]
+name = "housaky"
+path = "src/main.rs"
+
+[dependencies]
+# Workspace dependencies
+tokio.workspace = true
+tokio-util.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+rayon.workspace = true
+blake3.workspace = true
+rand.workspace = true
+ed25519-dalek.workspace = true
+uuid.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+chrono.workspace = true
+
+# CLI
+clap = { version = "4.5", features = ["derive"] }
+
+# Image processing
+image = "0.25"
+nokhwa = { version = "0.10", features = ["input-native"] }
+
+# HTTP client
+reqwest = { version = "0.12", features = ["json"], optional = true }
+
+# Metrics
+metrics = { version = "0.23", optional = true }
+metrics-exporter-prometheus = { version = "0.15", optional = true }
+
+# WASM support
+wasm-bindgen = { version = "0.2", optional = true }
+
+[features]
+default = ["metrics"]
+metrics = ["dep:metrics", "dep:metrics-exporter-prometheus"]
+web = ["dep:wasm-bindgen"]
+full = ["metrics", "web"]
+full-crypto = []
+camera = []
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 16
+strip = true
+
+[profile.dev]
+opt-level = 0
+debug = true

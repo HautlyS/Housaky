@@ -1,0 +1,19 @@
+[package]
+name = "housaky-energy"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Energy management and optimization"
+
+[dependencies]
+tokio = { workspace = true }
+serde = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+sysinfo = { workspace = true }
+housaky-core = { path = "../housaky-core" }
+
+[dev-dependencies]
+tokio-test = "0.4"

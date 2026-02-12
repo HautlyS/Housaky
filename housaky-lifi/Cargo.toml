@@ -1,0 +1,32 @@
+[package]
+name = "housaky-lifi"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Li-Fi communication protocol implementation"
+
+[dependencies]
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+housaky-core = { path = "../housaky-core" }
+housaky-photonics = { path = "../housaky-photonics" }
+
+# Platform-specific dependencies
+[target.'cfg(target_os = "linux")'.dependencies]
+nix = { version = "0.28", features = ["ioctl"] }
+libc = "0.2"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows = { version = "0.52", features = ["Win32_Media_DirectShow", "Win32_System_Com", "Win32_Foundation"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc = "0.2"
+cocoa = "0.25"
+
+[dev-dependencies]
+tokio-test = "0.4"

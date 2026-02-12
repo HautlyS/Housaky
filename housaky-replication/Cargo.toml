@@ -1,0 +1,21 @@
+[package]
+name = "housaky-replication"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Node replication and redundancy system"
+
+[dependencies]
+tokio = { workspace = true }
+serde = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+reed-solomon-erasure = { workspace = true }
+housaky-core = { path = "../housaky-core" }
+housaky-p2p = { path = "../housaky-p2p" }
+housaky-storage = { path = "../housaky-storage" }
+
+[dev-dependencies]
+tokio-test = "0.4"

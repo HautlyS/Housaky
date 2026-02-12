@@ -1,0 +1,22 @@
+[package]
+name = "housaky-economy"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Token economy and incentive system"
+
+[dependencies]
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+blake3 = { workspace = true }
+ed25519-dalek = { workspace = true }
+housaky-core = { path = "../housaky-core" }
+housaky-consensus = { path = "../housaky-consensus" }
+
+[dev-dependencies]
+tokio-test = "0.4"

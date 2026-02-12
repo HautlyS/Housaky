@@ -1,0 +1,20 @@
+[package]
+name = "housaky-genetics"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Genetic algorithms for optimization"
+
+[dependencies]
+tokio = { workspace = true }
+serde = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+rand = "0.8"
+rayon = { workspace = true }
+housaky-core = { path = "../housaky-core" }
+
+[dev-dependencies]
+tokio-test = "0.4"

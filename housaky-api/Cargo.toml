@@ -1,0 +1,30 @@
+[package]
+name = "housaky-api"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Public API and CLI interface"
+
+[dependencies]
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+clap = { version = "4", features = ["derive"] }
+axum = "0.7"
+tower = "0.4"
+tower-http = "0.5"
+housaky-core = { path = "../housaky-core" }
+housaky-rlm = { path = "../housaky-rlm" }
+housaky-p2p = { path = "../housaky-p2p" }
+housaky-storage = { path = "../housaky-storage" }
+
+[[bin]]
+name = "housaky"
+path = "src/main.rs"
+
+[dev-dependencies]
+tokio-test = "0.4"

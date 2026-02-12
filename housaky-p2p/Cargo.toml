@@ -1,0 +1,24 @@
+[package]
+name = "housaky-p2p"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Peer-to-peer networking layer with libp2p"
+
+[dependencies]
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+libp2p = { workspace = true }
+quinn = { workspace = true }
+futures = "0.3"
+async-trait = "0.1"
+housaky-core = { path = "../housaky-core" }
+
+[dev-dependencies]
+tokio-test = "0.4"

@@ -1,0 +1,41 @@
+# Ignore build artifacts
+/target/
+**/*.rs.bk
+*.pdb
+
+# Ignore Cargo.lock for libraries (keep for binaries)
+# Cargo.lock
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Logs
+*.log
+housaky.log
+
+# Runtime
+*.pid
+housaky.pid
+
+# Data
+/data/
+*.db
+*.sqlite
+
+# Temporary
+/tmp/
+*.tmp
+
+# OS
+Thumbs.db
+.Spotlight-V100
+.Trashes
+
+# Generated
+monitor.sh
+replicate.sh

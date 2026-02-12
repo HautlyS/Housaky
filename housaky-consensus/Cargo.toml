@@ -1,0 +1,22 @@
+[package]
+name = "housaky-consensus"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Distributed consensus protocol"
+
+[dependencies]
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+blake3 = { workspace = true }
+ed25519-dalek = { workspace = true }
+housaky-core = { path = "../housaky-core" }
+housaky-p2p = { path = "../housaky-p2p" }
+
+[dev-dependencies]
+tokio-test = "0.4"
