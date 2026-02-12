@@ -3170,6 +3170,8 @@ dependencies = [
  "anyhow",
  "housaky-core",
  "image",
+ "ndarray",
+ "rand 0.8.5",
  "rayon",
  "serde",
  "tokio",
@@ -3205,7 +3207,10 @@ name = "housaky-rlm"
 version = "3.0.0"
 dependencies = [
  "anyhow",
+ "candle-core",
+ "candle-nn",
  "half",
+ "rand 0.8.5",
  "rayon",
  "serde",
  "serde_json",

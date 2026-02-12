@@ -3,8 +3,6 @@
 //! This crate provides capabilities for detecting and processing photons
 //! using cameras and optical sensors.
 
-use anyhow::Result;
-
 pub mod detector;
 pub mod encoding;
 pub mod processor;

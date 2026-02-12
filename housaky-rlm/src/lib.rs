@@ -3,10 +3,6 @@
 //! This crate provides local transformer-based inference capabilities for the Housaky AGI system.
 //! It supports quantized models for efficient inference on consumer hardware.
 
-use anyhow::Result;
-use serde::{Deserialize, Serialize};
-use std::sync::Arc;
-
 pub mod inference;
 pub mod model;
 pub mod tokenizer;

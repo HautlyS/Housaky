@@ -3,7 +3,6 @@
 use anyhow::Result;
 use image::{ImageBuffer, Rgb};
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
 use tokio::sync::mpsc;
 
 /// Configuration for photon detection

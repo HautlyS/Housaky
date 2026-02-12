@@ -1,7 +1,7 @@
 //! Image processing for photon data
 
 use anyhow::Result;
-use image::{GrayImage, ImageBuffer, Luma, Rgb, RgbImage};
+use image::{GrayImage, ImageBuffer, Luma};
 use ndarray::{Array2, Array3};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};

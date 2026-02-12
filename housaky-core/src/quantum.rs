@@ -4,7 +4,7 @@
 //! concepts on classical hardware, including superposition, entanglement, and measurement.
 
 use anyhow::Result;
-use ndarray::{Array1, Array2, ArrayView1};
+use ndarray::{Array1, Array2};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::f64::consts::PI;
