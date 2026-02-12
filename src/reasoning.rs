@@ -4,11 +4,13 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 
 /// Lightweight reasoning engine
+#[allow(dead_code)]
 pub struct ReasoningEngine {
     context: Arc<Mutex<Vec<String>>>,
     max_context: usize,
 }
 
+#[allow(dead_code)]
 impl ReasoningEngine {
     pub fn new() -> Self {
         Self {
@@ -20,7 +22,7 @@ impl ReasoningEngine {
     /// Process input and generate reasoning
     pub async fn reason(&self, input: &str) -> String {
         let mut ctx = self.context.lock().await;
-        
+
         // Add to context
         ctx.push(input.to_string());
         if ctx.len() > self.max_context {

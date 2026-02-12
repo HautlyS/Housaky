@@ -30,6 +30,7 @@ pub enum TransactionType {
     Reward,
 }
 
+#[allow(dead_code)]
 impl Block {
     pub fn new(index: u64, transactions: Vec<Transaction>, previous_hash: String) -> Self {
         let timestamp = SystemTime::now()
@@ -55,7 +56,9 @@ impl Block {
             "{}{}{}{}{}",
             self.index,
             self.timestamp,
-            bincode::serialize(&self.transactions).unwrap_or_default().len(),
+            bincode::serialize(&self.transactions)
+                .unwrap_or_default()
+                .len(),
             self.previous_hash,
             self.nonce
         );
@@ -74,6 +77,7 @@ impl Block {
     }
 }
 
+#[allow(dead_code)]
 pub struct Blockchain {
     pub chain: Vec<Block>,
     pub pending_transactions: Vec<Transaction>,
@@ -81,6 +85,7 @@ pub struct Blockchain {
     pub mining_reward: f64,
 }
 
+#[allow(dead_code)]
 impl Blockchain {
     pub fn new() -> Self {
         let mut chain = Self {
@@ -172,7 +177,7 @@ mod tests {
     #[test]
     fn test_blockchain() {
         let mut chain = Blockchain::new();
-        
+
         chain.add_transaction(Transaction {
             from: "alice".to_string(),
             to: "bob".to_string(),
@@ -181,7 +186,7 @@ mod tests {
         });
 
         chain.mine_pending_transactions("miner1");
-        
+
         assert!(chain.is_valid());
         assert_eq!(chain.chain.len(), 2);
     }
@@ -189,7 +194,7 @@ mod tests {
     #[test]
     fn test_balance() {
         let mut chain = Blockchain::new();
-        
+
         chain.add_transaction(Transaction {
             from: "system".to_string(),
             to: "alice".to_string(),
@@ -198,7 +203,7 @@ mod tests {
         });
 
         chain.mine_pending_transactions("miner1");
-        
+
         let balance = chain.get_balance("alice");
         assert_eq!(balance, 100.0);
     }

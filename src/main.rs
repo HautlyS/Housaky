@@ -50,19 +50,19 @@ use tokio_util::sync::CancellationToken;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 // Internal modules
+mod blockchain;
+mod evolution;
 mod federated_node;
 mod photon_detector;
 mod quantum_state;
 mod reasoning;
-mod blockchain;
-mod evolution;
 
+use blockchain::{Blockchain, Transaction, TransactionType};
+use evolution::CodeEvolver;
 use federated_node::{FederatedNode, NodeConfig, NodeEvent};
 use photon_detector::PseudoQubit;
 use quantum_state::QuantumInspiredState;
 use reasoning::ReasoningEngine;
-use blockchain::{Blockchain, Transaction, TransactionType};
-use evolution::CodeEvolver;
 
 /// Command line arguments
 #[derive(Parser, Debug)]
@@ -311,7 +311,7 @@ async fn run_agi_system(
     );
 
     // Initialize reasoning engine
-    let reasoning = ReasoningEngine::new();
+    let _reasoning = ReasoningEngine::new();
     tracing::info!("Reasoning engine initialized");
 
     // Initialize blockchain

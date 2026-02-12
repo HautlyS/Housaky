@@ -6,6 +6,7 @@ pub struct CodeEvolver {
     sandbox_enabled: bool,
 }
 
+#[allow(dead_code)]
 impl CodeEvolver {
     pub fn new() -> Self {
         Self {
@@ -14,10 +15,7 @@ impl CodeEvolver {
     }
 
     fn check_docker() -> bool {
-        Command::new("docker")
-            .arg("--version")
-            .output()
-            .is_ok()
+        Command::new("docker").arg("--version").output().is_ok()
     }
 
     /// Evaluate code fitness
@@ -44,11 +42,7 @@ impl CodeEvolver {
     /// Apply simple mutation
     pub fn mutate(&self, code: &str) -> String {
         // Simple mutations
-        let mutations = vec![
-            ("Vec<", "Vec<"),
-            ("fn ", "pub fn "),
-            ("let ", "let mut "),
-        ];
+        let mutations = [("Vec<", "Vec<"), ("fn ", "pub fn "), ("let ", "let mut ")];
 
         let mut mutated = code.to_string();
         if let Some((from, to)) = mutations.get(rand::random::<usize>() % mutations.len()) {

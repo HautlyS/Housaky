@@ -481,7 +481,7 @@ mod tests {
         let state2 = QuantumInspiredState::new(4);
 
         let fidelity = state1.fidelity(&state2);
-        assert!(fidelity >= 0.0 && fidelity <= 1.0);
+        assert!((0.0..=1.0).contains(&fidelity));
 
         // Same state should have fidelity close to 1
         assert!(state1.fidelity(&state1) > 0.99);

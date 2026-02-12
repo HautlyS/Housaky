@@ -4,46 +4,70 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
 
 env:
   CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 1
 
 jobs:
-  create-release:
-    name: Create Release
+  test:
+    name: Test before Release
     runs-on: ubuntu-latest
-    outputs:
-      upload_url: ${{ steps.create_release.outputs.upload_url }}
     steps:
-      - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/checkout@v4
+      
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+      
+      - name: Cache cargo
+        uses: actions/cache@v4
         with:
-          tag_name: ${{ github.ref }}
-          release_name: Release ${{ github.ref }}
-          draft: false
-          prerelease: false
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: test-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: test-cargo-
+      
+      - name: Run tests
+        run: cargo test --workspace --verbose
+      
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+      
+      - name: Run clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
 
-  build-release:
-    name: Build Release
-    needs: create-release
+  build-desktop:
+    name: Build Desktop (${{ matrix.target }})
+    needs: test
     strategy:
+      fail-fast: false
       matrix:
         include:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
-            artifact_name: housaky
-            asset_name: housaky-linux-amd64
+            artifact: housaky-linux-x86_64
+            binary: housaky
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            artifact: housaky-linux-aarch64
+            binary: housaky
           - os: macos-latest
             target: x86_64-apple-darwin
-            artifact_name: housaky
-            asset_name: housaky-macos-amd64
+            artifact: housaky-macos-x86_64
+            binary: housaky
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            artifact: housaky-macos-aarch64
+            binary: housaky
           - os: windows-latest
             target: x86_64-pc-windows-msvc
-            artifact_name: housaky.exe
-            asset_name: housaky-windows-amd64.exe
+            artifact: housaky-windows-x86_64.exe
+            binary: housaky.exe
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -52,16 +76,191 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
-          
+      
+      - name: Install cross-compilation tools (Linux ARM)
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+      
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ matrix.os }}-${{ matrix.target }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ matrix.os }}-${{ matrix.target }}-cargo-
+      
       - name: Build release
         run: cargo build --release --target ${{ matrix.target }}
-        
-      - name: Upload Release Asset
-        uses: actions/upload-release-asset@v1
+        env:
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
+      
+      - name: Package artifact
+        run: |
+          cd target/${{ matrix.target }}/release
+          strip ${{ matrix.binary }} || true
+          tar -czvf ${{ matrix.artifact }}.tar.gz ${{ matrix.binary }}
+          shasum -a 256 ${{ matrix.artifact }}.tar.gz > ${{ matrix.artifact }}.sha256
+      
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: |
+            target/${{ matrix.target }}/release/${{ matrix.artifact }}.tar.gz
+            target/${{ matrix.target }}/release/${{ matrix.artifact }}.sha256
+
+  build-android:
+    name: Build Android (${{ matrix.target }})
+    needs: test
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: aarch64-linux-android
+            artifact: housaky-android-aarch64
+          - target: armv7-linux-androideabi
+            artifact: housaky-android-armv7
+          - target: x86_64-linux-android
+            artifact: housaky-android-x86_64
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      
+      - name: Setup Android NDK
+        uses: nttld/setup-ndk@v1
+        with:
+          ndk-version: r26b
+      
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: android-${{ matrix.target }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: android-${{ matrix.target }}-cargo-
+      
+      - name: Build
+        run: cargo build --release --target ${{ matrix.target }}
+        env:
+          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+      
+      - name: Package artifact
+        run: |
+          cd target/${{ matrix.target }}/release
+          tar -czvf ${{ matrix.artifact }}.tar.gz libhousaky.so
+          shasum -a 256 ${{ matrix.artifact }}.tar.gz > ${{ matrix.artifact }}.sha256
+      
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: |
+            target/${{ matrix.target }}/release/${{ matrix.artifact }}.tar.gz
+            target/${{ matrix.target }}/release/${{ matrix.artifact }}.sha256
+
+  build-ios:
+    name: Build iOS (${{ matrix.target }})
+    needs: test
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: aarch64-apple-ios
+            artifact: housaky-ios-aarch64
+          - target: x86_64-apple-ios
+            artifact: housaky-ios-simulator-x86_64
+          - target: aarch64-apple-ios-sim
+            artifact: housaky-ios-simulator-aarch64
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ios-${{ matrix.target }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ios-${{ matrix.target }}-cargo-
+      
+      - name: Build
+        run: cargo build --release --target ${{ matrix.target }}
+      
+      - name: Package artifact
+        run: |
+          cd target/${{ matrix.target }}/release
+          tar -czvf ${{ matrix.artifact }}.tar.gz libhousaky.a
+          shasum -a 256 ${{ matrix.artifact }}.tar.gz > ${{ matrix.artifact }}.sha256
+      
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: |
+            target/${{ matrix.target }}/release/${{ matrix.artifact }}.tar.gz
+            target/${{ matrix.target }}/release/${{ matrix.artifact }}.sha256
+
+  create-release:
+    name: Create GitHub Release
+    needs: [build-desktop, build-android, build-ios]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      
+      - name: Display structure of downloaded files
+        run: ls -R artifacts
+      
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            artifacts/**/*
+          generate_release_notes: true
+          draft: false
+          prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: ./target/${{ matrix.target }}/release/${{ matrix.artifact_name }}
-          asset_name: ${{ matrix.asset_name }}
-          asset_content_type: application/octet-stream
+
+  security-audit:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --locked
+      
+      - name: Run security audit
+        run: cargo audit
