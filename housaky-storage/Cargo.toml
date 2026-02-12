@@ -5,7 +5,7 @@ edition.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Decentralized storage with IPFS/Iroh integration"
+description = "Decentralized storage"
 
 [dependencies]
 tokio = { workspace = true }
@@ -13,13 +13,11 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 anyhow = { workspace = true }
 tracing = { workspace = true }
-iroh = { workspace = true }
 blake3 = { workspace = true }
 futures = "0.3"
 housaky-core = { path = "../housaky-core" }
 multibase = "0.9"
 bs58 = "0.5"
-reqwest = { version = "0.11", features = ["json"] }
 
 [dev-dependencies]
 tokio-test = "0.4"

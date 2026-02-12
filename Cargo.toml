@@ -1,76 +1,107 @@
 [package]
 name = "housaky"
-version = "2.0.0"
+version = "3.0.0"
 edition = "2021"
 authors = ["Housaky Contributors"]
 license = "Apache-2.0"
 repository = "https://github.com/housaky/housaky"
-description = "Housaky AGI - Autonomous Self-Improving Distributed Intelligence"
+description = "Housaky AGI v2026.2 - Autonomous Self-Improving Distributed Intelligence with Quantum Consciousness"
 rust-version = "1.75"
+
+[workspace]
+members = [
+    "housaky-core",
+    "housaky-evolution",
+    "housaky-consensus",
+    "housaky-p2p",
+    "housaky-storage",
+    "housaky-security",
+    "housaky-api",
+    "housaky-rlm",
+    "housaky-photonics",
+    "housaky-lifi",
+    "housaky-metalearning",
+    "housaky-genetics",
+    "housaky-replication",
+    "housaky-economy",
+    "housaky-energy",
+    "housaky-verification",
+    "housaky-photon-db",
+    "housaky-llm",
+    "housaky-network",
+    "housaky-agi",
+]
+
+[workspace.package]
+version = "3.0.0"
+edition = "2021"
+authors = ["Housaky Contributors"]
+license = "Apache-2.0"
+repository = "https://github.com/housaky/housaky"
+
+[workspace.dependencies]
+tokio = { version = "1.40", features = ["full", "rt-multi-thread"] }
+tokio-util = "0.7"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+anyhow = "1.0"
+thiserror = "1.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+rayon = "1.10"
+ndarray = "0.15"
+blake3 = "1.5"
+rand = "0.8"
+ed25519-dalek = { version = "2.1", features = ["rand_core"] }
+uuid = { version = "1.10", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+clap = { version = "4.5", features = ["derive"] }
+async-trait = "0.1"
+hex = "0.4"
+libp2p = { version = "0.53", features = ["gossipsub", "kad", "mdns", "noise", "tcp", "tokio", "yamux"] }
+tokenizers = "0.15"
+tempfile = "3"
+syn = { version = "2.0", features = ["full", "visit", "visit-mut", "fold"] }
+quote = "1.0"
+proc-macro2 = "1.0"
+quinn = "0.10"
+futures = "0.3"
 
 [[bin]]
 name = "housaky"
 path = "src/main.rs"
 
 [dependencies]
-# Async runtime
-tokio = { version = "1.40", features = ["full", "rt-multi-thread"] }
-tokio-util = "0.7"
-
-# Serialization
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-
-# CLI
-clap = { version = "4.5", features = ["derive"] }
-
-# Parallelism
-rayon = "1.10"
-
-# Image processing
-image = "0.25"
-nokhwa = { version = "0.10", features = ["input-native"], optional = true }
-
-# Cryptography
-blake3 = "1.5"
-rand = "0.8"
-ed25519-dalek = { version = "2.1", features = ["rand_core"] }
-
-# UUID
-uuid = { version = "1.10", features = ["v4", "serde"] }
-
-# Tracing
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-
-# Error handling
-anyhow = "1.0"
-thiserror = "1.0"
-
-# Time
-chrono = { version = "0.4", features = ["serde"] }
-
-# HTTP client
-reqwest = { version = "0.12", features = ["json"], optional = true }
-
-# Blockchain
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+clap = { workspace = true }
+rayon = { workspace = true }
+blake3 = { workspace = true }
+rand = { workspace = true }
+ed25519-dalek = { workspace = true }
+uuid = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+chrono = { workspace = true }
 sha2 = "0.10"
 bincode = "1.3"
-
-# Metrics
-metrics = { version = "0.23", optional = true }
-metrics-exporter-prometheus = { version = "0.15", optional = true }
-
-# WASM support
-wasm-bindgen = { version = "0.2", optional = true }
+image = "0.25"
+housaky-core = { path = "housaky-core" }
+housaky-evolution = { path = "housaky-evolution" }
+housaky-consensus = { path = "housaky-consensus" }
+housaky-llm = { path = "housaky-llm" }
+housaky-network = { path = "housaky-network" }
 
 [features]
-default = ["metrics"]
-metrics = ["dep:metrics", "dep:metrics-exporter-prometheus"]
-web = ["dep:wasm-bindgen"]
-camera = ["dep:nokhwa"]
+default = []
+metrics = []
+web = []
+camera = []
 full = ["metrics", "web", "camera"]
-full-crypto = []
 
 [profile.dev]
 opt-level = 0
@@ -104,7 +135,6 @@ lto = "thin"
 opt-level = 1
 debug = true
 
-# Profile for maximum performance (longer compile times)
 [profile.maxperf]
 inherits = "release"
 lto = "fat"

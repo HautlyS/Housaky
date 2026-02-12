@@ -14,7 +14,6 @@ anyhow = { workspace = true }
 tracing = { workspace = true }
 blake3 = { workspace = true }
 ed25519-dalek = { workspace = true }
-noise-protocol = { workspace = true }
 rand = "0.8"
 x25519-dalek = "2"
 housaky-core = { path = "../housaky-core" }

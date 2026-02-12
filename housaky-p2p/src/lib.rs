@@ -8,11 +8,13 @@ pub mod discovery;
 pub mod gossip;
 pub mod network;
 pub mod protocol;
+pub mod dht;
 
 pub use discovery::*;
 pub use gossip::*;
 pub use network::*;
 pub use protocol::*;
+pub use dht::*;
 
 /// Initialize the P2P module
 pub fn init() {

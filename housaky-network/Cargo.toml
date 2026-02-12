@@ -1,11 +1,11 @@
 [package]
-name = "housaky-rlm"
+name = "housaky-network"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Reasoning Language Model - local transformer inference"
+description = "Distributed AGI network integration with GitHub and notebook platforms"
 
 [dependencies]
 tokio = { workspace = true }
@@ -13,8 +13,11 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 anyhow = { workspace = true }
 tracing = { workspace = true }
-rayon = { workspace = true }
-half = "2.3"
+chrono = { workspace = true }
+uuid = { workspace = true }
+blake3 = { workspace = true }
+housaky-core = { path = "../housaky-core" }
+housaky-consensus = { path = "../housaky-consensus" }
 
 [dev-dependencies]
 tokio-test = "0.4"

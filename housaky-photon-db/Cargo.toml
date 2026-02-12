@@ -13,7 +13,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 anyhow = { workspace = true }
 tracing = { workspace = true }
-sled = { workspace = true }
+sled = "0.34"
 blake3 = { workspace = true }
 housaky-core = { path = "../housaky-core" }
 housaky-photonics = { path = "../housaky-photonics" }

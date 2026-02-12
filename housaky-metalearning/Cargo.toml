@@ -12,8 +12,6 @@ tokio = { workspace = true }
 serde = { workspace = true }
 anyhow = { workspace = true }
 tracing = { workspace = true }
-candle-core = { workspace = true }
-candle-nn = { workspace = true }
 ndarray = { workspace = true }
 rayon = { workspace = true }
 housaky-core = { path = "../housaky-core" }

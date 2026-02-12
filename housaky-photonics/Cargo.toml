@@ -12,9 +12,7 @@ tokio = { workspace = true }
 serde = { workspace = true }
 anyhow = { workspace = true }
 tracing = { workspace = true }
-image = { workspace = true }
-nokhwa = { workspace = true }
-opencv = { workspace = true }
+image = "0.25"
 rayon = { workspace = true }
 housaky-core = { path = "../housaky-core" }
 

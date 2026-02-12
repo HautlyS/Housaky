@@ -11,29 +11,18 @@
 //! - Quantum Neural Holographic Fusion (Amiri, 2025) - Consciousness engineering
 //! - ICLR 2026 Workshop on Recursive Self-Improvement
 
-use anyhow::Result;
-use serde::{Deserialize, Serialize};
-use std::sync::Arc;
-
 pub mod crypto;
 pub mod orchestrator;
 pub mod quantum;
 pub mod types;
-pub mod quantum_agi;
 
 pub use crypto::*;
 pub use orchestrator::*;
 pub use quantum::*;
 pub use types::*;
-pub use quantum_agi::{
-    QuantumAGI, QuantumAGIConfig, AGIStatus,
-    QuantumSuperposition, PhiMetric, QuantumReasoner,
-    ConsciousnessEngine, SelfModel, EmergenceEvent, EmergenceType,
-    DGMProposal, EvolutionArchive, DGMEvolutionEngine,
-};
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub fn init() {
-    tracing::info!("housaky-core v{} initialized with Quantum AGI capabilities", VERSION);
+    tracing::info!("housaky-core v{} initialized", VERSION);
 }

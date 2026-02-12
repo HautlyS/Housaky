@@ -12,7 +12,6 @@ tokio = { workspace = true }
 serde = { workspace = true }
 anyhow = { workspace = true }
 tracing = { workspace = true }
-reed-solomon-erasure = { workspace = true }
 housaky-core = { path = "../housaky-core" }
 housaky-p2p = { path = "../housaky-p2p" }
 housaky-storage = { path = "../housaky-storage" }
