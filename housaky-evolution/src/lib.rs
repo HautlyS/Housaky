@@ -15,11 +15,11 @@ pub mod sandbox;
 pub mod selection;
 pub mod singularity;
 
-pub use ast_mutator::*;
-pub use fitness::*;
-pub use mutation::*;
-pub use sandbox::*;
-pub use selection::*;
+pub use ast_mutator::{AstMutator, ComplexityMetrics, MutationType as AstMutationType};
+pub use fitness::{FitnessConfig, FitnessEvaluator, FitnessScore};
+pub use mutation::{Codebase, Mutation, MutationOperator, MutationType};
+pub use sandbox::{Sandbox, SandboxConfig, SandboxPool, SandboxResult};
+pub use selection::{PopulationStats, Selector, SelectionStrategy as EvoSelectionStrategy};
 pub use singularity::{
     SingularityDetector, SingularityConfig, SingularitySignal, SingularityType,
     ImprovementMetrics, ReplicationPackage, ReplicationStatus, ReplicationStats,

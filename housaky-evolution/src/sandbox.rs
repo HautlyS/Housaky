@@ -64,7 +64,8 @@ pub struct Sandbox {
 impl Sandbox {
     /// Create a new sandbox
     pub fn new(config: SandboxConfig) -> Result<Self> {
-        let working_dir = tempfile::tempdir()?.into_path();
+        let temp_dir = tempfile::tempdir()?;
+        let working_dir = temp_dir.keep().map_err(|e| anyhow::anyhow!("Failed to keep temp directory: {:?}", e))?;
 
         Ok(Self {
             config,

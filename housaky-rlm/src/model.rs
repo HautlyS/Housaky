@@ -338,6 +338,66 @@ impl LanguageModel {
             .map(|var| var.as_tensor().elem_count())
             .sum()
     }
+
+    /// Check if the model is quantized
+    pub fn is_quantized(&self) -> bool {
+        self.is_quantized
+    }
+
+    /// Get quantized storage information
+    pub fn quantized_storage_info(&self) -> HashMap<String, QuantizedTensorInfo> {
+        self.quantized_storage
+            .iter()
+            .map(|(name, tensor)| {
+                (
+                    name.clone(),
+                    QuantizedTensorInfo {
+                        bits: tensor.bits,
+                        original_shape: tensor.original_shape.clone(),
+                        original_dtype: tensor.original_dtype,
+                        quantization_type: tensor.quantization_type,
+                        data_size_bytes: tensor.data.len(),
+                    },
+                )
+            })
+            .collect()
+    }
+
+    /// Get the number of quantized tensors
+    pub fn quantized_tensor_count(&self) -> usize {
+        self.quantized_storage.len()
+    }
+
+    /// Calculate total size of quantized storage in bytes
+    pub fn quantized_storage_size(&self) -> usize {
+        self.quantized_storage.values().map(|t| t.data.len()).sum()
+    }
+
+    /// Get quantization statistics
+    pub fn quantization_stats(&self) -> QuantizationStats {
+        let total_original_size: usize = self
+            .quantized_storage
+            .values()
+            .map(|t| t.original_shape.elem_count() * 4) // Assume F32 = 4 bytes
+            .sum();
+
+        let total_quantized_size: usize = self.quantized_storage_size();
+
+        let compression_ratio = if total_original_size > 0 {
+            total_quantized_size as f64 / total_original_size as f64
+        } else {
+            1.0
+        };
+
+        QuantizationStats {
+            is_quantized: self.is_quantized,
+            tensor_count: self.quantized_tensor_count(),
+            original_size_bytes: total_original_size,
+            quantized_size_bytes: total_quantized_size,
+            compression_ratio,
+            memory_saved_bytes: total_original_size.saturating_sub(total_quantized_size),
+        }
+    }
 }
 
 /// Model quantization configuration
@@ -636,6 +696,38 @@ pub struct QuantizedTensor {
     pub block_size: usize,
     /// Quantization type
     pub quantization_type: QuantizationType,
+}
+
+/// Information about a quantized tensor (without the data)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QuantizedTensorInfo {
+    /// Bits per element
+    pub bits: u8,
+    /// Original tensor shape
+    pub original_shape: Shape,
+    /// Original data type
+    pub original_dtype: DType,
+    /// Quantization type
+    pub quantization_type: QuantizationType,
+    /// Size of quantized data in bytes
+    pub data_size_bytes: usize,
+}
+
+/// Statistics about model quantization
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QuantizationStats {
+    /// Whether the model is quantized
+    pub is_quantized: bool,
+    /// Number of quantized tensors
+    pub tensor_count: usize,
+    /// Original size in bytes
+    pub original_size_bytes: usize,
+    /// Quantized size in bytes
+    pub quantized_size_bytes: usize,
+    /// Compression ratio (quantized / original)
+    pub compression_ratio: f64,
+    /// Memory saved in bytes
+    pub memory_saved_bytes: usize,
 }
 
 #[cfg(test)]

@@ -568,6 +568,41 @@ struct TestResult {
     pass_rate: f64,
 }
 
+impl TestResult {
+    /// Get total number of tests
+    pub fn total(&self) -> usize {
+        self.total
+    }
+    
+    /// Get number of passed tests
+    pub fn passed(&self) -> usize {
+        self.passed
+    }
+    
+    /// Get number of failed tests
+    pub fn failed(&self) -> usize {
+        self.failed
+    }
+    
+    /// Get pass rate (0.0 - 1.0)
+    pub fn pass_rate(&self) -> f64 {
+        self.pass_rate
+    }
+    
+    /// Check if all tests passed
+    pub fn all_passed(&self) -> bool {
+        self.failed == 0 && self.total > 0
+    }
+    
+    /// Get a summary string
+    pub fn summary(&self) -> String {
+        format!(
+            "Tests: {} total, {} passed, {} failed ({:.1}% pass rate)",
+            self.total, self.passed, self.failed, self.pass_rate * 100.0
+        )
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

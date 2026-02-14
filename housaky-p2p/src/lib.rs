@@ -2,8 +2,6 @@
 //!
 //! This crate provides P2P networking using libp2p.
 
-use anyhow::Result;
-
 pub mod discovery;
 pub mod gossip;
 pub mod network;

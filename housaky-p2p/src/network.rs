@@ -200,7 +200,7 @@ impl P2PNetwork {
     }
 
     /// Run the network event loop
-    pub async fn run(mut self) -> Result<()> {
+    pub async fn run(self) -> Result<()> {
         loop {
             tokio::select! {
                 event = self.swarm.select_next_some() => {

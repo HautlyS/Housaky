@@ -36,13 +36,13 @@ use tower_http::trace::TraceLayer;
 use metrics::{counter, gauge, histogram};
 
 /// Maximum request size (10MB)
-const MAX_REQUEST_SIZE: usize = 10 * 1024 * 1024;
+pub const MAX_REQUEST_SIZE: usize = 10 * 1024 * 1024;
 
 /// Request timeout (30 seconds)
-const REQUEST_TIMEOUT_SECS: u64 = 30;
+pub const REQUEST_TIMEOUT_SECS: u64 = 30;
 
 /// Maximum concurrent connections
-const MAX_CONCURRENT_CONNECTIONS: usize = 1000;
+pub const MAX_CONCURRENT_CONNECTIONS: usize = 1000;
 
 /// API state shared across all handlers
 #[derive(Clone)]
@@ -562,21 +562,33 @@ async fn list_transactions(Query(params): Query<PaginationParams>) -> impl IntoR
     )
 }
 
-/// Submit new transaction
-async fn submit_transaction(
-    State(state): State<ApiState>,
-    AxumJson(request): AxumJson<TransactionRequest>,
-) -> impl IntoResponse {
-    let start = std::time::Instant::now();
-    let (tx, mut rx) = mpsc::channel(1);
+    /// Submit new transaction
+    pub async fn submit_transaction(
+        &self,
+        request: TransactionRequest,
+    ) -> Result<TransactionResponse, ApiError> {
+        // Check request size
+        let request_size = serde_json::to_vec(&request).map_err(|_| ApiError::BadRequest("Invalid request".to_string()))?.len();
+        if request_size > MAX_REQUEST_SIZE {
+            return Err(ApiError::BadRequest(format!(
+                "Request too large: {} bytes (max: {} bytes)",
+                request_size, MAX_REQUEST_SIZE
+            )));
+        }
 
-    if let Err(e) = state
-        .event_tx
-        .send(ApiEvent::SubmitTransaction(request, tx))
-        .await
-    {
-        update_metrics(&state, false, start.elapsed()).await;
-        return error_response(StatusCode::INTERNAL_SERVER_ERROR, &format!("Failed to submit transaction: {}", e));
+        let (tx, mut rx) = mpsc::channel(1);
+
+        self.event_tx
+            .send(ApiEvent::SubmitTransaction(request, tx))
+            .await
+            .map_err(|_| ApiError::Internal("Failed to send transaction".to_string()))?;
+
+        // Use timeout from constant
+        match tokio::time::timeout(Duration::from_secs(REQUEST_TIMEOUT_SECS), rx.recv()).await {
+            Ok(Some(result)) => result,
+            Ok(None) => Err(ApiError::Internal("No response".to_string())),
+            Err(_) => Err(ApiError::Timeout),
+        }
     }
 
     match timeout(Duration::from_secs(10), rx.recv()).await {
@@ -981,8 +993,12 @@ pub async fn start_server(port: u16, node_id: String) -> Result<()> {
     tracing::info!("API server listening on port {}", port);
     tracing::info!("REST API: http://0.0.0.0:{}/", port);
     tracing::info!("WebSocket: ws://0.0.0.0:{}/ws", port);
+    tracing::info!("Max concurrent connections: {}", MAX_CONCURRENT_CONNECTIONS);
+    tracing::info!("Request timeout: {}s", REQUEST_TIMEOUT_SECS);
+    tracing::info!("Max request size: {}MB", MAX_REQUEST_SIZE / 1024 / 1024);
     counter!("api.server_started").increment(1);
     gauge!("api.port").set(port as f64);
+    gauge!("api.max_connections").set(MAX_CONCURRENT_CONNECTIONS as f64);
 
     // Spawn event handler
     let event_handle = tokio::spawn(async move {

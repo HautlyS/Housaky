@@ -1,6 +1,5 @@
 //! Content-addressed storage with Iroh
 use anyhow::Result;
-use iroh::blobs::Hash;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -67,7 +66,7 @@ pub mod multihash {
     }
 
     /// Encode u64 as varint
-    fn encode_varint(mut value: u64, buf: &mut Vec<u8>) {
+    pub fn encode_varint(mut value: u64, buf: &mut Vec<u8>) {
         while value >= 0x80 {
             buf.push((value as u8) | 0x80);
             value >>= 7;
@@ -76,7 +75,7 @@ pub mod multihash {
     }
 
     /// Decode varint from buffer
-    fn decode_varint(data: &[u8]) -> anyhow::Result<(u64, usize)> {
+    pub fn decode_varint(data: &[u8]) -> anyhow::Result<(u64, usize)> {
         let mut result: u64 = 0;
         let mut shift = 0;
         let mut i = 0;

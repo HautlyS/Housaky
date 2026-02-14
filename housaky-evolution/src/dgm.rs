@@ -229,6 +229,31 @@ struct Issue {
     line_numbers: Vec<u32>,
 }
 
+impl Issue {
+    /// Get the line numbers where the issue occurs
+    pub fn line_numbers(&self) -> &[u32] {
+        &self.line_numbers
+    }
+    
+    /// Check if this is a critical issue
+    pub fn is_critical(&self) -> bool {
+        self.severity == IssueSeverity::Critical
+    }
+    
+    /// Get a formatted location string (file:line)
+    pub fn location(&self) -> String {
+        if let Some(file) = self.files.first() {
+            if let Some(line) = self.line_numbers.first() {
+                format!("{}:{}", file, line)
+            } else {
+                file.clone()
+            }
+        } else {
+            "unknown".to_string()
+        }
+    }
+}
+
 /// Issue severity levels
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum IssueSeverity {
@@ -616,14 +641,19 @@ impl DgmEngine {
                     // Parse line numbers and file paths
                     let (file, line_num, desc) = parse_clippy_output(line);
                     
+                    // Determine severity based on error type
+                    let severity = if line.contains("panic") || line.contains("unsafe") || line.contains("security") {
+                        IssueSeverity::Critical
+                    } else if line.contains("error:") {
+                        IssueSeverity::Error
+                    } else {
+                        IssueSeverity::Warning
+                    };
+                    
                     issues.push(Issue {
                         description: desc,
                         files: file.map(|f| vec![f]).unwrap_or_default(),
-                        severity: if line.contains("error:") {
-                            IssueSeverity::Error
-                        } else {
-                            IssueSeverity::Warning
-                        },
+                        severity,
                         line_numbers: line_num.map(|l| vec![l]).unwrap_or_default(),
                     });
                 }

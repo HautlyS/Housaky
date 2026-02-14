@@ -1,5 +1,4 @@
 //! Peer discovery mechanisms
-use anyhow::Result;
 use libp2p::PeerId;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

@@ -196,12 +196,40 @@ impl BatchInference {
         Self { engine, batch_size }
     }
 
+    /// Get the batch size
+    pub fn batch_size(&self) -> usize {
+        self.batch_size
+    }
+
     /// Process multiple prompts in batches
     pub fn generate_batch(&self, prompts: &[String]) -> Vec<Result<String>> {
         prompts
-            .iter()
-            .map(|prompt| self.engine.generate(prompt))
+            .chunks(self.batch_size)
+            .flat_map(|chunk| {
+                chunk
+                    .iter()
+                    .map(|prompt| self.engine.generate(prompt))
+                    .collect::<Vec<_>>()
+            })
             .collect()
+    }
+
+    /// Process multiple prompts in batches asynchronously
+    pub async fn generate_batch_async(&self, prompts: &[String]) -> Vec<Result<String>> {
+        let mut results = Vec::with_capacity(prompts.len());
+        
+        for chunk in prompts.chunks(self.batch_size) {
+            let chunk_results: Vec<_> = chunk
+                .iter()
+                .map(|prompt| async move {
+                    self.engine.generate(prompt)
+                })
+                .collect();
+            
+            results.extend(chunk_results);
+        }
+        
+        results
     }
 }
 

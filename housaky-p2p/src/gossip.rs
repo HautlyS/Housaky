@@ -1,5 +1,4 @@
 //! Gossip protocol implementation
-use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
