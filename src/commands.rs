@@ -1,0 +1,253 @@
+use clap::Subcommand;
+use serde::{Deserialize, Serialize};
+
+/// Service management subcommands
+#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum ServiceCommands {
+    /// Install daemon service unit for auto-start and restart
+    Install,
+    /// Start daemon service
+    Start,
+    /// Stop daemon service
+    Stop,
+    /// Check daemon service status
+    Status,
+    /// Uninstall daemon service unit
+    Uninstall,
+}
+
+/// Channel management subcommands
+#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum ChannelCommands {
+    /// List all configured channels
+    List,
+    /// Start all configured channels (handled in main.rs for async)
+    Start,
+    /// Run health checks for configured channels (handled in main.rs for async)
+    Doctor,
+    /// Add a new channel configuration
+    Add {
+        /// Channel type (telegram, discord, slack, whatsapp, matrix, imessage, email)
+        channel_type: String,
+        /// Optional configuration as JSON
+        config: String,
+    },
+    /// Remove a channel configuration
+    Remove {
+        /// Channel name to remove
+        name: String,
+    },
+}
+
+/// Skills management subcommands
+#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum SkillCommands {
+    /// List all installed skills
+    List,
+    /// Install a new skill from a URL or local path
+    Install {
+        /// Source URL or local path
+        source: String,
+    },
+    /// Remove an installed skill
+    Remove {
+        /// Skill name to remove
+        name: String,
+    },
+}
+
+/// Migration subcommands
+#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum MigrateCommands {
+    /// Import memory from an `OpenClaw` workspace into this `Housaky` workspace
+    Openclaw {
+        /// Optional path to `OpenClaw` workspace (defaults to ~/.openclaw/workspace)
+        #[arg(long)]
+        source: Option<std::path::PathBuf>,
+
+        /// Validate and preview migration without writing any data
+        #[arg(long)]
+        dry_run: bool,
+    },
+}
+
+/// Cron subcommands
+#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum CronCommands {
+    /// List all scheduled tasks
+    List,
+    /// Add a new scheduled task
+    Add {
+        /// Cron expression
+        expression: String,
+        /// Command to run
+        command: String,
+    },
+    /// Add a one-shot delayed task (e.g. "30m", "2h", "1d")
+    Once {
+        /// Delay duration
+        delay: String,
+        /// Command to run
+        command: String,
+    },
+    /// Remove a scheduled task
+    Remove {
+        /// Task ID
+        id: String,
+    },
+    /// Pause a scheduled task
+    Pause {
+        /// Task ID
+        id: String,
+    },
+    /// Resume a paused task
+    Resume {
+        /// Task ID
+        id: String,
+    },
+}
+
+/// Integration subcommands
+#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum IntegrationCommands {
+    /// Show details about a specific integration
+    Info {
+        /// Integration name
+        name: String,
+    },
+}
+
+/// Model management subcommands
+#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum ModelCommands {
+    /// Refresh and cache provider models
+    Refresh {
+        /// Provider name (defaults to configured default provider)
+        #[arg(long)]
+        provider: Option<String>,
+
+        /// Force live refresh and ignore fresh cache
+        #[arg(long)]
+        force: bool,
+    },
+}
+
+/// Hardware discovery subcommands
+#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum HardwareCommands {
+    /// Enumerate USB devices (VID/PID) and show known boards
+    Discover,
+    /// Introspect a device by path (e.g. /dev/ttyACM0)
+    Introspect {
+        /// Serial or device path
+        path: String,
+    },
+    /// Get chip info via USB (probe-rs over ST-Link). No firmware needed on target.
+    Info {
+        /// Chip name (e.g. STM32F401RETx). Default: STM32F401RETx for Nucleo-F401RE
+        #[arg(long, default_value = "STM32F401RETx")]
+        chip: String,
+    },
+}
+
+/// Peripheral (hardware) management subcommands
+#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum PeripheralCommands {
+    /// List configured peripherals
+    List,
+    /// Add a peripheral (board path, e.g. nucleo-f401re /dev/ttyACM0)
+    Add {
+        /// Board type (nucleo-f401re, rpi-gpio, esp32)
+        board: String,
+        /// Path for serial transport (/dev/ttyACM0) or "native" for local GPIO
+        path: String,
+    },
+    /// Flash Housaky firmware to Arduino (creates .ino, installs arduino-cli if needed, uploads)
+    Flash {
+        /// Serial port (e.g. /dev/cu.usbmodem12345). If omitted, uses first arduino-uno from config.
+        #[arg(short, long)]
+        port: Option<String>,
+    },
+    /// Setup Arduino Uno Q Bridge app (deploy GPIO bridge for agent control)
+    SetupUnoQ {
+        /// Uno Q IP (e.g. 192.168.0.48). If omitted, assumes running ON the Uno Q.
+        #[arg(long)]
+        host: Option<String>,
+    },
+    /// Flash Housaky firmware to Nucleo-F401RE (builds + probe-rs run)
+    FlashNucleo,
+}
+
+/// Housaky AGI agent subcommands
+#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum HousakyCommands {
+    /// Show Housaky status and current state
+    Status,
+    /// Initialize Housaky AGI system
+    Init,
+    /// Trigger a manual heartbeat cycle
+    Heartbeat,
+    /// Show current tasks
+    Tasks,
+    /// Show state review
+    Review,
+    /// Force self-improvement cycle
+    Improve,
+    /// Connect to Kowalski agents
+    ConnectKowalski,
+    /// Start AGI mode interactive session
+    Agi {
+        /// Single message mode (don't enter interactive mode)
+        #[arg(short, long)]
+        message: Option<String>,
+        /// Provider to use
+        #[arg(short, long)]
+        provider: Option<String>,
+        /// Model to use
+        #[arg(long)]
+        model: Option<String>,
+    },
+    /// Launch AGI dashboard TUI
+    Dashboard {
+        /// Provider to use
+        #[arg(short, long)]
+        provider: Option<String>,
+        /// Model to use
+        #[arg(long)]
+        model: Option<String>,
+    },
+    /// Show inner monologue (thoughts)
+    Thoughts {
+        /// Number of thoughts to show
+        #[arg(short, long, default_value = "10")]
+        count: usize,
+    },
+    /// Manage goals
+    Goals {
+        #[command(subcommand)]
+        goal_command: GoalCommands,
+    },
+}
+
+/// Goal management subcommands
+#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum GoalCommands {
+    /// List all goals
+    List,
+    /// Add a new goal
+    Add {
+        /// Goal title
+        title: String,
+        /// Goal description
+        #[arg(short, long)]
+        description: Option<String>,
+        /// Priority (critical, high, medium, low)
+        #[arg(short = 'P', long, default_value = "medium")]
+        priority: String,
+    },
+    /// Complete a goal
+    Complete {
+        /// Goal ID
+        id: String,
+    },
+}

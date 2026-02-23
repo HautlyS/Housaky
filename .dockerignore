@@ -1,0 +1,47 @@
+# Build artifacts
+target/
+
+# Git
+.git/
+.githooks/
+
+# Documentation
+docs/
+examples/
+tests/
+*.md
+!Cargo.toml
+
+# Images
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.svg
+
+# Databases
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+
+# System files
+.DS_Store
+Thumbs.db
+
+# CI/CD configs
+.github/
+deny.toml
+LICENSE
+
+# Environment and secrets
+.env
+.env.*
+*.pem
+*.key
+
+# Temporary files
+.tmp_*
+*.tmp
+*.temp
+*.log
