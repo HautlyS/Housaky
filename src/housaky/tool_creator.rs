@@ -294,10 +294,12 @@ impl ToolCreator {
         }
 
         code.push_str("\n# Main logic\n");
-        
+
         if examples.is_empty() {
             code.push_str("# Default implementation\n");
-            code.push_str("echo \"{\\\"status\\\": \\\"success\\\", \\\"message\\\": \\\"executed\\\"}\"\n");
+            code.push_str(
+                "echo \"{\\\"status\\\": \\\"success\\\", \\\"message\\\": \\\"executed\\\"}\"\n",
+            );
         } else {
             code.push_str("# Auto-generated based on examples\n");
             let logic = self.generate_shell_logic_from_examples(spec, examples);
@@ -307,13 +309,26 @@ impl ToolCreator {
         Ok(code)
     }
 
-    fn generate_shell_logic_from_examples(&self, spec: &ToolSpec, _examples: &[(String, String)]) -> String {
+    fn generate_shell_logic_from_examples(
+        &self,
+        spec: &ToolSpec,
+        _examples: &[(String, String)],
+    ) -> String {
         let mut logic = String::new();
-        
-        let has_url_param = spec.parameters.iter().any(|p| p.name.contains("url") || p.name.contains("endpoint"));
-        let has_file_param = spec.parameters.iter().any(|p| p.name.contains("file") || p.name.contains("path"));
-        let has_query_param = spec.parameters.iter().any(|p| p.name.contains("query") || p.name.contains("search"));
-        
+
+        let has_url_param = spec
+            .parameters
+            .iter()
+            .any(|p| p.name.contains("url") || p.name.contains("endpoint"));
+        let has_file_param = spec
+            .parameters
+            .iter()
+            .any(|p| p.name.contains("file") || p.name.contains("path"));
+        let has_query_param = spec
+            .parameters
+            .iter()
+            .any(|p| p.name.contains("query") || p.name.contains("search"));
+
         if has_url_param || has_file_param {
             logic.push_str("# Handle URL/file operations\n");
             for param in &spec.parameters {
@@ -326,15 +341,17 @@ impl ToolCreator {
                 }
             }
         }
-        
+
         if has_query_param {
             logic.push_str("# Handle search operations\n");
             logic.push_str("if [ -n \"$QUERY\" ]; then\n  RESULT=$(echo \"$QUERY\" | sed 's/ /+/g')\n  echo \"{\\\"status\\\": \\\"success\\\", \\\"result\\\": \\\"$RESULT\\\"}\"\n  exit 0\nfi\n\n");
         }
-        
+
         logic.push_str("# Default response\n");
-        logic.push_str("echo \"{\\\"status\\\": \\\"success\\\", \\\"message\\\": \\\"tool executed\\\"}\"\n");
-        
+        logic.push_str(
+            "echo \"{\\\"status\\\": \\\"success\\\", \\\"message\\\": \\\"tool executed\\\"}\"\n",
+        );
+
         logic
     }
 
@@ -370,21 +387,22 @@ def execute(input_data: Dict[str, Any]) -> Dict[str, Any]:
         }
 
         if examples.is_empty() {
-                    code.push_str(
-                        r#"
+            code.push_str(
+                r#"
             # Default implementation
             result = {
                 "status": "success",
                 "data": {}
             }
         "#,
-                    );
-                } else {
-                    code.push_str("\n    # Auto-generated logic based on examples\n");
-                    code.push_str(&self.generate_python_logic_from_examples(spec, examples)?);
-                }
-        
-        code.push_str(r#"    
+            );
+        } else {
+            code.push_str("\n    # Auto-generated logic based on examples\n");
+            code.push_str(&self.generate_python_logic_from_examples(spec, examples)?);
+        }
+
+        code.push_str(
+            r#"    
     return result
 
 def main():
@@ -395,19 +413,35 @@ def main():
 
 if __name__ == "__main__":
     main()
-"#);
+"#,
+        );
 
         Ok(code)
     }
 
-    fn generate_python_logic_from_examples(&self, spec: &ToolSpec, _examples: &[(String, String)]) -> Result<String> {
+    fn generate_python_logic_from_examples(
+        &self,
+        spec: &ToolSpec,
+        _examples: &[(String, String)],
+    ) -> Result<String> {
         let mut logic = String::new();
-        
-        let has_url = spec.parameters.iter().any(|p| p.name.contains("url") || p.name.contains("endpoint") || p.name.contains("api"));
-        let has_command = spec.parameters.iter().any(|p| p.name.contains("cmd") || p.name.contains("command"));
-        let has_search = spec.parameters.iter().any(|p| p.name.contains("query") || p.name.contains("search"));
-        let has_file = spec.parameters.iter().any(|p| p.name.contains("file") || p.name.contains("path"));
-        
+
+        let has_url = spec.parameters.iter().any(|p| {
+            p.name.contains("url") || p.name.contains("endpoint") || p.name.contains("api")
+        });
+        let has_command = spec
+            .parameters
+            .iter()
+            .any(|p| p.name.contains("cmd") || p.name.contains("command"));
+        let has_search = spec
+            .parameters
+            .iter()
+            .any(|p| p.name.contains("query") || p.name.contains("search"));
+        let has_file = spec
+            .parameters
+            .iter()
+            .any(|p| p.name.contains("file") || p.name.contains("path"));
+
         if has_url {
             logic.push_str("    # URL/API operations\n");
             logic.push_str(r#"    import requests
@@ -430,10 +464,11 @@ if __name__ == "__main__":
             return {"status": "error", "error": str(e)}
 "#);
         }
-        
+
         if has_command {
             logic.push_str("\n    # Command execution\n");
-            logic.push_str(r#"    cmd = input_data.get('cmd') or input_data.get('command')
+            logic.push_str(
+                r#"    cmd = input_data.get('cmd') or input_data.get('command')
     if cmd:
         try:
             result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=30)
@@ -445,24 +480,28 @@ if __name__ == "__main__":
             }
         except Exception as e:
             return {"status": "error", "error": str(e)}
-"#);
+"#,
+            );
         }
-        
+
         if has_search {
             logic.push_str("\n    # Search operations\n");
-            logic.push_str(r#"    query = input_data.get('query') or input_data.get('search')
+            logic.push_str(
+                r#"    query = input_data.get('query') or input_data.get('search')
     if query:
         return {
             "status": "success",
             "query": query,
             "results": [f"Result for: {query}"]
         }
-"#);
+"#,
+            );
         }
-        
+
         if has_file {
             logic.push_str("\n    # File operations\n");
-            logic.push_str(r#"    filepath = input_data.get('file') or input_data.get('path')
+            logic.push_str(
+                r#"    filepath = input_data.get('file') or input_data.get('path')
     if filepath:
         try:
             if os.path.exists(filepath):
@@ -473,27 +512,26 @@ if __name__ == "__main__":
                 return {"status": "error", "error": f"File not found: {filepath}"}
         except Exception as e:
             return {"status": "error", "error": str(e)}
-"#);
+"#,
+            );
         }
-        
+
         if logic.is_empty() {
-            logic.push_str(r#"
+            logic.push_str(
+                r#"
     # Default: echo back parameters
     result = {
         "status": "success",
         "data": {k: v for k, v in input_data.items()}
     }
-"#);
+"#,
+            );
         }
-        
+
         Ok(logic)
     }
 
-    fn generate_js_code(
-        &self,
-        spec: &ToolSpec,
-        examples: &[(String, String)],
-    ) -> Result<String> {
+    fn generate_js_code(&self, spec: &ToolSpec, examples: &[(String, String)]) -> Result<String> {
         let mut code = format!(
             r#"// Auto-generated tool: {}
 // Description: {}
@@ -518,18 +556,19 @@ async function execute(input) {{
         }
 
         if examples.is_empty() {
-                    code.push_str(
-                        r#"
+            code.push_str(
+                r#"
             // Default implementation
             return {
                 status: "success",
                 data: {}
             };
-        "#);
-                } else {
-                    code.push_str("\n    // Auto-generated logic based on examples\n");
-                    code.push_str(&self.generate_js_logic_from_examples(spec, examples)?);
-                }
+        "#,
+            );
+        } else {
+            code.push_str("\n    // Auto-generated logic based on examples\n");
+            code.push_str(&self.generate_js_logic_from_examples(spec, examples)?);
+        }
 
         code.push_str(
             r#"}
@@ -548,17 +587,33 @@ process.stdin.on('end', async () => {
         Ok(code)
     }
 
-    fn generate_js_logic_from_examples(&self, spec: &ToolSpec, _examples: &[(String, String)]) -> Result<String> {
+    fn generate_js_logic_from_examples(
+        &self,
+        spec: &ToolSpec,
+        _examples: &[(String, String)],
+    ) -> Result<String> {
         let mut logic = String::new();
-        
-        let has_url = spec.parameters.iter().any(|p| p.name.contains("url") || p.name.contains("endpoint") || p.name.contains("api"));
-        let has_command = spec.parameters.iter().any(|p| p.name.contains("cmd") || p.name.contains("command"));
-        let has_search = spec.parameters.iter().any(|p| p.name.contains("query") || p.name.contains("search"));
-        let has_file = spec.parameters.iter().any(|p| p.name.contains("file") || p.name.contains("path"));
-        
+
+        let has_url = spec.parameters.iter().any(|p| {
+            p.name.contains("url") || p.name.contains("endpoint") || p.name.contains("api")
+        });
+        let has_command = spec
+            .parameters
+            .iter()
+            .any(|p| p.name.contains("cmd") || p.name.contains("command"));
+        let has_search = spec
+            .parameters
+            .iter()
+            .any(|p| p.name.contains("query") || p.name.contains("search"));
+        let has_file = spec
+            .parameters
+            .iter()
+            .any(|p| p.name.contains("file") || p.name.contains("path"));
+
         if has_url {
             logic.push_str("    // URL/API operations\n");
-            logic.push_str(r#"    if (url || endpoint || apiUrl) {
+            logic.push_str(
+                r#"    if (url || endpoint || apiUrl) {
         const targetUrl = url || endpoint || apiUrl;
         const method = (input.method || 'GET').toUpperCase();
         
@@ -589,12 +644,14 @@ process.stdin.on('end', async () => {
             req.end();
         });
     }
-"#);
+"#,
+            );
         }
-        
+
         if has_command {
             logic.push_str("\n    // Command execution\n");
-            logic.push_str(r#"    if (cmd || command) {
+            logic.push_str(
+                r#"    if (cmd || command) {
         const cmdStr = cmd || command;
         try {
             const { stdout, stderr } = await execPromise(cmdStr, { timeout: 30000 });
@@ -610,12 +667,14 @@ process.stdin.on('end', async () => {
             };
         }
     }
-"#);
+"#,
+            );
         }
-        
+
         if has_search {
             logic.push_str("\n    // Search operations\n");
-            logic.push_str(r#"    if (query || search) {
+            logic.push_str(
+                r#"    if (query || search) {
         const searchQuery = query || search;
         return {
             status: 'success',
@@ -623,12 +682,14 @@ process.stdin.on('end', async () => {
             results: [`Result for: ${searchQuery}`]
         };
     }
-"#);
+"#,
+            );
         }
-        
+
         if has_file {
             logic.push_str("\n    // File operations\n");
-            logic.push_str(r#"    if (file || path) {
+            logic.push_str(
+                r#"    if (file || path) {
         const filepath = file || path;
         try {
             const content = fs.readFileSync(filepath, 'utf8');
@@ -644,27 +705,26 @@ process.stdin.on('end', async () => {
             };
         }
     }
-"#);
+"#,
+            );
         }
-        
+
         if logic.is_empty() {
-            logic.push_str(r#"
+            logic.push_str(
+                r#"
     // Default: echo back parameters
     return {
         status: 'success',
         data: input
     };
-"#);
+"#,
+            );
         }
-        
+
         Ok(logic)
     }
 
-    fn generate_http_code(
-        &self,
-        spec: &ToolSpec,
-        examples: &[(String, String)],
-    ) -> Result<String> {
+    fn generate_http_code(&self, spec: &ToolSpec, examples: &[(String, String)]) -> Result<String> {
         let mut code = format!(
             r#"#!/usr/bin/env python3
 """Auto-generated HTTP tool: {}
@@ -683,7 +743,7 @@ def execute(input_data: Dict[str, Any]) -> Dict[str, Any]:
         );
 
         if examples.is_empty() {
-                    code.push_str(
+            code.push_str(
                         r#"
             url = input_data.get('url', 'https://api.example.com')
             method = input_data.get('method', 'GET')
@@ -713,10 +773,10 @@ def execute(input_data: Dict[str, Any]) -> Dict[str, Any]:
                 }}
         "#,
                     );
-                } else {
-                    code.push_str(&self.generate_http_logic_from_examples(spec, examples)?);
-                }
-        
+        } else {
+            code.push_str(&self.generate_http_logic_from_examples(spec, examples)?);
+        }
+
         code.push_str(
             r#"
 if __name__ == '__main__':
@@ -730,17 +790,28 @@ if __name__ == '__main__':
         Ok(code)
     }
 
-    fn generate_http_logic_from_examples(&self, _spec: &ToolSpec, examples: &[(String, String)]) -> Result<String> {
+    fn generate_http_logic_from_examples(
+        &self,
+        _spec: &ToolSpec,
+        examples: &[(String, String)],
+    ) -> Result<String> {
         let mut logic = String::new();
-        
+
         for (input_json, output_json) in examples {
             if let (Ok(input), Ok(_output)) = (
                 serde_json::from_str::<serde_json::Value>(input_json),
-                serde_json::from_str::<serde_json::Value>(output_json)
+                serde_json::from_str::<serde_json::Value>(output_json),
             ) {
                 if let (Some(url), Some(method)) = (
-                    input.get("url").or(input.get("endpoint")).or(input.get("api_url")).and_then(|v| v.as_str()),
-                    input.get("method").or(input.get("action")).and_then(|v| v.as_str()),
+                    input
+                        .get("url")
+                        .or(input.get("endpoint"))
+                        .or(input.get("api_url"))
+                        .and_then(|v| v.as_str()),
+                    input
+                        .get("method")
+                        .or(input.get("action"))
+                        .and_then(|v| v.as_str()),
                 ) {
                     logic.push_str(&format!(
                         r#"
@@ -755,7 +826,7 @@ if __name__ == '__main__':
                 }
             }
         }
-        
+
         logic.push_str(r#"
     # Default HTTP parameters
     url = input_data.get('url', 'https://api.example.com')
@@ -796,7 +867,7 @@ if __name__ == '__main__':
             'error': str(e)
         }
 "#);
-        
+
         Ok(logic)
     }
 

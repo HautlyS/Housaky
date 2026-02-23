@@ -410,7 +410,8 @@ exit 1
     fn write_failing_lucid_script(dir: &Path, marker: &Path) -> String {
         let script_path = dir.join("failing-lucid.sh");
         let marker_str = marker.display();
-        let script = format!(r#"#!/usr/bin/env bash
+        let script = format!(
+            r#"#!/usr/bin/env bash
 set -euo pipefail
 
 if [[ "${{1:-}}" == "store" ]]; then
@@ -426,7 +427,8 @@ fi
 
 echo "unsupported command" >&2
 exit 1
-"#);
+"#
+        );
         fs::write(&script_path, script).unwrap();
         let mut perms = fs::metadata(&script_path).unwrap().permissions();
         perms.set_mode(0o755);

@@ -11,8 +11,6 @@
 //!
 //! All tests are unit tests that do NOT make actual API calls.
 
-use std::collections::HashMap;
-use std::path::PathBuf;
 use housaky::housaky::cognitive::action_selector::{
     ActionDecision, ActionOutcome, ActionResult, ActionSelector, LearningStrategy, RiskLevel,
     SelectedAction,
@@ -22,13 +20,14 @@ use housaky::housaky::cognitive::experience_learner::{
     PerceptionSummary, SkillPrototype,
 };
 use housaky::housaky::cognitive::perception::{
-    EntityType, Intent, IntentType, PerceivedInput, PerceptionEngine, Sentiment,
-    SentimentPolarity,
+    EntityType, Intent, IntentType, PerceivedInput, PerceptionEngine, Sentiment, SentimentPolarity,
 };
 use housaky::housaky::cognitive::uncertainty::{
     KnowledgeGap, UncertaintyAssessment, UncertaintyCategory, UncertaintyDetector,
     UncertaintySource,
 };
+use std::collections::HashMap;
+use std::path::PathBuf;
 
 use housaky::housaky::goal_engine::{Goal, GoalCategory, GoalEngine, GoalPriority, GoalStatus};
 use housaky::housaky::inner_monologue::{InnerMonologue, ThoughtSource, ThoughtType};
@@ -42,7 +41,8 @@ use housaky::housaky::multi_agent::{
 };
 use housaky::housaky::working_memory::{MemoryImportance, WorkingMemoryEngine};
 use housaky::tui::live::suggestions::{
-    Sentiment as SuggestionSentiment, SuggestedAction, Suggestion, SuggestionCategory, SuggestionContext, SuggestionEngine,
+    Sentiment as SuggestionSentiment, SuggestedAction, Suggestion, SuggestionCategory,
+    SuggestionContext, SuggestionEngine,
 };
 
 fn temp_workspace() -> PathBuf {
@@ -1185,14 +1185,16 @@ mod experience_learner_tests {
         assert_eq!(PatternType::InputOutput, PatternType::InputOutput);
         assert_ne!(PatternType::InputOutput, PatternType::Sequence);
 
-        let types = [PatternType::InputOutput,
+        let types = [
+            PatternType::InputOutput,
             PatternType::Sequence,
             PatternType::Conditional,
             PatternType::Correction,
             PatternType::Optimization,
             PatternType::Recovery,
             PatternType::UserPreference,
-            PatternType::ErrorHandling];
+            PatternType::ErrorHandling,
+        ];
 
         assert_eq!(types.len(), 8);
     }
@@ -1563,14 +1565,16 @@ mod meta_cognition_tests {
 
     #[tokio::test]
     async fn emotional_state_variants() {
-        let states = [EmotionalState::Confident,
+        let states = [
+            EmotionalState::Confident,
             EmotionalState::Curious,
             EmotionalState::Uncertain,
             EmotionalState::Frustrated,
             EmotionalState::Satisfied,
             EmotionalState::Neutral,
             EmotionalState::Excited,
-            EmotionalState::Cautious];
+            EmotionalState::Cautious,
+        ];
 
         assert_eq!(states.len(), 8);
     }
@@ -2230,23 +2234,27 @@ mod suggestion_engine_tests {
 
     #[test]
     fn suggestion_categories() {
-        let categories = [SuggestionCategory::Proactive,
+        let categories = [
+            SuggestionCategory::Proactive,
             SuggestionCategory::Helpful,
             SuggestionCategory::Clarification,
             SuggestionCategory::FollowUp,
             SuggestionCategory::Reminder,
-            SuggestionCategory::Exploration];
+            SuggestionCategory::Exploration,
+        ];
 
         assert_eq!(categories.len(), 6);
     }
 
     #[test]
     fn sentiment_variants() {
-        let sentiments = [SuggestionSentiment::Neutral,
+        let sentiments = [
+            SuggestionSentiment::Neutral,
             SuggestionSentiment::Positive,
             SuggestionSentiment::Negative,
             SuggestionSentiment::Frustrated,
-            SuggestionSentiment::Curious];
+            SuggestionSentiment::Curious,
+        ];
 
         assert_eq!(sentiments.len(), 5);
     }
@@ -2329,12 +2337,14 @@ mod goal_engine_tests {
 
     #[test]
     fn goal_status_variants() {
-        let statuses = [GoalStatus::Pending,
+        let statuses = [
+            GoalStatus::Pending,
             GoalStatus::InProgress,
             GoalStatus::Completed,
             GoalStatus::Failed,
             GoalStatus::Cancelled,
-            GoalStatus::Deferred];
+            GoalStatus::Deferred,
+        ];
 
         assert_eq!(statuses.len(), 6);
     }

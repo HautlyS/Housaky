@@ -11,9 +11,9 @@ use tracing::{error, info};
 use super::information_gap::InformationGapEngine;
 use super::meta_learning::MetaLearningEngine;
 use super::world_model::WorldModel;
-use crate::housaky::memory::hierarchical::{ActionRecord, EventType, OutcomeRecord};
 use crate::housaky::goal_engine::GoalEngine;
 use crate::housaky::memory::hierarchical::HierarchicalMemory;
+use crate::housaky::memory::hierarchical::{ActionRecord, EventType, OutcomeRecord};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AgentInteraction {
@@ -153,7 +153,10 @@ impl LearningPipeline {
         info!("Recorded interaction, buffer size: {}", buffer.len());
     }
 
-    pub async fn process_interaction(&self, interaction: AgentInteraction) -> Result<LearningReport> {
+    pub async fn process_interaction(
+        &self,
+        interaction: AgentInteraction,
+    ) -> Result<LearningReport> {
         let mut report = LearningReport {
             interactions_processed: 1,
             facts_extracted: 0,
@@ -167,27 +170,29 @@ impl LearningPipeline {
         self.record_interaction(interaction.clone()).await;
 
         if let Some(ref memory) = self.unified_memory {
-            let _ = memory.store_episode(
-                EventType::Learning,
-                &interaction.input,
-                interaction
-                    .tool_calls
-                    .iter()
-                    .map(|t| ActionRecord {
-                        action_type: t.clone(),
-                        description: t.clone(),
-                        timestamp: interaction.timestamp,
+            let _ = memory
+                .store_episode(
+                    EventType::Learning,
+                    &interaction.input,
+                    interaction
+                        .tool_calls
+                        .iter()
+                        .map(|t| ActionRecord {
+                            action_type: t.clone(),
+                            description: t.clone(),
+                            timestamp: interaction.timestamp,
+                            success: interaction.success,
+                            duration_ms: interaction.duration_ms,
+                        })
+                        .collect(),
+                    OutcomeRecord {
+                        result: interaction.output.clone(),
                         success: interaction.success,
-                        duration_ms: interaction.duration_ms,
-                    })
-                    .collect(),
-                OutcomeRecord {
-                    result: interaction.output.clone(),
-                    success: interaction.success,
-                    side_effects: vec![],
-                    user_feedback: None,
-                },
-            ).await;
+                        side_effects: vec![],
+                        user_feedback: None,
+                    },
+                )
+                .await;
             report.facts_extracted = 1;
         }
 
@@ -215,7 +220,9 @@ impl LearningPipeline {
         if let Some(ref world_model) = self.world_model {
             if interaction.success {
                 let mut state = super::world_model::WorldState::default();
-                state.context.insert("success".to_string(), "true".to_string());
+                state
+                    .context
+                    .insert("success".to_string(), "true".to_string());
                 world_model.update_state(state).await;
                 report.world_model_updates += 1;
             }
@@ -231,7 +238,13 @@ impl LearningPipeline {
                         task_type: super::meta_learning::TaskType::ProblemSolving,
                         domain: interaction.context.domain.clone().unwrap_or_default(),
                         difficulty: 0.5,
-                        context: interaction.context.task_type.clone().map(|t| (t, "1".to_string())).into_iter().collect(),
+                        context: interaction
+                            .context
+                            .task_type
+                            .clone()
+                            .map(|t| (t, "1".to_string()))
+                            .into_iter()
+                            .collect(),
                         required_skills: vec![],
                     },
                     success: interaction.success,
@@ -279,9 +292,7 @@ impl LearningPipeline {
 
         info!(
             "Batch processing complete: {} interactions, {} facts, {} goals",
-            report.interactions_processed,
-            report.facts_extracted,
-            report.new_goals_created
+            report.interactions_processed, report.facts_extracted, report.new_goals_created
         );
 
         Ok(report)

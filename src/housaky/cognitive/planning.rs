@@ -70,20 +70,19 @@ impl PlanningEngine {
 
         let paths = self
             .world_model
-            .simulate(
-                &self.generate_possible_actions(&initial_state),
-                max_depth,
-            )
+            .simulate(&self.generate_possible_actions(&initial_state), max_depth)
             .await;
 
         let best_path = paths.into_iter().max_by(|a, b| {
             let a_score = a.total_reward * a.confidence;
             let b_score = b.total_reward * b.confidence;
-            a_score.partial_cmp(&b_score).unwrap_or(std::cmp::Ordering::Equal)
+            a_score
+                .partial_cmp(&b_score)
+                .unwrap_or(std::cmp::Ordering::Equal)
         });
 
         if let Some(path) = best_path {
-                let planned_actions: Vec<PlannedAction> = path
+            let planned_actions: Vec<PlannedAction> = path
                 .actions
                 .into_iter()
                 .map(|action| PlannedAction {
@@ -341,22 +340,23 @@ impl MCTSNode {
         let parent_visits = self.visits;
         let mut best_idx = 0;
         let mut best_ucb = f64::NEG_INFINITY;
-        
+
         for (idx, child) in self.children.iter().enumerate() {
             let ucb = if child.visits == 0 {
                 f64::MAX
             } else {
                 let exploitation = child.total_reward / child.visits as f64;
-                let exploration = exploration_constant * ((parent_visits as f64).ln() / child.visits as f64).sqrt();
+                let exploration = exploration_constant
+                    * ((parent_visits as f64).ln() / child.visits as f64).sqrt();
                 exploitation + exploration
             };
-            
+
             if ucb > best_ucb {
                 best_ucb = ucb;
                 best_idx = idx;
             }
         }
-        
+
         self.children.get_mut(best_idx)
     }
 
@@ -366,8 +366,8 @@ impl MCTSNode {
         }
 
         let exploitation = child.total_reward / child.visits as f64;
-        let exploration = exploration_constant
-            * ((self.visits as f64).ln() / child.visits as f64).sqrt();
+        let exploration =
+            exploration_constant * ((self.visits as f64).ln() / child.visits as f64).sqrt();
 
         exploitation + exploration
     }

@@ -245,13 +245,16 @@ impl MetaLearningEngine {
                 strategy.success_rate * (strategy.total_uses - 1) as f64
             };
             strategy.success_rate = successful_count / strategy.total_uses as f64;
-            strategy.average_time_ms = ((strategy.average_time_ms * (strategy.total_uses - 1) as u64)
+            strategy.average_time_ms = ((strategy.average_time_ms
+                * (strategy.total_uses - 1) as u64)
                 + outcome.time_taken_ms)
                 / strategy.total_uses as u64;
         }
 
         let mut domain = self.domain_performance.write().await;
-        let metrics = domain.entry(outcome.task.domain.clone()).or_insert_with(DomainMetrics::default);
+        let metrics = domain
+            .entry(outcome.task.domain.clone())
+            .or_insert_with(DomainMetrics::default);
         metrics.record(&outcome);
 
         info!(
@@ -284,9 +287,7 @@ impl MetaLearningEngine {
                 matches as f64 / task.required_skills.len().max(1) as f64
             };
 
-            let score = (strategy.success_rate * 0.4)
-                + (domain_bonus * 0.3)
-                + (task_match * 0.3);
+            let score = (strategy.success_rate * 0.4) + (domain_bonus * 0.3) + (task_match * 0.3);
 
             match best_strategy {
                 None => best_strategy = Some((id, strategy, score)),
@@ -333,7 +334,8 @@ impl MetaLearningEngine {
                         improvement_type: ImprovementType::Abandoned,
                         description: format!(
                             "Strategy {} has low success rate ({:.1}%), consider replacing",
-                            strategy.name, metrics.success_rate * 100.0
+                            strategy.name,
+                            metrics.success_rate * 100.0
                         ),
                         expected_impact: 0.2,
                         implementation: "Switch to alternative strategy".to_string(),
@@ -344,10 +346,12 @@ impl MetaLearningEngine {
                         improvement_type: ImprovementType::ParameterTuning,
                         description: format!(
                             "Strategy {} has moderate success ({:.1}%), tune parameters",
-                            strategy.name, metrics.success_rate * 100.0
+                            strategy.name,
+                            metrics.success_rate * 100.0
                         ),
                         expected_impact: 0.15,
-                        implementation: "Adjust strategy parameters based on failure patterns".to_string(),
+                        implementation: "Adjust strategy parameters based on failure patterns"
+                            .to_string(),
                     });
                 }
             }
@@ -357,7 +361,9 @@ impl MetaLearningEngine {
             improvements.push(StrategyImprovement {
                 strategy_id: "all".to_string(),
                 improvement_type: ImprovementType::NewStrategy,
-                description: "All strategies performing well, consider adding new strategies for edge cases".to_string(),
+                description:
+                    "All strategies performing well, consider adding new strategies for edge cases"
+                        .to_string(),
                 expected_impact: 0.1,
                 implementation: "Analyze failure cases and create targeted strategies".to_string(),
             });
@@ -404,13 +410,19 @@ impl DomainMetrics {
         }
         self.success_rate = self.successful_tasks as f64 / self.total_tasks as f64;
 
-        let entry = self.strategy_performance.entry(outcome.strategy_id.clone()).or_insert(0.5);
+        let entry = self
+            .strategy_performance
+            .entry(outcome.strategy_id.clone())
+            .or_insert(0.5);
         *entry = (*entry * (self.total_tasks - 1) as f64 + if outcome.success { 1.0 } else { 0.0 })
             / self.total_tasks as f64;
     }
 
     pub fn get_strategy_performance(&self, strategy_id: &str) -> f64 {
-        self.strategy_performance.get(strategy_id).copied().unwrap_or(0.5)
+        self.strategy_performance
+            .get(strategy_id)
+            .copied()
+            .unwrap_or(0.5)
     }
 }
 

@@ -526,7 +526,6 @@ impl WorkingMemoryEngine {
     }
 }
 
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WorkingMemoryStats {
     pub short_term_count: usize,

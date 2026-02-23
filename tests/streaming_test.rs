@@ -10,12 +10,12 @@
 //! - Ratatui TUI rendering simulation
 //! - Real-time streaming simulation
 
-use std::sync::Arc;
-use std::time::{Duration, Instant};
-use tokio::sync::broadcast;
 use housaky::housaky::streaming::{
     StreamChunk, StreamState, StreamStats, StreamingManager, StreamingSession,
 };
+use std::sync::Arc;
+use std::time::{Duration, Instant};
+use tokio::sync::broadcast;
 
 fn create_test_chunk() -> StreamChunk {
     StreamChunk {
@@ -31,7 +31,6 @@ fn create_test_chunk() -> StreamChunk {
 
 mod stream_chunk_tests {
     use super::*;
-    
 
     #[test]
     fn stream_chunk_creation() {
@@ -203,12 +202,14 @@ mod stream_state_tests {
 
     #[test]
     fn stream_state_variants() {
-        let states = [StreamState::Idle,
+        let states = [
+            StreamState::Idle,
             StreamState::Starting,
             StreamState::Streaming,
             StreamState::Completing,
             StreamState::Complete,
-            StreamState::Error];
+            StreamState::Error,
+        ];
 
         assert_eq!(states.len(), 6);
     }
@@ -1488,9 +1489,11 @@ mod real_time_simulation_tests {
         let manager = Arc::new(StreamingManager::new());
         let mut state_receiver = manager.subscribe_state();
 
-        let _states = [StreamState::Starting,
+        let _states = [
+            StreamState::Starting,
             StreamState::Streaming,
-            StreamState::Complete];
+            StreamState::Complete,
+        ];
 
         manager.start_stream().await;
         let s1 = state_receiver.try_recv().unwrap();

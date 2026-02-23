@@ -148,19 +148,19 @@ impl BeliefTracker {
         };
 
         let id = belief.id.clone();
-        self.beliefs.write().await.insert(id.clone(), belief.clone());
-
-        self.belief_history
+        self.beliefs
             .write()
             .await
-            .push(BeliefHistoryEntry {
-                belief_id: id.clone(),
-                timestamp: Utc::now(),
-                change_type: BeliefChangeType::Created,
-                old_confidence: 0.0,
-                new_confidence: belief.confidence,
-                reason: "Initial belief creation".to_string(),
-            });
+            .insert(id.clone(), belief.clone());
+
+        self.belief_history.write().await.push(BeliefHistoryEntry {
+            belief_id: id.clone(),
+            timestamp: Utc::now(),
+            change_type: BeliefChangeType::Created,
+            old_confidence: 0.0,
+            new_confidence: belief.confidence,
+            reason: "Initial belief creation".to_string(),
+        });
 
         info!("Added belief: {}", id);
         Ok(id)
@@ -174,17 +174,14 @@ impl BeliefTracker {
             belief.confidence = self.bayesian_update(belief.confidence, 0.7);
             belief.last_verified = Utc::now();
 
-            self.belief_history
-                .write()
-                .await
-                .push(BeliefHistoryEntry {
-                    belief_id: belief_id.to_string(),
-                    timestamp: Utc::now(),
-                    change_type: BeliefChangeType::EvidenceAdded,
-                    old_confidence,
-                    new_confidence: belief.confidence,
-                    reason: format!("Evidence added: {}", evidence),
-                });
+            self.belief_history.write().await.push(BeliefHistoryEntry {
+                belief_id: belief_id.to_string(),
+                timestamp: Utc::now(),
+                change_type: BeliefChangeType::EvidenceAdded,
+                old_confidence,
+                new_confidence: belief.confidence,
+                reason: format!("Evidence added: {}", evidence),
+            });
 
             info!(
                 "Updated belief {} confidence: {:.2} -> {:.2}",
@@ -202,17 +199,14 @@ impl BeliefTracker {
             belief.confidence = self.bayesian_update(belief.confidence, 0.3);
             belief.last_verified = Utc::now();
 
-            self.belief_history
-                .write()
-                .await
-                .push(BeliefHistoryEntry {
-                    belief_id: belief_id.to_string(),
-                    timestamp: Utc::now(),
-                    change_type: BeliefChangeType::ContradictionFound,
-                    old_confidence,
-                    new_confidence: belief.confidence,
-                    reason: format!("Contradiction found: {}", contradiction),
-                });
+            self.belief_history.write().await.push(BeliefHistoryEntry {
+                belief_id: belief_id.to_string(),
+                timestamp: Utc::now(),
+                change_type: BeliefChangeType::ContradictionFound,
+                old_confidence,
+                new_confidence: belief.confidence,
+                reason: format!("Contradiction found: {}", contradiction),
+            });
 
             info!(
                 "Contradiction for belief {}: confidence {:.2} -> {:.2}",
@@ -303,17 +297,14 @@ impl BeliefTracker {
                 belief.confidence = (belief.confidence - belief.decay_rate).max(0.1);
                 decayed += 1;
 
-                self.belief_history
-                    .write()
-                    .await
-                    .push(BeliefHistoryEntry {
-                        belief_id: belief.id.clone(),
-                        timestamp: Utc::now(),
-                        change_type: BeliefChangeType::Decayed,
-                        old_confidence: belief.confidence + belief.decay_rate,
-                        new_confidence: belief.confidence,
-                        reason: "Natural confidence decay".to_string(),
-                    });
+                self.belief_history.write().await.push(BeliefHistoryEntry {
+                    belief_id: belief.id.clone(),
+                    timestamp: Utc::now(),
+                    change_type: BeliefChangeType::Decayed,
+                    old_confidence: belief.confidence + belief.decay_rate,
+                    new_confidence: belief.confidence,
+                    reason: "Natural confidence decay".to_string(),
+                });
             }
         }
 
@@ -321,7 +312,8 @@ impl BeliefTracker {
     }
 
     fn bayesian_update(&self, prior: f64, likelihood: f64) -> f64 {
-        let posterior = (likelihood * prior) / ((likelihood * prior) + ((1.0 - likelihood) * (1.0 - prior)));
+        let posterior =
+            (likelihood * prior) / ((likelihood * prior) + ((1.0 - likelihood) * (1.0 - prior)));
         posterior.clamp(0.0, 1.0)
     }
 
@@ -333,7 +325,9 @@ impl BeliefTracker {
             .values()
             .filter(|b| {
                 b.content.to_lowercase().contains(&query_lower)
-                    || b.evidence.iter().any(|e| e.to_lowercase().contains(&query_lower))
+                    || b.evidence
+                        .iter()
+                        .any(|e| e.to_lowercase().contains(&query_lower))
             })
             .cloned()
             .collect()
@@ -418,7 +412,10 @@ mod tests {
             .await
             .unwrap();
 
-        tracker.update_with_evidence(&id, "Supporting evidence").await.unwrap();
+        tracker
+            .update_with_evidence(&id, "Supporting evidence")
+            .await
+            .unwrap();
 
         let belief = tracker.get_belief(&id).await.unwrap();
         assert!(belief.confidence > 0.5);

@@ -3,10 +3,10 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{info, error};
+use tracing::{error, info};
 
-use crate::housaky::cognitive::world_model::{Action, WorldModel, WorldState};
 use crate::housaky::cognitive::planning::Plan;
+use crate::housaky::cognitive::world_model::{Action, WorldModel, WorldState};
 
 pub struct ActionExecutor {
     world_model: Arc<WorldModel>,
@@ -64,7 +64,7 @@ impl ActionExecutor {
             let action = &planned_action.action;
 
             let predicted = self.world_model.predict(action).await;
-            
+
             let exec_result = self.execute_action(action, &current_state).await;
 
             let action_result = crate::housaky::cognitive::world_model::ActionResult {
@@ -89,26 +89,36 @@ impl ActionExecutor {
             current_state = exec_result.new_state;
         }
 
-        let final_state = results.last()
+        let final_state = results
+            .last()
             .map(|r| r.new_state.clone())
             .unwrap_or_else(|| current_state);
-        
+
         let all_success = results.iter().all(|r| r.success);
-        
+
         Ok(ExecutionResult {
             success: all_success,
-            output: format!("Executed {} actions, {} successful", 
-                results.len(), 
-                results.iter().filter(|r| r.success).count()),
+            output: format!(
+                "Executed {} actions, {} successful",
+                results.len(),
+                results.iter().filter(|r| r.success).count()
+            ),
             new_state: final_state,
             duration_ms: results.iter().map(|r| r.duration_ms).sum(),
-            error: results.iter().find(|r| !r.success).and_then(|r| r.error.clone()),
+            error: results
+                .iter()
+                .find(|r| !r.success)
+                .and_then(|r| r.error.clone()),
         })
     }
 
-    pub async fn execute_action(&self, action: &Action, current_state: &WorldState) -> ExecutionResult {
+    pub async fn execute_action(
+        &self,
+        action: &Action,
+        current_state: &WorldState,
+    ) -> ExecutionResult {
         let start_time = std::time::Instant::now();
-        
+
         info!("Executing action: {} ({})", action.id, action.action_type);
 
         let execution = ActionExecution {
@@ -126,7 +136,10 @@ impl ActionExecutor {
             "write" => self.execute_write(action).await,
             "execute" => self.execute_shell(action).await,
             "ask" => self.execute_ask(action).await,
-            _ => Err(anyhow::anyhow!("Unknown action type: {}", action.action_type)),
+            _ => Err(anyhow::anyhow!(
+                "Unknown action type: {}",
+                action.action_type
+            )),
         };
 
         let mut exec = execution;
@@ -135,16 +148,16 @@ impl ActionExecutor {
         let exec_result = match result {
             Ok(output) => {
                 let new_state = self.apply_effects(action, current_state);
-                
+
                 let result = ActionExecutionResult {
                     success: true,
                     output: output.clone(),
                     state_changes: HashMap::new(),
                     tools_invoked: vec![],
                 };
-                
+
                 exec.result = Some(result);
-                
+
                 ExecutionResult {
                     success: true,
                     output,
@@ -156,7 +169,7 @@ impl ActionExecutor {
             Err(e) => {
                 error!("Action execution failed: {}", e);
                 exec.error = Some(e.to_string());
-                
+
                 ExecutionResult {
                     success: false,
                     output: String::new(),
@@ -180,18 +193,16 @@ impl ActionExecutor {
         for effect in &action.expected_effects {
             match effect.effect_type {
                 crate::housaky::cognitive::world_model::EffectType::StateChange => {
-                    new_state.context.insert(
-                        effect.target.clone(),
-                        effect.value.to_string(),
-                    );
+                    new_state
+                        .context
+                        .insert(effect.target.clone(), effect.value.to_string());
                 }
                 crate::housaky::cognitive::world_model::EffectType::ResourceChange => {
                     if let Some(current) = new_state.resources.get(&effect.target).copied() {
                         let change = effect.value.as_f64().unwrap_or(0.0);
-                        new_state.resources.insert(
-                            effect.target.clone(),
-                            (current + change).max(0.0),
-                        );
+                        new_state
+                            .resources
+                            .insert(effect.target.clone(), (current + change).max(0.0));
                     }
                 }
                 _ => {}
@@ -235,14 +246,22 @@ impl ActionExecutor {
 
         // Basic path safety: restrict to relative paths or explicitly allowed prefixes
         if path.contains("../") || path.contains("/etc/") || path.contains("/proc/") {
-            return Err(anyhow::anyhow!("Path traversal detected - access denied: {}", path));
+            return Err(anyhow::anyhow!(
+                "Path traversal detected - access denied: {}",
+                path
+            ));
         }
 
-        let content = tokio::fs::read_to_string(path).await
+        let content = tokio::fs::read_to_string(path)
+            .await
             .map_err(|e| anyhow::anyhow!("Failed to read '{}': {}", path, e))?;
 
         let truncated = if content.len() > 8_000 {
-            format!("{}\n... [truncated {} bytes]", &content[..8_000], content.len() - 8_000)
+            format!(
+                "{}\n... [truncated {} bytes]",
+                &content[..8_000],
+                content.len() - 8_000
+            )
         } else {
             content
         };
@@ -259,7 +278,10 @@ impl ActionExecutor {
             .ok_or_else(|| anyhow::anyhow!("Missing 'path' parameter for write action"))?;
 
         if path.contains("../") || path.starts_with("/etc/") || path.starts_with("/proc/") {
-            return Err(anyhow::anyhow!("Path traversal detected - access denied: {}", path));
+            return Err(anyhow::anyhow!(
+                "Path traversal detected - access denied: {}",
+                path
+            ));
         }
 
         let content = action
@@ -271,12 +293,14 @@ impl ActionExecutor {
         let path_buf = std::path::Path::new(path);
         if let Some(parent) = path_buf.parent() {
             if !parent.as_os_str().is_empty() {
-                tokio::fs::create_dir_all(parent).await
-                    .map_err(|e| anyhow::anyhow!("Failed to create directories for '{}': {}", path, e))?;
+                tokio::fs::create_dir_all(parent).await.map_err(|e| {
+                    anyhow::anyhow!("Failed to create directories for '{}': {}", path, e)
+                })?;
             }
         }
 
-        tokio::fs::write(path, content).await
+        tokio::fs::write(path, content)
+            .await
             .map_err(|e| anyhow::anyhow!("Failed to write '{}': {}", path, e))?;
 
         Ok(format!("Written {} bytes to {}", content.len(), path))
@@ -291,10 +315,20 @@ impl ActionExecutor {
             .ok_or_else(|| anyhow::anyhow!("Missing 'command' parameter for execute action"))?;
 
         // Deny dangerous shell patterns
-        let denied_patterns = ["rm -rf", "dd if=", "mkfs", ":(){ :|:& };:", "> /dev/", "chmod 777 /"];
+        let denied_patterns = [
+            "rm -rf",
+            "dd if=",
+            "mkfs",
+            ":(){ :|:& };:",
+            "> /dev/",
+            "chmod 777 /",
+        ];
         for pattern in &denied_patterns {
             if command.contains(pattern) {
-                return Err(anyhow::anyhow!("Command blocked by safety policy: {}", command));
+                return Err(anyhow::anyhow!(
+                    "Command blocked by safety policy: {}",
+                    command
+                ));
             }
         }
 
@@ -353,13 +387,14 @@ impl ActionExecutor {
         let tools = self.tool_registry.tools.read().await;
         if let Some(llm_tool) = tools.get("llm").or_else(|| tools.get("chat")) {
             let mut args = std::collections::HashMap::new();
-            args.insert("prompt".to_string(), serde_json::Value::String(
-                if context.is_empty() {
+            args.insert(
+                "prompt".to_string(),
+                serde_json::Value::String(if context.is_empty() {
                     question.to_string()
                 } else {
                     format!("Context: {}\n\nQuestion: {}", context, question)
-                }
-            ));
+                }),
+            );
             let result = llm_tool.execute(args).await?;
             Ok(result.as_str().unwrap_or("").to_string())
         } else {

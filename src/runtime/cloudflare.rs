@@ -203,7 +203,10 @@ impl CloudflareRuntime {
         }
 
         let response_json: serde_json::Value = response.json().await?;
-        let logs_array = response_json["result"].as_array().cloned().unwrap_or_default();
+        let logs_array = response_json["result"]
+            .as_array()
+            .cloned()
+            .unwrap_or_default();
 
         let logs: Vec<WorkerLog> = logs_array
             .iter()
@@ -317,7 +320,9 @@ mod tests {
         cfg.api_token = String::new();
         let rt = CloudflareRuntime::new(cfg);
         let err = rt.validate_config().unwrap_err();
-        assert!(err.to_string().contains("runtime.cloudflare.api_token is required"));
+        assert!(err
+            .to_string()
+            .contains("runtime.cloudflare.api_token is required"));
     }
 
     #[test]
@@ -328,7 +333,9 @@ mod tests {
         cfg.memory_limit_mb = 0;
         let rt = CloudflareRuntime::new(cfg);
         let err = rt.validate_config().unwrap_err();
-        assert!(err.to_string().contains("runtime.cloudflare.memory_limit_mb must be > 0"));
+        assert!(err
+            .to_string()
+            .contains("runtime.cloudflare.memory_limit_mb must be > 0"));
     }
 
     #[test]
@@ -339,7 +346,9 @@ mod tests {
         cfg.memory_limit_mb = 512;
         let rt = CloudflareRuntime::new(cfg);
         let err = rt.validate_config().unwrap_err();
-        assert!(err.to_string().contains("runtime.cloudflare.memory_limit_mb of 512 exceeds the 300 MB limit"));
+        assert!(err
+            .to_string()
+            .contains("runtime.cloudflare.memory_limit_mb of 512 exceeds the 300 MB limit"));
     }
 
     #[test]
@@ -356,7 +365,10 @@ mod tests {
         let rt = CloudflareRuntime::new(default_config());
         let result = rt.build_shell_command("echo hello", Path::new("/tmp"));
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("does not support shell"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("does not support shell"));
     }
 
     #[test]

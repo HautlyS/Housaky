@@ -201,7 +201,12 @@ impl AGIAgentLoop {
         );
 
         let final_response = provider
-            .chat_with_system(Some(&self.system_prompt), &follow_up_prompt, model, temperature)
+            .chat_with_system(
+                Some(&self.system_prompt),
+                &follow_up_prompt,
+                model,
+                temperature,
+            )
             .await?;
 
         if let Some(gid) = goal_id {
@@ -487,7 +492,7 @@ pub async fn run_agi_loop(
                 temperature,
             )
             .await?;
-        
+
         tracing::info!("AGI loop: got response, about to print");
 
         println!("\n{}", response);

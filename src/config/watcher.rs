@@ -53,7 +53,9 @@ impl ConfigWatcher {
                     if matches!(event.kind, EventKind::Modify(_)) {
                         let now = Instant::now();
                         let last = *last_reload.blocking_read();
-                        if u64::try_from(now.duration_since(last).as_millis()).unwrap_or(u64::MAX) > debounce_ms {
+                        if u64::try_from(now.duration_since(last).as_millis()).unwrap_or(u64::MAX)
+                            > debounce_ms
+                        {
                             *last_reload.blocking_write() = now;
                             let _ = tx_clone.send(ConfigUpdate::FullReload(Config::default()));
                         }
@@ -171,7 +173,8 @@ impl UsageTracker {
             if daily_limit_tokens == 0 {
                 return 0;
             }
-            let percent = (stats.tokens_today as f64 / daily_limit_tokens as f64 * 100.0).clamp(0.0, 100.0) as u8;
+            let percent = (stats.tokens_today as f64 / daily_limit_tokens as f64 * 100.0)
+                .clamp(0.0, 100.0) as u8;
             return percent;
         }
         0

@@ -355,11 +355,7 @@ impl MetaCognitionEngine {
         actions
     }
 
-    fn assess_mood(
-        &self,
-        observations: &[Observation],
-        insights: &[Insight],
-    ) -> EmotionalState {
+    fn assess_mood(&self, observations: &[Observation], insights: &[Insight]) -> EmotionalState {
         let risk_count = observations
             .iter()
             .filter(|o| o.category == ObservationCategory::Risk)

@@ -1,6 +1,6 @@
+use crate::housaky::agent::{Agent, Task};
 #[allow(unused_imports)]
 use crate::housaky::goal_engine::Goal;
-use crate::housaky::agent::{Agent, Task};
 use crate::housaky::inner_monologue::InnerMonologue;
 use crate::housaky::knowledge_graph::{EntityType, KnowledgeGraphEngine};
 use crate::housaky::meta_cognition::MetaCognitionEngine;
@@ -49,11 +49,7 @@ impl SelfImprovementEngine {
         }
     }
 
-    pub fn with_provider(
-        agent: Arc<Agent>,
-        provider: Box<dyn Provider>,
-        model: String,
-    ) -> Self {
+    pub fn with_provider(agent: Arc<Agent>, provider: Box<dyn Provider>, model: String) -> Self {
         let workspace_dir = agent.workspace_dir.clone();
 
         Self {
@@ -469,12 +465,12 @@ impl SelfImprovementEngine {
                     .learning_progress
                     .skills_learned
                     .contains(&insight.content)
-                {
-                    state
-                        .learning_progress
-                        .skills_learned
-                        .push(insight.content.clone());
-                }
+            {
+                state
+                    .learning_progress
+                    .skills_learned
+                    .push(insight.content.clone());
+            }
         }
 
         self.knowledge_graph.save().await?;
@@ -888,20 +884,24 @@ impl ContinuousLearningEngine {
 
     pub fn record_feedback(&mut self, feedback: LearningFeedback) {
         self.feedback_history.push(feedback.clone());
-        
+
         if feedback.success {
             self.learn_from_success(&feedback);
         } else {
             self.learn_from_failure(&feedback);
         }
-        
+
         self.update_patterns();
     }
 
     fn learn_from_success(&mut self, feedback: &LearningFeedback) {
         let context = feedback.context.get("context").cloned().unwrap_or_default();
-        
-        if let Some(pattern) = self.success_patterns.iter_mut().find(|p| p.context == context) {
+
+        if let Some(pattern) = self
+            .success_patterns
+            .iter_mut()
+            .find(|p| p.context == context)
+        {
             pattern.frequency += 1;
             let n = pattern.frequency as f64;
             pattern.success_rate = ((n - 1.0) * pattern.success_rate + 1.0) / n;
@@ -917,14 +917,18 @@ impl ContinuousLearningEngine {
 
     fn learn_from_failure(&mut self, feedback: &LearningFeedback) {
         let context = feedback.context.get("context").cloned().unwrap_or_default();
-        
+
         let alternatives = self.suggest_alternatives(&feedback.action);
-        
-        if let Some(pattern) = self.failure_patterns.iter_mut().find(|p| p.context == context) {
+
+        if let Some(pattern) = self
+            .failure_patterns
+            .iter_mut()
+            .find(|p| p.context == context)
+        {
             pattern.frequency += 1;
             let n = pattern.frequency as f64;
             pattern.failure_rate = ((n - 1.0) * pattern.failure_rate + 1.0) / n;
-            
+
             if pattern.failure_rate > 0.7 && pattern.suggested_alternatives.is_empty() {
                 pattern.suggested_alternatives = alternatives;
             }
@@ -941,78 +945,84 @@ impl ContinuousLearningEngine {
 
     fn suggest_alternatives(&self, failed_action: &str) -> Vec<String> {
         let mut alternatives = Vec::new();
-        
+
         if failed_action.contains("search") {
             alternatives.push("browse".to_string());
             alternatives.push("lookup".to_string());
         }
-        
+
         if failed_action.contains("browse") {
             alternatives.push("search".to_string());
             alternatives.push("scrape".to_string());
         }
-        
+
         if failed_action.contains("execute") {
             alternatives.push("simulate".to_string());
             alternatives.push("validate".to_string());
         }
-        
+
         alternatives
     }
 
     fn update_patterns(&mut self) {
         let mut to_remove = Vec::new();
-        
+
         for (i, pattern) in self.success_patterns.iter_mut().enumerate() {
             if pattern.frequency > 10 && pattern.success_rate < 0.3 {
                 to_remove.push(i);
             }
         }
-        
+
         for i in to_remove.iter().rev() {
             self.success_patterns.remove(*i);
         }
-        
+
         to_remove.clear();
-        
+
         for (i, pattern) in self.failure_patterns.iter_mut().enumerate() {
             if pattern.frequency > 10 && pattern.failure_rate < 0.3 {
                 to_remove.push(i);
             }
         }
-        
+
         for i in to_remove.iter().rev() {
             self.failure_patterns.remove(*i);
         }
     }
 
     pub fn get_recommended_action(&self, context: &str) -> Option<String> {
-        let best_success = self.success_patterns.iter()
+        let best_success = self
+            .success_patterns
+            .iter()
             .filter(|p| p.context == context)
             .max_by(|a, b| {
                 (a.success_rate * a.frequency as f64)
                     .partial_cmp(&(b.success_rate * b.frequency as f64))
                     .unwrap()
             });
-        
+
         if let Some(pattern) = best_success {
             if pattern.success_rate >= self.min_confidence_threshold {
                 return pattern.action_sequence.first().cloned();
             }
         }
-        
+
         if rand::random::<f64>() < self.exploration_rate {
             return Some("explore".to_string());
         }
-        
+
         None
     }
 
     pub fn adapt_behavior(&mut self, trigger: &str, adaptation: &str) {
         if let Some(existing) = self.adaptations.iter_mut().find(|a| a.trigger == trigger) {
             existing.times_triggered += 1;
-            existing.confidence = (existing.confidence * (existing.times_triggered - 1) as f64 
-                + if adaptation == existing.adaptation { 1.0 } else { 0.0 }) 
+            existing.confidence = (existing.confidence * (existing.times_triggered - 1) as f64
+                + if adaptation == existing.adaptation {
+                    1.0
+                } else {
+                    0.0
+                })
                 / existing.times_triggered as f64;
         } else {
             self.adaptations.push(BehavioralAdaptation {

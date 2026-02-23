@@ -207,7 +207,8 @@ impl CognitiveLoop {
         .await;
 
         if self.config.enable_reflection
-            && self.state.read().await.total_turns % u64::from(self.config.reflection_frequency) == 0
+            && self.state.read().await.total_turns % u64::from(self.config.reflection_frequency)
+                == 0
         {
             self.reflect(&perception, &decision, &response).await?;
         }
@@ -524,7 +525,7 @@ impl CognitiveLoop {
 
         let state = self.state.read().await;
         let mut history: Vec<ChatMessage> = Vec::new();
-        
+
         for turn in state.conversation_history.iter().rev().take(10).rev() {
             history.push(ChatMessage {
                 role: "user".to_string(),

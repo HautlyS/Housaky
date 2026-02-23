@@ -634,12 +634,12 @@ impl KnowledgeGraphEngine {
         }
 
         // Only link entities whose type pairing is semantically meaningful
-        use EntityType::{Technology, API, Concept, Organization};
+        use EntityType::{Concept, Organization, Technology, API};
         let meaningful = matches!(
             (&from_entity.entity_type, &to_entity.entity_type),
-            (Technology | API | Concept | Organization, Technology) |
-            (Concept | Technology, Concept) |
-            (Technology, API | Organization)
+            (Technology | API | Concept | Organization, Technology)
+                | (Concept | Technology, Concept)
+                | (Technology, API | Organization)
         );
 
         meaningful
@@ -895,15 +895,13 @@ impl InferenceEngine {
         self.rules.push(InferenceRule {
             id: "rule_uses_implies_depends".to_string(),
             name: "Uses Implies Depends".to_string(),
-            premise: vec![
-                RulePattern {
-                    entity_type: None,
-                    entity_name: None,
-                    relation: Some("Uses".to_string()),
-                    target_type: None,
-                    target_name: None,
-                },
-            ],
+            premise: vec![RulePattern {
+                entity_type: None,
+                entity_name: None,
+                relation: Some("Uses".to_string()),
+                target_type: None,
+                target_name: None,
+            }],
             conclusion: RulePattern {
                 entity_type: None,
                 entity_name: None,
@@ -918,15 +916,13 @@ impl InferenceEngine {
         self.rules.push(InferenceRule {
             id: "rule_partof_implies_contains".to_string(),
             name: "PartOf Implies Contains".to_string(),
-            premise: vec![
-                RulePattern {
-                    entity_type: None,
-                    entity_name: None,
-                    relation: Some("PartOf".to_string()),
-                    target_type: None,
-                    target_name: None,
-                },
-            ],
+            premise: vec![RulePattern {
+                entity_type: None,
+                entity_name: None,
+                relation: Some("PartOf".to_string()),
+                target_type: None,
+                target_name: None,
+            }],
             conclusion: RulePattern {
                 entity_type: None,
                 entity_name: None,
@@ -941,15 +937,13 @@ impl InferenceEngine {
         self.rules.push(InferenceRule {
             id: "rule_creates_implies_uses".to_string(),
             name: "Creates Implies Uses".to_string(),
-            premise: vec![
-                RulePattern {
-                    entity_type: None,
-                    entity_name: None,
-                    relation: Some("Creates".to_string()),
-                    target_type: None,
-                    target_name: None,
-                },
-            ],
+            premise: vec![RulePattern {
+                entity_type: None,
+                entity_name: None,
+                relation: Some("Creates".to_string()),
+                target_type: None,
+                target_name: None,
+            }],
             conclusion: RulePattern {
                 entity_type: None,
                 entity_name: None,
@@ -966,11 +960,7 @@ impl InferenceEngine {
         self.rules.push(rule);
     }
 
-    pub fn infer(
-        &self,
-        knowledge_graph: &KnowledgeGraph,
-        _query: &str,
-    ) -> InferenceResult {
+    pub fn infer(&self, knowledge_graph: &KnowledgeGraph, _query: &str) -> InferenceResult {
         let mut inferred_entities = Vec::new();
         let mut inferred_relations = Vec::new();
         let mut rules_applied = Vec::new();
@@ -981,19 +971,19 @@ impl InferenceEngine {
         for rule in &self.rules {
             if self.rule_matches_premise(rule, knowledge_graph) {
                 rules_applied.push(rule.name.clone());
-                
+
                 let conclusion = self.apply_rule_conclusion(rule, knowledge_graph);
                 if let Some((entity, relation)) = conclusion {
                     inferred_entities.push(entity.clone());
                     inferred_relations.push(relation.clone());
-                    
+
                     reasoning_chain.push(ReasoningStep {
                         rule_id: rule.id.clone(),
                         premise_matches: vec!["matched".to_string()],
                         conclusion: format!("{:?} -> {:?}", relation.relation_type, entity.name),
                         confidence: rule.confidence,
                     });
-                    
+
                     total_confidence += rule.confidence;
                     rule_count += 1;
                 }
@@ -1019,17 +1009,22 @@ impl InferenceEngine {
         for premise in &rule.premise {
             let matches = graph.relations.iter().any(|rel| {
                 let type_match = premise.entity_type.as_ref().map_or(true, |et| {
-                    graph.entities.get(&rel.from_entity)
+                    graph
+                        .entities
+                        .get(&rel.from_entity)
                         .map(|e| format!("{:?}", e.entity_type).contains(et))
                         .unwrap_or(false)
                 });
-                
-                let rel_match = premise.relation.as_ref().map_or(true, |r| {
-                    rel.relation_type.as_str() == r
-                });
-                
+
+                let rel_match = premise
+                    .relation
+                    .as_ref()
+                    .map_or(true, |r| rel.relation_type.as_str() == r);
+
                 let target_match = premise.target_type.as_ref().map_or(true, |tt| {
-                    graph.entities.get(&rel.to_entity)
+                    graph
+                        .entities
+                        .get(&rel.to_entity)
                         .map(|e| format!("{:?}", e.entity_type).contains(tt))
                         .unwrap_or(false)
                 });
@@ -1049,16 +1044,28 @@ impl InferenceEngine {
         rule: &InferenceRule,
         graph: &KnowledgeGraph,
     ) -> Option<(Entity, Relation)> {
-        let from_entity = graph.relations.iter()
-            .find(|r| rule.premise.iter().any(|p| {
-                p.relation.as_ref().map_or(false, |rel| r.relation_type.as_str() == rel)
-            }))
+        let from_entity = graph
+            .relations
+            .iter()
+            .find(|r| {
+                rule.premise.iter().any(|p| {
+                    p.relation
+                        .as_ref()
+                        .map_or(false, |rel| r.relation_type.as_str() == rel)
+                })
+            })
             .map(|r| r.from_entity.clone())?;
 
-        let to_entity = graph.relations.iter()
-            .find(|r| rule.premise.iter().any(|p| {
-                p.relation.as_ref().map_or(false, |rel| r.relation_type.as_str() == rel)
-            }))
+        let to_entity = graph
+            .relations
+            .iter()
+            .find(|r| {
+                rule.premise.iter().any(|p| {
+                    p.relation
+                        .as_ref()
+                        .map_or(false, |rel| r.relation_type.as_str() == rel)
+                })
+            })
             .map(|r| r.to_entity.clone())?;
 
         let relation_type = match rule.conclusion.relation.as_deref() {
@@ -1097,15 +1104,17 @@ impl InferenceEngine {
 
         for _ in 0..max_iterations {
             let result = self.infer(&current_graph, "");
-            
+
             if result.inferred_entities.is_empty() {
                 break;
             }
 
             for entity in &result.inferred_entities {
-                current_graph.entities.insert(entity.id.clone(), entity.clone());
+                current_graph
+                    .entities
+                    .insert(entity.id.clone(), entity.clone());
             }
-            
+
             for relation in &result.inferred_relations {
                 current_graph.relations.push(relation.clone());
             }
@@ -1127,11 +1136,20 @@ impl InferenceEngine {
             for relation in &knowledge_graph.relations {
                 if relation.to_entity == *target {
                     for rule in &self.rules {
-                        if rule.conclusion.relation.as_deref() == Some(relation.relation_type.as_str()) {
+                        if rule.conclusion.relation.as_deref()
+                            == Some(relation.relation_type.as_str())
+                        {
                             reasoning_chain.push(ReasoningStep {
                                 rule_id: rule.id.clone(),
-                                premise_matches: vec![format!("{} -> {:?}", relation.from_entity.as_str(), relation.relation_type)],
-                                conclusion: format!("{} is {:?}", entity.name, relation.relation_type),
+                                premise_matches: vec![format!(
+                                    "{} -> {:?}",
+                                    relation.from_entity.as_str(),
+                                    relation.relation_type
+                                )],
+                                conclusion: format!(
+                                    "{} is {:?}",
+                                    entity.name, relation.relation_type
+                                ),
                                 confidence: rule.confidence * relation.confidence,
                             });
                         }

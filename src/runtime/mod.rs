@@ -20,9 +20,13 @@ pub fn create_runtime(config: &RuntimeConfig) -> anyhow::Result<Box<dyn RuntimeA
         "wasm" => Ok(Box::new(WasmRuntime::new(config.wasm.clone()))),
         "cloudflare" => Ok(Box::new(CloudflareRuntime::new(config.cloudflare.clone()))),
         other if other.trim().is_empty() => {
-            anyhow::bail!("runtime.kind cannot be empty. Supported values: native, docker, wasm, cloudflare")
+            anyhow::bail!(
+                "runtime.kind cannot be empty. Supported values: native, docker, wasm, cloudflare"
+            )
         }
-        other => anyhow::bail!("Unknown runtime kind '{other}'. Supported values: native, docker, wasm, cloudflare"),
+        other => anyhow::bail!(
+            "Unknown runtime kind '{other}'. Supported values: native, docker, wasm, cloudflare"
+        ),
     }
 }
 

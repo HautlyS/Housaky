@@ -122,8 +122,7 @@ impl ReasoningPipeline {
             .chat_with_system(Some(&system_prompt), &user_prompt, model, 0.3)
             .await?;
 
-        let parsed = self
-            .parse_reasoning_response(&response, &reasoning_type)?;
+        let parsed = self.parse_reasoning_response(&response, &reasoning_type)?;
 
         for step in &parsed.steps {
             self.engine
@@ -167,8 +166,7 @@ impl ReasoningPipeline {
             .chat_with_system(Some(&system_prompt), &user_prompt, model, 0.2)
             .await?;
 
-        let parsed = self
-            .parse_react_response(&response, available_tools)?;
+        let parsed = self.parse_react_response(&response, available_tools)?;
 
         for step in &parsed.steps {
             self.engine
@@ -388,11 +386,7 @@ Final Answer: [your conclusion]
         })
     }
 
-    fn parse_react_response(
-        &self,
-        response: &str,
-        tools: &[&str],
-    ) -> Result<ReasoningResult> {
+    fn parse_react_response(&self, response: &str, tools: &[&str]) -> Result<ReasoningResult> {
         let mut steps = Vec::new();
         let mut current_thought = String::new();
         let mut current_action = String::new();
@@ -479,7 +473,7 @@ Final Answer: [your conclusion]
             } else {
                 response.trim().to_string()
             };
-            
+
             if steps.is_empty() {
                 steps.push(ReasoningStep {
                     step_number: 1,

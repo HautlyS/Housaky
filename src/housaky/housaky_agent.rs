@@ -125,8 +125,7 @@ pub struct ImprovementTarget {
     pub target_value: f64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct LearningProgress {
     pub skills_learned: Vec<String>,
     pub tools_mastered: Vec<String>,
@@ -180,7 +179,6 @@ impl Default for HousakyState {
         }
     }
 }
-
 
 impl Default for SystemHealth {
     fn default() -> Self {

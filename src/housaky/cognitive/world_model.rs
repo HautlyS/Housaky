@@ -191,19 +191,11 @@ impl WorldModel {
     pub async fn predict(&self, action: &Action) -> PredictedOutcome {
         let current = self.current_state.read().await.clone();
 
-        let predicted_state = self
-            .transition_model
-            .read()
-            .await
-            .predict(&current, action);
+        let predicted_state = self.transition_model.read().await.predict(&current, action);
 
         let reward = self.reward_model.read().await.predict(&predicted_state);
 
-        let confidence = self
-            .transition_model
-            .read()
-            .await
-            .get_confidence(action);
+        let confidence = self.transition_model.read().await.get_confidence(action);
 
         PredictedOutcome {
             state: predicted_state,
@@ -291,10 +283,11 @@ impl WorldModel {
     }
 
     pub async fn learn(&self, result: &ActionResult) {
-        self.transition_model
-            .write()
-            .await
-            .update(&result.action, &result.expected_state, &result.actual_state);
+        self.transition_model.write().await.update(
+            &result.action,
+            &result.expected_state,
+            &result.actual_state,
+        );
 
         self.reward_model
             .write()
@@ -302,10 +295,7 @@ impl WorldModel {
             .update(&result.actual_state, result.success);
 
         if let Some(causality) = &result.discovered_causality {
-            self.causal_graph
-                .write()
-                .await
-                .add_causality(causality);
+            self.causal_graph.write().await.add_causality(causality);
         }
 
         self.history.write().await.push(result.clone());
@@ -315,12 +305,9 @@ impl WorldModel {
     }
 
     pub async fn get_causal_relationships(&self, entity: &str) -> Vec<CausalRelationship> {
-        self.causal_graph
-            .read()
-            .await
-            .get_relationships(entity)
+        self.causal_graph.read().await.get_relationships(entity)
     }
-    
+
     pub async fn find_unresolved_entities(&self) -> Vec<crate::housaky::knowledge_graph::Entity> {
         // Return entities with low confidence as unresolved
         vec![]
@@ -389,16 +376,11 @@ impl TransitionModel {
         new_state
     }
 
-    pub fn update(
-        &mut self,
-        action: &Action,
-        expected: &Option<WorldState>,
-        actual: &WorldState,
-    ) {
+    pub fn update(&mut self, action: &Action, expected: &Option<WorldState>, actual: &WorldState) {
         let action_type = action.action_type.clone();
         let observation_count;
         let old_confidence;
-        
+
         {
             let pattern = self
                 .patterns
@@ -419,9 +401,8 @@ impl TransitionModel {
         if let Some(exp) = expected {
             let match_rate = self.calculate_state_match(exp, actual);
             if let Some(pattern) = self.patterns.get_mut(&action_type) {
-                pattern.confidence =
-                    (old_confidence * (observation_count - 1) as f64 + match_rate)
-                        / observation_count as f64;
+                pattern.confidence = (old_confidence * (observation_count - 1) as f64 + match_rate)
+                    / observation_count as f64;
             }
         }
     }
@@ -465,7 +446,9 @@ impl RewardModel {
         signals.insert("time_saved".to_string(), 0.1);
         signals.insert("resource_saved".to_string(), 0.05);
 
-        Self { reward_signals: signals }
+        Self {
+            reward_signals: signals,
+        }
     }
 
     pub fn predict(&self, state: &WorldState) -> f64 {
@@ -477,7 +460,11 @@ impl RewardModel {
 
         if let Some(time) = state.context.get("time_taken") {
             if let Ok(t) = time.parse::<f64>() {
-                reward -= t * self.reward_signals.get("time_saved").copied().unwrap_or(0.0);
+                reward -= t * self
+                    .reward_signals
+                    .get("time_saved")
+                    .copied()
+                    .unwrap_or(0.0);
             }
         }
 
@@ -528,10 +515,7 @@ impl CausalGraph {
     }
 
     pub fn get_relationships(&self, entity: &str) -> Vec<CausalRelationship> {
-        self.edges
-            .get(entity)
-            .cloned()
-            .unwrap_or_default()
+        self.edges.get(entity).cloned().unwrap_or_default()
     }
 }
 

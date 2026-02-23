@@ -40,7 +40,9 @@ pub mod web_browser;
 pub mod working_memory;
 
 pub use agent::{AgentInput, AgentOutput, Session as AgentSession, UnifiedAgentLoop};
-pub use housaky_agent::{Agent, Capability, KowalskiIntegrationConfig, Task, TaskCategory, TaskPriority, TaskStatus};
+pub use housaky_agent::{
+    Agent, Capability, KowalskiIntegrationConfig, Task, TaskCategory, TaskPriority, TaskStatus,
+};
 pub use session_manager::{Session, SessionManager, SessionSummary};
 
 use crate::commands::{GoalCommands, HousakyCommands};
@@ -136,7 +138,7 @@ pub async fn handle_command(command: HousakyCommands, config: &Config) -> Result
             let heartbeat = heartbeat::HousakyHeartbeat::new(agent);
 
             println!("Heartbeat cycle initiated. Running single cycle...");
-            
+
             match heartbeat.run_single_cycle().await {
                 Ok(()) => println!("✓ Heartbeat cycle completed successfully"),
                 Err(e) => println!("✗ Heartbeat cycle failed: {}", e),

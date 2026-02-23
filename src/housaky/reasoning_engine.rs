@@ -682,7 +682,12 @@ pub struct MCTSNode {
 }
 
 impl MCTSNode {
-    pub fn new(state: String, action: Option<String>, parent: Option<String>, depth: usize) -> Self {
+    pub fn new(
+        state: String,
+        action: Option<String>,
+        parent: Option<String>,
+        depth: usize,
+    ) -> Self {
         Self {
             state,
             action,
@@ -708,7 +713,8 @@ impl MCTSNode {
             f64::MAX
         } else {
             let exploitation = self.total_value / self.visit_count as f64;
-            let exploration = exploration_constant * ((parent_visit_count as f64).ln() / self.visit_count as f64).sqrt();
+            let exploration = exploration_constant
+                * ((parent_visit_count as f64).ln() / self.visit_count as f64).sqrt();
             exploitation + exploration
         }
     }
@@ -747,30 +753,35 @@ impl MonteCarloTreeSearch {
         self.root = Some(MCTSNode::new(initial_state, None, None, 0));
     }
 
-    pub fn search(&mut self, get_possible_actions: impl Fn(&str) -> Vec<String>, evaluate: impl Fn(&str) -> f64) -> Option<String> {
+    pub fn search(
+        &mut self,
+        get_possible_actions: impl Fn(&str) -> Vec<String>,
+        evaluate: impl Fn(&str) -> f64,
+    ) -> Option<String> {
         let root_state = self.root.as_mut()?.state.clone();
         let mut current_state = root_state.clone();
-        
+
         for _ in 0..self.max_iterations {
             let actions = get_possible_actions(&current_state);
             if actions.is_empty() {
                 break;
             }
-            
+
             let idx = rand::random::<usize>() % actions.len();
             let action = actions[idx].clone();
             current_state = format!("{} -> {}", current_state, action);
-            
+
             let reward = evaluate(&current_state);
-            
+
             if let Some(root) = self.root.as_mut() {
                 root.visit_count += 1;
                 root.total_value += reward;
             }
         }
-        
+
         self.root.as_mut().and_then(|r| {
-            r.children.iter()
+            r.children
+                .iter()
                 .max_by_key(|c| c.visit_count)
                 .and_then(|c| c.action.clone())
         })
@@ -778,20 +789,18 @@ impl MonteCarloTreeSearch {
 
     pub fn get_best_path(&self) -> Vec<String> {
         let mut path = Vec::new();
-        
+
         if let Some(root) = &self.root {
             path.push(root.state.clone());
-            
-            let mut current = root.children.iter()
-                .max_by_key(|c| c.visit_count);
-                
+
+            let mut current = root.children.iter().max_by_key(|c| c.visit_count);
+
             while let Some(node) = current {
                 path.push(node.state.clone());
-                current = node.children.iter()
-                    .max_by_key(|c| c.visit_count);
+                current = node.children.iter().max_by_key(|c| c.visit_count);
             }
         }
-        
+
         path
     }
 }
@@ -843,10 +852,10 @@ impl AdvancedReasoningEngine {
         max_steps: usize,
     ) -> Vec<(String, f64)> {
         let mut beam = vec![(initial_state.to_string(), evaluate(initial_state))];
-        
+
         for _ in 0..max_steps {
             let mut candidates = Vec::new();
-            
+
             for (state, score) in &beam {
                 let neighbors = generate_neighbors(state);
                 for (neighbor, edge_cost) in neighbors {
@@ -854,15 +863,15 @@ impl AdvancedReasoningEngine {
                     candidates.push((neighbor, new_score));
                 }
             }
-            
+
             if candidates.is_empty() {
                 break;
             }
-            
+
             candidates.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
             beam = candidates.into_iter().take(self.beam_width).collect();
         }
-        
+
         beam
     }
 
@@ -874,26 +883,27 @@ impl AdvancedReasoningEngine {
         goal_check: impl Fn(&str) -> bool,
         max_steps: usize,
     ) -> Option<String> {
-        let mut frontier: Vec<(f64, String)> = vec![(heuristic(initial_state), initial_state.to_string())];
+        let mut frontier: Vec<(f64, String)> =
+            vec![(heuristic(initial_state), initial_state.to_string())];
         let mut visited = std::collections::HashSet::new();
-        
+
         for _ in 0..max_steps {
             if frontier.is_empty() {
                 return None;
             }
-            
+
             frontier.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap());
             let (_, current) = frontier.remove(0);
-            
+
             if goal_check(&current) {
                 return Some(current);
             }
-            
+
             if visited.contains(&current) {
                 continue;
             }
             visited.insert(current.clone());
-            
+
             for neighbor in generate_neighbors(&current) {
                 if !visited.contains(&neighbor) {
                     let priority = heuristic(&neighbor);
@@ -901,7 +911,7 @@ impl AdvancedReasoningEngine {
                 }
             }
         }
-        
+
         None
     }
 
@@ -916,38 +926,38 @@ impl AdvancedReasoningEngine {
     ) -> (String, f64) {
         let mut current = initial_state.to_string();
         let mut current_energy = evaluate(&current);
-        
+
         let mut best = current.clone();
         let mut best_energy = current_energy;
-        
+
         let mut temp = initial_temp;
-        
+
         while temp > min_temp {
             let next = generate_neighbor(&current);
             let next_energy = evaluate(&next);
-            
+
             let delta = next_energy - current_energy;
-            
+
             let should_accept = if delta > 0.0 {
                 true
             } else {
                 let probability = (delta / temp).exp();
                 rand::random::<f64>() < probability
             };
-            
+
             if should_accept {
                 current = next;
                 current_energy = next_energy;
-                
+
                 if current_energy > best_energy {
                     best = current.clone();
                     best_energy = current_energy;
                 }
             }
-            
+
             temp *= cooling_rate;
         }
-        
+
         (best, best_energy)
     }
 
@@ -959,18 +969,18 @@ impl AdvancedReasoningEngine {
         merge: impl Fn(&[String]) -> String,
     ) -> Option<String> {
         let subproblems = split(problem);
-        
+
         if subproblems.len() <= 2 {
             return solve_base(problem);
         }
-        
+
         let mut solutions = Vec::new();
         for sub in subproblems {
             if let Some(solution) = self.divide_and_conquer(&sub, &split, &solve_base, &merge) {
                 solutions.push(solution);
             }
         }
-        
+
         if solutions.is_empty() {
             None
         } else {

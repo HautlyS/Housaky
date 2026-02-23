@@ -41,10 +41,9 @@ use tracing_subscriber::FmtSubscriber;
 extern crate housaky;
 
 // Use the library modules
-use housaky::
-    { agent, channels, commands, config_editor, cron, daemon, doctor, gateway, hardware,
-    integrations, migration, onboard, peripherals, service, skills, tui,
-    Config,
+use housaky::{
+    agent, channels, commands, config_editor, cron, daemon, doctor, gateway, hardware,
+    integrations, migration, onboard, peripherals, service, skills, tui, Config,
 };
 
 use commands::{

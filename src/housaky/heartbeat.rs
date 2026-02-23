@@ -336,12 +336,11 @@ impl HousakyHeartbeat {
 
         let mut state = self.agent.state.write().await;
         for task in &mut tasks {
-            if task.status == TaskStatus::InProgress
-                && self.should_complete_task(task)? {
-                    task.status = TaskStatus::Completed;
-                    task.completed_at = Some(chrono::Utc::now());
-                    state.total_improvements += 1;
-                }
+            if task.status == TaskStatus::InProgress && self.should_complete_task(task)? {
+                task.status = TaskStatus::Completed;
+                task.completed_at = Some(chrono::Utc::now());
+                state.total_improvements += 1;
+            }
         }
 
         state.active_tasks = tasks.clone();
@@ -678,11 +677,13 @@ Generated: {}
     }
 
     fn format_improvement_targets(&self) -> String {
-        ["1. Increase consciousness level by 0.01",
+        [
+            "1. Increase consciousness level by 0.01",
             "2. Create at least 1 new skill",
             "3. Improve code generation capability",
             "4. Expand knowledge domains",
-            "5. Optimize EC2 resource usage"]
+            "5. Optimize EC2 resource usage",
+        ]
         .join("\n")
     }
 

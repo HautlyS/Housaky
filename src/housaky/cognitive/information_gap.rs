@@ -155,8 +155,7 @@ impl CuriosityEngine {
             .iter()
             .filter(|e| {
                 let event_lower = e.to_lowercase();
-                !event_lower.contains(&topic_lower)
-                    && !topic_lower.contains(&event_lower)
+                !event_lower.contains(&topic_lower) && !topic_lower.contains(&event_lower)
             })
             .count();
 
@@ -235,7 +234,10 @@ impl InformationGapEngine {
         }
     }
 
-    pub fn with_belief_tracker(mut self, tracker: Arc<crate::housaky::memory::BeliefTracker>) -> Self {
+    pub fn with_belief_tracker(
+        mut self,
+        tracker: Arc<crate::housaky::memory::BeliefTracker>,
+    ) -> Self {
         self.belief_tracker = Some(tracker);
         self
     }
@@ -302,7 +304,9 @@ impl InformationGapEngine {
         }
 
         if let Some(ref kg) = self.knowledge_graph {
-            let recent_entities = kg.query(crate::housaky::knowledge_graph::GraphQuery::Recent(10)).await;
+            let recent_entities = kg
+                .query(crate::housaky::knowledge_graph::GraphQuery::Recent(10))
+                .await;
             for entity in recent_entities.iter().take(5) {
                 if entity.confidence < 0.6 {
                     let gap = KnowledgeGap {
@@ -364,7 +368,10 @@ impl InformationGapEngine {
         identified_gaps
     }
 
-    pub async fn create_learning_goal(&self, gap: &KnowledgeGap) -> Result<crate::housaky::goal_engine::Goal> {
+    pub async fn create_learning_goal(
+        &self,
+        gap: &KnowledgeGap,
+    ) -> Result<crate::housaky::goal_engine::Goal> {
         let goal = crate::housaky::goal_engine::Goal {
             id: uuid::Uuid::new_v4().to_string(),
             title: format!("Learn about {}", gap.topic),

@@ -277,10 +277,7 @@ impl Provider for OpenRouterProvider {
             .client
             .post("https://openrouter.ai/api/v1/chat/completions")
             .header("Authorization", format!("Bearer {api_key}"))
-            .header(
-                "HTTP-Referer",
-                "https://github.com/theonlyhennygod/housaky",
-            )
+            .header("HTTP-Referer", "https://github.com/theonlyhennygod/housaky")
             .header("X-Title", "Housaky")
             .json(&request)
             .send()
@@ -327,10 +324,7 @@ impl Provider for OpenRouterProvider {
             .client
             .post("https://openrouter.ai/api/v1/chat/completions")
             .header("Authorization", format!("Bearer {api_key}"))
-            .header(
-                "HTTP-Referer",
-                "https://github.com/theonlyhennygod/housaky",
-            )
+            .header("HTTP-Referer", "https://github.com/theonlyhennygod/housaky")
             .header("X-Title", "Housaky")
             .json(&request)
             .send()
@@ -375,10 +369,7 @@ impl Provider for OpenRouterProvider {
             .client
             .post("https://openrouter.ai/api/v1/chat/completions")
             .header("Authorization", format!("Bearer {api_key}"))
-            .header(
-                "HTTP-Referer",
-                "https://github.com/theonlyhennygod/housaky",
-            )
+            .header("HTTP-Referer", "https://github.com/theonlyhennygod/housaky")
             .header("X-Title", "Housaky")
             .json(&native_request)
             .send()

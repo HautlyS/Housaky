@@ -177,10 +177,16 @@ impl SessionManager {
         };
 
         let id = session.id.clone();
-        self.sessions.write().await.insert(id.clone(), session.clone());
+        self.sessions
+            .write()
+            .await
+            .insert(id.clone(), session.clone());
         *self.active_session.write().await = Some(id);
 
-        self.session_history.write().await.push_front(session.id.clone());
+        self.session_history
+            .write()
+            .await
+            .push_front(session.id.clone());
         self.prune_history().await;
 
         self.save_session(&session).await?;
@@ -283,11 +289,7 @@ impl SessionManager {
         }
     }
 
-    pub async fn add_tool_call(
-        &self,
-        session_id: &str,
-        call: ToolCallEntry,
-    ) -> Result<()> {
+    pub async fn add_tool_call(&self, session_id: &str, call: ToolCallEntry) -> Result<()> {
         let mut sessions = self.sessions.write().await;
         if let Some(session) = sessions.get_mut(session_id) {
             if let Some(entry) = session.conversation_history.last_mut() {
@@ -410,7 +412,10 @@ impl SessionManager {
         session.last_active = Utc::now();
 
         let id = session.id.clone();
-        self.sessions.write().await.insert(id.clone(), session.clone());
+        self.sessions
+            .write()
+            .await
+            .insert(id.clone(), session.clone());
         self.save_session(&session).await?;
 
         info!("Imported session: {}", session.id);

@@ -4,11 +4,13 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use crate::config::Config;
-use crate::housaky::cognitive::{ActionSelector, CognitiveLoop, InformationGapEngine, PlanningEngine, world_model::WorldModel};
-use crate::housaky::memory::{BeliefTracker, HierarchicalMemory};
+use crate::housaky::cognitive::{
+    world_model::WorldModel, ActionSelector, CognitiveLoop, InformationGapEngine, PlanningEngine,
+};
 use crate::housaky::goal_engine::GoalEngine;
-use crate::housaky::reasoning_engine::ReasoningEngine;
 use crate::housaky::knowledge_graph::KnowledgeGraphEngine;
+use crate::housaky::memory::{BeliefTracker, HierarchicalMemory};
+use crate::housaky::reasoning_engine::ReasoningEngine;
 use crate::housaky::working_memory::WorkingMemoryEngine;
 
 pub struct UnifiedAgentLoop {
@@ -83,7 +85,7 @@ impl UnifiedAgentLoop {
             knowledge_graph: Arc::new(KnowledgeGraphEngine::new(workspace_dir)),
             goal_engine: Arc::new(GoalEngine::new(workspace_dir)),
             hierarchical_memory: Arc::new(HierarchicalMemory::new(
-                crate::housaky::memory::hierarchical::HierarchicalMemoryConfig::default()
+                crate::housaky::memory::hierarchical::HierarchicalMemoryConfig::default(),
             )),
             session: Arc::new(RwLock::new(None)),
         })
@@ -97,7 +99,9 @@ impl UnifiedAgentLoop {
     ) -> Result<AgentOutput> {
         let start_time = std::time::Instant::now();
 
-        let session = self.get_or_create_session(input.session_id.as_deref()).await?;
+        let session = self
+            .get_or_create_session(input.session_id.as_deref())
+            .await?;
 
         self.working_memory
             .add_message(&input.message, "user")
@@ -111,18 +115,24 @@ impl UnifiedAgentLoop {
             .process(&input.message, provider, model, &tool_refs)
             .await?;
 
-        let gaps = self.information_gap.identify_gaps(
-            &crate::housaky::cognitive::information_gap::CuriosityContext {
-                current_goals: {
-                    let goals = self.goal_engine.get_active_goals().await;
-                    goals.into_iter().map(|g| g.title).collect()
+        let gaps = self
+            .information_gap
+            .identify_gaps(
+                &crate::housaky::cognitive::information_gap::CuriosityContext {
+                    current_goals: {
+                        let goals = self.goal_engine.get_active_goals().await;
+                        goals.into_iter().map(|g| g.title).collect()
+                    },
+                    recent_events: vec![format!(
+                        "User message: {}",
+                        &input.message[..input.message.len().min(80)]
+                    )],
+                    uncertain_topics: vec![],
+                    existing_knowledge: vec![],
+                    active_tasks: vec![],
                 },
-                recent_events: vec![format!("User message: {}", &input.message[..input.message.len().min(80)])],
-                uncertain_topics: vec![],
-                existing_knowledge: vec![],
-                active_tasks: vec![],
-            }
-        ).await;
+            )
+            .await;
         let _should_learn = self.should_interrupt_for_learning(&gaps).await;
 
         self.working_memory
@@ -133,7 +143,11 @@ impl UnifiedAgentLoop {
             response: cognitive_response.content.clone(),
             session_id: Some(session.id.clone()),
             actions_taken: cognitive_response.actions_taken.clone(),
-            goals_updated: if cognitive_response.goals_updated { vec!["updated".to_string()] } else { vec![] },
+            goals_updated: if cognitive_response.goals_updated {
+                vec!["updated".to_string()]
+            } else {
+                vec![]
+            },
             meta: OutputMetadata {
                 reasoning_steps: cognitive_response.thoughts.len(),
                 tools_used: cognitive_response.actions_taken,
@@ -145,10 +159,9 @@ impl UnifiedAgentLoop {
         Ok(output)
     }
 
-
     async fn get_or_create_session(&self, session_id: Option<&str>) -> Result<Session> {
         let mut session_lock = self.session.write().await;
-        
+
         if let Some(id) = session_id {
             if let Some(ref existing) = *session_lock {
                 if existing.id == id {
@@ -182,8 +195,6 @@ impl UnifiedAgentLoop {
         self.session.read().await.clone()
     }
 }
-
-
 
 #[cfg(test)]
 mod tests {

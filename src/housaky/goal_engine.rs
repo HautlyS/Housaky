@@ -298,10 +298,9 @@ impl GoalEngine {
 
         while let Some(id) = queue.front() {
             if let Some(goal) = goals.get(id) {
-                if goal.status == GoalStatus::Pending
-                    && self.dependencies_satisfied(goal, &goals) {
-                        return queue.pop_front().and_then(|id| goals.get(&id).cloned());
-                    }
+                if goal.status == GoalStatus::Pending && self.dependencies_satisfied(goal, &goals) {
+                    return queue.pop_front().and_then(|id| goals.get(&id).cloned());
+                }
             }
             queue.pop_front();
         }
@@ -692,19 +691,17 @@ impl AutonomousPlanningEngine {
 
     pub fn create_plan(&self, goal: &Goal, available_tools: &[&str]) -> ExecutionPlan {
         let plan_id = format!("plan_{}", uuid::Uuid::new_v4());
-        
+
         let steps = self.decompose_goal(goal, available_tools);
-        
-        let total_estimated_mins: u32 = steps.iter()
-            .map(|s| s.estimated_duration_mins)
-            .sum();
-        
+
+        let total_estimated_mins: u32 = steps.iter().map(|s| s.estimated_duration_mins).sum();
+
         let schedule = if self.enable_parallel_execution {
             self.schedule_steps(&steps)
         } else {
             Vec::new()
         };
-        
+
         ExecutionPlan {
             id: plan_id,
             root_goal_id: goal.id.clone(),
@@ -721,7 +718,7 @@ impl AutonomousPlanningEngine {
     fn decompose_goal(&self, goal: &Goal, available_tools: &[&str]) -> Vec<PlanStep> {
         let mut steps = Vec::new();
         let complexity = goal.estimated_complexity as usize;
-        
+
         if complexity <= 2 {
             steps.push(PlanStep {
                 id: format!("step_{}_1", goal.id),
@@ -740,18 +737,22 @@ impl AutonomousPlanningEngine {
         } else {
             let num_subtasks = (complexity as f64 / 2.0).ceil() as usize;
             let subtask_size = (goal.description.len() / num_subtasks.max(1)).max(1);
-            
+
             for i in 0..num_subtasks {
                 let start = i * subtask_size;
                 let end = (start + subtask_size).min(goal.description.len());
                 let subtask_desc = &goal.description[start..end];
-                
+
                 steps.push(PlanStep {
                     id: format!("step_{}_{}", goal.id, i + 1),
                     goal_id: goal.id.clone(),
                     description: subtask_desc.to_string(),
                     action: self.select_action_for_description(subtask_desc, available_tools),
-                    prerequisites: if i > 0 { vec![format!("step_{}_{}", goal.id, i)] } else { Vec::new() },
+                    prerequisites: if i > 0 {
+                        vec![format!("step_{}_{}", goal.id, i)]
+                    } else {
+                        Vec::new()
+                    },
                     expected_outcome: format!("Subtask {} completed", i + 1),
                     estimated_duration_mins: (30 / num_subtasks as u32).max(5),
                     actual_duration_mins: None,
@@ -762,16 +763,19 @@ impl AutonomousPlanningEngine {
                 });
             }
         }
-        
+
         steps
     }
 
     fn select_action_for_goal(&self, goal: &Goal, available_tools: &[&str]) -> String {
         let desc_lower = goal.description.to_lowercase();
-        
+
         if desc_lower.contains("search") || desc_lower.contains("find") {
             "search".to_string()
-        } else if desc_lower.contains("create") || desc_lower.contains("build") || desc_lower.contains("make") {
+        } else if desc_lower.contains("create")
+            || desc_lower.contains("build")
+            || desc_lower.contains("make")
+        {
             "create".to_string()
         } else if desc_lower.contains("analyze") || desc_lower.contains("examine") {
             "analyze".to_string()
@@ -786,7 +790,7 @@ impl AutonomousPlanningEngine {
 
     fn select_action_for_description(&self, description: &str, available_tools: &[&str]) -> String {
         let desc_lower = description.to_lowercase();
-        
+
         let action_keywords = [
             ("search", vec!["search", "find", "lookup", "query"]),
             ("read", vec!["read", "get", "fetch", "retrieve"]),
@@ -796,7 +800,7 @@ impl AutonomousPlanningEngine {
             ("execute", vec!["run", "execute", "perform", "do"]),
             ("analyze", vec!["analyze", "examine", "review", "check"]),
         ];
-        
+
         for (action, keywords) in action_keywords {
             for keyword in keywords {
                 if desc_lower.contains(keyword) {
@@ -804,7 +808,7 @@ impl AutonomousPlanningEngine {
                 }
             }
         }
-        
+
         if available_tools.is_empty() {
             "process".to_string()
         } else {
@@ -815,17 +819,18 @@ impl AutonomousPlanningEngine {
     fn schedule_steps(&self, steps: &[PlanStep]) -> Vec<ScheduledStep> {
         let mut schedule = Vec::new();
         let mut current_time = Utc::now();
-        
+
         let parallel_groups = self.identify_parallel_groups(steps);
-        
+
         for group in parallel_groups {
-            let max_duration = group.iter()
+            let max_duration = group
+                .iter()
                 .map(|s| s.estimated_duration_mins)
                 .max()
                 .unwrap_or(1);
-            
+
             let end_time = current_time + chrono::Duration::minutes(i64::from(max_duration));
-            
+
             for step in &group {
                 schedule.push(ScheduledStep {
                     step_id: step.id.clone(),
@@ -835,49 +840,48 @@ impl AutonomousPlanningEngine {
                     priority_score: self.calculate_priority_score(step),
                 });
             }
-            
+
             current_time = end_time;
         }
-        
+
         schedule
     }
 
     fn identify_parallel_groups(&self, steps: &[PlanStep]) -> Vec<Vec<PlanStep>> {
         let mut groups = Vec::new();
         let mut completed: Vec<String> = Vec::new();
-        
+
         let mut ready: Vec<PlanStep> = steps.to_vec();
         let not_ready: Vec<PlanStep> = Vec::new();
-        
+
         while !ready.is_empty() || !not_ready.is_empty() {
             let mut current_group = Vec::new();
             let mut next_not_ready = Vec::new();
-            
+
             for step in &ready {
-                let prereqs_satisfied = step.prerequisites.iter()
-                    .all(|p| completed.contains(p));
-                
+                let prereqs_satisfied = step.prerequisites.iter().all(|p| completed.contains(p));
+
                 if prereqs_satisfied {
                     current_group.push(step.clone());
                 } else {
                     next_not_ready.push(step.clone());
                 }
             }
-            
+
             if current_group.is_empty() && !next_not_ready.is_empty() {
                 current_group.push(next_not_ready.remove(0));
             }
-            
+
             if !current_group.is_empty() {
                 groups.push(current_group.clone());
                 for step in &current_group {
                     completed.push(step.id.clone());
                 }
             }
-            
+
             ready = next_not_ready;
         }
-        
+
         groups
     }
 
@@ -888,14 +892,14 @@ impl AutonomousPlanningEngine {
             StepStatus::InProgress => 1.5,
             _ => 0.5,
         };
-        
+
         base_score * (f64::from(step.estimated_duration_mins) / 30.0)
     }
 
     pub fn adapt_plan(&self, plan: &mut ExecutionPlan, failed_step_id: &str, error: &str) {
         if let Some(step) = plan.steps.iter_mut().find(|s| s.id == failed_step_id) {
             step.status = StepStatus::Failed;
-            
+
             if let Some(fallback) = &step.fallback_action {
                 let new_step = PlanStep {
                     id: format!("{}_fallback", step.id),
@@ -911,44 +915,52 @@ impl AutonomousPlanningEngine {
                     success_criteria: step.success_criteria.clone(),
                     fallback_action: None,
                 };
-                
+
                 plan.steps.push(new_step);
             }
         }
-        
+
         plan.status = PlanStatus::InProgress;
         plan.updated_at = Utc::now();
     }
 
-    pub fn optimize_plan(&self, plan: &ExecutionPlan, available_resources: &HashMap<String, u32>) -> ExecutionPlan {
+    pub fn optimize_plan(
+        &self,
+        plan: &ExecutionPlan,
+        available_resources: &HashMap<String, u32>,
+    ) -> ExecutionPlan {
         let mut optimized = plan.clone();
-        
+
         for step in &mut optimized.steps {
-            let available = available_resources.get(&step.resources_required.first().cloned().unwrap_or_default())
+            let available = available_resources
+                .get(&step.resources_required.first().cloned().unwrap_or_default())
                 .copied()
                 .unwrap_or(u32::MAX);
-            
+
             if step.estimated_duration_mins as u32 > available {
                 step.estimated_duration_mins = available;
             }
         }
-        
+
         optimized.schedule = self.schedule_steps(&optimized.steps);
-        optimized.total_estimated_mins = optimized.steps.iter()
+        optimized.total_estimated_mins = optimized
+            .steps
+            .iter()
             .map(|s| s.estimated_duration_mins)
             .sum();
-        
+
         optimized
     }
 
     pub fn get_next_executable_step<'a>(&self, plan: &'a ExecutionPlan) -> Option<&'a PlanStep> {
-        plan.steps.iter()
-            .find(|s| {
-                s.status == StepStatus::Ready && 
-                s.prerequisites.iter().all(|p| {
-                    plan.steps.iter().any(|other| other.id == *p && other.status == StepStatus::Completed)
+        plan.steps.iter().find(|s| {
+            s.status == StepStatus::Ready
+                && s.prerequisites.iter().all(|p| {
+                    plan.steps
+                        .iter()
+                        .any(|other| other.id == *p && other.status == StepStatus::Completed)
                 })
-            })
+        })
     }
 }
 

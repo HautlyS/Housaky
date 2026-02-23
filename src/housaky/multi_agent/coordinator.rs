@@ -428,7 +428,10 @@ impl MultiAgentCoordinator {
             .ok_or_else(|| anyhow::anyhow!("Agent '{}' not found in registry", agent_id))?;
 
         if !agent_info.available {
-            return Err(anyhow::anyhow!("Agent '{}' is not currently available", agent_id));
+            return Err(anyhow::anyhow!(
+                "Agent '{}' is not currently available",
+                agent_id
+            ));
         }
 
         // Create a one-shot response channel embedded in the message metadata
@@ -451,19 +454,18 @@ impl MultiAgentCoordinator {
         };
 
         // Send via registry channel; if no channel is registered, broadcast on the bus
-        self.registry.send_to_agent(agent_id, message.clone()).await
+        self.registry
+            .send_to_agent(agent_id, message.clone())
+            .await
             .unwrap_or_else(|_| {
                 let _ = self.message_bus.send(message);
             });
 
         // Await reply with a 30-second timeout
-        let response = tokio::time::timeout(
-            std::time::Duration::from_secs(30),
-            resp_rx,
-        )
-        .await
-        .map_err(|_| anyhow::anyhow!("Timeout waiting for agent '{}' response", agent_id))?
-        .map_err(|_| anyhow::anyhow!("Agent '{}' response channel dropped", agent_id))?;
+        let response = tokio::time::timeout(std::time::Duration::from_secs(30), resp_rx)
+            .await
+            .map_err(|_| anyhow::anyhow!("Timeout waiting for agent '{}' response", agent_id))?
+            .map_err(|_| anyhow::anyhow!("Agent '{}' response channel dropped", agent_id))?;
 
         Ok(response)
     }
