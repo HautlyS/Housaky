@@ -11,7 +11,7 @@ pub struct AgentRegistry {
         RwLock<
             HashMap<
                 String,
-                tokio::sync::mpsc::Sender<crate::multi_agent::message::AgentMessage>,
+                tokio::sync::mpsc::Sender<crate::housaky::multi_agent::message::AgentMessage>,
             >,
         >,
     >,
@@ -196,7 +196,7 @@ impl AgentRegistry {
     pub async fn register_sender(
         &self,
         agent_id: &str,
-        sender: tokio::sync::mpsc::Sender<crate::multi_agent::message::AgentMessage>,
+        sender: tokio::sync::mpsc::Sender<crate::housaky::multi_agent::message::AgentMessage>,
     ) {
         let mut senders = self.agent_senders.write().await;
         senders.insert(agent_id.to_string(), sender);
@@ -205,7 +205,7 @@ impl AgentRegistry {
     pub async fn send_to_agent(
         &self,
         agent_id: &str,
-        message: crate::multi_agent::message::AgentMessage,
+        message: crate::housaky::multi_agent::message::AgentMessage,
     ) -> Result<()> {
         let senders = self.agent_senders.read().await;
 
@@ -216,7 +216,7 @@ impl AgentRegistry {
         Ok(())
     }
 
-    pub async fn broadcast(&self, message: crate::multi_agent::message::AgentMessage) {
+    pub async fn broadcast(&self, message: crate::housaky::multi_agent::message::AgentMessage) {
         let senders = self.agent_senders.read().await;
 
         for sender in senders.values() {

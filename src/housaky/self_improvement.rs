@@ -617,7 +617,7 @@ impl SelfImprovementEngine {
 
     async fn apply_general_improvements(
         &self,
-        reflection: &crate::meta_cognition::Reflection,
+        reflection: &crate::housaky::meta_cognition::Reflection,
     ) -> Result<u64> {
         let mut improvements = 0;
 

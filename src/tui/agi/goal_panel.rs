@@ -1,4 +1,4 @@
-use crate::goal_engine::Goal;
+use crate::housaky::goal_engine::Goal;
 
 pub struct GoalPanel {
     goals: Vec<Goal>,

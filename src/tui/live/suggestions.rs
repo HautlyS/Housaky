@@ -1,5 +1,5 @@
-use crate::cognitive::perception::IntentType;
-use crate::goal_engine::Goal;
+use crate::housaky::cognitive::perception::IntentType;
+use crate::housaky::goal_engine::Goal;
 use serde::{Deserialize, Serialize};
 
 pub struct SuggestionEngine {

@@ -67,7 +67,7 @@ impl ActionExecutor {
             
             let exec_result = self.execute_action(action, &current_state).await;
 
-            let action_result = crate::cognitive::world_model::ActionResult {
+            let action_result = crate::housaky::cognitive::world_model::ActionResult {
                 action: action.clone(),
                 actual_state: exec_result.new_state.clone(),
                 expected_state: Some(predicted.state.clone()),
@@ -179,13 +179,13 @@ impl ActionExecutor {
 
         for effect in &action.expected_effects {
             match effect.effect_type {
-                crate::cognitive::world_model::EffectType::StateChange => {
+                crate::housaky::cognitive::world_model::EffectType::StateChange => {
                     new_state.context.insert(
                         effect.target.clone(),
                         effect.value.to_string(),
                     );
                 }
-                crate::cognitive::world_model::EffectType::ResourceChange => {
+                crate::housaky::cognitive::world_model::EffectType::ResourceChange => {
                     if let Some(current) = new_state.resources.get(&effect.target).copied() {
                         let change = effect.value.as_f64().unwrap_or(0.0);
                         new_state.resources.insert(
@@ -209,7 +209,7 @@ impl ActionExecutor {
             .and_then(|v| v.as_str())
             .ok_or_else(|| anyhow::anyhow!("Missing 'query' parameter for search action"))?;
 
-        let browser = crate::web_browser::WebBrowser::new();
+        let browser = crate::housaky::web_browser::WebBrowser::new();
         let results = browser.search(query, 5).await?;
 
         if results.is_empty() {

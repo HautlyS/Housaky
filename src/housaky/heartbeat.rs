@@ -4,7 +4,7 @@ use crate::housaky::core::HousakyCore;
 use crate::housaky::kowalski_integration::KowalskiBridge;
 use crate::housaky::memory::consolidation::MemoryConsolidator;
 use crate::housaky::self_improvement::SelfImprovementEngine;
-use crate::skills::{SkillCreator, SkillRegistry};
+use crate::housaky::skills::{SkillCreator, SkillRegistry};
 use crate::providers::{create_provider, Provider};
 use anyhow::Result;
 use std::sync::Arc;

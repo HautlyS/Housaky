@@ -218,8 +218,8 @@ pub struct CuriosityState {
 
 pub struct InformationGapEngine {
     curiosity: Arc<CuriosityEngine>,
-    belief_tracker: Option<Arc<crate::memory::BeliefTracker>>,
-    knowledge_graph: Option<Arc<crate::knowledge_graph::KnowledgeGraphEngine>>,
+    belief_tracker: Option<Arc<crate::housaky::memory::BeliefTracker>>,
+    knowledge_graph: Option<Arc<crate::housaky::knowledge_graph::KnowledgeGraphEngine>>,
     gaps: Arc<RwLock<HashMap<String, KnowledgeGap>>>,
     storage_path: Option<PathBuf>,
 }
@@ -235,14 +235,14 @@ impl InformationGapEngine {
         }
     }
 
-    pub fn with_belief_tracker(mut self, tracker: Arc<crate::memory::BeliefTracker>) -> Self {
+    pub fn with_belief_tracker(mut self, tracker: Arc<crate::housaky::memory::BeliefTracker>) -> Self {
         self.belief_tracker = Some(tracker);
         self
     }
 
     pub fn with_knowledge_graph(
         mut self,
-        kg: Arc<crate::knowledge_graph::KnowledgeGraphEngine>,
+        kg: Arc<crate::housaky::knowledge_graph::KnowledgeGraphEngine>,
     ) -> Self {
         self.knowledge_graph = Some(kg);
         self
@@ -302,7 +302,7 @@ impl InformationGapEngine {
         }
 
         if let Some(ref kg) = self.knowledge_graph {
-            let recent_entities = kg.query(crate::knowledge_graph::GraphQuery::Recent(10)).await;
+            let recent_entities = kg.query(crate::housaky::knowledge_graph::GraphQuery::Recent(10)).await;
             for entity in recent_entities.iter().take(5) {
                 if entity.confidence < 0.6 {
                     let gap = KnowledgeGap {
@@ -364,20 +364,20 @@ impl InformationGapEngine {
         identified_gaps
     }
 
-    pub async fn create_learning_goal(&self, gap: &KnowledgeGap) -> Result<crate::goal_engine::Goal> {
-        let goal = crate::goal_engine::Goal {
+    pub async fn create_learning_goal(&self, gap: &KnowledgeGap) -> Result<crate::housaky::goal_engine::Goal> {
+        let goal = crate::housaky::goal_engine::Goal {
             id: uuid::Uuid::new_v4().to_string(),
             title: format!("Learn about {}", gap.topic),
             description: gap.question.clone(),
             priority: match gap.urgency {
-                u if u > 0.8 => crate::goal_engine::GoalPriority::Critical,
-                u if u > 0.6 => crate::goal_engine::GoalPriority::High,
-                u if u > 0.4 => crate::goal_engine::GoalPriority::Medium,
-                _ => crate::goal_engine::GoalPriority::Low,
+                u if u > 0.8 => crate::housaky::goal_engine::GoalPriority::Critical,
+                u if u > 0.6 => crate::housaky::goal_engine::GoalPriority::High,
+                u if u > 0.4 => crate::housaky::goal_engine::GoalPriority::Medium,
+                _ => crate::housaky::goal_engine::GoalPriority::Low,
             },
-            category: crate::goal_engine::GoalCategory::KnowledgeExpansion,
+            category: crate::housaky::goal_engine::GoalCategory::KnowledgeExpansion,
             progress: 0.0,
-            status: crate::goal_engine::GoalStatus::Pending,
+            status: crate::housaky::goal_engine::GoalStatus::Pending,
             created_at: Utc::now(),
             updated_at: Utc::now(),
             deadline: None,

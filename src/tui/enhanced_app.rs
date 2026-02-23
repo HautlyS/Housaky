@@ -1,7 +1,7 @@
 use crate::config::Config;
-use crate::goal_engine::GoalEngine;
-use crate::meta_cognition::MetaCognitionEngine;
-use crate::reasoning_engine::{ReasoningChain, ReasoningEngine};
+use crate::housaky::goal_engine::GoalEngine;
+use crate::housaky::meta_cognition::MetaCognitionEngine;
+use crate::housaky::reasoning_engine::{ReasoningChain, ReasoningEngine};
 use crate::providers::{create_provider, ChatMessage};
 use crate::tui::chat::{format_message_content, Message};
 use crate::tui::command_palette::{CommandAction, CommandPalette};
@@ -425,7 +425,7 @@ impl EnhancedApp {
             CommandAction::AddGoal(goal_desc) => {
                 let rt = tokio::runtime::Runtime::new()?;
                 rt.block_on(async {
-                    let goal = crate::goal_engine::Goal {
+                    let goal = crate::housaky::goal_engine::Goal {
                         title: goal_desc,
                         ..Default::default()
                     };

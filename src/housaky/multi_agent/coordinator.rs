@@ -1,5 +1,5 @@
-use crate::multi_agent::agent_registry::AgentRegistry;
-use crate::multi_agent::message::{AgentMessage, MessageType};
+use crate::housaky::multi_agent::agent_registry::AgentRegistry;
+use crate::housaky::multi_agent::message::{AgentMessage, MessageType};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -268,7 +268,7 @@ impl MultiAgentCoordinator {
 
     fn calculate_agent_score(
         &self,
-        agent: &crate::multi_agent::agent_registry::AgentInfo,
+        agent: &crate::housaky::multi_agent::agent_registry::AgentInfo,
         required: &[String],
     ) -> f64 {
         let capability_score = required
@@ -418,7 +418,7 @@ impl MultiAgentCoordinator {
     }
 
     async fn query_agent(&self, agent_id: &str, question: &str) -> Result<String> {
-        use crate::multi_agent::message::{AgentMessage, MessageType};
+        use crate::housaky::multi_agent::message::{AgentMessage, MessageType};
 
         // Ensure the agent is registered
         let agent_info = self

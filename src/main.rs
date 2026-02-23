@@ -465,7 +465,7 @@ async fn main() -> Result<()> {
         }
 
         Commands::Housaky { housaky_command } => {
-            housaky::handle_command(housaky_command, &config).await
+            housaky::housaky::handle_command(housaky_command, &config).await
         }
     }
 }

@@ -4,7 +4,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use crate::config::Config;
-use crate::housaky::cognitive::{ActionSelector, CognitiveLoop, InformationGapEngine, PlanningEngine, world_model::{Action, WorldModel, WorldState}, planning::Plan};
+use crate::housaky::cognitive::{ActionSelector, CognitiveLoop, InformationGapEngine, PlanningEngine, world_model::WorldModel};
 use crate::housaky::memory::{BeliefTracker, HierarchicalMemory};
 use crate::housaky::goal_engine::GoalEngine;
 use crate::housaky::reasoning_engine::ReasoningEngine;
@@ -83,7 +83,7 @@ impl UnifiedAgentLoop {
             knowledge_graph: Arc::new(KnowledgeGraphEngine::new(workspace_dir)),
             goal_engine: Arc::new(GoalEngine::new(workspace_dir)),
             hierarchical_memory: Arc::new(HierarchicalMemory::new(
-                crate::memory::hierarchical::HierarchicalMemoryConfig::default()
+                crate::housaky::memory::hierarchical::HierarchicalMemoryConfig::default()
             )),
             session: Arc::new(RwLock::new(None)),
         })
@@ -112,7 +112,7 @@ impl UnifiedAgentLoop {
             .await?;
 
         let gaps = self.information_gap.identify_gaps(
-            &crate::cognitive::information_gap::CuriosityContext {
+            &crate::housaky::cognitive::information_gap::CuriosityContext {
                 current_goals: {
                     let goals = self.goal_engine.get_active_goals().await;
                     goals.into_iter().map(|g| g.title).collect()
@@ -172,7 +172,7 @@ impl UnifiedAgentLoop {
 
     async fn should_interrupt_for_learning(
         &self,
-        gaps: &[crate::cognitive::KnowledgeGap],
+        gaps: &[crate::housaky::cognitive::KnowledgeGap],
     ) -> bool {
         let urgent_gaps = gaps.iter().filter(|g| g.urgency > 0.7).count();
         urgent_gaps > 0

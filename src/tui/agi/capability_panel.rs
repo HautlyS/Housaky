@@ -1,4 +1,4 @@
-use crate::meta_cognition::CapabilityAssessment;
+use crate::housaky::meta_cognition::CapabilityAssessment;
 
 pub struct CapabilityPanel {
     capabilities: Option<CapabilityAssessment>,

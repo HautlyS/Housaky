@@ -25,8 +25,8 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CognitiveContext {
     pub current_goal: Option<String>,
-    pub working_memory_items: Vec<crate::working_memory::WorkingMemoryItem>,
-    pub belief_state: Vec<crate::memory::Belief>,
+    pub working_memory_items: Vec<crate::housaky::working_memory::WorkingMemoryItem>,
+    pub belief_state: Vec<crate::housaky::memory::Belief>,
     pub knowledge_context: Vec<String>,
     pub recent_errors: Vec<String>,
     pub available_tools: Vec<String>,

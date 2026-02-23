@@ -24,7 +24,7 @@ use tracing::info;
 pub struct CognitiveLoop {
     pub perception: PerceptionEngine,
     pub action_selector: ActionSelector,
-    pub uncertainty: crate::cognitive::uncertainty::UncertaintyDetector,
+    pub uncertainty: crate::housaky::cognitive::uncertainty::UncertaintyDetector,
     pub experience_learner: ExperienceLearner,
     pub working_memory: Arc<WorkingMemoryEngine>,
     pub goal_engine: Arc<GoalEngine>,
@@ -106,7 +106,7 @@ impl CognitiveLoop {
         Ok(Self {
             perception: PerceptionEngine::new(),
             action_selector: ActionSelector::new(),
-            uncertainty: crate::cognitive::uncertainty::UncertaintyDetector::new(),
+            uncertainty: crate::housaky::cognitive::uncertainty::UncertaintyDetector::new(),
             experience_learner: ExperienceLearner::new(&workspace_dir),
             working_memory: Arc::new(WorkingMemoryEngine::new()),
             goal_engine: Arc::new(GoalEngine::new(&workspace_dir)),
@@ -200,7 +200,7 @@ impl CognitiveLoop {
             &decision,
             matches!(
                 outcome.result,
-                crate::cognitive::action_selector::ActionResult::Success { .. }
+                crate::housaky::cognitive::action_selector::ActionResult::Success { .. }
             ),
             start_time.elapsed().as_millis() as u64,
         )
@@ -269,8 +269,8 @@ impl CognitiveLoop {
         tools: &[&dyn Tool],
         provider: &dyn Provider,
         model: &str,
-        _experiences: &[crate::cognitive::experience_learner::Experience],
-        patterns: &[crate::cognitive::experience_learner::Pattern],
+        _experiences: &[crate::housaky::cognitive::experience_learner::Experience],
+        patterns: &[crate::housaky::cognitive::experience_learner::Pattern],
     ) -> Result<ActionDecision> {
         let basic_decision = self
             .action_selector
@@ -317,7 +317,7 @@ impl CognitiveLoop {
         thoughts.push(format!("Confidence: {:.0}%", decision.confidence * 100.0));
 
         let (content, success, needs_clarification) = match &decision.action {
-            crate::cognitive::action_selector::SelectedAction::Respond {
+            crate::housaky::cognitive::action_selector::SelectedAction::Respond {
                 content,
                 needs_clarification,
                 suggested_follow_ups: _,
@@ -333,7 +333,7 @@ impl CognitiveLoop {
                 (response, true, *needs_clarification)
             }
 
-            crate::cognitive::action_selector::SelectedAction::UseTool {
+            crate::housaky::cognitive::action_selector::SelectedAction::UseTool {
                 tool_name,
                 arguments,
                 ..
@@ -366,7 +366,7 @@ impl CognitiveLoop {
                 }
             }
 
-            crate::cognitive::action_selector::SelectedAction::Clarify {
+            crate::housaky::cognitive::action_selector::SelectedAction::Clarify {
                 questions,
                 assumptions,
             } => {
@@ -384,12 +384,12 @@ impl CognitiveLoop {
                 (response, true, true)
             }
 
-            crate::cognitive::action_selector::SelectedAction::CreateGoal {
+            crate::housaky::cognitive::action_selector::SelectedAction::CreateGoal {
                 title,
                 description,
                 priority,
             } => {
-                let goal = crate::goal_engine::Goal {
+                let goal = crate::housaky::goal_engine::Goal {
                     title: title.clone(),
                     description: description.clone(),
                     priority: priority.clone(),
@@ -402,7 +402,7 @@ impl CognitiveLoop {
                 (response, true, false)
             }
 
-            crate::cognitive::action_selector::SelectedAction::Learn {
+            crate::housaky::cognitive::action_selector::SelectedAction::Learn {
                 topic,
                 source,
                 ..
@@ -413,7 +413,7 @@ impl CognitiveLoop {
                 (response, true, false)
             }
 
-            crate::cognitive::action_selector::SelectedAction::Reflect {
+            crate::housaky::cognitive::action_selector::SelectedAction::Reflect {
                 trigger, ..
             } => {
                 let reflection = self.meta_cognition.reflect(trigger).await?;
@@ -423,7 +423,7 @@ impl CognitiveLoop {
                 (response, true, false)
             }
 
-            crate::cognitive::action_selector::SelectedAction::Delegate {
+            crate::housaky::cognitive::action_selector::SelectedAction::Delegate {
                 agent_type,
                 task_description,
                 ..
@@ -434,7 +434,7 @@ impl CognitiveLoop {
                 (response, true, false)
             }
 
-            crate::cognitive::action_selector::SelectedAction::Wait { reason, .. } => {
+            crate::housaky::cognitive::action_selector::SelectedAction::Wait { reason, .. } => {
                 let response = format!("Waiting: {}", reason);
                 thoughts.push("Waiting".to_string());
                 (response, true, false)
@@ -468,7 +468,7 @@ impl CognitiveLoop {
             confidence: decision.confidence,
             needs_clarification,
             suggested_follow_ups: match &decision.action {
-                crate::cognitive::action_selector::SelectedAction::Respond {
+                crate::housaky::cognitive::action_selector::SelectedAction::Respond {
                     suggested_follow_ups,
                     ..
                 } => suggested_follow_ups.clone(),
@@ -544,7 +544,7 @@ impl CognitiveLoop {
         self.working_memory
             .add(
                 &format!("User: {} | Assistant: {}", perception.raw_input, response),
-                crate::working_memory::MemoryImportance::Normal,
+                crate::housaky::working_memory::MemoryImportance::Normal,
                 [(
                     "intent".to_string(),
                     format!("{:?}", perception.intent.primary),
@@ -693,7 +693,7 @@ pub struct CognitiveMetrics {
     pub failed_actions: u64,
     pub success_rate: f64,
     pub reflections_count: u64,
-    pub learning_stats: crate::cognitive::experience_learner::LearningStats,
-    pub memory_stats: crate::working_memory::WorkingMemoryStats,
-    pub goal_stats: crate::goal_engine::GoalStats,
+    pub learning_stats: crate::housaky::cognitive::experience_learner::LearningStats,
+    pub memory_stats: crate::housaky::working_memory::WorkingMemoryStats,
+    pub goal_stats: crate::housaky::goal_engine::GoalStats,
 }

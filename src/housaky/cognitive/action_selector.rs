@@ -37,7 +37,7 @@ pub enum SelectedAction {
     CreateGoal {
         title: String,
         description: String,
-        priority: crate::goal_engine::GoalPriority,
+        priority: crate::housaky::goal_engine::GoalPriority,
     },
     Reflect {
         trigger: String,
@@ -647,11 +647,11 @@ Return JSON with:
         _available_tools: &[&dyn Tool],
     ) -> Result<ActionDecision> {
         let priority = if perception.complexity > 0.7 {
-            crate::goal_engine::GoalPriority::High
+            crate::housaky::goal_engine::GoalPriority::High
         } else if perception.complexity > 0.4 {
-            crate::goal_engine::GoalPriority::Medium
+            crate::housaky::goal_engine::GoalPriority::Medium
         } else {
-            crate::goal_engine::GoalPriority::Low
+            crate::housaky::goal_engine::GoalPriority::Low
         };
 
         Ok(ActionDecision {

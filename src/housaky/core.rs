@@ -852,7 +852,7 @@ impl HousakyCore {
         })
     }
 
-    pub async fn get_streaming_stats(&self) -> crate::streaming::streaming::StreamStats {
+    pub async fn get_streaming_stats(&self) -> crate::housaky::streaming::streaming::StreamStats {
         self.streaming_manager.get_stats().await
     }
 
@@ -887,7 +887,7 @@ pub struct DashboardMetrics {
     pub memory_tokens: usize,
     pub knowledge_entities: usize,
     pub knowledge_relations: usize,
-    pub capabilities: crate::meta_cognition::CapabilityAssessment,
+    pub capabilities: crate::housaky::meta_cognition::CapabilityAssessment,
     pub current_focus: Option<String>,
     pub last_thought: Option<String>,
     pub uptime_seconds: u64,

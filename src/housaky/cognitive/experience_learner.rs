@@ -203,10 +203,10 @@ impl ExperienceLearner {
 
     fn hash_arguments(
         &self,
-        action: &crate::cognitive::action_selector::SelectedAction,
+        action: &crate::housaky::cognitive::action_selector::SelectedAction,
     ) -> String {
         match action {
-            crate::cognitive::action_selector::SelectedAction::UseTool {
+            crate::housaky::cognitive::action_selector::SelectedAction::UseTool {
                 arguments,
                 ..
             } => md5::format_hex(&md5::compute(arguments.to_string().as_bytes())),
@@ -216,10 +216,10 @@ impl ExperienceLearner {
 
     fn extract_tool_from_action(
         &self,
-        action: &crate::cognitive::action_selector::SelectedAction,
+        action: &crate::housaky::cognitive::action_selector::SelectedAction,
     ) -> Option<String> {
         match action {
-            crate::cognitive::action_selector::SelectedAction::UseTool {
+            crate::housaky::cognitive::action_selector::SelectedAction::UseTool {
                 tool_name,
                 ..
             } => Some(tool_name.clone()),

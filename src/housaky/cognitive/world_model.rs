@@ -321,7 +321,7 @@ impl WorldModel {
             .get_relationships(entity)
     }
     
-    pub async fn find_unresolved_entities(&self) -> Vec<crate::knowledge_graph::Entity> {
+    pub async fn find_unresolved_entities(&self) -> Vec<crate::housaky::knowledge_graph::Entity> {
         // Return entities with low confidence as unresolved
         vec![]
     }

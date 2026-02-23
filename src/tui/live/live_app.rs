@@ -1,7 +1,7 @@
 use crate::config::Config;
-use crate::cognitive::cognitive_loop::{CognitiveLoop, CognitiveResponse};
-use crate::goal_engine::Goal;
-use crate::streaming::{StreamChunk, StreamState, StreamingManager};
+use crate::housaky::cognitive::cognitive_loop::{CognitiveLoop, CognitiveResponse};
+use crate::housaky::goal_engine::Goal;
+use crate::housaky::streaming::{StreamChunk, StreamState, StreamingManager};
 use crate::providers::{create_provider, ChatMessage};
 use anyhow::Result;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
@@ -552,11 +552,11 @@ impl LiveAGIApp {
         {
             let progress_bar = self.make_progress_bar(goal.progress);
             let priority_color = match goal.priority {
-                crate::goal_engine::GoalPriority::Critical => Color::Red,
-                crate::goal_engine::GoalPriority::High => Color::Yellow,
-                crate::goal_engine::GoalPriority::Medium => Color::Blue,
-                crate::goal_engine::GoalPriority::Low => Color::Gray,
-                crate::goal_engine::GoalPriority::Background => Color::DarkGray,
+                crate::housaky::goal_engine::GoalPriority::Critical => Color::Red,
+                crate::housaky::goal_engine::GoalPriority::High => Color::Yellow,
+                crate::housaky::goal_engine::GoalPriority::Medium => Color::Blue,
+                crate::housaky::goal_engine::GoalPriority::Low => Color::Gray,
+                crate::housaky::goal_engine::GoalPriority::Background => Color::DarkGray,
             };
 
             lines.push(Line::from(vec![
