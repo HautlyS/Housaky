@@ -1,5 +1,5 @@
-use crate::cognitive::action_selector::{ActionDecision, ActionOutcome, ActionResult};
-use crate::cognitive::perception::PerceivedInput;
+use crate::housaky::cognitive::action_selector::{ActionDecision, ActionOutcome, ActionResult};
+use crate::housaky::cognitive::perception::PerceivedInput;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

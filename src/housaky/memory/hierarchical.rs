@@ -1,4 +1,4 @@
-use crate::working_memory::{MemoryImportance, WorkingMemoryItem};
+use crate::housaky::working_memory::{MemoryImportance, WorkingMemoryItem};
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};

@@ -1,5 +1,5 @@
-use crate::cognitive::perception::{IntentType, PerceivedInput};
-use crate::cognitive::uncertainty::UncertaintyAssessment;
+use crate::housaky::cognitive::perception::{IntentType, PerceivedInput};
+use crate::housaky::cognitive::uncertainty::UncertaintyAssessment;
 use crate::providers::Provider;
 use crate::tools::Tool;
 use anyhow::Result;

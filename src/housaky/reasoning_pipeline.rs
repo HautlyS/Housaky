@@ -1,5 +1,5 @@
-use crate::core::TurnContext;
-use crate::reasoning_engine::{ReasoningEngine, ReasoningType};
+use crate::housaky::core::TurnContext;
+use crate::housaky::reasoning_engine::{ReasoningEngine, ReasoningType};
 use crate::providers::Provider;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};

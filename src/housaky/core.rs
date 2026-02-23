@@ -1,16 +1,16 @@
 use crate::config::Config;
-use crate::agent::Agent;
-use crate::cognitive::cognitive_loop::{CognitiveLoop, CognitiveResponse};
-use crate::goal_engine::{Goal, GoalEngine, GoalPriority, GoalStatus};
-use crate::inner_monologue::InnerMonologue;
-use crate::knowledge_graph::KnowledgeGraphEngine;
-use crate::memory::consolidation::MemoryConsolidator;
-use crate::memory::hierarchical::HierarchicalMemory;
-use crate::meta_cognition::MetaCognitionEngine;
-use crate::reasoning_pipeline::{ReasoningPipeline, ReasoningResult};
-use crate::streaming::streaming::StreamingManager;
-use crate::tool_creator::ToolCreator;
-use crate::working_memory::{MemoryImportance, WorkingMemoryEngine};
+use crate::housaky::agent::Agent;
+use crate::housaky::cognitive::cognitive_loop::{CognitiveLoop, CognitiveResponse};
+use crate::housaky::goal_engine::{Goal, GoalEngine, GoalPriority, GoalStatus};
+use crate::housaky::inner_monologue::InnerMonologue;
+use crate::housaky::knowledge_graph::KnowledgeGraphEngine;
+use crate::housaky::memory::consolidation::MemoryConsolidator;
+use crate::housaky::memory::hierarchical::HierarchicalMemory;
+use crate::housaky::meta_cognition::MetaCognitionEngine;
+use crate::housaky::reasoning_pipeline::{ReasoningPipeline, ReasoningResult};
+use crate::housaky::streaming::streaming::StreamingManager;
+use crate::housaky::tool_creator::ToolCreator;
+use crate::housaky::working_memory::{MemoryImportance, WorkingMemoryEngine};
 use crate::providers::Provider;
 use crate::tools::Tool;
 use anyhow::Result;
@@ -664,7 +664,7 @@ impl HousakyCore {
         _provider: &dyn Provider,
         _model: &str,
     ) -> Result<Option<String>> {
-        use crate::tool_creator::{ToolGenerationRequest, ToolKind};
+        use crate::housaky::tool_creator::{ToolGenerationRequest, ToolKind};
 
         let goals = self.goal_engine.get_active_goals().await;
 

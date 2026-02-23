@@ -5,8 +5,8 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{info, error};
 
-use crate::cognitive::world_model::{Action, WorldModel, WorldState};
-use crate::cognitive::planning::Plan;
+use crate::housaky::cognitive::world_model::{Action, WorldModel, WorldState};
+use crate::housaky::cognitive::planning::Plan;
 
 pub struct ActionExecutor {
     world_model: Arc<WorldModel>,

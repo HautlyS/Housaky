@@ -11,9 +11,9 @@ use tracing::{error, info};
 use super::information_gap::InformationGapEngine;
 use super::meta_learning::MetaLearningEngine;
 use super::world_model::WorldModel;
-use crate::memory::hierarchical::{ActionRecord, EventType, OutcomeRecord};
-use crate::goal_engine::GoalEngine;
-use crate::memory::hierarchical::HierarchicalMemory;
+use crate::housaky::memory::hierarchical::{ActionRecord, EventType, OutcomeRecord};
+use crate::housaky::goal_engine::GoalEngine;
+use crate::housaky::memory::hierarchical::HierarchicalMemory;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AgentInteraction {

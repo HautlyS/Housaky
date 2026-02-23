@@ -1,12 +1,12 @@
 #[allow(unused_imports)]
-use crate::goal_engine::Goal;
-use crate::agent::{Agent, Task};
-use crate::inner_monologue::InnerMonologue;
-use crate::knowledge_graph::{EntityType, KnowledgeGraphEngine};
-use crate::meta_cognition::MetaCognitionEngine;
-use crate::reasoning_pipeline::ReasoningPipeline;
-use crate::tool_creator::{ToolCreator, ToolGenerationRequest, ToolKind};
-use crate::working_memory::{MemoryImportance, WorkingMemoryEngine};
+use crate::housaky::goal_engine::Goal;
+use crate::housaky::agent::{Agent, Task};
+use crate::housaky::inner_monologue::InnerMonologue;
+use crate::housaky::knowledge_graph::{EntityType, KnowledgeGraphEngine};
+use crate::housaky::meta_cognition::MetaCognitionEngine;
+use crate::housaky::reasoning_pipeline::ReasoningPipeline;
+use crate::housaky::tool_creator::{ToolCreator, ToolGenerationRequest, ToolKind};
+use crate::housaky::working_memory::{MemoryImportance, WorkingMemoryEngine};
 use crate::providers::{create_provider, Provider};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
@@ -212,7 +212,7 @@ impl SelfImprovementEngine {
 
         for (domain, description) in domains {
             if observation.to_lowercase().contains(domain) {
-                use crate::knowledge_graph::EntityType;
+                use crate::housaky::knowledge_graph::EntityType;
                 self.knowledge_graph
                     .add_entity(domain, EntityType::Concept, description)
                     .await?;

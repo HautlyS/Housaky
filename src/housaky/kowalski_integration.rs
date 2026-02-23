@@ -1,4 +1,4 @@
-use crate::agent::KowalskiIntegrationConfig;
+use crate::housaky::agent::KowalskiIntegrationConfig;
 use anyhow::{bail, Context, Result};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;

@@ -1,9 +1,9 @@
 use crate::config::Config;
-use crate::agent::{Agent, Task, TaskCategory, TaskPriority, TaskStatus};
-use crate::core::HousakyCore;
-use crate::kowalski_integration::KowalskiBridge;
-use crate::memory::consolidation::MemoryConsolidator;
-use crate::self_improvement::SelfImprovementEngine;
+use crate::housaky::agent::{Agent, Task, TaskCategory, TaskPriority, TaskStatus};
+use crate::housaky::core::HousakyCore;
+use crate::housaky::kowalski_integration::KowalskiBridge;
+use crate::housaky::memory::consolidation::MemoryConsolidator;
+use crate::housaky::self_improvement::SelfImprovementEngine;
 use crate::skills::{SkillCreator, SkillRegistry};
 use crate::providers::{create_provider, Provider};
 use anyhow::Result;

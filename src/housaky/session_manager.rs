@@ -7,7 +7,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::info;
 
-use crate::memory::hierarchical::HierarchicalMemory;
+use crate::housaky::memory::hierarchical::HierarchicalMemory;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Session {

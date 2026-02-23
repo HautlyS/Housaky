@@ -1,16 +1,16 @@
 use crate::config::Config;
-use crate::cognitive::action_selector::{
+use crate::housaky::cognitive::action_selector::{
     ActionDecision, ActionOutcome, ActionResult, ActionSelector,
 };
-use crate::cognitive::experience_learner::ExperienceLearner;
-use crate::cognitive::perception::{PerceivedInput, PerceptionEngine};
-use crate::cognitive::uncertainty::UncertaintyAssessment;
-use crate::goal_engine::GoalEngine;
-use crate::inner_monologue::InnerMonologue;
-use crate::knowledge_graph::KnowledgeGraphEngine;
-use crate::meta_cognition::MetaCognitionEngine;
-use crate::reasoning_pipeline::ReasoningPipeline;
-use crate::working_memory::WorkingMemoryEngine;
+use crate::housaky::cognitive::experience_learner::ExperienceLearner;
+use crate::housaky::cognitive::perception::{PerceivedInput, PerceptionEngine};
+use crate::housaky::cognitive::uncertainty::UncertaintyAssessment;
+use crate::housaky::goal_engine::GoalEngine;
+use crate::housaky::inner_monologue::InnerMonologue;
+use crate::housaky::knowledge_graph::KnowledgeGraphEngine;
+use crate::housaky::meta_cognition::MetaCognitionEngine;
+use crate::housaky::reasoning_pipeline::ReasoningPipeline;
+use crate::housaky::working_memory::WorkingMemoryEngine;
 use crate::providers::{create_provider, ChatMessage, Provider};
 use crate::tools::Tool;
 use anyhow::Result;

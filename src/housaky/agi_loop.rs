@@ -1,7 +1,7 @@
-use crate::agent::loop_::{build_tool_instructions, find_tool};
+use crate::housaky::agent::agent_loop::{build_tool_instructions, find_tool};
 use crate::config::Config;
-use crate::core::{AGIAction, HousakyCore};
-use crate::goal_engine::{Goal, GoalPriority, GoalStatus};
+use crate::housaky::core::{AGIAction, HousakyCore};
+use crate::housaky::goal_engine::{Goal, GoalPriority, GoalStatus};
 use crate::memory::{Memory, MemoryCategory};
 use crate::observability::{Observer, ObserverEvent};
 use crate::providers::{ChatMessage, Provider};

@@ -1,4 +1,4 @@
-use crate::memory::hierarchical::{
+use crate::housaky::memory::hierarchical::{
     Episode, HierarchicalMemory, ProcedureStep, TriggerCondition,
 };
 use anyhow::Result;
