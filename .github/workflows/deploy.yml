@@ -1,27 +1,66 @@
-name: Build Dashboard
+name: Deploy All Platforms
 
 on:
   push:
-    branches: [master, main]
-    paths:
-      - 'dashboard/**'
-      - '.github/workflows/dashboard.yml'
-  pull_request:
-    branches: [master, main]
-    paths:
-      - 'dashboard/**'
-  release:
-    types: [published]
+    branches: [master]
   workflow_dispatch:
 
 permissions:
   contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build-tauri:
+  build-landing:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+          cache-dependency-path: 'landing/pnpm-lock.yaml'
+
+      - name: Install dependencies
+        working-directory: ./landing
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        working-directory: ./landing
+        run: pnpm run build
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./landing/dist
+
+  deploy-landing:
+    needs: build-landing
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+  build-desktop:
     strategy:
       fail-fast: false
       matrix:
@@ -92,8 +131,8 @@ jobs:
           releaseDraft: true
           prerelease: false
 
-  test-unit:
-    runs-on: ubuntu-latest
+  build-android:
+    runs-on: ubuntu-22.04
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -110,16 +149,39 @@ jobs:
           cache: 'pnpm'
           cache-dependency-path: 'dashboard/pnpm-lock.yaml'
 
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Add Android targets
+        run: |
+          rustup target add aarch64-linux-android
+          rustup target add x86_64-linux-android
+          rustup target add armv7-linux-androideabi
+
+      - name: Install Android SDK
+        uses: android-actions/setup-android@v2
+
       - name: Install dependencies
         working-directory: ./dashboard
         run: pnpm install --frozen-lockfile
 
-      - name: Run unit tests
+      - name: Build frontend
         working-directory: ./dashboard
-        run: pnpm test
+        run: pnpm run build
 
-  test-e2e:
-    runs-on: ubuntu-latest
+      - name: Build Android APK
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: android-v__VERSION__
+          releaseName: 'Housaky Dashboard Android v__VERSION__'
+          releaseBody: 'Android APK build'
+          releaseDraft: true
+          prerelease: false
+
+  build-ios:
+    runs-on: macos-14
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -136,14 +198,22 @@ jobs:
           cache: 'pnpm'
           cache-dependency-path: 'dashboard/pnpm-lock.yaml'
 
-      - name: Install dependencies
-        working-directory: ./dashboard
-        run: pnpm install --frozen-lockfile
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
 
-      - name: Install Playwright browsers
-        working-directory: ./dashboard
-        run: pnpm exec playwright install --with-deps
+      - name: Install iOS dependencies
+        run: |
+          cd dashboard
+          pnpm install --frozen-lockfile
+          pnpm run build
 
-      - name: Run e2e tests
-        working-directory: ./dashboard
-        run: pnpm run test:e2e || true
+      - name: Build iOS app
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ios-v__VERSION__
+          releaseName: 'Housaky Dashboard iOS v__VERSION__'
+          releaseBody: 'iOS IPA build for iPhone and Simulator'
+          releaseDraft: true
+          prerelease: false

@@ -2,12 +2,12 @@ name: Build iOS
 
 on:
   push:
-    branches: [main]
+    branches: [master, main]
     paths:
       - 'dashboard/**'
       - '.github/workflows/ios.yml'
   pull_request:
-    branches: [main]
+    branches: [master, main]
     paths:
       - 'dashboard/**'
   workflow_dispatch:
