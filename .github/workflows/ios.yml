@@ -43,6 +43,7 @@ jobs:
         with:
           node-version: '20'
           cache: 'pnpm'
+          cache-dependency-path: 'dashboard/pnpm-lock.yaml'
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
@@ -81,6 +82,7 @@ jobs:
         with:
           node-version: '20'
           cache: 'pnpm'
+          cache-dependency-path: 'dashboard/pnpm-lock.yaml'
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
