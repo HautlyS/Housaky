@@ -137,8 +137,8 @@ impl ReliableProvider {
     }
 
     /// Advance to the next API key and return it, or None if no extra keys configured.
-    fn rotate_key(&self) -> Option<&str> {
-        if let Some(kvm) = &self.kvm_manager {
+    fn rotate_key(&self) -> Option<String> {
+        if let Some(ref kvm) = self.kvm_manager {
             let rt = tokio::runtime::Handle::current();
             let provider_name = self.current_provider_name.clone();
             
@@ -146,19 +146,19 @@ impl ReliableProvider {
                 kvm.rotate_key(&provider_name).await
             });
             
-            return key.map(|k| k.key.as_str());
+            return key.map(|k| k.key);
         }
         
         if self.api_keys.is_empty() {
             return None;
         }
         let idx = self.key_index.fetch_add(1, Ordering::Relaxed) % self.api_keys.len();
-        Some(&self.api_keys[idx])
+        Some(self.api_keys[idx].clone())
     }
 
     /// Get current key from KVM manager
     fn get_current_key(&self) -> Option<String> {
-        if let Some(kvm) = &self.kvm_manager {
+        if let Some(ref kvm) = self.kvm_manager {
             let rt = tokio::runtime::Handle::current();
             let provider_name = self.current_provider_name.clone();
             
@@ -171,7 +171,8 @@ impl ReliableProvider {
 
     /// Report key success to KVM manager
     fn report_key_success(&self, key_id: &str) {
-        if let Some(kvm) = &self.kvm_manager {
+        if let Some(ref kvm) = self.kvm_manager {
+            let kvm = Arc::clone(kvm);
             let rt = tokio::runtime::Handle::current();
             let provider_name = self.current_provider_name.clone();
             let key_id = key_id.to_string();
@@ -184,7 +185,8 @@ impl ReliableProvider {
 
     /// Report key failure to KVM manager
     fn report_key_failure(&self, key_id: &str, is_rate_limit: bool) {
-        if let Some(kvm) = &self.kvm_manager {
+        if let Some(ref kvm) = self.kvm_manager {
+            let kvm = Arc::clone(kvm);
             let rt = tokio::runtime::Handle::current();
             let provider_name = self.current_provider_name.clone();
             let key_id = key_id.to_string();
