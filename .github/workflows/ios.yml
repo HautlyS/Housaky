@@ -33,11 +33,14 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'dashboard/node_modules'
+          cache: 'pnpm'
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
@@ -45,8 +48,8 @@ jobs:
       - name: Install iOS dependencies
         run: |
           cd dashboard
-          npm ci
-          npm run build
+          pnpm install --frozen-lockfile
+          pnpm run build
 
       - name: Build iOS app
         uses: tauri-apps/tauri-action@v0
@@ -66,22 +69,25 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'dashboard/node_modules'
+          cache: 'pnpm'
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
 
       - name: Install dependencies
         working-directory: ./dashboard
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       - name: Build XCFramework
         working-directory: ./dashboard
-        run: npm run tauri build -- --target aarch64-apple-ios --lib-only
+        run: pnpm run tauri build -- --target aarch64-apple-ios --lib-only
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4

@@ -33,11 +33,14 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'dashboard/node_modules'
+          cache: 'pnpm'
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
@@ -51,11 +54,11 @@ jobs:
 
       - name: Install dependencies
         working-directory: ./dashboard
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       - name: Build frontend
         working-directory: ./dashboard
-        run: npm run build
+        run: pnpm run build
 
       - name: Build Android APK
         uses: tauri-apps/tauri-action@v0
@@ -75,11 +78,14 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'dashboard/node_modules'
+          cache: 'pnpm'
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
@@ -91,15 +97,15 @@ jobs:
 
       - name: Install dependencies
         working-directory: ./dashboard
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       - name: Build frontend
         working-directory: ./dashboard
-        run: npm run build
+        run: pnpm run build
 
       - name: Build debug APK
         working-directory: ./dashboard
-        run: npm run tauri build -- --debug
+        run: pnpm run tauri build -- --debug
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4

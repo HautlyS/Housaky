@@ -43,11 +43,14 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'dashboard/node_modules'
+          cache: 'pnpm'
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
@@ -72,7 +75,7 @@ jobs:
 
       - name: Install dashboard dependencies
         working-directory: ./dashboard
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       - name: Build Tauri app
         uses: tauri-apps/tauri-action@v0
@@ -91,19 +94,22 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'dashboard/node_modules'
+          cache: 'pnpm'
 
       - name: Install dependencies
         working-directory: ./dashboard
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       - name: Run unit tests
         working-directory: ./dashboard
-        run: npm test
+        run: pnpm test
 
   test-e2e:
     runs-on: ubuntu-latest
@@ -111,20 +117,23 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'dashboard/node_modules'
+          cache: 'pnpm'
 
       - name: Install dependencies
         working-directory: ./dashboard
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       - name: Install Playwright browsers
         working-directory: ./dashboard
-        run: npx playwright install --with-deps
+        run: pnpm exec playwright install --with-deps
 
       - name: Run e2e tests
         working-directory: ./dashboard
-        run: npm run test:e2e || true
+        run: pnpm run test:e2e || true
