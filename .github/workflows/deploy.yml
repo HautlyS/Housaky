@@ -124,6 +124,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
+          projectPath: dashboard
           tagName: dashboard-v__VERSION__
           releaseName: 'Housaky Dashboard v__VERSION__'
           releaseBody: 'See the assets to download this version and install.'
@@ -173,6 +174,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
+          projectPath: dashboard
           tagName: android-v__VERSION__
           releaseName: 'Housaky Dashboard Android v__VERSION__'
           releaseBody: 'Android APK build'
@@ -211,6 +213,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
+          projectPath: dashboard
           tagName: ios-v__VERSION__
           releaseName: 'Housaky Dashboard iOS v__VERSION__'
           releaseBody: 'iOS IPA build for iPhone and Simulator'
