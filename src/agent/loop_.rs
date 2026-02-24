@@ -1,4 +1,5 @@
 use crate::config::Config;
+use crate::housaky::agi_context::AGIContext;
 use crate::memory::{self, Memory, MemoryCategory};
 use crate::observability::{self, Observer, ObserverEvent};
 use crate::providers::{self, ChatMessage, Provider, ToolCall};
@@ -7,6 +8,7 @@ use crate::security::SecurityPolicy;
 use crate::tools::{self, Tool};
 use crate::util::truncate_with_ellipsis;
 use anyhow::Result;
+use std::collections::HashMap;
 use std::fmt::Write;
 use std::io::Write as _;
 use std::sync::Arc;
@@ -414,6 +416,7 @@ fn build_assistant_history_with_tool_calls(text: &str, tool_calls: &[ToolCall]) 
 /// Execute a single turn of the agent loop: send messages, parse tool calls,
 /// execute tools, and loop until the LLM produces a final text response.
 /// When `silent` is true, suppresses stdout (for channel use).
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn agent_turn(
     provider: &dyn Provider,
     history: &mut Vec<ChatMessage>,
@@ -441,6 +444,7 @@ pub(crate) async fn agent_turn(
 
 /// Execute a single turn of the agent loop: send messages, parse tool calls,
 /// execute tools, and loop until the LLM produces a final text response.
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn run_tool_call_loop(
     provider: &dyn Provider,
     history: &mut Vec<ChatMessage>,
@@ -548,6 +552,179 @@ pub(crate) async fn run_tool_call_loop(
         }
 
         // Add assistant message with tool calls + tool results to history
+        history.push(ChatMessage::assistant(assistant_history_content.clone()));
+        history.push(ChatMessage::user(format!("[Tool results]\n{tool_results}")));
+    }
+
+    anyhow::bail!("Agent exceeded maximum tool iterations ({max_tool_iterations})")
+}
+
+/// Execute agent loop with AGI integration (goals, learning, meta-cognition, drift detection)
+#[allow(clippy::too_many_arguments)]
+pub(crate) async fn run_tool_call_loop_with_agi(
+    provider: &dyn Provider,
+    history: &mut Vec<ChatMessage>,
+    tools_registry: &[Box<dyn Tool>],
+    observer: &dyn Observer,
+    provider_name: &str,
+    model: &str,
+    temperature: f64,
+    silent: bool,
+    max_tool_iterations: usize,
+    agi_context: &AGIContext,
+) -> Result<String> {
+    let turn_number = agi_context.increment_turn().await;
+    
+    if agi_context.should_reflect().await {
+        if let Some(summary) = agi_context.run_reflection(&format!("Periodic reflection at turn {}", turn_number)).await {
+            tracing::info!("AGI Reflection: {}", summary);
+        }
+    }
+    
+    if agi_context.should_check_drift().await {
+        let warnings = agi_context.check_value_alignment().await;
+        for warning in &warnings {
+            tracing::warn!("Value drift: {}", warning);
+        }
+    }
+
+    for iteration in 0..max_tool_iterations {
+        observer.record_event(&ObserverEvent::LlmRequest {
+            provider: provider_name.to_string(),
+            model: model.to_string(),
+            messages_count: history.len(),
+        });
+
+        let llm_started_at = Instant::now();
+        let response = match provider
+            .chat_with_history(history, model, temperature)
+            .await
+        {
+            Ok(resp) => {
+                observer.record_event(&ObserverEvent::LlmResponse {
+                    provider: provider_name.to_string(),
+                    model: model.to_string(),
+                    duration: llm_started_at.elapsed(),
+                    success: true,
+                    error_message: None,
+                });
+                resp
+            }
+            Err(e) => {
+                observer.record_event(&ObserverEvent::LlmResponse {
+                    provider: provider_name.to_string(),
+                    model: model.to_string(),
+                    duration: llm_started_at.elapsed(),
+                    success: false,
+                    error_message: Some(crate::providers::sanitize_api_error(&e.to_string())),
+                });
+                return Err(e);
+            }
+        };
+
+        let response_text = response;
+        let assistant_history_content = response_text.clone();
+        let (parsed_text, tool_calls) = parse_tool_calls(&response_text);
+
+        if tool_calls.is_empty() {
+            history.push(ChatMessage::assistant(response_text.clone()));
+            return Ok(if parsed_text.is_empty() {
+                response_text
+            } else {
+                parsed_text
+            });
+        }
+
+        if !silent && !parsed_text.is_empty() {
+            print!("{parsed_text}");
+            let _ = std::io::stdout().flush();
+        }
+
+        let mut tool_results = String::new();
+        for call in &tool_calls {
+            observer.record_event(&ObserverEvent::ToolCallStart {
+                tool: call.name.clone(),
+            });
+            
+            let decision_id = agi_context.record_decision(
+                &format!("Tool execution: {}", call.name),
+                &call.name,
+                &format!("Arguments: {:?}", call.arguments),
+                0.8,
+                None,
+                Some(&call.name),
+            ).await;
+            
+            let start = Instant::now();
+            let result = if let Some(tool) = find_tool(tools_registry, &call.name) {
+                match tool.execute(call.arguments.clone()).await {
+                    Ok(r) => {
+                        observer.record_event(&ObserverEvent::ToolCall {
+                            tool: call.name.clone(),
+                            duration: start.elapsed(),
+                            success: r.success,
+                        });
+                        
+                        agi_context.record_tool_feedback(
+                            &call.name,
+                            r.success,
+                            {
+                                let mut ctx = HashMap::new();
+                                ctx.insert("iteration".to_string(), iteration.to_string());
+                                ctx.insert("turn".to_string(), turn_number.to_string());
+                                ctx
+                            },
+                        ).await;
+                        
+                        if let Some(ref id) = decision_id {
+                            agi_context.record_decision_outcome(
+                                id,
+                                r.success,
+                                &r.output.chars().take(200).collect::<String>(),
+                            ).await;
+                        }
+                        
+                        if r.success {
+                            r.output
+                        } else {
+                            format!("Error: {}", r.error.unwrap_or_else(|| r.output))
+                        }
+                    }
+                    Err(e) => {
+                        observer.record_event(&ObserverEvent::ToolCall {
+                            tool: call.name.clone(),
+                            duration: start.elapsed(),
+                            success: false,
+                        });
+                        
+                        agi_context.record_tool_feedback(
+                            &call.name,
+                            false,
+                            {
+                                let mut ctx = HashMap::new();
+                                ctx.insert("error".to_string(), e.to_string());
+                                ctx
+                            },
+                        ).await;
+                        
+                        if let Some(ref id) = decision_id {
+                            agi_context.record_decision_outcome(id, false, &e.to_string()).await;
+                        }
+                        
+                        format!("Error executing {}: {e}", call.name)
+                    }
+                }
+            } else {
+                format!("Unknown tool: {}", call.name)
+            };
+
+            let _ = writeln!(
+                tool_results,
+                "<tool_result name=\"{}\">\n{}\n</tool_result>",
+                call.name, result
+            );
+        }
+
         history.push(ChatMessage::assistant(assistant_history_content.clone()));
         history.push(ChatMessage::user(format!("[Tool results]\n{tool_results}")));
     }

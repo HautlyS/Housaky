@@ -136,3 +136,97 @@ mod tests {
         assert_eq!(truncate_with_ellipsis("hello", 0), "...");
     }
 }
+
+// Serialization utilities for multiple formats.
+// Provides helpers for TOML, MessagePack, and JSON serialization.
+// TOML is preferred for human-readable config/state data.
+// MessagePack is preferred for complex data structures requiring fast parsing.
+// JSON is kept for debugging/interchange scenarios.
+
+use anyhow::{Context, Result};
+use serde::{de::DeserializeOwned, Serialize};
+use std::path::Path;
+
+/// Serialize data to TOML string (human-readable, fast for simple data).
+pub fn to_toml<T: Serialize>(value: &T) -> Result<String> {
+    toml::to_string(value).context("Failed to serialize to TOML")
+}
+
+/// Deserialize TOML from string.
+pub fn from_toml<T: DeserializeOwned>(toml_str: &str) -> Result<T> {
+    toml::from_str(toml_str).context("Failed to deserialize from TOML")
+}
+
+/// Write data to TOML file (atomic write for safety).
+pub async fn write_toml_file<T: Serialize>(path: &Path, value: &T) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        tokio::fs::create_dir_all(parent).await?;
+    }
+    let toml_str = to_toml(value)?;
+    
+    // Atomic write: write to temp file, then rename
+    let temp_path = path.with_extension("toml.tmp");
+    tokio::fs::write(&temp_path, &toml_str).await?;
+    tokio::fs::rename(&temp_path, path).await?;
+    
+    Ok(())
+}
+
+/// Read data from TOML file.
+pub async fn read_toml_file<T: DeserializeOwned>(path: &Path) -> Result<T> {
+    let content = tokio::fs::read_to_string(path).await?;
+    from_toml(&content)
+}
+
+/// Serialize data to MessagePack bytes (fast binary format).
+pub fn to_msgpack<T: Serialize>(value: &T) -> Result<Vec<u8>> {
+    let bytes = rmp_serde::to_vec(value).context("Failed to serialize to MessagePack")?;
+    Ok(bytes)
+}
+
+/// Deserialize MessagePack from bytes.
+pub fn from_msgpack<T: DeserializeOwned>(bytes: &[u8]) -> Result<T> {
+    rmp_serde::from_slice(bytes).context("Failed to deserialize from MessagePack")
+}
+
+/// Write data to MessagePack file (atomic write for safety).
+pub async fn write_msgpack_file<T: Serialize>(path: &Path, value: &T) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        tokio::fs::create_dir_all(parent).await?;
+    }
+    let bytes = to_msgpack(value)?;
+    
+    // Atomic write: write to temp file, then rename
+    let temp_path = path.with_extension("msgpack.tmp");
+    tokio::fs::write(&temp_path, &bytes).await?;
+    tokio::fs::rename(&temp_path, path).await?;
+    
+    Ok(())
+}
+
+/// Read data from MessagePack file.
+pub async fn read_msgpack_file<T: DeserializeOwned>(path: &Path) -> Result<T> {
+    let bytes = tokio::fs::read(path).await?;
+    from_msgpack(&bytes)
+}
+
+/// Get the appropriate file extension for each format.
+pub trait StorageFormat {
+    fn extension(&self) -> &'static str;
+}
+
+pub enum TomlFormat {}
+pub enum MsgpackFormat {}
+pub enum JsonFormat {}
+
+impl StorageFormat for TomlFormat {
+    fn extension(&self) -> &'static str { "toml" }
+}
+
+impl StorageFormat for MsgpackFormat {
+    fn extension(&self) -> &'static str { "msgpack" }
+}
+
+impl StorageFormat for JsonFormat {
+    fn extension(&self) -> &'static str { "json" }
+}

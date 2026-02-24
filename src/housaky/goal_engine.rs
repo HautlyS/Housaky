@@ -455,18 +455,13 @@ impl GoalEngine {
         }
     }
 
-    async fn save_goals(&self) -> Result<()> {
+    pub async fn save_goals(&self) -> Result<()> {
         let goals = self.goals.read().await;
         let path = self.workspace_dir.join(".housaky").join("goals.json");
 
-        if let Some(parent) = path.parent() {
-            tokio::fs::create_dir_all(parent).await?;
-        }
-
         let goals_vec: Vec<_> = goals.values().cloned().collect();
         let json = serde_json::to_string_pretty(&goals_vec)?;
-        tokio::fs::write(&path, json).await?;
-
+        std::fs::write(&path, json)?;
         Ok(())
     }
 
@@ -477,9 +472,8 @@ impl GoalEngine {
             return Ok(());
         }
 
-        let content = tokio::fs::read_to_string(&path).await?;
-        let goals_vec: Vec<Goal> = serde_json::from_str(&content)?;
-
+        let goals_vec: Vec<Goal> = serde_json::from_str(&std::fs::read_to_string(&path)?)?;
+        
         let mut goals = self.goals.write().await;
         let mut queue = self.queue.write().await;
 

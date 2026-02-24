@@ -19,6 +19,7 @@ pub use traits::{
 
 use compatible::{AuthStyle, OpenAiCompatibleProvider};
 use reliable::ReliableProvider;
+use std::sync::Arc;
 
 const MAX_API_ERROR_CHARS: usize = 200;
 
@@ -366,6 +367,60 @@ pub fn create_resilient_provider(
     )
     .with_api_keys(reliability.api_keys.clone())
     .with_model_fallbacks(reliability.model_fallbacks.clone());
+
+    Ok(Box::new(reliable))
+}
+
+/// Create provider with KVM key management for advanced rotation
+pub fn create_resilient_provider_with_kvm(
+    primary_name: &str,
+    api_key: Option<&str>,
+    reliability: &crate::config::ReliabilityConfig,
+    kvm_manager: Option<Arc<crate::key_management::KvmKeyManager>>,
+) -> anyhow::Result<Box<dyn Provider>> {
+    let mut providers: Vec<(String, Box<dyn Provider>)> = Vec::new();
+
+    providers.push((
+        primary_name.to_string(),
+        create_provider(primary_name, api_key)?,
+    ));
+
+    for fallback in &reliability.fallback_providers {
+        if fallback == primary_name || providers.iter().any(|(name, _)| name == fallback) {
+            continue;
+        }
+
+        if api_key.is_some() && fallback != "ollama" {
+            tracing::warn!(
+                fallback_provider = fallback,
+                primary_provider = primary_name,
+                "Fallback provider will use the primary provider's API key — \
+                 this will fail if the providers require different keys"
+            );
+        }
+
+        match create_provider(fallback, api_key) {
+            Ok(provider) => providers.push((fallback.clone(), provider)),
+            Err(e) => {
+                tracing::warn!(
+                    fallback_provider = fallback,
+                    "Ignoring invalid fallback provider: {e}"
+                );
+            }
+        }
+    }
+
+    let mut reliable = ReliableProvider::new(
+        providers,
+        reliability.provider_retries,
+        reliability.provider_backoff_ms,
+    )
+    .with_api_keys(reliability.api_keys.clone())
+    .with_model_fallbacks(reliability.model_fallbacks.clone());
+
+    if let Some(kvm) = kvm_manager {
+        reliable = reliable.with_kvm_manager(kvm);
+    }
 
     Ok(Box::new(reliable))
 }

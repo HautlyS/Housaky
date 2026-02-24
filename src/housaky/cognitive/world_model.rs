@@ -1,3 +1,4 @@
+use crate::util::{read_msgpack_file, write_msgpack_file};
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -144,17 +145,15 @@ impl WorldModel {
     pub async fn load(&self) -> Result<()> {
         if let Some(ref path) = self.storage_path {
             if path.exists() {
-                let state_path = path.join("state.json");
+                let state_path = path.join("state.msgpack");
                 if state_path.exists() {
-                    let content = tokio::fs::read_to_string(&state_path).await?;
-                    let state: WorldState = serde_json::from_str(&content)?;
+                    let state: WorldState = read_msgpack_file(&state_path).await?;
                     *self.current_state.write().await = state;
                 }
 
-                let causal_path = path.join("causal_graph.json");
+                let causal_path = path.join("causal_graph.msgpack");
                 if causal_path.exists() {
-                    let content = tokio::fs::read_to_string(&causal_path).await?;
-                    let graph: CausalGraph = serde_json::from_str(&content)?;
+                    let graph: CausalGraph = read_msgpack_file(&causal_path).await?;
                     *self.causal_graph.write().await = graph;
                 }
 
@@ -169,12 +168,10 @@ impl WorldModel {
             tokio::fs::create_dir_all(path).await?;
 
             let state = self.current_state.read().await;
-            let content = serde_json::to_string_pretty(&*state)?;
-            tokio::fs::write(path.join("state.json"), content).await?;
+            write_msgpack_file(&path.join("state.msgpack"), &*state).await?;
 
             let causal = self.causal_graph.read().await;
-            let content = serde_json::to_string_pretty(&*causal)?;
-            tokio::fs::write(path.join("causal_graph.json"), content).await?;
+            write_msgpack_file(&path.join("causal_graph.msgpack"), &*causal).await?;
         }
         Ok(())
     }

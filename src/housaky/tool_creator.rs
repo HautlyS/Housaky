@@ -4,7 +4,6 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
-use tokio::io::AsyncWriteExt;
 use tokio::sync::RwLock;
 use tracing::{info, warn};
 
@@ -986,23 +985,42 @@ if __name__ == "__main__":
 
         let input_str = serde_json::to_string(input)?;
 
-        let output = tokio::time::timeout(
+        let result = tokio::time::timeout(
             std::time::Duration::from_millis(self.test_timeout_ms),
-            tokio::process::Command::new("python3")
-                .arg(&tool_path)
-                .stdin(std::process::Stdio::piped())
-                .stdout(std::process::Stdio::piped())
-                .stderr(std::process::Stdio::piped())
-                .spawn()?
-                .stdin
-                .take()
-                .unwrap()
-                .write_all(input_str.as_bytes()),
+            async {
+                let mut child = tokio::process::Command::new("python3")
+                    .arg(&tool_path)
+                    .stdin(std::process::Stdio::piped())
+                    .stdout(std::process::Stdio::piped())
+                    .stderr(std::process::Stdio::piped())
+                    .spawn()?;
+
+                if let Some(mut stdin) = child.stdin.take() {
+                    use tokio::io::AsyncWriteExt;
+                    stdin.write_all(input_str.as_bytes()).await?;
+                    stdin.flush().await?;
+                }
+
+                let output = child.wait_with_output().await?;
+                Ok::<_, anyhow::Error>(output)
+            },
         )
         .await;
 
-        let (actual_output, error) = match output {
-            Ok(_) => (Some(serde_json::json!({"status": "success"})), None),
+        let (actual_output, error) = match result {
+            Ok(Ok(output)) => {
+                if output.status.success() {
+                    let stdout = String::from_utf8_lossy(&output.stdout);
+                    match serde_json::from_str::<serde_json::Value>(&stdout) {
+                        Ok(json) => (Some(json), None),
+                        Err(_) => (Some(serde_json::json!({"status": "success", "output": stdout.to_string()})), None),
+                    }
+                } else {
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    (None, Some(stderr.to_string()))
+                }
+            }
+            Ok(Err(e)) => (None, Some(e.to_string())),
             Err(_) => (None, Some("Timeout or execution error".to_string())),
         };
 

@@ -142,12 +142,16 @@ impl InnerMonologue {
         stream.unprocessed_count += 1;
         stream.total_thoughts += 1;
 
+        let thought_content = stream.thoughts.back().unwrap().content.clone();
+        
         info!(
             "Added thought: {} (type: {:?}, confidence: {:.2})",
             id,
             stream.thoughts.back().unwrap().thought_type,
             confidence
         );
+        
+        println!("💭 Thought: {}", thought_content.chars().take(120).collect::<String>());
 
         Ok(id)
     }

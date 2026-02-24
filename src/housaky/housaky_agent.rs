@@ -1,4 +1,5 @@
 use crate::config::Config;
+use crate::util::{read_toml_file, write_toml_file};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
@@ -313,19 +314,17 @@ impl Agent {
     }
 
     async fn load_state(&mut self) -> Result<()> {
-        let state_path = self.workspace_dir.join(".housaky").join("STATE.json");
+        let state_path = self.workspace_dir.join(".housaky").join("STATE.toml");
 
         if state_path.exists() {
-            if let Ok(content) = tokio::fs::read_to_string(&state_path).await {
-                if let Ok(mut loaded_state) = serde_json::from_str::<HousakyState>(&content) {
-                    loaded_state.last_improvement = chrono::Utc::now();
-                    *self.state.write().await = loaded_state;
-                    tracing::info!(
-                        "Loaded existing Housaky state: {} improvements, consciousness {:.2}",
-                        self.state.read().await.total_improvements,
-                        self.state.read().await.consciousness_level
-                    );
-                }
+            if let Ok(mut loaded_state) = read_toml_file::<HousakyState>(&state_path).await {
+                loaded_state.last_improvement = chrono::Utc::now();
+                *self.state.write().await = loaded_state;
+                tracing::info!(
+                    "Loaded existing Housaky state: {} improvements, consciousness {:.2}",
+                    self.state.read().await.total_improvements,
+                    self.state.read().await.consciousness_level
+                );
             }
         }
 
@@ -435,12 +434,11 @@ path to AGI singularity.
             tokio::fs::write(&review_path, initial_review).await?;
         }
 
-        // Create STATE.json
-        let state_path = housaky_dir.join("STATE.json");
+        // Create STATE.toml
+        let state_path = housaky_dir.join("STATE.toml");
         if !state_path.exists() {
             let state = HousakyState::default();
-            let state_json = serde_json::to_string_pretty(&state)?;
-            tokio::fs::write(&state_path, state_json).await?;
+            write_toml_file(&state_path, &state).await?;
         }
 
         Ok(())

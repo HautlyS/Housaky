@@ -1,3 +1,4 @@
+use crate::util::{read_msgpack_file, write_msgpack_file};
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -677,14 +678,13 @@ impl KnowledgeGraphEngine {
         let path = self
             .workspace_dir
             .join(".housaky")
-            .join("knowledge_graph.json");
+            .join("knowledge_graph.msgpack");
 
         if let Some(parent) = path.parent() {
             tokio::fs::create_dir_all(parent).await?;
         }
 
-        let json = serde_json::to_string_pretty(graph)?;
-        tokio::fs::write(&path, json).await?;
+        write_msgpack_file(&path, graph).await?;
 
         Ok(())
     }
@@ -693,14 +693,13 @@ impl KnowledgeGraphEngine {
         let path = self
             .workspace_dir
             .join(".housaky")
-            .join("knowledge_graph.json");
+            .join("knowledge_graph.msgpack");
 
         if !path.exists() {
             return Ok(());
         }
 
-        let content = tokio::fs::read_to_string(&path).await?;
-        let loaded: KnowledgeGraph = serde_json::from_str(&content)?;
+        let loaded: KnowledgeGraph = read_msgpack_file(&path).await?;
 
         let mut graph = self.graph.write().await;
         *graph = loaded;

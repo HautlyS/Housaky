@@ -409,7 +409,7 @@ pub async fn run_agi_loop(
     let model_name = model_override
         .as_deref()
         .or(config.default_model.as_deref())
-        .unwrap_or("anthropic/claude-sonnet-4");
+        .unwrap_or("arcee-ai/trinity-large-preview:free");
 
     let provider: Box<dyn Provider> = crate::providers::create_routed_provider(
         provider_name,
@@ -480,7 +480,6 @@ pub async fn run_agi_loop(
     let mut agi_loop = AGIAgentLoop::new(core, config.clone(), system_prompt);
 
     if let Some(msg) = message {
-        tracing::info!("AGI loop: about to call process_message");
         let response = agi_loop
             .process_message(
                 provider.as_ref(),
@@ -492,8 +491,6 @@ pub async fn run_agi_loop(
                 temperature,
             )
             .await?;
-
-        tracing::info!("AGI loop: got response, about to print");
 
         println!("\n{}", response);
 

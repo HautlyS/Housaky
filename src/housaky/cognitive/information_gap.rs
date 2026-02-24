@@ -7,6 +7,8 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::info;
 
+use crate::util::{read_msgpack_file, write_msgpack_file};
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct KnowledgeGap {
     pub id: String,
@@ -68,7 +70,7 @@ impl CuriosityEngine {
     }
 
     pub fn with_storage(workspace_dir: &PathBuf) -> Self {
-        let storage_path = workspace_dir.join(".housaky").join("curiosity.json");
+        let storage_path = workspace_dir.join(".housaky").join("curiosity.msgpack");
         Self {
             novelty_weight: 0.3,
             relevance_weight: 0.3,
@@ -81,8 +83,7 @@ impl CuriosityEngine {
     pub async fn load(&self) -> Result<CuriosityState> {
         if let Some(ref path) = self.storage_path {
             if path.exists() {
-                let content = tokio::fs::read_to_string(path).await?;
-                let state: CuriosityState = serde_json::from_str(&content)?;
+                let state = read_msgpack_file(path).await?;
                 return Ok(state);
             }
         }
@@ -94,8 +95,7 @@ impl CuriosityEngine {
             if let Some(parent) = path.parent() {
                 tokio::fs::create_dir_all(parent).await?;
             }
-            let content = serde_json::to_string_pretty(state)?;
-            tokio::fs::write(path, content).await?;
+            write_msgpack_file(path, state).await?;
         }
         Ok(())
     }
@@ -251,7 +251,7 @@ impl InformationGapEngine {
     }
 
     pub fn with_storage(mut self, workspace_dir: &PathBuf) -> Self {
-        let storage_path = workspace_dir.join(".housaky").join("information_gaps.json");
+        let storage_path = workspace_dir.join(".housaky").join("information_gaps.msgpack");
         self.storage_path = Some(storage_path);
         self
     }
@@ -259,8 +259,7 @@ impl InformationGapEngine {
     pub async fn load(&self) -> Result<()> {
         if let Some(ref path) = self.storage_path {
             if path.exists() {
-                let content = tokio::fs::read_to_string(path).await?;
-                let loaded: HashMap<String, KnowledgeGap> = serde_json::from_str(&content)?;
+                let loaded: HashMap<String, KnowledgeGap> = read_msgpack_file(path).await?;
                 let mut gaps = self.gaps.write().await;
                 *gaps = loaded;
                 info!("Loaded {} knowledge gaps from storage", gaps.len());
@@ -275,8 +274,7 @@ impl InformationGapEngine {
                 tokio::fs::create_dir_all(parent).await?;
             }
             let gaps = self.gaps.read().await;
-            let content = serde_json::to_string_pretty(&*gaps)?;
-            tokio::fs::write(path, content).await?;
+            write_msgpack_file(path, &*gaps).await?;
         }
         Ok(())
     }

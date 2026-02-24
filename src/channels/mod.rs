@@ -11,6 +11,9 @@ pub mod telegram;
 pub mod traits;
 pub mod whatsapp;
 
+pub mod agi_processor;
+
+pub use agi_processor::AGIChannelProcessor;
 pub use cli::CliChannel;
 pub use dingtalk::DingTalkChannel;
 pub use discord::DiscordChannel;
@@ -73,6 +76,7 @@ struct ChannelRuntimeContext {
     auto_save_memory: bool,
     max_tool_iterations: usize,
     conv_history: ConvHistoryMap,
+    agi_processor: Option<Arc<AGIChannelProcessor>>,
 }
 
 fn conv_history_key(msg: &traits::ChannelMessage) -> String {
@@ -180,6 +184,55 @@ async fn process_channel_message(ctx: Arc<ChannelRuntimeContext>, msg: traits::C
         msg.sender,
         truncate_with_ellipsis(&msg.content, 80)
     );
+
+    // If AGI processor is available and enabled, use it for all message processing
+    if let Some(ref agi_processor) = ctx.agi_processor {
+        // First check if it's an AGI command
+        if let Some(command_response) = agi_processor.handle_agi_command(&msg).await {
+            let target_channel = ctx.channels_by_name.get(&msg.channel);
+            if let Some(channel) = target_channel {
+                if let Err(e) = channel.send(&command_response, &msg.sender).await {
+                    eprintln!("  ❌ Failed to send AGI command response: {e}");
+                }
+            }
+            return;
+        }
+
+        // Use full AGI processing for all messages when enabled
+        let target_channel = ctx.channels_by_name.get(&msg.channel).cloned();
+
+        if let Some(channel) = target_channel.as_ref() {
+            if let Err(e) = channel.start_typing(&msg.sender).await {
+                tracing::debug!("Failed to start typing on {}: {e}", channel.name());
+            }
+        }
+
+        println!("  🧠 [AGI Processing] Processing with reasoning, goals, and thoughts...");
+
+        match agi_processor.process_with_agi(&msg).await {
+            Ok(response) => {
+                if let Some(channel) = target_channel.as_ref() {
+                    if let Err(e) = channel.stop_typing(&msg.sender).await {
+                        tracing::debug!("Failed to stop typing on {}: {e}", channel.name());
+                    }
+                    if let Err(e) = channel.send(&response, &msg.sender).await {
+                        eprintln!("  ❌ Failed to reply on {}: {e}", channel.name());
+                    }
+                }
+            }
+            Err(e) => {
+                if let Some(channel) = target_channel.as_ref() {
+                    if let Err(stop_err) = channel.stop_typing(&msg.sender).await {
+                        tracing::debug!("Failed to stop typing on {}: {stop_err}", channel.name());
+                    }
+                    let _ = channel.send(&format!("⚠️ Error: {e}"), &msg.sender).await;
+                }
+            }
+        }
+        return;
+    }
+
+    // Fall back to regular processing when AGI is not enabled
 
     let memory_context = build_memory_context(ctx.memory.as_ref(), &msg.content).await;
 
@@ -1099,13 +1152,29 @@ pub async fn start_channels(config: Config) -> Result<()> {
         provider: Arc::clone(&provider),
         memory: Arc::clone(&mem),
         tools_registry: Arc::clone(&tools_registry),
-        observer,
-        system_prompt: Arc::new(system_prompt),
+        observer: observer.clone(),
+        system_prompt: Arc::new(system_prompt.clone()),
         model: Arc::new(model.clone()),
         temperature,
         auto_save_memory: config.memory.auto_save,
         max_tool_iterations: config.agent.max_tool_iterations,
         conv_history: Arc::new(Mutex::new(HashMap::new())),
+        agi_processor: if config.agi_enabled {
+            Some(Arc::new(AGIChannelProcessor::new(
+                config.workspace_dir.clone(),
+                config.clone(),
+                Arc::clone(&provider),
+                Arc::clone(&mem),
+                Arc::clone(&tools_registry),
+                observer.clone(),
+                system_prompt.clone(),
+                model.clone(),
+                temperature,
+                config.agent.max_tool_iterations,
+            )))
+        } else {
+            None
+        },
     });
 
     run_message_dispatch_loop(rx, runtime_ctx, max_in_flight_messages).await;
@@ -1294,6 +1363,7 @@ mod tests {
             auto_save_memory: false,
             max_tool_iterations: usize::MAX,
             conv_history: Arc::new(Mutex::new(HashMap::new())),
+            agi_processor: None,
         });
 
         process_channel_message(
@@ -1386,6 +1456,7 @@ mod tests {
             auto_save_memory: false,
             max_tool_iterations: usize::MAX,
             conv_history: Arc::new(Mutex::new(HashMap::new())),
+            agi_processor: None,
         });
 
         let (tx, rx) = tokio::sync::mpsc::channel::<traits::ChannelMessage>(4);

@@ -17,9 +17,12 @@
 //! - Web Browser: Safe web content fetching and search
 
 pub mod agent;
+pub mod agi_context;
 pub mod agi_loop;
+pub mod alignment;
 pub mod cognitive;
 pub mod core;
+pub mod decision_journal;
 pub mod goal_engine;
 pub mod heartbeat;
 pub mod housaky_agent;
@@ -31,7 +34,7 @@ pub mod meta_cognition;
 pub mod multi_agent;
 pub mod reasoning_engine;
 pub mod reasoning_pipeline;
-pub mod self_improvement;
+pub mod self_improvement_mod;
 pub mod session_manager;
 pub mod skills;
 pub mod streaming;
@@ -40,6 +43,11 @@ pub mod web_browser;
 pub mod working_memory;
 
 pub use agent::{AgentInput, AgentOutput, Session as AgentSession, UnifiedAgentLoop};
+pub use decision_journal::{
+    ChosenOption, ConsideredOption, DecisionBuilder, DecisionContext, DecisionEntry,
+    DecisionJournal, DecisionJournalError, ExecutionRecord, FileDecisionJournal, JournalStats,
+    OutcomeRecord,
+};
 pub use housaky_agent::{
     Agent, Capability, KowalskiIntegrationConfig, Task, TaskCategory, TaskPriority, TaskStatus,
 };
@@ -216,8 +224,26 @@ pub async fn handle_command(command: HousakyCommands, config: &Config) -> Result
             provider,
             model,
         } => {
-            println!("🧠 Starting Housaky AGI Mode...");
-            agi_loop::run_agi_loop(config.clone(), message, provider, model, 0.7).await?;
+            println!("🧠 Starting Housaky AGI Mode (autonomous, parallel)...");
+            let cfg = config.clone();
+            tokio::spawn(async move {
+                if let Err(e) = agi_loop::run_agi_loop(cfg, message, provider, model, 0.7).await {
+                    tracing::error!("AGI loop error: {}", e);
+                }
+            });
+            println!("✓ AGI running in background with self-improvement");
+        }
+
+        HousakyCommands::Run {
+            message,
+            provider,
+            model,
+            verbose,
+        } => {
+            println!("🚀 Starting Full Housaky AGI System (daemon + channels + heartbeat)...");
+            println!("   Verbose mode: {}", verbose);
+            
+            heartbeat::run_agi_background(config.clone(), message, provider, model).await?;
         }
 
         HousakyCommands::Dashboard { provider, model } => {

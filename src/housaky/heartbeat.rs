@@ -3,9 +3,10 @@ use crate::housaky::agent::{Agent, Task, TaskCategory, TaskPriority, TaskStatus}
 use crate::housaky::core::HousakyCore;
 use crate::housaky::kowalski_integration::KowalskiBridge;
 use crate::housaky::memory::consolidation::MemoryConsolidator;
-use crate::housaky::self_improvement::SelfImprovementEngine;
+use crate::housaky::self_improvement_mod::SelfImprovementEngine;
 use crate::housaky::skills::{SkillCreator, SkillRegistry};
 use crate::providers::{create_provider, Provider};
+use crate::util::write_toml_file;
 use anyhow::Result;
 use std::sync::Arc;
 use tokio::time::{interval, Duration};
@@ -127,6 +128,73 @@ impl HousakyHeartbeat {
             model,
         }
     }
+    
+    pub fn with_provider(agent: Arc<Agent>, provider: Box<dyn Provider>, model: String) -> Self {
+        let full_config = Config::load_or_init().unwrap_or_default();
+        let core = Arc::new(
+            HousakyCore::new(&full_config)
+                .unwrap_or_else(|_| panic!("Failed to create core")),
+        );
+        Self::with_core_and_provider(agent, core, provider, model, full_config)
+    }
+    
+    pub fn with_core_provider(
+        agent: Arc<Agent>, 
+        core: Arc<HousakyCore>, 
+        provider: Box<dyn Provider>, 
+        model: String,
+        config: Config,
+    ) -> Self {
+        Self::with_core_and_provider(agent, core, provider, model, config)
+    }
+    
+    fn with_core_and_provider(
+        agent: Arc<Agent>,
+        core: Arc<HousakyCore>,
+        provider: Box<dyn Provider>,
+        model: String,
+        config: Config,
+    ) -> Self {
+        let skill_registry = Arc::new(SkillRegistry::new(&agent.workspace_dir));
+
+        let kowalski_bridge = if agent.config.kowalski_integration.enabled {
+            Some(Arc::new(KowalskiBridge::new(
+                &agent.config.kowalski_integration,
+            )))
+        } else {
+            None
+        };
+
+        let memory_consolidator = core.memory_consolidator.clone();
+
+        let self_improvement_provider = create_provider(
+            &agent.config.provider.name,
+            agent.config.provider.api_key.as_deref(),
+        )
+        .ok();
+        let self_improvement = if let Some(p) = self_improvement_provider {
+            Arc::new(SelfImprovementEngine::with_provider(
+                agent.clone(),
+                p,
+                model.clone(),
+            ))
+        } else {
+            Arc::new(SelfImprovementEngine::new(agent.clone()))
+        };
+
+        Self {
+            agent,
+            core,
+            skill_registry,
+            kowalski_bridge,
+            self_improvement,
+            memory_consolidator,
+            interval_seconds: 120,
+            config,
+            provider: Some(provider),
+            model,
+        }
+    }
 
     pub async fn run(&self) -> Result<()> {
         info!(
@@ -182,6 +250,11 @@ impl HousakyHeartbeat {
         }
 
         self.auto_generate_tools().await?;
+        
+        match self.core.inner_monologue.save().await {
+            Ok(_) => info!("Inner monologue saved"),
+            Err(e) => error!("Failed to save inner monologue: {}", e),
+        }
 
         self.update_review_file().await?;
         self.save_state().await?;
@@ -211,9 +284,17 @@ impl HousakyHeartbeat {
                         cog_response.confidence,
                         cog_response.thoughts.len()
                     );
+                    println!("🧠 Cognitive Cycle: confidence={:.0}%, {} thoughts", 
+                        cog_response.confidence * 100.0, cog_response.thoughts.len());
+                    if !cog_response.thoughts.is_empty() {
+                        for thought in &cog_response.thoughts {
+                            println!("   💭 {}", thought.chars().take(80).collect::<String>());
+                        }
+                    }
                 }
                 Err(e) => {
                     warn!("Cognitive cycle error: {}", e);
+                    println!("⚠️ Cognitive cycle error: {}", e);
                 }
             }
         }
@@ -688,10 +769,110 @@ Generated: {}
     }
 
     async fn save_state(&self) -> Result<()> {
-        let state_path = self.agent.workspace_dir.join(".housaky").join("STATE.json");
+        let state_path = self.agent.workspace_dir.join(".housaky").join("STATE.toml");
         let state = self.agent.state.read().await;
-        let state_json = serde_json::to_string_pretty(&*state)?;
-        tokio::fs::write(&state_path, state_json).await?;
+        write_toml_file(&state_path, &*state).await?;
         Ok(())
     }
+}
+
+pub async fn run_agi_background(
+    config: Config,
+    message: Option<String>,
+    provider_override: Option<String>,
+    model_override: Option<String>,
+) -> Result<()> {
+    info!("Starting AGI background mode...");
+    
+    let provider_name = provider_override
+        .as_deref()
+        .or(config.default_provider.as_deref())
+        .unwrap_or("openrouter");
+    let model_name = model_override
+        .as_deref()
+        .or(config.default_model.as_deref())
+        .unwrap_or("arcee-ai/trinity-large-preview:free");
+    
+    let provider: Box<dyn crate::providers::Provider> = crate::providers::create_routed_provider(
+        provider_name,
+        config.api_key.as_deref(),
+        &config.reliability,
+        &config.model_routes,
+        model_name,
+    )?;
+    
+    let core = match crate::housaky::core::HousakyCore::new(&config) {
+        Ok(c) => Arc::new(c),
+        Err(e) => {
+            eprintln!("ERROR creating core: {:?}", e);
+            return Err(e.into());
+        }
+    };
+    if let Err(e) = core.initialize().await {
+        eprintln!("ERROR initializing core: {:?}", e);
+        return Err(e);
+    }
+    
+    if let Some(ref msg) = message {
+        info!("Processing initial message: {}", msg);
+        
+        let response = core
+            .process_with_cognitive_loop(
+                msg,
+                provider.as_ref(),
+                model_name,
+                &[],
+            )
+            .await;
+        
+        match response {
+            Ok(cog_response) => {
+                info!("Message processed: confidence={:.2}, thoughts={}", 
+                    cog_response.confidence, cog_response.thoughts.len());
+                println!("\n🤖 Response: {}", cog_response.content);
+                
+                if let Err(e) = core.inner_monologue.save().await {
+                    error!("Failed to save inner monologue after message: {}", e);
+                }
+            }
+            Err(e) => {
+                error!("Error processing message: {}", e);
+            }
+        }
+    }
+    
+    let agent = Arc::new(crate::housaky::agent::Agent::new(&config)?);
+    let heartbeat = HousakyHeartbeat::with_core_provider(
+        agent, 
+        core, 
+        provider, 
+        model_name.to_string(),
+        config,
+    );
+    
+    heartbeat.run().await
+}
+
+pub async fn run_agi_with_tui(
+    config: Config,
+    message: Option<String>,
+    provider: Option<String>,
+    model: Option<String>,
+    _verbose: bool,
+) -> Result<()> {
+    let cfg = config.clone();
+    std::thread::spawn(move || {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(async move {
+            if let Err(e) = run_agi_background(cfg, message, provider, model).await {
+                error!("AGI background error: {}", e);
+            }
+        });
+    });
+    
+    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+    
+    crate::tui::run_agi_tui(config, None, None)?;
+    
+    Ok(())
 }

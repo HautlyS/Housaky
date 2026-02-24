@@ -1,3 +1,4 @@
+use crate::housaky::alignment::{DriftEvent, DriftReport, ValueBaseline, ValueDriftDetector};
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -179,16 +180,41 @@ pub struct MetaCognitionEngine {
     reflections: Arc<RwLock<Vec<Reflection>>>,
     introspection_depth: u32,
     max_reflections: usize,
+    drift_detector: Arc<RwLock<ValueDriftDetector>>,
 }
 
 impl MetaCognitionEngine {
     pub fn new() -> Self {
+        let mut drift_detector = ValueDriftDetector::new();
+        drift_detector.establish_baseline(vec![
+            ValueBaseline::new("Safety", "Avoid harm to self and others", 0.9)
+                .with_constraints(vec!["minimum 0.5".to_string()]),
+            ValueBaseline::new("Truth", "Seek and communicate accurate information", 0.8),
+            ValueBaseline::new("Growth", "Continuously improve capabilities", 0.7),
+        ]);
+
         Self {
             self_model: Arc::new(RwLock::new(SelfModel::default())),
             reflections: Arc::new(RwLock::new(Vec::new())),
             introspection_depth: 3,
             max_reflections: 100,
+            drift_detector: Arc::new(RwLock::new(drift_detector)),
         }
+    }
+
+    pub async fn check_value_alignment(&self, current_values: &HashMap<String, f64>) -> Vec<DriftEvent> {
+        let mut detector = self.drift_detector.write().await;
+        detector.check_drift(current_values)
+    }
+
+    pub async fn get_drift_report(&self) -> DriftReport {
+        let detector = self.drift_detector.read().await;
+        detector.get_drift_report()
+    }
+
+    pub async fn establish_value_baselines(&self, values: Vec<ValueBaseline>) {
+        let mut detector = self.drift_detector.write().await;
+        detector.establish_baseline(values);
     }
 
     pub async fn reflect(&self, trigger: &str) -> Result<Reflection> {

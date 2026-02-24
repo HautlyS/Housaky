@@ -1,3 +1,4 @@
+use crate::util::{read_msgpack_file, write_msgpack_file};
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -193,17 +194,15 @@ impl MetaLearningEngine {
     pub async fn load(&self) -> Result<()> {
         if let Some(ref path) = self.storage_path {
             if path.exists() {
-                let strategies_path = path.join("strategies.json");
+                let strategies_path = path.join("strategies.msgpack");
                 if strategies_path.exists() {
-                    let content = tokio::fs::read_to_string(&strategies_path).await?;
-                    let loaded: HashMap<String, LearningStrategy> = serde_json::from_str(&content)?;
+                    let loaded: HashMap<String, LearningStrategy> = read_msgpack_file(&strategies_path).await?;
                     *self.strategies.write().await = loaded;
                 }
 
-                let history_path = path.join("history.json");
+                let history_path = path.join("history.msgpack");
                 if history_path.exists() {
-                    let content = tokio::fs::read_to_string(&history_path).await?;
-                    let loaded: VecDeque<LearningOutcome> = serde_json::from_str(&content)?;
+                    let loaded: VecDeque<LearningOutcome> = read_msgpack_file(&history_path).await?;
                     *self.outcome_history.write().await = loaded;
                 }
 
@@ -218,12 +217,10 @@ impl MetaLearningEngine {
             tokio::fs::create_dir_all(path).await?;
 
             let strategies = self.strategies.read().await;
-            let content = serde_json::to_string_pretty(&*strategies)?;
-            tokio::fs::write(path.join("strategies.json"), content).await?;
+            write_msgpack_file(&path.join("strategies.msgpack"), &*strategies).await?;
 
             let history = self.outcome_history.read().await;
-            let content = serde_json::to_string_pretty(&*history)?;
-            tokio::fs::write(path.join("history.json"), content).await?;
+            write_msgpack_file(&path.join("history.msgpack"), &*history).await?;
         }
         Ok(())
     }

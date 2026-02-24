@@ -101,6 +101,10 @@ pub struct CognitiveResponse {
 
 impl CognitiveLoop {
     pub fn new(config: &Config) -> Result<Self> {
+        Self::with_inner_monologue(config, None)
+    }
+    
+    pub fn with_inner_monologue(config: &Config, inner_monologue: Option<Arc<InnerMonologue>>) -> Result<Self> {
         let workspace_dir = config.workspace_dir.clone();
 
         Ok(Self {
@@ -113,7 +117,7 @@ impl CognitiveLoop {
             reasoning: Arc::new(ReasoningPipeline::new()),
             meta_cognition: Arc::new(MetaCognitionEngine::new()),
             knowledge_graph: Arc::new(KnowledgeGraphEngine::new(&workspace_dir)),
-            inner_monologue: Arc::new(InnerMonologue::new(&workspace_dir)),
+            inner_monologue: inner_monologue.unwrap_or_else(|| Arc::new(InnerMonologue::new(&workspace_dir))),
             config: CognitiveLoopConfig::default(),
             state: Arc::new(RwLock::new(CognitiveState {
                 total_turns: 0,
@@ -194,6 +198,15 @@ impl CognitiveLoop {
                 .record_experience(&perception, &decision, &outcome)
                 .await?;
         }
+        
+        let thought = format!(
+            "Processed {}: intent={:?}, action={:?}, confidence={:.0}%",
+            user_input,
+            perception.intent.primary,
+            decision.action,
+            response.confidence * 100.0
+        );
+        let _ = self.inner_monologue.add_thought(&thought, response.confidence).await;
 
         self.update_state(
             &perception,
@@ -524,23 +537,46 @@ impl CognitiveLoop {
         system_prompt.push_str("Respond helpfully and accurately. If uncertain, say so.");
 
         let state = self.state.read().await;
-        let mut history: Vec<ChatMessage> = Vec::new();
-
-        for turn in state.conversation_history.iter().rev().take(10).rev() {
-            history.push(ChatMessage {
-                role: "user".to_string(),
-                content: turn.user_input.clone(),
-            });
-            if !turn.response.is_empty() {
-                history.push(ChatMessage {
-                    role: "assistant".to_string(),
-                    content: turn.response.clone(),
-                });
-            }
-        }
+        let history: Vec<ChatMessage> = state
+            .conversation_history
+            .iter()
+            .rev()
+            .take(10)
+            .rev()
+            .flat_map(|turn| {
+                let mut msgs = vec![ChatMessage {
+                    role: "user".to_string(),
+                    content: turn.user_input.clone(),
+                }];
+                if !turn.response.is_empty() {
+                    msgs.push(ChatMessage {
+                        role: "assistant".to_string(),
+                        content: turn.response.clone(),
+                    });
+                }
+                msgs
+            })
+            .collect();
         drop(state);
 
-        let response = provider.chat_with_history(&history, model, 0.7).await?;
+        let response = if history.is_empty() {
+            provider
+                .chat_with_system(Some(&system_prompt), &perception.raw_input, model, 0.7)
+                .await?
+        } else {
+            let mut full_history = vec![ChatMessage {
+                role: "system".to_string(),
+                content: system_prompt.clone(),
+            }];
+            full_history.extend(history);
+            full_history.push(ChatMessage {
+                role: "user".to_string(),
+                content: perception.raw_input.clone(),
+            });
+            provider
+                .chat_with_history(&full_history, model, 0.7)
+                .await?
+        };
 
         self.working_memory
             .add(

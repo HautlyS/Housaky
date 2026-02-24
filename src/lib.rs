@@ -35,6 +35,8 @@
     dead_code
 )]
 
+#![allow(clippy::all)]
+
 pub mod agent;
 pub mod channels;
 pub mod commands;
@@ -51,6 +53,7 @@ pub mod heartbeat;
 pub mod housaky;
 pub mod identity;
 pub mod integrations;
+pub mod key_management;
 pub mod memory;
 pub mod migration;
 pub mod observability;

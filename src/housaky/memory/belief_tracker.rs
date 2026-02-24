@@ -7,6 +7,8 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::info;
 
+use crate::util::{read_msgpack_file, write_msgpack_file};
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Belief {
     pub id: String,
@@ -93,7 +95,7 @@ impl BeliefTracker {
     }
 
     pub fn with_storage(workspace_dir: &PathBuf) -> Self {
-        let storage_path = workspace_dir.join(".housaky").join("beliefs.json");
+        let storage_path = workspace_dir.join(".housaky").join("beliefs.msgpack");
         Self {
             beliefs: Arc::new(RwLock::new(HashMap::new())),
             belief_history: Arc::new(RwLock::new(Vec::new())),
@@ -105,8 +107,7 @@ impl BeliefTracker {
     pub async fn load(&self) -> Result<()> {
         if let Some(ref path) = self.storage_path {
             if path.exists() {
-                let content = tokio::fs::read_to_string(path).await?;
-                let beliefs: HashMap<String, Belief> = serde_json::from_str(&content)?;
+                let beliefs: HashMap<String, Belief> = read_msgpack_file(path).await?;
                 let mut storage = self.beliefs.write().await;
                 *storage = beliefs;
                 info!("Loaded {} beliefs from storage", storage.len());
@@ -121,8 +122,7 @@ impl BeliefTracker {
                 tokio::fs::create_dir_all(parent).await?;
             }
             let beliefs = self.beliefs.read().await;
-            let content = serde_json::to_string_pretty(&*beliefs)?;
-            tokio::fs::write(path, content).await?;
+            write_msgpack_file(path, &*beliefs).await?;
             info!("Saved {} beliefs to storage", beliefs.len());
         }
         Ok(())

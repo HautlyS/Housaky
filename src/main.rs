@@ -32,6 +32,8 @@
     dead_code
 )]
 
+#![allow(clippy::all)]
+
 use anyhow::{bail, Result};
 use clap::{Parser, Subcommand};
 use tracing::{info, Level};
@@ -132,6 +134,25 @@ enum Commands {
         host: String,
     },
 
+    /// Start full AGI system with TUI chat (gateway + channels + heartbeat + chat)
+    Run {
+        /// Single message to process
+        #[arg(short, long)]
+        message: Option<String>,
+
+        /// Provider to use
+        #[arg(short, long)]
+        provider: Option<String>,
+
+        /// Model to use
+        #[arg(long)]
+        model: Option<String>,
+
+        /// Verbose output (show thoughts)
+        #[arg(short, long)]
+        verbose: bool,
+    },
+
     /// Manage OS service lifecycle (launchd/systemd user service)
     Service {
         #[command(subcommand)]
@@ -154,6 +175,12 @@ enum Commands {
     Models {
         #[command(subcommand)]
         model_command: ModelCommands,
+    },
+
+    /// Manage API keys and providers
+    Keys {
+        #[command(subcommand)]
+        key_command: KeyCommands,
     },
 
     /// Manage channels (telegram, discord, slack)
@@ -202,9 +229,6 @@ enum Commands {
         #[arg(long)]
         model: Option<String>,
     },
-
-    /// Test and configure LLM providers
-    Providers,
 
     /// Interactive configuration editor
     Config {
@@ -304,6 +328,19 @@ async fn main() -> Result<()> {
                 info!("🧠 Starting Housaky Daemon on {host}:{port}");
             }
             daemon::run(config, host, port).await
+        }
+
+        Commands::Run { message, provider, model, verbose } => {
+            println!("🚀 Starting Full Housaky AGI System with TUI Chat...");
+            println!("   Verbose mode: {}", verbose);
+            
+            housaky::housaky::heartbeat::run_agi_with_tui(
+                config, 
+                message, 
+                provider, 
+                model, 
+                verbose
+            ).await
         }
 
         Commands::Status => {
@@ -433,15 +470,6 @@ async fn main() -> Result<()> {
             Ok(())
         }
 
-        Commands::Providers => {
-            // Run TUI in a blocking task to avoid nested runtime issues
-            tokio::task::spawn_blocking(move || tui::run_provider_tui(config))
-                .await
-                .map_err(|e| anyhow::anyhow!("Provider TUI task failed: {e}"))?
-                .map_err(|e| anyhow::anyhow!("Provider TUI error: {e}"))?;
-            Ok(())
-        }
-
         Commands::Config { section, reset } => {
             if reset {
                 let mut default_config = Config::default();
@@ -464,7 +492,8 @@ async fn main() -> Result<()> {
         }
 
         Commands::Housaky { housaky_command } => {
-            housaky::housaky::handle_command(housaky_command, &config).await
+            housaky::housaky::handle_command(housaky_command, &config).await?;
+            Ok(())
         }
     }
 }

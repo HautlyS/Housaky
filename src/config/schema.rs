@@ -1,5 +1,6 @@
 use crate::security::AutonomyLevel;
 use anyhow::{Context, Result};
+use chrono::{DateTime, Duration, Utc};
 use directories::UserDirs;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -93,6 +94,10 @@ pub struct Config {
     /// Hardware configuration (wizard-driven physical world setup).
     #[serde(default)]
     pub hardware: HardwareConfig,
+
+    /// Enable AGI features in channels (reasoning, goals, thoughts)
+    #[serde(default)]
+    pub agi_enabled: bool,
 }
 
 // ── Delegate Agents ──────────────────────────────────────────────
@@ -217,6 +222,64 @@ pub struct AgentConfig {
     /// Maximum characters for bootstrap context loading
     #[serde(default = "default_bootstrap_max_chars")]
     pub bootstrap_max_chars: usize,
+    /// AGI subsystem configuration
+    #[serde(default)]
+    pub agi: AGISubsystemConfig,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AGISubsystemConfig {
+    /// Enable goal tracking during agent execution
+    #[serde(default = "default_true")]
+    pub enable_goal_tracking: bool,
+    /// Enable continuous learning from tool execution feedback
+    #[serde(default = "default_true")]
+    pub enable_learning: bool,
+    /// Enable meta-cognitive reflection
+    #[serde(default = "default_true")]
+    pub enable_meta_cognition: bool,
+    /// Enable decision journaling
+    #[serde(default = "default_true")]
+    pub enable_decision_journal: bool,
+    /// Enable value drift detection
+    #[serde(default = "default_true")]
+    pub enable_drift_detection: bool,
+    /// Number of turns between periodic reflections
+    #[serde(default = "default_reflection_interval")]
+    pub reflection_interval_turns: u32,
+    /// Number of turns between drift checks
+    #[serde(default = "default_drift_check_interval")]
+    pub drift_check_interval_turns: u32,
+    /// Maximum decisions stored in journal
+    #[serde(default = "default_max_decisions")]
+    pub max_decisions_in_journal: usize,
+}
+
+fn default_reflection_interval() -> u32 {
+    10
+}
+
+fn default_drift_check_interval() -> u32 {
+    20
+}
+
+fn default_max_decisions() -> usize {
+    1000
+}
+
+impl Default for AGISubsystemConfig {
+    fn default() -> Self {
+        Self {
+            enable_goal_tracking: true,
+            enable_learning: true,
+            enable_meta_cognition: true,
+            enable_decision_journal: true,
+            enable_drift_detection: true,
+            reflection_interval_turns: default_reflection_interval(),
+            drift_check_interval_turns: default_drift_check_interval(),
+            max_decisions_in_journal: default_max_decisions(),
+        }
+    }
 }
 
 fn default_agent_max_tool_iterations() -> usize {
@@ -259,6 +322,7 @@ impl Default for AgentConfig {
             compaction_max_source_chars: default_compaction_max_source_chars(),
             compaction_max_summary_chars: default_compaction_max_summary_chars(),
             bootstrap_max_chars: default_bootstrap_max_chars(),
+            agi: AGISubsystemConfig::default(),
         }
     }
 }
@@ -1341,13 +1405,25 @@ impl Default for RuntimeConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReliabilityConfig {
+    /// Provider configurations with detailed key management
+    #[serde(default)]
+    pub providers: Vec<ProviderConfig>,
+    /// Global rotation settings
+    #[serde(default)]
+    pub rotation: GlobalRotationConfig,
+    /// Health monitoring configuration
+    #[serde(default)]
+    pub health_monitoring: HealthMonitoringConfig,
+    /// Key storage and encryption
+    #[serde(default)]
+    pub key_storage: KeyStorageConfig,
     /// Retries per provider before failing over.
     #[serde(default = "default_provider_retries")]
     pub provider_retries: u32,
     /// Base backoff (ms) for provider retry delay.
     #[serde(default = "default_provider_backoff_ms")]
     pub provider_backoff_ms: u64,
-    /// Fallback provider chain (e.g. `["anthropic", "openai"]`).
+    /// Fallback provider chain (e.g. `"anthropic", "openai"]).
     #[serde(default)]
     pub fallback_providers: Vec<String>,
     /// Enable automatic API key rotation on rate-limit (429) errors.
@@ -1376,6 +1452,411 @@ pub struct ReliabilityConfig {
     /// Max retries for cron job execution attempts.
     #[serde(default = "default_scheduler_retries")]
     pub scheduler_retries: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProviderConfig {
+    /// Provider name (openrouter, anthropic, openai, etc.)
+    pub name: String,
+    /// Base URL for API requests
+    pub base_url: Option<String>,
+    /// Model configurations
+    pub models: Vec<ModelConfig>,
+    /// Authentication method (api_key, oauth, etc.)
+    pub auth_method: AuthMethod,
+    /// Request timeout in seconds
+    #[serde(default = "default_timeout")]
+    pub timeout_secs: u64,
+    /// Maximum concurrent requests
+    #[serde(default = "default_concurrent")]
+    pub max_concurrent: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ModelConfig {
+    /// Model name
+    pub name: String,
+    /// API key configurations
+    pub api_keys: Vec<ApiKeyConfig>,
+    /// Request limits
+    pub rate_limit: Option<RateLimitConfig>,
+    /// Temperature and other model parameters
+    #[serde(flatten)]
+    pub model_params: ModelParams,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ApiKeyConfig {
+    /// API key value
+    pub key: String,
+    /// Key metadata
+    pub metadata: KeyMetadata,
+    /// Usage statistics
+    #[serde(default)]
+    pub usage: UsageStats,
+    /// Rotation configuration
+    #[serde(default)]
+    pub rotation: RotationConfig,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RotationConfig {
+    /// Enable automatic rotation
+    #[serde(default)]
+    pub enabled: bool,
+    /// Rotation strategy (round-robin, priority, health-based)
+    #[serde(default = "default_rotation_strategy")]
+    pub strategy: RotationStrategy,
+    /// Threshold for rotation (usage %, error rate, etc.)
+    #[serde(default)]
+    pub threshold: RotationThreshold,
+    /// Cooldown period between rotations
+    #[serde(default = "default_cooldown")]
+    pub cooldown_secs: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GlobalRotationConfig {
+    /// Enable global rotation
+    #[serde(default)]
+    pub enabled: bool,
+    /// Default rotation strategy
+    #[serde(default = "default_global_strategy")]
+    pub default_strategy: RotationStrategy,
+    /// Global cooldown period
+    #[serde(default = "default_global_cooldown")]
+    pub global_cooldown_secs: u64,
+    /// Health check interval
+    #[serde(default = "default_health_check_interval")]
+    pub health_check_interval_secs: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HealthMonitoringConfig {
+    /// Enable health monitoring
+    #[serde(default)]
+    pub enabled: bool,
+    /// Health check endpoints
+    #[serde(default)]
+    pub endpoints: Vec<HealthEndpoint>,
+    /// Failure threshold for key rotation
+    #[serde(default = "default_failure_threshold")]
+    pub failure_threshold: u32,
+    /// Success rate threshold
+    #[serde(default = "default_success_rate")]
+    pub success_rate_threshold: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct KeyStorageConfig {
+    /// Enable encryption for API keys
+    #[serde(default = "default_true")]
+    pub encrypt: bool,
+    /// Encryption key storage method
+    #[serde(default = "default_encryption_method")]
+    pub encryption_method: EncryptionMethod,
+    /// Key rotation schedule
+    #[serde(default)]
+    pub rotation_schedule: RotationSchedule,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RotationSchedule {
+    /// Daily rotation time (HH:MM)
+    #[serde(default = "default_daily_rotation_time")]
+    pub daily_rotation_time: String,
+    /// Weekly rotation day (0=Sunday, 6=Saturday)
+    #[serde(default = "default_weekly_rotation_day")]
+    pub weekly_rotation_day: u32,
+    /// Monthly rotation day (1-31)
+    #[serde(default = "default_monthly_rotation_day")]
+    pub monthly_rotation_day: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HealthEndpoint {
+    /// Endpoint URL for health check
+    pub url: String,
+    /// HTTP method (GET, POST, etc.)
+    #[serde(default = "default_health_method")]
+    pub method: String,
+    /// Expected response status
+    #[serde(default = "default_expected_status")]
+    pub expected_status: u16,
+    /// Request timeout
+    #[serde(default = "default_health_timeout")]
+    pub timeout_secs: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UsageStats {
+    /// Total requests made
+    pub total_requests: u64,
+    /// Successful requests
+    pub successful_requests: u64,
+    /// Failed requests
+    pub failed_requests: u64,
+    /// Error rate percentage
+    #[serde(default = "default_error_rate")]
+    pub error_rate: f64,
+    /// Usage percentage (0-100)
+    #[serde(default = "default_usage_percent")]
+    pub usage_percent: u8,
+    /// Last usage update timestamp
+    #[serde(default = "default_timestamp")]
+    pub last_update: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct KeyMetadata {
+    /// Key description
+    pub description: String,
+    /// Creation date
+    #[serde(default = "default_timestamp")]
+    pub created_at: DateTime<Utc>,
+    /// Last rotation date
+    #[serde(default = "default_timestamp")]
+    pub last_rotated: DateTime<Utc>,
+    /// Tags for organization
+    #[serde(default)]
+    pub tags: Vec<String>,
+    /// Environment (production, staging, development)
+    #[serde(default = "default_environment")]
+    pub environment: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RateLimitConfig {
+    /// Requests per minute
+    #[serde(default = "default_rpm")]
+    pub requests_per_minute: u32,
+    /// Requests per hour
+    #[serde(default = "default_rph")]
+    pub requests_per_hour: u32,
+    /// Requests per day
+    #[serde(default = "default_rpd")]
+    pub requests_per_day: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ModelParams {
+    /// Temperature (0.0 - 2.0)
+    #[serde(default = "default_temperature")]
+    pub temperature: f64,
+    /// Max tokens
+    #[serde(default = "default_max_tokens")]
+    pub max_tokens: u32,
+    /// Top P sampling
+    #[serde(default = "default_top_p")]
+    pub top_p: f64,
+    /// Frequency penalty
+    #[serde(default = "default_frequency_penalty")]
+    pub frequency_penalty: f64,
+    /// Presence penalty
+    #[serde(default = "default_presence_penalty")]
+    pub presence_penalty: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum AuthMethod {
+    ApiKey,
+    OAuth,
+    BearerToken,
+    BasicAuth,
+    Custom,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum RotationStrategy {
+    RoundRobin,
+    Priority,
+    UsageBased,
+    ErrorBased,
+    HealthBased,
+    Hybrid,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum RotationThreshold {
+    UsagePercent(u8),
+    ErrorRate(f64),
+    TimeBased(Duration),
+    Custom(String),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum EncryptionMethod {
+    Aes256,
+    ChaCha20,
+    Rsa,
+    Custom,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum HealthStatus {
+    Healthy,
+    Degraded,
+    Unhealthy,
+    Unknown,
+}
+
+impl Default for GlobalRotationConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            default_strategy: default_global_strategy(),
+            global_cooldown_secs: default_global_cooldown(),
+            health_check_interval_secs: default_health_check_interval(),
+        }
+    }
+}
+
+impl Default for HealthMonitoringConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            endpoints: Vec::new(),
+            failure_threshold: default_failure_threshold(),
+            success_rate_threshold: default_success_rate(),
+        }
+    }
+}
+
+impl Default for KeyStorageConfig {
+    fn default() -> Self {
+        Self {
+            encrypt: true,
+            encryption_method: default_encryption_method(),
+            rotation_schedule: RotationSchedule::default(),
+        }
+    }
+}
+
+impl Default for UsageStats {
+    fn default() -> Self {
+        Self {
+            total_requests: 0,
+            successful_requests: 0,
+            failed_requests: 0,
+            error_rate: default_error_rate(),
+            usage_percent: default_usage_percent(),
+            last_update: default_timestamp(),
+        }
+    }
+}
+
+impl Default for RotationConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            strategy: default_rotation_strategy(),
+            threshold: RotationThreshold::UsagePercent(80),
+            cooldown_secs: default_cooldown(),
+        }
+    }
+}
+
+impl Default for RotationThreshold {
+    fn default() -> Self {
+        Self::UsagePercent(80)
+    }
+}
+
+impl Default for RotationSchedule {
+    fn default() -> Self {
+        Self {
+            daily_rotation_time: default_daily_rotation_time(),
+            weekly_rotation_day: default_weekly_rotation_day(),
+            monthly_rotation_day: default_monthly_rotation_day(),
+        }
+    }
+}
+
+// Default functions
+
+fn default_timeout() -> u64 {
+    30
+}
+fn default_concurrent() -> usize {
+    4
+}
+fn default_rotation_strategy() -> RotationStrategy {
+    RotationStrategy::RoundRobin
+}
+fn default_cooldown() -> u64 {
+    300
+}
+fn default_global_strategy() -> RotationStrategy {
+    RotationStrategy::Priority
+}
+fn default_global_cooldown() -> u64 {
+    600
+}
+fn default_health_check_interval() -> u64 {
+    300
+}
+fn default_failure_threshold() -> u32 {
+    5
+}
+fn default_success_rate() -> f64 {
+    0.9
+}
+fn default_encryption_method() -> EncryptionMethod {
+    EncryptionMethod::Aes256
+}
+fn default_daily_rotation_time() -> String {
+    "02:00".to_string()
+}
+fn default_weekly_rotation_day() -> u32 {
+    0
+}
+fn default_monthly_rotation_day() -> u32 {
+    1
+}
+fn default_health_method() -> String {
+    "GET".to_string()
+}
+fn default_expected_status() -> u16 {
+    200
+}
+fn default_health_timeout() -> u64 {
+    10
+}
+fn default_error_rate() -> f64 {
+    0.0
+}
+fn default_usage_percent() -> u8 {
+    0
+}
+fn default_timestamp() -> DateTime<Utc> {
+    Utc::now()
+}
+fn default_environment() -> String {
+    "production".to_string()
+}
+fn default_rpm() -> u32 {
+    60
+}
+fn default_rph() -> u32 {
+    3600
+}
+fn default_rpd() -> u32 {
+    86400
+}
+fn default_temperature() -> f64 {
+    0.7
+}
+fn default_max_tokens() -> u32 {
+    4096
+}
+fn default_top_p() -> f64 {
+    1.0
+}
+fn default_frequency_penalty() -> f64 {
+    0.0
+}
+fn default_presence_penalty() -> f64 {
+    0.0
 }
 
 fn default_provider_retries() -> u32 {
@@ -1472,6 +1953,10 @@ impl ReliabilityConfig {
 impl Default for ReliabilityConfig {
     fn default() -> Self {
         Self {
+            providers: Vec::new(),
+            rotation: GlobalRotationConfig::default(),
+            health_monitoring: HealthMonitoringConfig::default(),
+            key_storage: KeyStorageConfig::default(),
             provider_retries: default_provider_retries(),
             provider_backoff_ms: default_provider_backoff_ms(),
             fallback_providers: Vec::new(),
@@ -2041,6 +2526,7 @@ impl Default for Config {
             peripherals: PeripheralsConfig::default(),
             agents: HashMap::new(),
             hardware: HardwareConfig::default(),
+            agi_enabled: true,
         }
     }
 }
@@ -2124,7 +2610,70 @@ impl Config {
                 self.api_key = Some(key);
             }
         }
-        // API Key: GLM_API_KEY overrides when provider is glm (provider-specific)
+        // Provider-specific API keys
+        let provider = self.default_provider.as_deref().unwrap_or("");
+        if self.api_key.is_none() {
+            match provider {
+                "openrouter" | "open_router" => {
+                    if let Ok(key) = std::env::var("OPENROUTER_API_KEY") {
+                        if !key.is_empty() {
+                            self.api_key = Some(key);
+                        }
+                    }
+                }
+                "openai" => {
+                    if let Ok(key) = std::env::var("OPENAI_API_KEY") {
+                        if !key.is_empty() {
+                            self.api_key = Some(key);
+                        }
+                    }
+                }
+                "anthropic" => {
+                    if let Ok(key) = std::env::var("ANTHROPIC_API_KEY") {
+                        if !key.is_empty() {
+                            self.api_key = Some(key);
+                        }
+                    }
+                }
+                "glm" | "zhipu" => {
+                    if let Ok(key) = std::env::var("GLM_API_KEY") {
+                        if !key.is_empty() {
+                            self.api_key = Some(key);
+                        }
+                    }
+                }
+                "groq" => {
+                    if let Ok(key) = std::env::var("GROQ_API_KEY") {
+                        if !key.is_empty() {
+                            self.api_key = Some(key);
+                        }
+                    }
+                }
+                "mistral" => {
+                    if let Ok(key) = std::env::var("MISTRAL_API_KEY") {
+                        if !key.is_empty() {
+                            self.api_key = Some(key);
+                        }
+                    }
+                }
+                "deepseek" => {
+                    if let Ok(key) = std::env::var("DEEPSEEK_API_KEY") {
+                        if !key.is_empty() {
+                            self.api_key = Some(key);
+                        }
+                    }
+                }
+                "xai" | "grok" => {
+                    if let Ok(key) = std::env::var("XAI_API_KEY") {
+                        if !key.is_empty() {
+                            self.api_key = Some(key);
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        // GLM specific check
         if self.default_provider.as_deref() == Some("glm")
             || self.default_provider.as_deref() == Some("zhipu")
         {
@@ -2441,6 +2990,7 @@ mod tests {
             peripherals: PeripheralsConfig::default(),
             agents: HashMap::new(),
             hardware: HardwareConfig::default(),
+            agi_enabled: true,
         };
 
         let toml_str = toml::to_string_pretty(&config).unwrap();
@@ -2597,6 +3147,7 @@ tool_dispatcher = "xml"
             peripherals: PeripheralsConfig::default(),
             agents: HashMap::new(),
             hardware: HardwareConfig::default(),
+            agi_enabled: true,
         };
 
         config.save().unwrap();

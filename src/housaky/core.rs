@@ -147,7 +147,7 @@ impl HousakyCore {
         let tool_creator = Arc::new(ToolCreator::new(&workspace_dir));
         let inner_monologue = Arc::new(InnerMonologue::new(&workspace_dir));
         let reasoning_pipeline = Arc::new(ReasoningPipeline::new());
-        let cognitive_loop = Arc::new(CognitiveLoop::new(config)?);
+        let cognitive_loop = Arc::new(CognitiveLoop::with_inner_monologue(config, Some(inner_monologue.clone()))?);
         let hierarchical_memory = Arc::new(HierarchicalMemory::new(Default::default()));
         let memory_consolidator = Arc::new(MemoryConsolidator::new(
             hierarchical_memory.clone(),
@@ -196,13 +196,29 @@ impl HousakyCore {
     pub async fn initialize(&self) -> Result<()> {
         info!("Initializing Housaky AGI Core...");
 
-        self.goal_engine.load_goals().await?;
-        self.knowledge_graph.load_graph().await?;
-        self.inner_monologue.load().await?;
-        self.tool_creator.load_tools().await?;
-        self.cognitive_loop.initialize().await?;
+        if let Err(e) = self.goal_engine.load_goals().await {
+            return Err(anyhow::anyhow!("Failed to load goals: {}", e));
+        }
+        
+        if let Err(e) = self.knowledge_graph.load_graph().await {
+            return Err(anyhow::anyhow!("Failed to load knowledge graph: {}", e));
+        }
+        
+        if let Err(e) = self.inner_monologue.load().await {
+            return Err(anyhow::anyhow!("Failed to load inner monologue: {}", e));
+        }
+        
+        if let Err(e) = self.tool_creator.load_tools().await {
+            return Err(anyhow::anyhow!("Failed to load tools: {}", e));
+        }
+        
+        if let Err(e) = self.cognitive_loop.initialize().await {
+            return Err(anyhow::anyhow!("Failed to initialize cognitive loop: {}", e));
+        }
 
-        self.initialize_default_goals().await?;
+        if let Err(e) = self.initialize_default_goals().await {
+            return Err(anyhow::anyhow!("Failed to initialize default goals: {}", e));
+        }
 
         info!("Housaky AGI Core initialized successfully");
         Ok(())
@@ -855,6 +871,66 @@ impl HousakyCore {
     pub async fn get_streaming_stats(&self) -> crate::housaky::streaming::streaming::StreamStats {
         self.streaming_manager.get_stats().await
     }
+    
+    pub async fn decompose_task(&self, task: &str) -> Result<Vec<SubTask>> {
+        info!("Decomposing task: {}", task);
+        
+        let complexity_indicators = [
+            " and ", " then ", " also ", " plus ", " moreover",
+            "first", "second", "third", "finally",
+            "step 1", "step 2", "step 3",
+            "multiple", "several", "various",
+        ];
+        
+        let is_complex = complexity_indicators.iter()
+            .any(|i| task.to_lowercase().contains(i));
+        
+        if !is_complex {
+            return Ok(vec![SubTask {
+                id: format!("sub_{}", uuid::Uuid::new_v4()),
+                description: task.to_string(),
+                status: SubTaskStatus::Pending,
+                dependencies: vec![],
+            }]);
+        }
+        
+        let parts: Vec<&str> = task
+            .split(|c| c == ',' || c == '.' || c == ';' || c == '\n')
+            .filter(|s| !s.trim().is_empty())
+            .collect();
+        
+        let mut subtasks = Vec::new();
+        let mut dependencies: Vec<String> = vec![];
+        
+        for (_i, part) in parts.iter().enumerate() {
+            let clean = part.trim();
+            if clean.is_empty() || clean.len() < 3 {
+                continue;
+            }
+            
+            let subtask = SubTask {
+                id: format!("sub_{}", uuid::Uuid::new_v4()),
+                description: clean.to_string(),
+                status: SubTaskStatus::Pending,
+                dependencies: dependencies.clone(),
+            };
+            
+            dependencies.push(subtask.id.clone());
+            subtasks.push(subtask);
+        }
+        
+        if subtasks.is_empty() {
+            subtasks.push(SubTask {
+                id: format!("sub_{}", uuid::Uuid::new_v4()),
+                description: task.to_string(),
+                status: SubTaskStatus::Pending,
+                dependencies: vec![],
+            });
+        }
+        
+        info!("Decomposed into {} subtasks", subtasks.len());
+        Ok(subtasks)
+    }
 
     pub async fn shutdown(&self) -> Result<()> {
         info!("Shutting down Housaky AGI Core...");
@@ -869,6 +945,22 @@ impl HousakyCore {
         info!("Housaky AGI Core shutdown complete");
         Ok(())
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SubTask {
+    pub id: String,
+    pub description: String,
+    pub status: SubTaskStatus,
+    pub dependencies: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum SubTaskStatus {
+    Pending,
+    InProgress,
+    Completed,
+    Failed,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

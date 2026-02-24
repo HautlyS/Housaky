@@ -1,8 +1,10 @@
 use super::traits::ChatMessage;
 use super::Provider;
+use crate::key_management::{KvmKeyManager, KvmKey};
 use async_trait::async_trait;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
 use std::time::Duration;
 
 /// Check if an error is non-retryable (client errors that won't resolve with retries).
@@ -79,6 +81,9 @@ pub struct ReliableProvider {
     key_index: AtomicUsize,
     /// Per-model fallback chains: model_name → [fallback_model_1, fallback_model_2, ...]
     model_fallbacks: HashMap<String, Vec<String>>,
+    /// KVM key manager for advanced key rotation
+    kvm_manager: Option<Arc<KvmKeyManager>>,
+    current_provider_name: String,
 }
 
 impl ReliableProvider {
@@ -87,6 +92,11 @@ impl ReliableProvider {
         max_retries: u32,
         base_backoff_ms: u64,
     ) -> Self {
+        let provider_name = providers
+            .first()
+            .map(|(n, _)| n.clone())
+            .unwrap_or_else(|| "unknown".to_string());
+        
         Self {
             providers,
             max_retries,
@@ -94,7 +104,15 @@ impl ReliableProvider {
             api_keys: Vec::new(),
             key_index: AtomicUsize::new(0),
             model_fallbacks: HashMap::new(),
+            kvm_manager: None,
+            current_provider_name: provider_name,
         }
+    }
+
+    /// Set the KVM key manager for advanced key rotation
+    pub fn with_kvm_manager(mut self, manager: Arc<KvmKeyManager>) -> Self {
+        self.kvm_manager = Some(manager);
+        self
     }
 
     /// Set additional API keys for round-robin rotation on rate-limit errors.
@@ -120,11 +138,61 @@ impl ReliableProvider {
 
     /// Advance to the next API key and return it, or None if no extra keys configured.
     fn rotate_key(&self) -> Option<&str> {
+        if let Some(kvm) = &self.kvm_manager {
+            let rt = tokio::runtime::Handle::current();
+            let provider_name = self.current_provider_name.clone();
+            
+            let key = rt.block_on(async {
+                kvm.rotate_key(&provider_name).await
+            });
+            
+            return key.map(|k| k.key.as_str());
+        }
+        
         if self.api_keys.is_empty() {
             return None;
         }
         let idx = self.key_index.fetch_add(1, Ordering::Relaxed) % self.api_keys.len();
         Some(&self.api_keys[idx])
+    }
+
+    /// Get current key from KVM manager
+    fn get_current_key(&self) -> Option<String> {
+        if let Some(kvm) = &self.kvm_manager {
+            let rt = tokio::runtime::Handle::current();
+            let provider_name = self.current_provider_name.clone();
+            
+            return rt.block_on(async {
+                kvm.get_next_key(&provider_name).await
+            }).map(|k| k.key);
+        }
+        self.api_keys.get(self.key_index.load(Ordering::Relaxed)).cloned()
+    }
+
+    /// Report key success to KVM manager
+    fn report_key_success(&self, key_id: &str) {
+        if let Some(kvm) = &self.kvm_manager {
+            let rt = tokio::runtime::Handle::current();
+            let provider_name = self.current_provider_name.clone();
+            let key_id = key_id.to_string();
+            
+            rt.spawn(async move {
+                kvm.report_key_success(&provider_name, &key_id).await;
+            });
+        }
+    }
+
+    /// Report key failure to KVM manager
+    fn report_key_failure(&self, key_id: &str, is_rate_limit: bool) {
+        if let Some(kvm) = &self.kvm_manager {
+            let rt = tokio::runtime::Handle::current();
+            let provider_name = self.current_provider_name.clone();
+            let key_id = key_id.to_string();
+            
+            rt.spawn(async move {
+                kvm.report_key_failure(&provider_name, &key_id, is_rate_limit).await;
+            });
+        }
     }
 
     /// Compute backoff duration, respecting Retry-After if present.

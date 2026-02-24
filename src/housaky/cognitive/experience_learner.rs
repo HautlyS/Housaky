@@ -1,5 +1,6 @@
 use crate::housaky::cognitive::action_selector::{ActionDecision, ActionOutcome, ActionResult};
 use crate::housaky::cognitive::perception::PerceivedInput;
+use crate::util::{read_msgpack_file, write_msgpack_file};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -603,17 +604,14 @@ This skill was automatically generated from successful patterns observed during 
         tokio::fs::create_dir_all(&state_dir).await?;
 
         let experiences = self.experiences.read().await;
-        let recent: Vec<_> = experiences.iter().rev().take(100).collect();
-        let experiences_json = serde_json::to_string_pretty(&recent)?;
-        tokio::fs::write(state_dir.join("experiences.json"), experiences_json).await?;
+        let recent: Vec<_> = experiences.iter().rev().take(100).cloned().collect();
+        write_msgpack_file(&state_dir.join("experiences.msgpack"), &recent).await?;
 
         let patterns = self.patterns.read().await;
-        let patterns_json = serde_json::to_string_pretty(&*patterns)?;
-        tokio::fs::write(state_dir.join("patterns.json"), patterns_json).await?;
+        write_msgpack_file(&state_dir.join("patterns.msgpack"), &*patterns).await?;
 
         let lessons = self.lessons.read().await;
-        let lessons_json = serde_json::to_string_pretty(&*lessons)?;
-        tokio::fs::write(state_dir.join("lessons.json"), lessons_json).await?;
+        write_msgpack_file(&state_dir.join("lessons.msgpack"), &*lessons).await?;
 
         Ok(())
     }
@@ -622,21 +620,17 @@ This skill was automatically generated from successful patterns observed during 
         let state_dir = self.workspace_dir.join(".housaky").join("learning");
 
         if state_dir.exists() {
-            let patterns_path = state_dir.join("patterns.json");
+            let patterns_path = state_dir.join("patterns.msgpack");
             if patterns_path.exists() {
-                if let Ok(content) = tokio::fs::read_to_string(&patterns_path).await {
-                    if let Ok(loaded) = serde_json::from_str::<HashMap<String, Pattern>>(&content) {
-                        *self.patterns.write().await = loaded;
-                    }
+                if let Ok(loaded) = read_msgpack_file::<HashMap<String, Pattern>>(&patterns_path).await {
+                    *self.patterns.write().await = loaded;
                 }
             }
 
-            let lessons_path = state_dir.join("lessons.json");
+            let lessons_path = state_dir.join("lessons.msgpack");
             if lessons_path.exists() {
-                if let Ok(content) = tokio::fs::read_to_string(&lessons_path).await {
-                    if let Ok(loaded) = serde_json::from_str::<Vec<Lesson>>(&content) {
-                        *self.lessons.write().await = loaded;
-                    }
+                if let Ok(loaded) = read_msgpack_file::<Vec<Lesson>>(&lessons_path).await {
+                    *self.lessons.write().await = loaded;
                 }
             }
 
