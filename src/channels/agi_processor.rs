@@ -17,9 +17,9 @@ use std::fmt::Write;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+use tokio::sync::mpsc::Sender;
 
 const MAX_CHANNEL_HISTORY_TURNS: usize = 40;
-const CHANNEL_MESSAGE_TIMEOUT_SECS: u64 = 300;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 struct SessionMetadata {
@@ -40,6 +40,7 @@ pub struct AGIChannelProcessor {
     temperature: f64,
     auto_save_memory: bool,
     max_tool_iterations: usize,
+    message_timeout_secs: u64,
     conv_history: Arc<Mutex<HashMap<String, Vec<ChatMessage>>>>,
     state_cache: Arc<Mutex<HashMap<String, SessionMetadata>>>,
 }
@@ -57,6 +58,7 @@ impl AGIChannelProcessor {
         model: String,
         temperature: f64,
         max_tool_iterations: usize,
+        message_timeout_secs: u64,
     ) -> Self {
         Self {
             workspace_dir,
@@ -70,6 +72,7 @@ impl AGIChannelProcessor {
             temperature,
             auto_save_memory: config.memory.auto_save,
             max_tool_iterations,
+            message_timeout_secs,
             conv_history: Arc::new(Mutex::new(HashMap::new())),
             state_cache: Arc::new(Mutex::new(HashMap::new())),
         }
@@ -165,13 +168,30 @@ impl AGIChannelProcessor {
         context
     }
 
+    async fn send_status(status_tx: &Option<Sender<String>>, msg: &str) {
+        if let Some(tx) = status_tx {
+            let _ = tx.send(msg.to_string()).await;
+        }
+    }
+
     #[allow(clippy::single_char_add_str)]
     pub async fn process_with_agi(
         &self,
         msg: &crate::channels::traits::ChannelMessage,
     ) -> Result<String> {
+        self.process_with_agi_with_status(msg, None).await
+    }
+
+    #[allow(clippy::single_char_add_str)]
+    pub async fn process_with_agi_with_status(
+        &self,
+        msg: &crate::channels::traits::ChannelMessage,
+        status_tx: Option<Sender<String>>,
+    ) -> Result<String> {
         let conversation_id = format!("{}:{}", msg.channel, msg.sender);
         
+        Self::send_status(&status_tx, "📥 Loading session...").await;
+
         println!(
             "  🧠 [AGI {}] Processing from {}",
             msg.channel,
@@ -181,6 +201,8 @@ impl AGIChannelProcessor {
         let (inner_monologue, _reasoning, goal_engine, turn_count, _session_id) = 
             self.get_or_create_agi_state(&conversation_id).await;
 
+        Self::send_status(&status_tx, "💭 Recording thought...").await;
+
         inner_monologue.add_thought_with_type(
             &format!("User message: {}", msg.content.chars().take(200).collect::<String>()),
             ThoughtType::Observation,
@@ -188,7 +210,11 @@ impl AGIChannelProcessor {
             ThoughtSource::UserInteraction,
         ).await?;
 
+        Self::send_status(&status_tx, "🧠 Building AGI context...").await;
+
         let agi_context = self.build_agi_context(&inner_monologue, &goal_engine).await;
+
+        Self::send_status(&status_tx, "📚 Loading memory...").await;
 
         let memory_context = self.build_memory_context(&msg.content).await;
 
@@ -203,6 +229,8 @@ impl AGIChannelProcessor {
                 )
                 .await;
         }
+
+        Self::send_status(&status_tx, "🤖 Generating response...").await;
 
         let mut enriched_message = String::new();
         if !agi_context.is_empty() {
@@ -234,7 +262,7 @@ impl AGIChannelProcessor {
         }
 
         let llm_result = tokio::time::timeout(
-            Duration::from_secs(CHANNEL_MESSAGE_TIMEOUT_SECS),
+            Duration::from_secs(self.message_timeout_secs),
             run_tool_call_loop_with_agi(
                 self.provider.as_ref(),
                 &mut history,
@@ -301,16 +329,25 @@ impl AGIChannelProcessor {
                 Err(e)
             }
             Err(_) => {
-                let timeout_msg = format!(
-                    "LLM response timed out after {}s",
-                    CHANNEL_MESSAGE_TIMEOUT_SECS
-                );
+                let elapsed_ms = started_at.elapsed().as_millis();
                 eprintln!(
-                    "  ❌ {} (elapsed: {}ms)",
-                    timeout_msg,
-                    started_at.elapsed().as_millis()
+                    "  ❌ LLM response timed out after {}s (elapsed: {}ms)",
+                    self.message_timeout_secs,
+                    elapsed_ms
                 );
-                Err(anyhow::anyhow!(timeout_msg))
+                
+                inner_monologue.add_thought_with_type(
+                    &format!("Timeout after {}s - consider increasing message_timeout_secs in config", self.message_timeout_secs),
+                    ThoughtType::SelfCorrection,
+                    0.3,
+                    ThoughtSource::Internal,
+                ).await.ok();
+                
+                Err(anyhow::anyhow!(
+                    "LLM response timed out after {}s. Consider increasing 'message_timeout_secs' in your channels config (current: {}s).",
+                    self.message_timeout_secs,
+                    self.message_timeout_secs
+                ))
             }
         }
     }

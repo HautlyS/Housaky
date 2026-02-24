@@ -17,7 +17,7 @@
 Fast, small, and fully autonomous AI assistant infrastructure — deploy anywhere, swap anything.
 
 ```
-~3.4MB binary · <10ms startup · 1,017 tests · 22+ providers · 8 traits · Pluggable everything
+~3.4MB binary · <10ms startup · Rust-tested · 30+ providers · 9 categories · Pluggable everything
 ```
 
 ### ✨ Features
@@ -26,12 +26,17 @@ Fast, small, and fully autonomous AI assistant infrastructure — deploy anywher
 - 💰 **Minimal Cost:** Efficient enough to run on $10 Hardware — 98% cheaper than a Mac mini.
 - ⚡ **Lightning Fast:** 400X Faster startup time, boot in <10ms (under 1s even on 0.6GHz cores).
 - 🌍 **True Portability:** Single self-contained binary across ARM, x86, and RISC-V.
+- 🔌 **Hardware-Ready:** USB device discovery, STM32/Nucleo firmware flashing, Raspberry Pi GPIO.
+- 🧠 **AGI-Ready:** Goal engine, cognitive modules, self-improvement, multi-agent coordination.
+- 🔒 **Secure by Default:** Pairing, sandboxing, workspace scoping, encrypted secrets.
 
 ### Why teams pick Housaky
 
 - **Lean by default:** small Rust binary, fast startup, low memory footprint.
 - **Secure by design:** pairing, strict sandboxing, explicit allowlists, workspace scoping.
 - **Fully swappable:** core systems are traits (providers, channels, tools, memory, tunnels).
+- **Hardware-ready:** USB discovery, STM32/Nucleo flashing, Raspberry Pi GPIO support.
+- **AGI-capable:** goal engine, cognitive modules, self-improvement, multi-agent coordination.
 - **No lock-in:** OpenAI-compatible provider support + pluggable custom endpoints.
 
 ## Benchmark Snapshot (Housaky vs OpenClaw)
@@ -147,6 +152,15 @@ housaky agent -m "Hello, Housaky!"
 # Interactive mode
 housaky agent
 
+# Full AGI system with TUI
+housaky run
+
+# TUI chat interface
+housaky tui
+
+# Interactive config editor
+housaky config
+
 # Start the gateway (webhook server)
 housaky gateway                # default: 127.0.0.1:8080
 housaky gateway --port 0       # random port (security hardened)
@@ -163,8 +177,14 @@ housaky doctor
 # Check channel health
 housaky channel doctor
 
+# Manage scheduled tasks
+housaky cron list
+
 # Get integration setup details
 housaky integrations info Telegram
+
+# Discover hardware
+housaky hardware discover
 
 # Manage background service
 housaky service install
@@ -173,6 +193,10 @@ housaky service status
 # Migrate memory from OpenClaw (safe preview first)
 housaky migrate openclaw --dry-run
 housaky migrate openclaw
+
+# AGI commands
+housaky housaky status
+housaky housaky goals list
 ```
 
 > **Dev fallback (no global install):** prefix commands with `cargo run --release --` (example: `cargo run --release -- status`).
@@ -187,25 +211,27 @@ Every subsystem is a **trait** — swap implementations with a config change, ze
 
 | Subsystem | Trait | Ships with | Extend |
 |-----------|-------|------------|--------|
-| **AI Models** | `Provider` | 22+ providers (OpenRouter, Anthropic, OpenAI, Ollama, Venice, Groq, Mistral, xAI, DeepSeek, Together, Fireworks, Perplexity, Cohere, Bedrock, etc.) | `custom:https://your-api.com` — any OpenAI-compatible API |
-| **Channels** | `Channel` | CLI, Telegram, Discord, Slack, iMessage, Matrix, WhatsApp, Webhook | Any messaging API |
-| **Memory** | `Memory` | SQLite with hybrid search (FTS5 + vector cosine similarity), Lucid bridge (CLI sync + SQLite fallback), Markdown | Any persistence backend |
-| **Tools** | `Tool` | shell, file_read, file_write, memory_store, memory_recall, memory_forget, browser_open (Brave + allowlist), browser (agent-browser / rust-native), composio (optional) | Any capability |
-| **Observability** | `Observer` | Noop, Log, Multi | Prometheus, OTel |
-| **Runtime** | `RuntimeAdapter` | Native, Docker (sandboxed) | WASM (planned; unsupported kinds fail fast) |
-| **Security** | `SecurityPolicy` | Gateway pairing, sandbox, allowlists, rate limits, filesystem scoping, encrypted secrets | — |
+| **AI Models** | `Provider` | 30+ providers (OpenRouter, Anthropic, OpenAI, Ollama, Gemini, Venice, Groq, Mistral, xAI, DeepSeek, Together, Fireworks, Perplexity, Cohere, Bedrock, Vercel, Cloudflare, Moonshot, Qwen, and 15+ more) | `custom:https://your-api.com` — any OpenAI-compatible API |
+| **Channels** | `Channel` | CLI, Telegram, Discord, Slack, WhatsApp, iMessage, Matrix, DingTalk, Lark, IRC, Email, Webhook | Any messaging API |
+| **Memory** | `Memory` | SQLite with hybrid search (FTS5 + vector cosine similarity), Lucid bridge, Markdown, None (no-op) | Any persistence backend |
+| **Tools** | `Tool` | shell, file_read, file_write, memory_store, memory_recall, memory_forget, browser_open, browser, http_request, git_operations, schedule, delegate, composio, hardware_board_info, hardware_memory_read, hardware_memory_map, screenshot, image_info | Any capability |
+| **Observability** | `Observer` | Noop, Log, Multi, Prometheus | OpenTelemetry |
+| **Runtime** | `RuntimeAdapter` | Native, Docker (sandboxed), Cloudflare Workers, WASM (planned) | — |
+| **Security** | `SecurityPolicy` | Gateway pairing, sandbox (Docker, Bubblewrap, Firejail, Landlock), allowlists, rate limits, filesystem scoping, encrypted secrets | — |
 | **Identity** | `IdentityConfig` | OpenClaw (markdown), AIEOS v1.1 (JSON) | Any identity format |
 | **Tunnel** | `Tunnel` | None, Cloudflare, Tailscale, ngrok, Custom | Any tunnel binary |
 | **Heartbeat** | Engine | HEARTBEAT.md periodic tasks | — |
 | **Skills** | Loader | TOML manifests + SKILL.md instructions | Community skill packs |
-| **Integrations** | Registry | 50+ integrations across 9 categories | Plugin system |
+| **Integrations** | Registry | 75+ integrations across 9 categories | Plugin system |
+| **Hardware** | Peripherals | USB discovery (nusb), Serial (tokio-serial), STM32/Nucleo flashing, Raspberry Pi GPIO | — |
 
 ### Runtime support (current)
 
 - ✅ Supported today: `runtime.kind = "native"` or `runtime.kind = "docker"`
-- 🚧 Planned, not implemented yet: WASM / edge runtimes
+- 🚧 Planned: `runtime.kind = "wasm"` (via `runtime-wasm` feature)
+- 🚧 Planned: Cloudflare Workers runtime
 
-When an unsupported `runtime.kind` is configured, Housaky now exits with a clear error instead of silently falling back to native.
+When an unsupported `runtime.kind` is configured, Housaky exits with a clear error instead of silently falling back to native.
 
 ### Memory System (Full-Stack Search Engine)
 
@@ -494,6 +520,9 @@ See [aieos.org](https://aieos.org) for the full schema and live examples.
 | `/webhook` | POST | `Authorization: Bearer <token>` | Send message: `{"message": "your prompt"}` |
 | `/whatsapp` | GET | Query params | Meta webhook verification (hub.mode, hub.verify_token, hub.challenge) |
 | `/whatsapp` | POST | None (Meta signature) | WhatsApp incoming message webhook |
+| `/telegram` | POST | None (bot token) | Telegram webhook |
+| `/discord` | POST | None (interaction endpoint) | Discord interactions |
+| `/slack` | POST | None (verification token) | Slack events/webhooks |
 
 ## Commands
 
@@ -504,14 +533,29 @@ See [aieos.org](https://aieos.org) for the full schema and live examples.
 | `onboard --channels-only` | Reconfigure channels/allowlists only (fast repair flow) |
 | `agent -m "..."` | Single message mode |
 | `agent` | Interactive chat mode |
+| `run` | Full AGI system with TUI chat |
 | `gateway` | Start webhook server (default: `127.0.0.1:8080`) |
 | `gateway --port 0` | Random port mode |
 | `daemon` | Start long-running autonomous runtime |
+| `tui` | Launch terminal chat UI |
+| `config` | Interactive configuration editor TUI |
+| `config --section <name>` | Open config editor to specific section |
+| `config --reset` | Reset config to defaults |
 | `service install/start/stop/status/uninstall` | Manage user-level background service |
 | `doctor` | Diagnose daemon/scheduler/channel freshness |
 | `status` | Show full system status |
-| `channel doctor` | Run health checks for configured channels |
+| `channel list/start/doctor/add/remove` | Manage messaging channels |
+| `cron list/add/once/remove/pause/resume` | Manage scheduled tasks |
+| `models refresh` | Refresh and cache provider models |
+| `keys list/add/remove/rotate` | Manage API keys |
 | `integrations info <name>` | Show setup/status details for one integration |
+| `skills list/install/remove` | Manage skills |
+| `migrate openclaw` | Migrate memory from OpenClaw |
+| `hardware discover/introspect/info` | Discover and introspect USB hardware |
+| `peripheral list/add/flash/setup-unoq/flash-nucleo` | Manage hardware peripherals |
+| `housaky status/init/heartbeat/tasks/review/improve` | AGI system management |
+| `housaky run/agi/dashboard/thoughts` | Run AGI modes |
+| `housaky goals list/add/complete` | Manage goals |
 
 ## Development
 
@@ -519,12 +563,9 @@ See [aieos.org](https://aieos.org) for the full schema and live examples.
 cargo build              # Dev build
 cargo build --release    # Release build (~3.4MB)
 CARGO_BUILD_JOBS=1 cargo build --release    # Low-memory fallback (Raspberry Pi 3, 1GB RAM)
-cargo test               # 1,017 tests
-cargo clippy             # Lint (0 warnings)
-cargo fmt                # Format
-
-# Run the SQLite vs Markdown benchmark
-cargo test --test memory_comparison -- --nocapture
+cargo test               # Run tests
+cargo clippy             # Lint
+cargo fmt               # Format
 ```
 
 ### Pre-push hook
@@ -551,6 +592,43 @@ To skip the hook when you need a quick push during development:
 
 ```bash
 git push --no-verify
+```
+
+### Dashboard (Tauri + Vue.js)
+
+Housaky includes a cross-device web dashboard built with Tauri 2 + Vue 3 + Tailwind CSS 4.
+
+```bash
+cd frontend
+
+# Install dependencies
+npm install
+
+# Run in development
+npm run tauri dev
+
+# Build for production
+npm run tauri build
+```
+
+The dashboard provides:
+- 📊 **Dashboard** - System overview and status
+- 💬 **Chat** - Interactive AI chat
+- 🔧 **Skills** - Manage capabilities
+- 📡 **Channels** - Configure messaging integrations
+- 🔌 **Integrations** - Browse 75+ integrations
+- 💻 **Hardware** - USB device and board management
+- ⚙️ **Config** - Edit configuration
+- 📟 **Terminal** - Execute Housaky commands
+
+Requirements:
+- Rust (stable)
+- Node.js 20+
+- Linux: `libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf`
+
+The dashboard communicates with the Housaky CLI. Ensure Housaky is installed:
+```bash
+cargo install --path . --force --locked
 ```
 
 ## Collaboration & Docs
@@ -594,7 +672,9 @@ See [CONTRIBUTING.md](CONTRIBUTING.md). Implement a trait, submit a PR:
 - New `Tool` → `src/tools/`
 - New `Memory` → `src/memory/`
 - New `Tunnel` → `src/tunnel/`
-- New `Skill` → `~/.housaky/workspace/skills/<name>/`
+- New `Skill` → `src/skills/` or `~/.housaky/workspace/skills/<name>/`
+- New AGI subsystem → `src/housaky/`
+- Hardware support → `src/hardware/`, `src/peripherals/`
 
 
 ---

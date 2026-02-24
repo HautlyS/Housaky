@@ -98,6 +98,10 @@ pub struct Config {
     /// Enable AGI features in channels (reasoning, goals, thoughts)
     #[serde(default)]
     pub agi_enabled: bool,
+
+    /// Provider timeout configuration for LLM API calls.
+    #[serde(default)]
+    pub provider_timeout: ProviderTimeoutConfig,
 }
 
 // ── Delegate Agents ──────────────────────────────────────────────
@@ -193,6 +197,37 @@ impl Default for HardwareConfig {
             baud_rate: default_baud_rate(),
             probe_target: None,
             workspace_datasheets: false,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProviderTimeoutConfig {
+    /// Override default request timeout for LLM API calls (seconds).
+    #[serde(default)]
+    pub request_timeout_secs: Option<u64>,
+    /// Override default connection timeout (seconds).
+    #[serde(default)]
+    pub connect_timeout_secs: Option<u64>,
+    /// Whether to retry on timeout.
+    #[serde(default = "default_true")]
+    pub retry_on_timeout: bool,
+    /// Maximum retry attempts.
+    #[serde(default = "default_max_retries")]
+    pub max_retries: usize,
+}
+
+fn default_max_retries() -> usize {
+    1
+}
+
+impl Default for ProviderTimeoutConfig {
+    fn default() -> Self {
+        Self {
+            request_timeout_secs: None,
+            connect_timeout_secs: None,
+            retry_on_timeout: true,
+            max_retries: default_max_retries(),
         }
     }
 }
@@ -1432,6 +1467,9 @@ pub struct ReliabilityConfig {
     /// Path to KVM-style keys.json for auto-loading rotated keys.
     #[serde(default)]
     pub kvm_keys_path: Option<String>,
+    /// KVM providers - inline provider/key configuration (alternative to kvm_keys_path)
+    #[serde(default)]
+    pub kvm_providers: Vec<KvmProviderConfig>,
     /// Additional API keys for round-robin rotation on rate-limit (429) errors.
     /// The primary `api_key` is always tried first; these are extras.
     #[serde(default)]
@@ -1513,6 +1551,32 @@ pub struct RotationConfig {
     /// Cooldown period between rotations
     #[serde(default = "default_cooldown")]
     pub cooldown_secs: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct KvmProviderConfig {
+    /// Provider name (e.g., openrouter, anthropic, openai)
+    pub name: String,
+    /// Template to use (openrouter, anthropic, openai, custom)
+    #[serde(default)]
+    pub template: Option<String>,
+    /// Base URL (required if not using template)
+    #[serde(default)]
+    pub base_url: Option<String>,
+    /// Authentication method
+    #[serde(default)]
+    pub auth_method: Option<String>,
+    /// API keys for this provider
+    pub keys: Vec<String>,
+    /// Models available with this provider
+    #[serde(default)]
+    pub models: Vec<String>,
+    /// Custom headers
+    #[serde(default)]
+    pub headers: std::collections::HashMap<String, String>,
+    /// Rate limit configuration
+    #[serde(default)]
+    pub rate_limit: Option<RateLimitConfig>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1962,6 +2026,7 @@ impl Default for ReliabilityConfig {
             fallback_providers: Vec::new(),
             auto_rotate_on_limit: true,
             kvm_keys_path: None,
+            kvm_providers: Vec::new(),
             api_keys: Vec::new(),
             model_fallbacks: std::collections::HashMap::new(),
             channel_initial_backoff_secs: default_channel_backoff_secs(),
@@ -2527,6 +2592,7 @@ impl Default for Config {
             agents: HashMap::new(),
             hardware: HardwareConfig::default(),
             agi_enabled: true,
+            provider_timeout: ProviderTimeoutConfig::default(),
         }
     }
 }
@@ -2739,7 +2805,6 @@ impl Config {
     }
 
     pub fn save(&self) -> Result<()> {
-        // Encrypt agent API keys before serialization
         let mut config_to_save = self.clone();
         let housaky_dir = self
             .config_path
@@ -2779,6 +2844,7 @@ impl Config {
             .unwrap_or("config.toml");
         let temp_path = parent_dir.join(format!(".{file_name}.tmp-{}", uuid::Uuid::new_v4()));
         let backup_path = parent_dir.join(format!("{file_name}.bak"));
+        let persistent_backup = parent_dir.join(format!("{file_name}.persist"));
 
         let mut temp_file = OpenOptions::new()
             .create_new(true)
@@ -2806,6 +2872,7 @@ impl Config {
                     backup_path.display()
                 )
             })?;
+            let _ = fs::copy(&self.config_path, &persistent_backup);
         }
 
         if let Err(e) = fs::rename(&temp_path, &self.config_path) {
@@ -2818,11 +2885,38 @@ impl Config {
 
         sync_directory(parent_dir)?;
 
-        if had_existing_config {
-            let _ = fs::remove_file(&backup_path);
-        }
+        let _ = fs::remove_file(&backup_path);
 
         Ok(())
+    }
+
+    pub fn restore_from_backup() -> Result<Self> {
+        let home = UserDirs::new()
+            .map(|u| u.home_dir().to_path_buf())
+            .context("Could not find home directory")?;
+        let housaky_dir = home.join(".housaky");
+        let config_path = housaky_dir.join("config.toml");
+        let backup_path = housaky_dir.join("config.toml.bak");
+        let persistent_backup = housaky_dir.join("config.toml.persist");
+
+        let restore_path = if persistent_backup.exists() {
+            &persistent_backup
+        } else if backup_path.exists() {
+            &backup_path
+        } else {
+            anyhow::bail!("No backup config found");
+        };
+
+        let contents =
+            fs::read_to_string(restore_path).context("Failed to read backup config file")?;
+        let mut config: Config =
+            toml::from_str(&contents).context("Failed to parse backup config file")?;
+        config.config_path = config_path.clone();
+        config.workspace_dir = housaky_dir.join("workspace");
+        fs::copy(restore_path, &config_path)?;
+        config.apply_env_overrides();
+        config.apply_vkm_config();
+        Ok(config)
     }
 }
 
@@ -2991,6 +3085,7 @@ mod tests {
             agents: HashMap::new(),
             hardware: HardwareConfig::default(),
             agi_enabled: true,
+            provider_timeout: ProviderTimeoutConfig::default(),
         };
 
         let toml_str = toml::to_string_pretty(&config).unwrap();
@@ -3148,6 +3243,7 @@ tool_dispatcher = "xml"
             agents: HashMap::new(),
             hardware: HardwareConfig::default(),
             agi_enabled: true,
+            provider_timeout: ProviderTimeoutConfig::default(),
         };
 
         config.save().unwrap();

@@ -7,10 +7,15 @@ pub mod openai;
 pub mod openrouter;
 pub mod reliable;
 pub mod router;
+pub mod timeout;
 pub mod traits;
 
 #[allow(unused_imports)]
 pub use fallback::{FallbackManager, FallbackStatus};
+#[allow(unused_imports)]
+pub use timeout::{
+    TimeoutAction, TimeoutConfig, TimeoutError, TimeoutHandler, TimeoutStats,
+};
 #[allow(unused_imports)]
 pub use traits::{
     ChatMessage, ChatRequest, ChatResponse, ConversationMessage, Provider, ToolCall,
@@ -791,24 +796,23 @@ mod tests {
 
     #[test]
     fn resilient_provider_ignores_duplicate_and_invalid_fallbacks() {
-        let reliability = crate::config::ReliabilityConfig {
-            provider_retries: 1,
-            provider_backoff_ms: 100,
-            fallback_providers: vec![
-                "openrouter".into(),
-                "nonexistent-provider".into(),
-                "openai".into(),
-                "openai".into(),
-            ],
-            auto_rotate_on_limit: true,
-            kvm_keys_path: None,
-            api_keys: Vec::new(),
-            model_fallbacks: std::collections::HashMap::new(),
-            channel_initial_backoff_secs: 2,
-            channel_max_backoff_secs: 60,
-            scheduler_poll_secs: 15,
-            scheduler_retries: 2,
-        };
+        let mut reliability = crate::config::ReliabilityConfig::default();
+        reliability.provider_retries = 1;
+        reliability.provider_backoff_ms = 100;
+        reliability.fallback_providers = vec![
+            "openrouter".into(),
+            "nonexistent-provider".into(),
+            "openai".into(),
+            "openai".into(),
+        ];
+        reliability.auto_rotate_on_limit = true;
+        reliability.kvm_keys_path = None;
+        reliability.api_keys = Vec::new();
+        reliability.model_fallbacks = std::collections::HashMap::new();
+        reliability.channel_initial_backoff_secs = 2;
+        reliability.channel_max_backoff_secs = 60;
+        reliability.scheduler_poll_secs = 15;
+        reliability.scheduler_retries = 2;
 
         let provider = create_resilient_provider("openrouter", Some("sk-test"), &reliability);
         assert!(provider.is_ok());

@@ -133,6 +133,7 @@ pub fn run_wizard() -> Result<Config> {
         agents: std::collections::HashMap::new(),
         hardware: hardware_config,
         agi_enabled: true,
+        provider_timeout: crate::config::schema::ProviderTimeoutConfig::default(),
     };
 
     println!(
@@ -348,6 +349,7 @@ pub fn run_quick_setup(
         agents: std::collections::HashMap::new(),
         hardware: crate::config::HardwareConfig::default(),
         agi_enabled: true,
+        provider_timeout: crate::config::schema::ProviderTimeoutConfig::default(),
     };
 
     config.save()?;

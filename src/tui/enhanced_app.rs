@@ -444,6 +444,69 @@ impl EnhancedApp {
                     "Auto-scroll off"
                 });
             }
+            CommandAction::ListKeys => {
+                let kvm = crate::key_management::get_global_kvm_manager();
+                let rt = tokio::runtime::Runtime::new()?;
+                rt.block_on(async {
+                    crate::key_management::load_kvm_from_file().await;
+                    let store = kvm.store.read().await;
+                    if store.providers.is_empty() {
+                        self.show_notification("No API keys configured. Use CLI: housaky kvm add-provider");
+                    } else {
+                        let mut msg = String::from("API Keys:\n");
+                        for (name, provider) in &store.providers {
+                            let enabled = provider.keys.iter().filter(|k| k.enabled).count();
+                            msg.push_str(&format!("  {}: {} keys ({} enabled)\n", name, provider.keys.len(), enabled));
+                        }
+                        self.show_notification(&msg);
+                    }
+                });
+            }
+            CommandAction::AddKey(_provider) => {
+                self.show_notification("Use CLI to add keys: housaky kvm add-provider <name> -k <keys>");
+            }
+            CommandAction::RotateKey => {
+                let kvm = crate::key_management::get_global_kvm_manager();
+                let rt = tokio::runtime::Runtime::new()?;
+                rt.block_on(async {
+                    crate::key_management::load_kvm_from_file().await;
+                    let store = kvm.store.read().await;
+                    let names: Vec<_> = store.providers.keys().cloned().collect();
+                    drop(store);
+                    for name in names {
+                        if let Some(key) = kvm.rotate_key(&name).await {
+                            self.show_notification(&format!("Rotated key for {}: ...{}", name, &key.key[key.key.len().saturating_sub(4)..]));
+                            let _ = kvm.save().await;
+                            break;
+                        }
+                    }
+                });
+            }
+            CommandAction::ShowKeyStats => {
+                let kvm = crate::key_management::get_global_kvm_manager();
+                let rt = tokio::runtime::Runtime::new()?;
+                rt.block_on(async {
+                    crate::key_management::load_kvm_from_file().await;
+                    let store = kvm.store.read().await;
+                    if store.providers.is_empty() {
+                        self.show_notification("No API keys configured");
+                    } else {
+                        let mut msg = String::from("Key Statistics:\n");
+                        for (name, provider) in &store.providers {
+                            msg.push_str(&format!("\n[{}]\n", name));
+                            for key in &provider.keys {
+                                let usage = &key.usage;
+                                msg.push_str(&format!("  ...{}: {} reqs, {} failed, {} rate limited\n",
+                                    &key.key[key.key.len().saturating_sub(4)..],
+                                    usage.total_requests,
+                                    usage.failed_requests,
+                                    usage.rate_limited_count));
+                            }
+                        }
+                        self.show_notification(&msg);
+                    }
+                });
+            }
         }
         Ok(())
     }

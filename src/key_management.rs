@@ -4,8 +4,56 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use tokio::sync::RwLock;
+
+static KVM_MANAGER: OnceLock<Arc<KvmKeyManager>> = OnceLock::new();
+static KVM_STORAGE_PATH: OnceLock<std::path::PathBuf> = OnceLock::new();
+
+pub fn get_kvm_storage_path() -> std::path::PathBuf {
+    KVM_STORAGE_PATH.get_or_init(|| {
+        if let Some(user_dirs) = directories::UserDirs::new() {
+            let mut path = user_dirs.home_dir().to_path_buf();
+            path.push(".config");
+            path.push("housaky");
+            path.push("kvm_keys.json");
+            path
+        } else {
+            std::path::PathBuf::from("kvm_keys.json")
+        }
+    }).clone()
+}
+
+pub fn set_kvm_storage_path(path: std::path::PathBuf) {
+    let _ = KVM_STORAGE_PATH.set(path);
+}
+
+pub fn get_global_kvm_manager() -> Arc<KvmKeyManager> {
+    KVM_MANAGER.get_or_init(|| Arc::new(KvmKeyManager::new())).clone()
+}
+
+pub async fn load_kvm_from_file() {
+    if let Some(manager) = KVM_MANAGER.get() {
+        let path = get_kvm_storage_path();
+        if path.exists() {
+            if let Ok(content) = std::fs::read_to_string(&path) {
+                if let Ok(store) = serde_json::from_str::<KvmKeyStore>(&content) {
+                    let mut s = manager.store.write().await;
+                    *s = store;
+                    tracing::info!("Loaded KVM keys from {}", path.display());
+                }
+            }
+        }
+    }
+}
+
+pub fn init_global_kvm_manager() -> Arc<KvmKeyManager> {
+    get_global_kvm_manager()
+}
+
+pub fn set_global_kvm_manager(manager: Arc<KvmKeyManager>) {
+    let _ = KVM_MANAGER.set(manager);
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct KvmKeyStore {
@@ -145,9 +193,9 @@ impl KeyRotationState {
 }
 
 pub struct KvmKeyManager {
-    store: Arc<RwLock<KvmKeyStore>>,
-    rotation_states: Arc<RwLock<HashMap<String, Arc<KeyRotationState>>>>,
-    provider_templates: HashMap<String, ProviderTemplate>,
+    pub store: Arc<RwLock<KvmKeyStore>>,
+    pub rotation_states: Arc<RwLock<HashMap<String, Arc<KeyRotationState>>>>,
+    pub provider_templates: HashMap<String, ProviderTemplate>,
 }
 
 #[derive(Debug, Clone)]
@@ -247,6 +295,11 @@ impl KvmKeyManager {
             rotation_states: Arc::new(RwLock::new(HashMap::new())),
             provider_templates: templates,
         }
+    }
+
+    pub async fn set_rotation_strategy(&self, strategy: KvmRotationStrategy) {
+        let mut store = self.store.write().await;
+        store.rotation.strategy = strategy;
     }
 
     pub fn from_config(config: &ReliabilityConfig) -> Self {
@@ -375,13 +428,8 @@ impl KvmKeyManager {
         let rotation_states = self.rotation_states.clone();
         let provider_name_owned = provider_name.to_string();
         
-        tokio::spawn(async move {
-            let mut s = store.write().await;
-            s.providers.insert(provider_name_owned.clone(), provider);
-            
-            let mut rs = rotation_states.write().await;
-            rs.insert(provider_name_owned, state);
-        });
+        store.write().await.providers.insert(provider_name_owned.clone(), provider);
+        rotation_states.write().await.insert(provider_name_owned, state);
 
         Ok(())
     }
@@ -430,13 +478,8 @@ impl KvmKeyManager {
         let rotation_states = self.rotation_states.clone();
         let provider_name_owned = provider_name.to_string();
         
-        tokio::spawn(async move {
-            let mut s = store.write().await;
-            s.providers.insert(provider_name_owned.clone(), provider);
-            
-            let mut rs = rotation_states.write().await;
-            rs.insert(provider_name_owned, state);
-        });
+        store.write().await.providers.insert(provider_name_owned.clone(), provider);
+        rotation_states.write().await.insert(provider_name_owned, state);
 
         Ok(())
     }
@@ -461,7 +504,10 @@ impl KvmKeyManager {
         let strategy = &store.rotation.strategy;
         let index = match strategy {
             KvmRotationStrategy::RoundRobin => {
-                state.current_key_index.fetch_add(1, Ordering::Relaxed) % enabled_keys.len()
+                let current = state.current_key_index.load(Ordering::Relaxed);
+                let next = (current + 1) % enabled_keys.len();
+                state.current_key_index.store(next, Ordering::Relaxed);
+                current
             }
             KvmRotationStrategy::Priority => 0,
             KvmRotationStrategy::UsageBased => {
@@ -677,8 +723,16 @@ impl KvmKeyManager {
     pub async fn save_to_file(&self, path: &str) -> Result<()> {
         let store = self.store.read().await;
         let json = serde_json::to_string_pretty(&*store)?;
+        let path = std::path::Path::new(path);
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
         std::fs::write(path, json)?;
         Ok(())
+    }
+
+    pub async fn save(&self) -> Result<()> {
+        self.save_to_file(get_kvm_storage_path().to_str().unwrap_or("kvm_keys.json")).await
     }
 
     pub async fn load_from_file(&self, path: &str) -> Result<()> {
@@ -746,6 +800,8 @@ mod tests {
     #[tokio::test]
     async fn test_key_rotation_round_robin() {
         let manager = KvmKeyManager::new();
+        
+        manager.set_rotation_strategy(KvmRotationStrategy::RoundRobin).await;
         
         manager.add_provider_with_template(
             "round-robin-test",

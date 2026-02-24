@@ -36,6 +36,7 @@
 
 use anyhow::{bail, Result};
 use clap::{Parser, Subcommand};
+use std::sync::Arc;
 use tracing::{info, Level};
 use tracing_subscriber::FmtSubscriber;
 
@@ -45,12 +46,12 @@ extern crate housaky;
 // Use the library modules
 use housaky::{
     agent, channels, commands, config_editor, cron, daemon, doctor, gateway, hardware,
-    integrations, migration, onboard, peripherals, service, skills, tui, Config,
+    integrations, key_management, migration, onboard, peripherals, service, skills, tui, Config,
 };
 
 use commands::{
     ChannelCommands, CronCommands, HardwareCommands, HousakyCommands, IntegrationCommands,
-    MigrateCommands, ModelCommands, PeripheralCommands, ServiceCommands, SkillCommands,
+    KeyCommands, KvmCommands, MigrateCommands, ModelCommands, PeripheralCommands, ServiceCommands, SkillCommands,
 };
 
 /// `Housaky` - Zero overhead. Zero compromise. 100% Rust.
@@ -239,12 +240,22 @@ enum Commands {
         /// Reset to defaults
         #[arg(long)]
         reset: bool,
+
+        /// Restore from persistent backup (config.toml.persist)
+        #[arg(long)]
+        restore: bool,
     },
 
     /// Housaky AGI commands (goals, reasoning, self-improvement)
     Housaky {
         #[command(subcommand)]
         housaky_command: HousakyCommands,
+    },
+
+    /// KVM (Key Virtual Management) - manage multiple API keys with intelligent rotation
+    Kvm {
+        #[command(subcommand)]
+        kvm_command: KvmCommands,
     },
 }
 
@@ -266,6 +277,9 @@ async fn main() -> Result<()> {
         .finish();
 
     tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
+
+    // Initialize KVM manager and load keys from disk
+    let _ = key_management::init_global_kvm_manager();
 
     // Onboard runs quick setup by default, or the interactive wizard with --interactive
     if let Commands::Onboard {
@@ -433,6 +447,322 @@ async fn main() -> Result<()> {
 
         Commands::Service { service_command } => service::handle_command(&service_command, &config),
 
+        Commands::Keys { key_command } => {
+            let kvm = key_management::get_global_kvm_manager();
+            
+            async fn handle_keys_command(kvm: Arc<key_management::KvmKeyManager>, cmd: KeyCommands) -> Result<()> {
+                // Load keys from disk if not already loaded
+                key_management::load_kvm_from_file().await;
+                
+                match cmd {
+                    KeyCommands::List => {
+                        let store = kvm.store.read().await;
+                        if store.providers.is_empty() {
+                            println!("No KVM providers configured.");
+                            println!("  Use `housaky kvm add-provider` to add providers with keys.");
+                            println!("  Or use `housaky kvm interactive` for interactive mode.");
+                        } else {
+                            println!("KVM Providers:");
+                            for (name, provider) in &store.providers {
+                                let enabled_count = provider.keys.iter().filter(|k| k.enabled).count();
+                                println!("  - {}: {} keys ({} enabled)", name, provider.keys.len(), enabled_count);
+                                for key in &provider.keys {
+                                    let status = if key.enabled { "enabled" } else { "disabled" };
+                                    let suffix = if key.key.len() > 4 { &key.key[key.key.len()-4..] } else { &key.key };
+                                    println!("      [{}] ...{} - {}", key.id.chars().take(8).collect::<String>(), suffix, status);
+                                }
+                            }
+                        }
+                        Ok(())
+                    }
+                    KeyCommands::Add { provider, key } => {
+                        match kvm.add_provider_with_template(&provider, "custom", vec![key]).await {
+                            Ok(_) => {
+                                println!("Added key to provider: {}", provider);
+                                tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                                Ok(())
+                            }
+                            Err(e) => {
+                                println!("Error adding key: {}", e);
+                                Err(anyhow::anyhow!(e))
+                            }
+                        }
+                    }
+                    KeyCommands::Remove { provider } => {
+                        let mut store = kvm.store.write().await;
+                        if store.providers.remove(&provider).is_some() {
+                            let mut rs = kvm.rotation_states.write().await;
+                            rs.remove(&provider);
+                            println!("Removed provider: {}", provider);
+                            Ok(())
+                        } else {
+                            println!("Provider not found: {}", provider);
+                            Err(anyhow::anyhow!("Provider not found"))
+                        }
+                    }
+                    KeyCommands::Rotate => {
+                        let store = kvm.store.read().await;
+                        let names: Vec<_> = store.providers.keys().cloned().collect();
+                        drop(store);
+                        for name in names {
+                            if let Some(key) = kvm.rotate_key(&name).await {
+                                println!("Rotated key for {}: ...{}", name, &key.key[key.key.len().saturating_sub(4)..]);
+                            }
+                        }
+                        Ok(())
+                    }
+                }
+            }
+            
+            handle_keys_command(kvm, key_command).await
+        }
+
+        Commands::Kvm { kvm_command } => {
+            let kvm = key_management::get_global_kvm_manager();
+            
+            async fn handle_kvm_command(kvm: Arc<key_management::KvmKeyManager>, cmd: KvmCommands) -> Result<()> {
+                // Load keys from disk if not already loaded
+                key_management::load_kvm_from_file().await;
+                
+                match cmd {
+                    KvmCommands::List => {
+                        let store = kvm.store.read().await;
+                        if store.providers.is_empty() {
+                            println!("No KVM providers configured.");
+                            println!("  Use `housaky kvm add-provider` to add providers.");
+                            println!("  Or use `housaky kvm interactive` for interactive mode.");
+                        } else {
+                            println!("KVM Providers:");
+                            for (name, provider) in &store.providers {
+                                let enabled_count = provider.keys.iter().filter(|k| k.enabled).count();
+                                println!("\n  [{}]", name);
+                                println!("      Base URL: {:?}", provider.base_url);
+                                println!("      Auth: {}", provider.auth_method);
+                                println!("      Keys: {} total, {} enabled", provider.keys.len(), enabled_count);
+                                for key in &provider.keys {
+                                    let status = if key.enabled { "✓" } else { "✗" };
+                                    let suffix = if key.key.len() > 4 { &key.key[key.key.len()-4..] } else { &key.key };
+                                    println!("        {} ...{} - {}", status, suffix, key.id);
+                                }
+                            }
+                        }
+                        Ok(())
+                    }
+                    KvmCommands::AddProvider { name, template, base_url, auth_method, keys, models } => {
+                        let tmpl = template.as_deref().unwrap_or("custom");
+                        
+                        if keys.is_empty() {
+                            println!("Error: At least one key is required");
+                            return Err(anyhow::anyhow!("No keys provided"));
+                        }
+                        
+                        match kvm.add_provider_with_template(&name, tmpl, keys.clone()).await {
+                            Ok(_) => {
+                                tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                                
+                                if let Some(url) = base_url {
+                                    let mut store = kvm.store.write().await;
+                                    if let Some(provider) = store.providers.get_mut(&name) {
+                                        provider.base_url = Some(url);
+                                    }
+                                }
+                                
+                                if let Some(auth) = auth_method {
+                                    let mut store = kvm.store.write().await;
+                                    if let Some(provider) = store.providers.get_mut(&name) {
+                                        provider.auth_method = auth;
+                                    }
+                                }
+                                
+                                println!("Added provider '{}' with {} keys", name, keys.len());
+                                if !models.is_empty() {
+                                    println!("  Models: {}", models.join(", "));
+                                }
+                                let _ = kvm.save().await;
+                                Ok(())
+                            }
+                            Err(e) => {
+                                println!("Error adding provider: {}", e);
+                                Err(anyhow::anyhow!(e))
+                            }
+                        }
+                    }
+                    KvmCommands::AddKey { provider, key } => {
+                        match kvm.add_key(&provider, key.clone()).await {
+                            Ok(_) => {
+                                println!("Added key to provider: {}", provider);
+                                let _ = kvm.save().await;
+                                Ok(())
+                            }
+                            Err(e) => {
+                                println!("Error adding key: {}", e);
+                                Err(anyhow::anyhow!(e))
+                            }
+                        }
+                    }
+                    KvmCommands::RemoveProvider { name } => {
+                        let mut store = kvm.store.write().await;
+                        if store.providers.remove(&name).is_some() {
+                            let mut rs = kvm.rotation_states.write().await;
+                            rs.remove(&name);
+                            println!("Removed provider: {}", name);
+                            drop(store);
+                            let _ = kvm.save().await;
+                            Ok(())
+                        } else {
+                            println!("Provider not found: {}", name);
+                            Err(anyhow::anyhow!("Provider not found"))
+                        }
+                    }
+                    KvmCommands::RemoveKey { provider, key } => {
+                        let mut store = kvm.store.write().await;
+                        if let Some(p) = store.providers.get_mut(&provider) {
+                            let initial_len = p.keys.len();
+                            p.keys.retain(|k| !k.key.contains(&key) && !k.id.contains(&key));
+                            if p.keys.len() < initial_len {
+                                println!("Removed key from provider: {}", provider);
+                                drop(store);
+                                let _ = kvm.save().await;
+                                Ok(())
+                            } else {
+                                println!("Key not found in provider: {}", provider);
+                                Err(anyhow::anyhow!("Key not found"))
+                            }
+                        } else {
+                            println!("Provider not found: {}", provider);
+                            Err(anyhow::anyhow!("Provider not found"))
+                        }
+                    }
+                    KvmCommands::Rotate { provider } => {
+                        match provider {
+                            Some(name) => {
+                                if let Some(key) = kvm.rotate_key(&name).await {
+                                    println!("Rotated key for {}: ...{}", name, &key.key[key.key.len().saturating_sub(4)..]);
+                                } else {
+                                    println!("Provider not found: {}", name);
+                                }
+                            }
+                            None => {
+                                let store = kvm.store.read().await;
+                                let names: Vec<_> = store.providers.keys().cloned().collect();
+                                drop(store);
+                                for name in names {
+                                    if let Some(key) = kvm.rotate_key(&name).await {
+                                        println!("Rotated key for {}: ...{}", name, &key.key[key.key.len().saturating_sub(4)..]);
+                                    }
+                                }
+                            }
+                        }
+                        Ok(())
+                    }
+                    KvmCommands::Stats { provider } => {
+                        let store = kvm.store.read().await;
+                        let providers: Vec<_> = match provider {
+                            Some(p) => store.providers.get(&p).map(|pr| (p.clone(), pr)).into_iter().collect(),
+                            None => store.providers.iter().map(|(n, p)| (n.clone(), p)).collect(),
+                        };
+                        
+                        for (name, prov) in providers {
+                            println!("\n[{}]", name);
+                            for key in &prov.keys {
+                                let usage = &key.usage;
+                                println!("  Key: ...{}", &key.key[key.key.len().saturating_sub(4)..]);
+                                println!("    Total requests: {}", usage.total_requests);
+                                println!("    Successful: {}", usage.successful_requests);
+                                println!("    Failed: {}", usage.failed_requests);
+                                println!("    Rate limited: {}", usage.rate_limited_count);
+                                println!("    Enabled: {}", key.enabled);
+                            }
+                        }
+                        Ok(())
+                    }
+                    KvmCommands::SetStrategy { provider, strategy } => {
+                        use key_management::KvmRotationStrategy;
+                        
+                        let strat = match strategy.as_str() {
+                            "RoundRobin" => KvmRotationStrategy::RoundRobin,
+                            "Priority" => KvmRotationStrategy::Priority,
+                            "UsageBased" => KvmRotationStrategy::UsageBased,
+                            "ErrorBased" => KvmRotationStrategy::ErrorBased,
+                            "HealthBased" => KvmRotationStrategy::HealthBased,
+                            "Adaptive" => KvmRotationStrategy::Adaptive,
+                            _ => {
+                                println!("Unknown strategy: {}", strategy);
+                                return Err(anyhow::anyhow!("Unknown strategy"));
+                            }
+                        };
+                        
+                        kvm.set_rotation_strategy(strat).await;
+                        println!("Set rotation strategy to {} for {}", strategy, provider);
+                        Ok(())
+                    }
+                    KvmCommands::EnableKey { provider, key } => {
+                        match kvm.enable_key(&provider, &key).await {
+                            Ok(_) => {
+                                println!("Enabled key in provider: {}", provider);
+                                let _ = kvm.save().await;
+                                Ok(())
+                            }
+                            Err(e) => {
+                                println!("Error enabling key: {}", e);
+                                Err(anyhow::anyhow!(e))
+                            }
+                        }
+                    }
+                    KvmCommands::DisableKey { provider, key } => {
+                        match kvm.disable_key(&provider, &key).await {
+                            Ok(_) => {
+                                println!("Disabled key in provider: {}", provider);
+                                let _ = kvm.save().await;
+                                Ok(())
+                            }
+                            Err(e) => {
+                                println!("Error disabling key: {}", e);
+                                Err(anyhow::anyhow!(e))
+                            }
+                        }
+                    }
+                    KvmCommands::Export { path } => {
+                        let store = kvm.store.read().await;
+                        let json = serde_json::to_string_pretty(&*store).unwrap();
+                        match path {
+                            Some(p) => {
+                                std::fs::write(&p, &json).unwrap();
+                                println!("Exported KVM config to: {}", p);
+                            }
+                            None => {
+                                println!("{}", json);
+                            }
+                        }
+                        Ok(())
+                    }
+                    KvmCommands::Import { path } => {
+                        let content = std::fs::read_to_string(&path).unwrap();
+                        let new_store: key_management::KvmKeyStore = serde_json::from_str(&content).unwrap();
+                        
+                        let mut store = kvm.store.write().await;
+                        *store = new_store;
+                        
+                        let mut rs = kvm.rotation_states.write().await;
+                        rs.clear();
+                        for name in store.providers.keys() {
+                            rs.insert(name.clone(), Arc::new(key_management::KeyRotationState::new()));
+                        }
+                        
+                        println!("Imported KVM config from: {}", path);
+                        Ok(())
+                    }
+                    KvmCommands::Interactive => {
+                        println!("Starting interactive KVM TUI...");
+                        println!("Not implemented yet - use CLI commands for now.");
+                        Ok(())
+                    }
+                }
+            }
+            
+            handle_kvm_command(kvm, kvm_command).await
+        }
+
         Commands::Doctor => doctor::run(&config),
 
         Commands::Channel { channel_command } => match channel_command {
@@ -470,7 +800,19 @@ async fn main() -> Result<()> {
             Ok(())
         }
 
-        Commands::Config { section, reset } => {
+        Commands::Config { section, reset, restore } => {
+            if restore {
+                match Config::restore_from_backup() {
+                    Ok(restored) => {
+                        println!("✅ Restored config from backup at {}", restored.config_path.display());
+                    }
+                    Err(e) => {
+                        println!("❌ Failed to restore config: {}", e);
+                        println!("   No backup found. Your config is safe at ~/.housaky/config.toml");
+                    }
+                }
+                return Ok(());
+            }
             if reset {
                 let mut default_config = Config::default();
                 default_config.config_path = config.config_path.clone();

@@ -52,9 +52,6 @@ const BOOTSTRAP_MAX_CHARS: usize = 20_000;
 
 const DEFAULT_CHANNEL_INITIAL_BACKOFF_SECS: u64 = 2;
 const DEFAULT_CHANNEL_MAX_BACKOFF_SECS: u64 = 60;
-/// Timeout for processing a single channel message (LLM + tools).
-/// 300s for on-device LLMs (Ollama) which are slower than cloud APIs.
-const CHANNEL_MESSAGE_TIMEOUT_SECS: u64 = 300;
 const CHANNEL_PARALLELISM_PER_CHANNEL: usize = 4;
 const CHANNEL_MIN_IN_FLIGHT_MESSAGES: usize = 8;
 const CHANNEL_MAX_IN_FLIGHT_MESSAGES: usize = 64;
@@ -77,6 +74,7 @@ struct ChannelRuntimeContext {
     max_tool_iterations: usize,
     conv_history: ConvHistoryMap,
     agi_processor: Option<Arc<AGIChannelProcessor>>,
+    message_timeout_secs: u64,
 }
 
 fn conv_history_key(msg: &traits::ChannelMessage) -> String {
@@ -185,11 +183,17 @@ async fn process_channel_message(ctx: Arc<ChannelRuntimeContext>, msg: traits::C
         truncate_with_ellipsis(&msg.content, 80)
     );
 
-    // If AGI processor is available and enabled, use it for all message processing
+    let target_channel = ctx.channels_by_name.get(&msg.channel).cloned();
+
+    if let Some(channel) = target_channel.as_ref() {
+        let _ = channel.send("⏳ Initializing...", &msg.sender).await;
+        if let Err(e) = channel.start_typing(&msg.sender).await {
+            tracing::debug!("Failed to start typing on {}: {e}", channel.name());
+        }
+    }
+
     if let Some(ref agi_processor) = ctx.agi_processor {
-        // First check if it's an AGI command
         if let Some(command_response) = agi_processor.handle_agi_command(&msg).await {
-            let target_channel = ctx.channels_by_name.get(&msg.channel);
             if let Some(channel) = target_channel {
                 if let Err(e) = channel.send(&command_response, &msg.sender).await {
                     eprintln!("  ❌ Failed to send AGI command response: {e}");
@@ -198,23 +202,33 @@ async fn process_channel_message(ctx: Arc<ChannelRuntimeContext>, msg: traits::C
             return;
         }
 
-        // Use full AGI processing for all messages when enabled
-        let target_channel = ctx.channels_by_name.get(&msg.channel).cloned();
-
-        if let Some(channel) = target_channel.as_ref() {
-            if let Err(e) = channel.start_typing(&msg.sender).await {
-                tracing::debug!("Failed to start typing on {}: {e}", channel.name());
+        let (status_tx, mut status_rx) = tokio::sync::mpsc::channel::<String>(16);
+        
+        let channel_clone = target_channel.clone();
+        let sender_clone = msg.sender.clone();
+        let status_task = tokio::spawn(async move {
+            while let Some(status) = status_rx.recv().await {
+                if let Some(ch) = &channel_clone {
+                    let _ = ch.send(&status, &sender_clone).await;
+                }
             }
-        }
+        });
 
         println!("  🧠 [AGI Processing] Processing with reasoning, goals, and thoughts...");
 
-        match agi_processor.process_with_agi(&msg).await {
+        let result = agi_processor.process_with_agi_with_status(&msg, Some(status_tx)).await;
+        
+        let _ = status_task.await;
+
+        if let Some(channel) = target_channel.as_ref() {
+            if let Err(e) = channel.stop_typing(&msg.sender).await {
+                tracing::debug!("Failed to stop typing on {}: {e}", channel.name());
+            }
+        }
+
+        match result {
             Ok(response) => {
                 if let Some(channel) = target_channel.as_ref() {
-                    if let Err(e) = channel.stop_typing(&msg.sender).await {
-                        tracing::debug!("Failed to stop typing on {}: {e}", channel.name());
-                    }
                     if let Err(e) = channel.send(&response, &msg.sender).await {
                         eprintln!("  ❌ Failed to reply on {}: {e}", channel.name());
                     }
@@ -222,9 +236,6 @@ async fn process_channel_message(ctx: Arc<ChannelRuntimeContext>, msg: traits::C
             }
             Err(e) => {
                 if let Some(channel) = target_channel.as_ref() {
-                    if let Err(stop_err) = channel.stop_typing(&msg.sender).await {
-                        tracing::debug!("Failed to stop typing on {}: {stop_err}", channel.name());
-                    }
                     let _ = channel.send(&format!("⚠️ Error: {e}"), &msg.sender).await;
                 }
             }
@@ -232,7 +243,9 @@ async fn process_channel_message(ctx: Arc<ChannelRuntimeContext>, msg: traits::C
         return;
     }
 
-    // Fall back to regular processing when AGI is not enabled
+    if let Some(channel) = target_channel.as_ref() {
+        let _ = channel.send("🔍 Building context...", &msg.sender).await;
+    }
 
     let memory_context = build_memory_context(ctx.memory.as_ref(), &msg.content).await;
 
@@ -254,12 +267,8 @@ async fn process_channel_message(ctx: Arc<ChannelRuntimeContext>, msg: traits::C
         format!("{memory_context}{}", msg.content)
     };
 
-    let target_channel = ctx.channels_by_name.get(&msg.channel).cloned();
-
     if let Some(channel) = target_channel.as_ref() {
-        if let Err(e) = channel.start_typing(&msg.sender).await {
-            tracing::debug!("Failed to start typing on {}: {e}", channel.name());
-        }
+        let _ = channel.send("🤖 Generating response...", &msg.sender).await;
     }
 
     println!("  ⏳ Processing message...");
@@ -282,7 +291,7 @@ async fn process_channel_message(ctx: Arc<ChannelRuntimeContext>, msg: traits::C
     history.push(ChatMessage::user(&enriched_message));
 
     let llm_result = tokio::time::timeout(
-        Duration::from_secs(CHANNEL_MESSAGE_TIMEOUT_SECS),
+        Duration::from_secs(ctx.message_timeout_secs),
         run_tool_call_loop(
             ctx.provider.as_ref(),
             &mut history,
@@ -337,19 +346,27 @@ async fn process_channel_message(ctx: Arc<ChannelRuntimeContext>, msg: traits::C
             }
         }
         Err(_) => {
-            let timeout_msg = format!(
-                "LLM response timed out after {}s",
-                CHANNEL_MESSAGE_TIMEOUT_SECS
+            tracing::error!(
+                elapsed_ms = started_at.elapsed().as_millis() as u64,
+                timeout_secs = ctx.message_timeout_secs,
+                "LLM response timed out"
             );
             eprintln!(
-                "  ❌ {} (elapsed: {}ms)",
-                timeout_msg,
+                "  ❌ LLM response timed out after {}s (elapsed: {}ms)",
+                ctx.message_timeout_secs,
                 started_at.elapsed().as_millis()
             );
             if let Some(channel) = target_channel.as_ref() {
                 let _ = channel
                     .send(
-                        "⚠️ Request timed out while waiting for the model. Please try again.",
+                        &format!(
+                            "⚠️ Request timed out after {}s.\n\
+                             Suggestions:\n\
+                             • Try using a faster model (e.g., gpt-4o-mini instead of o1)\n\
+                             • Increase `message_timeout_secs` in config.toml\n\
+                             • Simplify your request or break it into smaller parts",
+                            ctx.message_timeout_secs
+                        ),
                         &msg.sender,
                     )
                     .await;
@@ -1171,10 +1188,12 @@ pub async fn start_channels(config: Config) -> Result<()> {
                 model.clone(),
                 temperature,
                 config.agent.max_tool_iterations,
+                config.channels_config.message_timeout_secs,
             )))
         } else {
             None
         },
+        message_timeout_secs: config.channels_config.message_timeout_secs,
     });
 
     run_message_dispatch_loop(rx, runtime_ctx, max_in_flight_messages).await;
@@ -1364,6 +1383,7 @@ mod tests {
             max_tool_iterations: usize::MAX,
             conv_history: Arc::new(Mutex::new(HashMap::new())),
             agi_processor: None,
+            message_timeout_secs: 300,
         });
 
         process_channel_message(
@@ -1457,6 +1477,7 @@ mod tests {
             max_tool_iterations: usize::MAX,
             conv_history: Arc::new(Mutex::new(HashMap::new())),
             agi_processor: None,
+            message_timeout_secs: 300,
         });
 
         let (tx, rx) = tokio::sync::mpsc::channel::<traits::ChannelMessage>(4);

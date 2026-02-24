@@ -1,6 +1,6 @@
 use super::traits::ChatMessage;
 use super::Provider;
-use crate::key_management::{KvmKeyManager, KvmKey};
+use crate::key_management::KvmKeyManager;
 use async_trait::async_trait;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -827,7 +827,7 @@ mod tests {
         .with_api_keys(vec!["key-a".into(), "key-b".into(), "key-c".into()]);
 
         // Rotate 5 times, verify round-robin
-        let keys: Vec<&str> = (0..5).map(|_| provider.rotate_key().unwrap()).collect();
+        let keys: Vec<String> = (0..5).map(|_| provider.rotate_key().unwrap()).collect();
         assert_eq!(keys, vec!["key-a", "key-b", "key-c", "key-a", "key-b"]);
     }
 

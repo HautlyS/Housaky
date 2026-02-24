@@ -17,6 +17,10 @@ pub enum CommandAction {
     AddGoal(String),
     ExportChat,
     ToggleAutoScroll,
+    ListKeys,
+    AddKey(String),
+    RotateKey,
+    ShowKeyStats,
 }
 
 #[derive(Debug, Clone)]
@@ -115,6 +119,34 @@ impl CommandPalette {
                 description: "Add a new goal to create a tool".to_string(),
                 action: CommandAction::AddGoal("Create a new tool".to_string()),
                 category: "Goals".to_string(),
+            },
+            Command {
+                name: "List API keys".to_string(),
+                shortcut: Some("k".to_string()),
+                description: "Show all configured API keys".to_string(),
+                action: CommandAction::ListKeys,
+                category: "Keys".to_string(),
+            },
+            Command {
+                name: "Add API key".to_string(),
+                shortcut: Some("K".to_string()),
+                description: "Add a new API key".to_string(),
+                action: CommandAction::AddKey(String::new()),
+                category: "Keys".to_string(),
+            },
+            Command {
+                name: "Rotate API key".to_string(),
+                shortcut: None,
+                description: "Rotate to next API key".to_string(),
+                action: CommandAction::RotateKey,
+                category: "Keys".to_string(),
+            },
+            Command {
+                name: "Show key stats".to_string(),
+                shortcut: None,
+                description: "Show API key usage statistics".to_string(),
+                action: CommandAction::ShowKeyStats,
+                category: "Keys".to_string(),
             },
         ];
 

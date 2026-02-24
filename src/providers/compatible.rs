@@ -153,7 +153,28 @@ struct Message {
 
 #[derive(Debug, Deserialize)]
 struct ApiChatResponse {
+    #[serde(default)]
     choices: Vec<Choice>,
+    #[serde(default)]
+    error: Option<ApiError>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ApiError {
+    #[serde(default)]
+    message: Option<String>,
+    #[serde(default)]
+    error: Option<String>,
+}
+
+impl ApiError {
+    fn message(&self) -> String {
+        self.message
+            .as_ref()
+            .or(self.error.as_ref())
+            .cloned()
+            .unwrap_or_else(|| "Unknown API error".to_string())
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -371,6 +392,10 @@ impl Provider for OpenAiCompatibleProvider {
 
         let chat_response: ApiChatResponse = response.json().await?;
 
+        if let Some(err) = &chat_response.error {
+            return Err(anyhow::anyhow!("{} API error: {}", self.name, err.message()));
+        }
+
         chat_response
             .choices
             .into_iter()
@@ -458,6 +483,10 @@ impl Provider for OpenAiCompatibleProvider {
         }
 
         let chat_response: ApiChatResponse = response.json().await?;
+
+        if let Some(err) = &chat_response.error {
+            return Err(anyhow::anyhow!("{} API error: {}", self.name, err.message()));
+        }
 
         chat_response
             .choices

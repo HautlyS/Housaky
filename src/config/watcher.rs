@@ -47,6 +47,7 @@ impl ConfigWatcher {
         let last_reload = self.last_reload.clone();
         let debounce_ms = self.debounce_ms;
 
+        let config_path_clone = config_path.clone();
         let mut watcher =
             notify::recommended_watcher(move |res: Result<Event, notify::Error>| match res {
                 Ok(event) => {
@@ -57,7 +58,15 @@ impl ConfigWatcher {
                             > debounce_ms
                         {
                             *last_reload.blocking_write() = now;
-                            let _ = tx_clone.send(ConfigUpdate::FullReload(Config::default()));
+                            match Config::load_or_init() {
+                                Ok(loaded_config) => {
+                                    let _ = tx_clone.send(ConfigUpdate::FullReload(loaded_config));
+                                    tracing::info!("Hot-reloaded config from {}", config_path_clone.display());
+                                }
+                                Err(e) => {
+                                    tracing::error!("Failed to reload config: {}", e);
+                                }
+                            }
                         }
                     }
                 }

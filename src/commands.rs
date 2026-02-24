@@ -178,6 +178,130 @@ pub enum PeripheralCommands {
     FlashNucleo,
 }
 
+/// Key management subcommands
+#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum KeyCommands {
+    /// List all configured API keys
+    List,
+    /// Add a new API key for a provider
+    Add {
+        /// Provider name (e.g., openrouter, anthropic, openai)
+        provider: String,
+        /// API key value
+        key: String,
+    },
+    /// Remove an API key
+    Remove {
+        /// Provider name
+        provider: String,
+    },
+    /// Rotate API keys (KVM mode)
+    Rotate,
+}
+
+/// KVM (Key Virtual Management) subcommands
+#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum KvmCommands {
+    /// List all providers and their keys
+    List,
+    /// Add a new provider with keys
+    AddProvider {
+        /// Provider name
+        name: String,
+        /// Template to use (openrouter, anthropic, openai, custom)
+        #[arg(long, short)]
+        template: Option<String>,
+        /// Base URL (required if not using template)
+        #[arg(long, short)]
+        base_url: Option<String>,
+        /// Authentication method (api_key, bearer, etc.)
+        #[arg(long, short)]
+        auth_method: Option<String>,
+        /// API keys (can be specified multiple times)
+        #[arg(long, short = 'k', value_delimiter = ',')]
+        keys: Vec<String>,
+        /// Models (can be specified multiple times)
+        #[arg(long, short = 'm', value_delimiter = ',')]
+        models: Vec<String>,
+    },
+    /// Add a key to an existing provider
+    AddKey {
+        /// Provider name
+        provider: String,
+        /// API key value
+        key: String,
+    },
+    /// Remove a provider and all its keys
+    RemoveProvider {
+        /// Provider name
+        name: String,
+    },
+    /// Remove a key from a provider
+    RemoveKey {
+        /// Provider name
+        provider: String,
+        /// Key ID or key value (partial match)
+        key: String,
+    },
+    /// Rotate to next key for a provider
+    Rotate {
+        /// Provider name (default: all providers)
+        provider: Option<String>,
+    },
+    /// Show key statistics for a provider
+    Stats {
+        /// Provider name (default: all)
+        provider: Option<String>,
+    },
+    /// Set rotation strategy for a provider
+    SetStrategy {
+        /// Provider name
+        provider: String,
+        /// Strategy (round-robin, priority, usage-based, error-based, health-based, adaptive)
+        #[arg(value_parser = parse_strategy)]
+        strategy: String,
+    },
+    /// Enable a disabled key
+    EnableKey {
+        /// Provider name
+        provider: String,
+        /// Key ID or key value
+        key: String,
+    },
+    /// Disable a key (won't be used for requests)
+    DisableKey {
+        /// Provider name
+        provider: String,
+        /// Key ID or key value
+        key: String,
+    },
+    /// Export keys to a JSON file
+    Export {
+        /// Output file path
+        path: Option<String>,
+    },
+    /// Import keys from a JSON file
+    Import {
+        /// Input file path
+        path: String,
+    },
+    /// Interactive TUI for KVM management
+    Interactive,
+}
+
+fn parse_strategy(s: &str) -> Result<String, String> {
+    let lower = s.to_lowercase();
+    match lower.as_str() {
+        "round-robin" | "roundrobin" | "rr" => Ok("RoundRobin".to_string()),
+        "priority" | "prio" => Ok("Priority".to_string()),
+        "usage-based" | "usagebased" | "usage" => Ok("UsageBased".to_string()),
+        "error-based" | "errorbased" | "error" => Ok("ErrorBased".to_string()),
+        "health-based" | "healthbased" | "health" => Ok("HealthBased".to_string()),
+        "adaptive" | "adapt" => Ok("Adaptive".to_string()),
+        _ => Err(format!("Unknown strategy: {}. Valid: round-robin, priority, usage-based, error-based, health-based, adaptive", s)),
+    }
+}
+
 /// Housaky AGI agent subcommands
 #[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum HousakyCommands {
@@ -195,6 +319,18 @@ pub enum HousakyCommands {
     Improve,
     /// Connect to Kowalski agents
     ConnectKowalski,
+    /// Run the full Housaky AGI system (daemon + channels + heartbeat)
+    Run {
+        /// Initial message to send
+        message: Option<String>,
+        /// Provider to use
+        provider: Option<String>,
+        /// Model to use
+        model: Option<String>,
+        /// Enable verbose logging
+        #[arg(short, long)]
+        verbose: bool,
+    },
     /// Start AGI mode interactive session
     Agi {
         /// Single message mode (don't enter interactive mode)
