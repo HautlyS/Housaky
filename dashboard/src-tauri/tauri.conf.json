@@ -7,8 +7,7 @@
     "beforeBuildCommand": "pnpm run build",
     "beforeDevCommand": "pnpm run dev",
     "devUrl": "http://localhost:1420",
-    "frontendDist": "../dist",
-    "devtools": true
+    "frontendDist": "../dist"
   },
   "app": {
     "withGlobalTauri": true,
@@ -42,17 +41,6 @@
       "webviewInstallMode": {
         "type": "downloadBootstrapper"
       }
-    },
-    "ios": {
-      "minimumOSVersion": "13.0"
-    },
-    "android": {
-      "minimumSdkVersion": 24,
-      "targetSdkVersion": 34,
-      "permissions": [
-        "INTERNET",
-        "ACCESS_NETWORK_STATE"
-      ]
     }
   },
   "plugins": {
