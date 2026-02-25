@@ -1,3 +1,5 @@
+#![allow(clippy::format_push_string, clippy::self_only_used_in_recursion)]
+
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use rand;

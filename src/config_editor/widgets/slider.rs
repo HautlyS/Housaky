@@ -44,7 +44,9 @@ impl<'a> Slider<'a> {
         };
 
         let bar_width = area.width.saturating_sub(2) as usize;
-        let filled = (percent / 100.0 * bar_width as f64) as usize;
+        let filled_f = (percent / 100.0 * bar_width as f64).clamp(0.0, bar_width as f64);
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        let filled = filled_f.round() as usize;
         let empty = bar_width.saturating_sub(filled);
 
         let bar = format!(

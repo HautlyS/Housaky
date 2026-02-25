@@ -45,7 +45,7 @@ extern crate housaky;
 
 // Use the library modules
 use housaky::{
-    agent, channels, commands, config_editor, cron, daemon, doctor, gateway, hardware,
+    agent, channels, commands, config_editor, cron, daemon, dashboard, doctor, gateway, hardware,
     integrations, key_management, migration, onboard, peripherals, service, skills, tui, Config,
 };
 
@@ -166,6 +166,29 @@ enum Commands {
     /// Show system status (full details)
     Status,
 
+    /// Start or check status of the Housaky Dashboard
+    Dashboard {
+        /// Start the dashboard server
+        #[arg(long)]
+        start: bool,
+
+        /// Host to bind to (use "0.0.0.0" or "network" to expose to network)
+        #[arg(long)]
+        host: Option<String>,
+
+        /// Port to listen on
+        #[arg(short, long, default_value = "3000")]
+        port: u16,
+
+        /// Open dashboard in browser
+        #[arg(short, long)]
+        open: bool,
+
+        /// Launch the desktop app instead of web server
+        #[arg(long)]
+        desktop: bool,
+    },
+
     /// Configure and manage scheduled tasks
     Cron {
         #[command(subcommand)]
@@ -198,8 +221,13 @@ enum Commands {
 
     /// Manage skills (user-defined capabilities)
     Skills {
+        /// Optional shorthand: `housaky skills <name>` (equivalent to `housaky skills get <name>`)
+        #[arg(value_name = "SKILL")]
+        skill: Option<String>,
+
+        /// Skill subcommand (defaults to `ui` when omitted)
         #[command(subcommand)]
-        skill_command: SkillCommands,
+        skill_command: Option<SkillCommands>,
     },
 
     /// Migrate data from other agent runtimes
@@ -280,6 +308,13 @@ async fn main() -> Result<()> {
 
     // Initialize KVM manager and load keys from disk
     let _ = key_management::init_global_kvm_manager();
+
+    // Provide workspace dir as env for channel commands (/logs today, /grep, etc.).
+    if std::env::var("HOUSAKY_WORKSPACE").is_err() {
+        if let Ok(cfg) = Config::load_or_init() {
+            std::env::set_var("HOUSAKY_WORKSPACE", cfg.workspace_dir.to_string_lossy().to_string());
+        }
+    }
 
     // Onboard runs quick setup by default, or the interactive wizard with --interactive
     if let Commands::Onboard {
@@ -437,6 +472,28 @@ async fn main() -> Result<()> {
             Ok(())
         }
 
+        Commands::Dashboard { start, host, port, open, desktop } => {
+            if desktop {
+                return dashboard::launch_desktop_app();
+            }
+
+            if start {
+                let bind_host = host.as_deref().unwrap_or("127.0.0.1");
+                let should_open = open || host.is_none();
+                dashboard::start_dashboard_server(bind_host, port, should_open).await
+            } else {
+                dashboard::print_status(port);
+                println!();
+                println!("Options:");
+                println!("  --start       Start the dashboard web server");
+                println!("  --host <ip>   Bind to specific host (use \"0.0.0.0\" for network)");
+                println!("  --port <n>    Port number (default: 3000)");
+                println!("  --open        Open in browser after starting");
+                println!("  --desktop     Launch the desktop app instead");
+                Ok(())
+            }
+        }
+
         Commands::Cron { cron_command } => cron::handle_command(cron_command, &config),
 
         Commands::Models { model_command } => match model_command {
@@ -448,15 +505,34 @@ async fn main() -> Result<()> {
         Commands::Service { service_command } => service::handle_command(&service_command, &config),
 
         Commands::Keys { key_command } => {
+            // New centralized manager (keys.json)
+            let keys_manager = housaky::keys_manager::manager::get_global_keys_manager();
+            // Legacy KVM manager (kvm_keys.json)
             let kvm = key_management::get_global_kvm_manager();
             
-            async fn handle_keys_command(kvm: Arc<key_management::KvmKeyManager>, cmd: KeyCommands) -> Result<()> {
-                // Load keys from disk if not already loaded
-                key_management::load_kvm_from_file().await;
-                
+            async fn handle_keys_command(
+                config: &mut Config,
+                keys_manager: &housaky::keys_manager::manager::KeysManager,
+                kvm: Arc<key_management::KvmKeyManager>,
+                cmd: KeyCommands,
+            ) -> Result<()> {
                 match cmd {
-                    KeyCommands::List => {
-                        let store = kvm.store.read().await;
+                    KeyCommands::Manager(manager_cmd) => {
+                        housaky::keys_manager::commands::handle_keys_manager_command(
+                            config,
+                            keys_manager,
+                            manager_cmd,
+                        )
+                        .await
+                    }
+                    // Legacy KVM-based commands:
+                    _ => {
+                        // Load keys from disk if not already loaded
+                        key_management::load_kvm_from_file().await;
+                        
+                        match cmd {
+                            KeyCommands::List => {
+                                let store = kvm.store.read().await;
                         if store.providers.is_empty() {
                             println!("No KVM providers configured.");
                             println!("  Use `housaky kvm add-provider` to add providers with keys.");
@@ -511,10 +587,13 @@ async fn main() -> Result<()> {
                         }
                         Ok(())
                     }
+                    KeyCommands::Manager(_) => unreachable!("handled above"),
+                        }
+                    }
                 }
             }
             
-            handle_keys_command(kvm, key_command).await
+            handle_keys_command(&mut config, &keys_manager, kvm, key_command).await
         }
 
         Commands::Kvm { kvm_command } => {
@@ -775,8 +854,13 @@ async fn main() -> Result<()> {
             integration_command,
         } => integrations::handle_command(integration_command, &config),
 
-        Commands::Skills { skill_command } => {
-            skills::handle_command(skill_command, &config.workspace_dir)
+        Commands::Skills { skill, skill_command } => {
+            let cmd = if let Some(name) = skill {
+                SkillCommands::Get { name, enable: false }
+            } else {
+                skill_command.unwrap_or(SkillCommands::Ui)
+            };
+            skills::handle_command(cmd, &config.workspace_dir)
         }
 
         Commands::Migrate { migrate_command } => {

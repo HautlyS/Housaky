@@ -127,6 +127,7 @@ pub fn run_wizard() -> Result<Config> {
         secrets: secrets_config,
         browser: BrowserConfig::default(),
         http_request: crate::config::HttpRequestConfig::default(),
+        clawd_cursor: crate::config::ClawdCursorConfig::default(),
         identity: crate::config::IdentityConfig::default(),
         cost: crate::config::CostConfig::default(),
         peripherals: crate::config::PeripheralsConfig::default(),
@@ -134,6 +135,8 @@ pub fn run_wizard() -> Result<Config> {
         hardware: hardware_config,
         agi_enabled: true,
         provider_timeout: crate::config::schema::ProviderTimeoutConfig::default(),
+        skills: crate::config::schema::SkillsConfig::default(),
+        routing: crate::config::schema::RoutingConfig::default(),
     };
 
     println!(
@@ -343,6 +346,7 @@ pub fn run_quick_setup(
         secrets: SecretsConfig::default(),
         browser: BrowserConfig::default(),
         http_request: crate::config::HttpRequestConfig::default(),
+        clawd_cursor: crate::config::ClawdCursorConfig::default(),
         identity: crate::config::IdentityConfig::default(),
         cost: crate::config::CostConfig::default(),
         peripherals: crate::config::PeripheralsConfig::default(),
@@ -350,6 +354,8 @@ pub fn run_quick_setup(
         hardware: crate::config::HardwareConfig::default(),
         agi_enabled: true,
         provider_timeout: crate::config::schema::ProviderTimeoutConfig::default(),
+        skills: crate::config::schema::SkillsConfig::default(),
+        routing: crate::config::schema::RoutingConfig::default(),
     };
 
     config.save()?;
@@ -2253,6 +2259,7 @@ fn setup_channels() -> Result<ChannelsConfig> {
         max_in_flight_messages: 64,
         history_turns: 40,
         bootstrap_max_chars: 20_000,
+        show_progress_messages: false,
     };
 
     loop {

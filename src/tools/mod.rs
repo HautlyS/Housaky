@@ -9,6 +9,7 @@ pub mod hardware_board_info;
 pub mod hardware_memory_map;
 pub mod hardware_memory_read;
 pub mod http_request;
+pub mod clawd_cursor;
 pub mod image_info;
 pub mod memory_forget;
 pub mod memory_recall;
@@ -18,7 +19,7 @@ pub mod screenshot;
 pub mod shell;
 pub mod traits;
 
-pub use browser::{BrowserTool, ComputerUseConfig};
+pub use browser::{BrowserBridge, BrowserTool, ComputerUseConfig, CookieData, ProfileInfo};
 pub use browser_open::BrowserOpenTool;
 pub use composio::ComposioTool;
 pub use delegate::DelegateTool;
@@ -29,6 +30,7 @@ pub use hardware_board_info::HardwareBoardInfoTool;
 pub use hardware_memory_map::HardwareMemoryMapTool;
 pub use hardware_memory_read::HardwareMemoryReadTool;
 pub use http_request::HttpRequestTool;
+pub use clawd_cursor::ClawdCursorTool;
 pub use image_info::ImageInfoTool;
 pub use memory_forget::MemoryForgetTool;
 pub use memory_recall::MemoryRecallTool;
@@ -128,24 +130,10 @@ pub fn all_tools_with_runtime(
             security.clone(),
             browser_config.allowed_domains.clone(),
         )));
-        // Add full browser automation tool (pluggable backend)
-        tools.push(Box::new(BrowserTool::new_with_backend(
+        // Add full browser automation tool (pluggable backend) with profile support
+        tools.push(Box::new(BrowserTool::from_config(
             security.clone(),
-            browser_config.allowed_domains.clone(),
-            browser_config.session_name.clone(),
-            browser_config.backend.clone(),
-            browser_config.native_headless,
-            browser_config.native_webdriver_url.clone(),
-            browser_config.native_chrome_path.clone(),
-            ComputerUseConfig {
-                endpoint: browser_config.computer_use.endpoint.clone(),
-                api_key: browser_config.computer_use.api_key.clone(),
-                timeout_ms: browser_config.computer_use.timeout_ms,
-                allow_remote_endpoint: browser_config.computer_use.allow_remote_endpoint,
-                window_allowlist: browser_config.computer_use.window_allowlist.clone(),
-                max_coordinate_x: browser_config.computer_use.max_coordinate_x,
-                max_coordinate_y: browser_config.computer_use.max_coordinate_y,
-            },
+            browser_config,
         )));
     }
 
@@ -155,6 +143,13 @@ pub fn all_tools_with_runtime(
             http_config.allowed_domains.clone(),
             http_config.max_response_size,
             http_config.timeout_secs,
+        )));
+    }
+
+    if config.clawd_cursor.enabled {
+        tools.push(Box::new(ClawdCursorTool::new(
+            security.clone(),
+            config.clawd_cursor.clone(),
         )));
     }
 

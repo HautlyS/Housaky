@@ -1,3 +1,5 @@
+#![allow(clippy::cast_possible_truncation, clippy::cast_sign_loss, clippy::format_push_string, clippy::match_same_arms, clippy::match_wildcard_for_single_variants, clippy::trivially_copy_pass_by_ref)]
+
 pub mod agi;
 pub mod app;
 pub mod chat;
@@ -8,6 +10,7 @@ pub mod help;
 pub mod live;
 pub mod provider;
 pub mod search;
+pub mod skills_market;
 pub mod state_panel;
 pub mod status_bar;
 
@@ -64,6 +67,38 @@ pub fn run_chat_tui(config: Config, provider: Option<String>, model: Option<Stri
     }
 
     Ok(())
+}
+
+pub fn run_skills_market_tui(config: Config, repo_root: std::path::PathBuf) -> Result<()> {
+    enable_raw_mode()?;
+    let mut stdout = io::stdout();
+    execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
+    let backend = CrosstermBackend::new(stdout);
+    let mut terminal = ratatui::Terminal::new(backend)?;
+
+    let mut app = skills_market::SkillsMarketApp::new(config, repo_root)?;
+
+    let res = loop {
+        terminal.draw(|f| app.draw(f))?;
+        if event::poll(Duration::from_millis(50))? {
+            if let Event::Key(key) = event::read()? {
+                app.handle_key(key)?;
+                if app.quit {
+                    break Ok(());
+                }
+            }
+        }
+    };
+
+    disable_raw_mode()?;
+    execute!(
+        terminal.backend_mut(),
+        LeaveAlternateScreen,
+        DisableMouseCapture
+    )?;
+    terminal.show_cursor()?;
+
+    res
 }
 
 pub fn run_provider_tui(config: Config) -> Result<()> {

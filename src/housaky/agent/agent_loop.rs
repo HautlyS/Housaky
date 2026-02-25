@@ -152,7 +152,7 @@ impl UnifiedAgentLoop {
                 reasoning_steps: cognitive_response.thoughts.len(),
                 tools_used: cognitive_response.actions_taken,
                 confidence: cognitive_response.confidence,
-                processing_time_ms: start_time.elapsed().as_millis() as u64,
+                processing_time_ms: crate::util::time::duration_ms_u64(start_time.elapsed()),
             },
         };
 

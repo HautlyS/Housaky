@@ -182,8 +182,9 @@ impl UsageTracker {
             if daily_limit_tokens == 0 {
                 return 0;
             }
-            let percent = (stats.tokens_today as f64 / daily_limit_tokens as f64 * 100.0)
-                .clamp(0.0, 100.0) as u8;
+            let percent_f = (stats.tokens_today as f64 / daily_limit_tokens as f64 * 100.0).clamp(0.0, 100.0);
+            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+            let percent = percent_f.round() as u8;
             return percent;
         }
         0

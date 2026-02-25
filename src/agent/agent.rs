@@ -2,7 +2,7 @@ use crate::agent::dispatcher::{
     NativeToolDispatcher, ParsedToolCall, ToolDispatcher, ToolExecutionResult, XmlToolDispatcher,
 };
 use crate::agent::memory_loader::{DefaultMemoryLoader, MemoryLoader};
-use crate::agent::prompt::{PromptContext, SystemPromptBuilder};
+use crate::agent::prompt::{PromptContext, ReasoningMode, SystemPromptBuilder};
 use crate::config::Config;
 use crate::memory::{self, Memory, MemoryCategory};
 use crate::observability::{self, Observer, ObserverEvent};
@@ -252,6 +252,7 @@ impl Agent {
             config.api_key.as_deref(),
             &config.reliability,
             &config.model_routes,
+            &config.routing,
             &model_name,
         )?;
 
@@ -276,7 +277,7 @@ impl Agent {
             .temperature(config.default_temperature)
             .workspace_dir(config.workspace_dir.clone())
             .identity_config(config.identity.clone())
-            .skills(crate::skills::load_skills(&config.workspace_dir))
+            .skills(crate::skills::load_active_skills(&config.workspace_dir, &config))
             .auto_save(config.memory.auto_save)
             .build()
     }
@@ -317,6 +318,8 @@ impl Agent {
             skills: &self.skills,
             identity_config: Some(&self.identity_config),
             dispatcher_instructions: &instructions,
+            reasoning_mode: ReasoningMode::default(),
+            dynamic_variables: std::collections::HashMap::new(),
         };
         self.prompt_builder.build(&ctx)
     }

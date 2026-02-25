@@ -1,4 +1,5 @@
 #![warn(clippy::all, clippy::pedantic)]
+#![allow(clippy::unused_async)]
 #![allow(
     clippy::assigning_clones,
     clippy::bool_to_int_with_if,
@@ -45,15 +46,18 @@ pub mod config_editor;
 pub mod cost;
 pub mod cron;
 pub mod daemon;
+pub mod dashboard;
 pub mod doctor;
 pub mod gateway;
 pub mod hardware;
 pub mod health;
 pub mod heartbeat;
+pub mod hooks;
 pub mod housaky;
 pub mod identity;
 pub mod integrations;
 pub mod key_management;
+pub mod keys_manager;
 pub mod memory;
 pub mod migration;
 pub mod observability;

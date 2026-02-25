@@ -167,7 +167,7 @@ impl ResponseCache {
         )?;
 
         #[allow(clippy::cast_sign_loss)]
-        Ok((count as usize, hits as u64, tokens_saved as u64))
+        Ok((usize::try_from(count).unwrap_or(0), hits as u64, tokens_saved as u64))
     }
 
     /// Wipe the entire cache (useful for `housaky cache clear`).

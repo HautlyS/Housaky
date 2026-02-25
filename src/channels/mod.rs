@@ -32,6 +32,7 @@ use crate::config::Config;
 use crate::identity;
 use crate::memory::{self, Memory};
 use crate::observability::{self, Observer};
+use chrono::Datelike;
 use crate::providers::{self, ChatMessage, Provider};
 use crate::runtime;
 use crate::security::SecurityPolicy;
@@ -75,6 +76,13 @@ struct ChannelRuntimeContext {
     conv_history: ConvHistoryMap,
     agi_processor: Option<Arc<AGIChannelProcessor>>,
     message_timeout_secs: u64,
+    /// When enabled, send "⏳/🔍/🤖" progress messages to the channel.
+    /// Disabled by default to avoid spamming and to keep channel send behavior deterministic.
+    send_progress_updates: bool,
+
+    /// Day-partitioned cross-agent journal + running registry.
+    flight_journal: Option<Arc<crate::observability::flight_journal::FlightJournal>>,
+    running_registry: Arc<crate::observability::running_registry::RunningRegistry>,
 }
 
 fn conv_history_key(msg: &traits::ChannelMessage) -> String {
@@ -185,8 +193,185 @@ async fn process_channel_message(ctx: Arc<ChannelRuntimeContext>, msg: traits::C
 
     let target_channel = ctx.channels_by_name.get(&msg.channel).cloned();
 
+    // ── Cross-agent coordination commands (available even when AGI is enabled) ──
+    // Commands:
+    //   /running
+    //   /logs today
+    //   /grep <pattern>
+    let content = msg.content.trim();
+    if content.starts_with('/') {
+        // /running
+        if content == "/running" {
+            let running = ctx
+                .running_registry
+                .read_current()
+                .unwrap_or_default();
+
+            let now = chrono::Local::now();
+            let mut lines = Vec::new();
+            lines.push("🏃 RUNNING agents/processes:".to_string());
+
+            if running.agents.is_empty() {
+                lines.push("(none)".to_string());
+            } else {
+                for rec in running.agents.values() {
+                    let (age_secs, age_label) = chrono::DateTime::parse_from_rfc3339(&rec.last_heartbeat_ts)
+                        .ok()
+                        .map(|ts| now.signed_duration_since(ts.with_timezone(&chrono::Local)))
+                        .map(|d| d.num_seconds().max(0))
+                        .map(|secs| (secs, format!("{}s", secs)))
+                        .unwrap_or_else(|| (i64::MAX, "?".to_string()));
+                    let stale = age_secs > 10;
+                    let stale_tag = if stale { " ⚠️STALE" } else { "" };
+
+                    let provider = rec.provider.clone().unwrap_or_else(|| "-".into());
+                    let model = rec.model.clone().unwrap_or_else(|| "-".into());
+                    lines.push(format!(
+                        "- {} ({}) hb_age={}{} provider={} model={}",
+                        rec.agent_id, rec.kind, age_label, stale_tag, provider, model
+                    ));
+                }
+            }
+
+            if let Some(channel) = target_channel.as_ref() {
+                let _ = channel.send(&lines.join("\n"), &msg.sender).await;
+            }
+            return;
+        }
+
+        // /logs today
+        if content == "/logs today" {
+            // Compute day folder in the same layout as RunningRegistry.
+            let now = chrono::Local::now();
+            let month = match now.month() {
+                1 => "Jan",
+                2 => "Feb",
+                3 => "Mar",
+                4 => "Apr",
+                5 => "May",
+                6 => "Jun",
+                7 => "Jul",
+                8 => "Aug",
+                9 => "Sep",
+                10 => "Oct",
+                11 => "Nov",
+                12 => "Dec",
+                _ => "???",
+            };
+            let day_folder = format!("{:02}{}{}", now.day(), month, now.year());
+            let logs_path = format!(
+                "{}/.housaky/logs/days/{}",
+                ctx
+                    .running_registry
+                    .read_current()
+                    .ok()
+                    .and_then(|_| std::env::var("HOUSAKY_WORKSPACE").ok())
+                    .unwrap_or_else(|| "<workspace>".into()),
+                day_folder
+            );
+
+            if let Some(channel) = target_channel.as_ref() {
+                let _ = channel
+                    .send(
+                        &format!("📁 Logs today:\n`{}`", logs_path),
+                        &msg.sender,
+                    )
+                    .await;
+            }
+            return;
+        }
+
+        // /grep <pattern>
+        if let Some(rest) = content.strip_prefix("/grep ") {
+            // Security: restrict to short patterns and disallow obviously dangerous regex constructs.
+            let pattern = rest.trim();
+            if pattern.is_empty() {
+                if let Some(channel) = target_channel.as_ref() {
+                    let _ = channel.send("Usage: /grep <pattern>", &msg.sender).await;
+                }
+                return;
+            }
+            if pattern.len() > 64 {
+                if let Some(channel) = target_channel.as_ref() {
+                    let _ = channel
+                        .send("/grep pattern too long (max 64 chars)", &msg.sender)
+                        .await;
+                }
+                return;
+            }
+            // Block newlines and some regex heavy constructs.
+            if pattern.contains('\n') || pattern.contains("(?") || pattern.contains("\\x") {
+                if let Some(channel) = target_channel.as_ref() {
+                    let _ = channel
+                        .send("/grep pattern rejected (unsupported)", &msg.sender)
+                        .await;
+                }
+                return;
+            }
+
+            let now = chrono::Local::now();
+            let month = match now.month() {
+                1 => "Jan",
+                2 => "Feb",
+                3 => "Mar",
+                4 => "Apr",
+                5 => "May",
+                6 => "Jun",
+                7 => "Jul",
+                8 => "Aug",
+                9 => "Sep",
+                10 => "Oct",
+                11 => "Nov",
+                12 => "Dec",
+                _ => "???",
+            };
+            let day_folder = format!("{:02}{}{}", now.day(), month, now.year());
+            let logs_dir = format!(
+                "{}/.housaky/logs/days/{}",
+                std::env::var("HOUSAKY_WORKSPACE").unwrap_or_else(|_| "<workspace>".into()),
+                day_folder
+            );
+
+            // Execute ripgrep via std::process (avoid shell injection).
+            let output = std::process::Command::new("rg")
+                .arg("--no-heading")
+                .arg("--line-number")
+                .arg(pattern)
+                .arg(&logs_dir)
+                .output();
+
+            let reply = match output {
+                Ok(out) => {
+                    if !out.status.success() && out.stdout.is_empty() {
+                        // rg returns exit code 1 when no matches.
+                        "(no matches)".to_string()
+                    } else {
+                        let mut text = String::from_utf8_lossy(&out.stdout).to_string();
+                        if text.len() > 3500 {
+                            text.truncate(3500);
+                            text.push_str("\n... (truncated)");
+                        }
+                        if text.trim().is_empty() {
+                            "(no matches)".to_string()
+                        } else {
+                            format!("```\n{}\n```", text.trim())
+                        }
+                    }
+                }
+                Err(e) => format!("/grep failed to execute rg: {e}"),
+            };
+
+            if let Some(channel) = target_channel.as_ref() {
+                let _ = channel.send(&reply, &msg.sender).await;
+            }
+            return;
+        }
+    }
+
     if let Some(channel) = target_channel.as_ref() {
-        let _ = channel.send("⏳ Initializing...", &msg.sender).await;
+        if ctx.send_progress_updates {
+            let _ = channel.send("⏳ Initializing...", &msg.sender).await;
+        }
         if let Err(e) = channel.start_typing(&msg.sender).await {
             tracing::debug!("Failed to start typing on {}: {e}", channel.name());
         }
@@ -244,7 +429,9 @@ async fn process_channel_message(ctx: Arc<ChannelRuntimeContext>, msg: traits::C
     }
 
     if let Some(channel) = target_channel.as_ref() {
-        let _ = channel.send("🔍 Building context...", &msg.sender).await;
+        if ctx.send_progress_updates {
+            let _ = channel.send("🔍 Building context...", &msg.sender).await;
+        }
     }
 
     let memory_context = build_memory_context(ctx.memory.as_ref(), &msg.content).await;
@@ -268,7 +455,9 @@ async fn process_channel_message(ctx: Arc<ChannelRuntimeContext>, msg: traits::C
     };
 
     if let Some(channel) = target_channel.as_ref() {
-        let _ = channel.send("🤖 Generating response...", &msg.sender).await;
+        if ctx.send_progress_updates {
+            let _ = channel.send("🤖 Generating response...", &msg.sender).await;
+        }
     }
 
     println!("  ⏳ Processing message...");
@@ -297,6 +486,7 @@ async fn process_channel_message(ctx: Arc<ChannelRuntimeContext>, msg: traits::C
             &mut history,
             ctx.tools_registry.as_ref(),
             ctx.observer.as_ref(),
+            ctx.flight_journal.clone(),
             "channel-runtime",
             ctx.model.as_str(),
             ctx.temperature,
@@ -347,7 +537,7 @@ async fn process_channel_message(ctx: Arc<ChannelRuntimeContext>, msg: traits::C
         }
         Err(_) => {
             tracing::error!(
-                elapsed_ms = started_at.elapsed().as_millis() as u64,
+                elapsed_ms = crate::util::time::duration_ms_u64(started_at.elapsed()),
                 timeout_secs = ctx.message_timeout_secs,
                 "LLM response timed out"
             );
@@ -939,7 +1129,7 @@ pub async fn start_channels(config: Config) -> Result<()> {
         &config,
     ));
 
-    let skills = crate::skills::load_skills(&workspace);
+    let skills = crate::skills::load_active_skills(&workspace, &config);
 
     // Collect tool descriptions for the prompt
     let mut tool_descs: Vec<(&str, &str)> = vec![
@@ -1164,6 +1354,35 @@ pub async fn start_channels(config: Config) -> Result<()> {
 
     println!("  🚦 In-flight message limit: {max_in_flight_messages}");
 
+    let running_registry = Arc::new(crate::observability::running_registry::RunningRegistry::new(
+        &config.workspace_dir,
+    ));
+    let channels_agent_id = format!("channels/pid{}", std::process::id());
+    let _ = running_registry
+        .register_start(
+            &channels_agent_id,
+            "channels",
+            Some(config.default_provider.as_deref().unwrap_or("provider")),
+            Some(&model),
+        )
+        .await;
+
+    let running_registry_bg = running_registry.clone();
+    let channels_agent_id_bg = channels_agent_id.clone();
+    let channels_heartbeat_task = tokio::spawn(async move {
+        loop {
+            let _ = running_registry_bg.heartbeat(&channels_agent_id_bg).await;
+            tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+        }
+    });
+
+    let flight_journal: Option<Arc<crate::observability::flight_journal::FlightJournal>> = Some(
+        Arc::new(crate::observability::flight_journal::FlightJournal::new(
+            &config.workspace_dir,
+            channels_agent_id.clone(),
+        )),
+    );
+
     let runtime_ctx = Arc::new(ChannelRuntimeContext {
         channels_by_name,
         provider: Arc::clone(&provider),
@@ -1194,7 +1413,15 @@ pub async fn start_channels(config: Config) -> Result<()> {
             None
         },
         message_timeout_secs: config.channels_config.message_timeout_secs,
+        send_progress_updates: config.channels_config.show_progress_messages,
+        flight_journal,
+        running_registry,
     });
+
+    // Ensure heartbeat task is stopped once the channel loop exits.
+    // (Loop is long-running; this is mainly for graceful shutdown / tests.)
+    let _channels_heartbeat_task = channels_heartbeat_task;
+
 
     run_message_dispatch_loop(rx, runtime_ctx, max_in_flight_messages).await;
 
@@ -1384,6 +1611,9 @@ mod tests {
             conv_history: Arc::new(Mutex::new(HashMap::new())),
             agi_processor: None,
             message_timeout_secs: 300,
+            send_progress_updates: false,
+            flight_journal: None,
+            running_registry: Arc::new(crate::observability::running_registry::RunningRegistry::new(".")),
         });
 
         process_channel_message(
@@ -1478,6 +1708,9 @@ mod tests {
             conv_history: Arc::new(Mutex::new(HashMap::new())),
             agi_processor: None,
             message_timeout_secs: 300,
+            send_progress_updates: false,
+            flight_journal: None,
+            running_registry: Arc::new(crate::observability::running_registry::RunningRegistry::new(".")),
         });
 
         let (tx, rx) = tokio::sync::mpsc::channel::<traits::ChannelMessage>(4);

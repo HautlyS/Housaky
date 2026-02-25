@@ -666,6 +666,11 @@ mod md5 {
     }
 
     pub fn format_hex(hash: &[u8; 16]) -> String {
-        hash.iter().map(|b| format!("{:02x}", b)).collect()
+        let mut out = String::with_capacity(hash.len() * 2);
+        for b in hash {
+            use std::fmt::Write as _;
+            write!(out, "{:02x}", b).ok();
+        }
+        out
     }
 }

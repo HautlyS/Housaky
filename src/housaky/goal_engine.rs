@@ -711,7 +711,8 @@ impl AutonomousPlanningEngine {
 
     fn decompose_goal(&self, goal: &Goal, available_tools: &[&str]) -> Vec<PlanStep> {
         let mut steps = Vec::new();
-        let complexity = goal.estimated_complexity as usize;
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        let complexity = goal.estimated_complexity.clamp(0.0, 1_000_000.0).round() as usize;
 
         if complexity <= 2 {
             steps.push(PlanStep {
@@ -729,7 +730,8 @@ impl AutonomousPlanningEngine {
                 fallback_action: None,
             });
         } else {
-            let num_subtasks = (complexity as f64 / 2.0).ceil() as usize;
+            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+            let num_subtasks = ((complexity as f64) / 2.0).ceil().clamp(1.0, 1_000_000.0) as usize;
             let subtask_size = (goal.description.len() / num_subtasks.max(1)).max(1);
 
             for i in 0..num_subtasks {
@@ -748,7 +750,7 @@ impl AutonomousPlanningEngine {
                         Vec::new()
                     },
                     expected_outcome: format!("Subtask {} completed", i + 1),
-                    estimated_duration_mins: (30 / num_subtasks as u32).max(5),
+                    estimated_duration_mins: (30 / u32::try_from(num_subtasks).unwrap_or(u32::MAX)).max(5),
                     actual_duration_mins: None,
                     status: StepStatus::Ready,
                     resources_required: vec!["agent".to_string()],

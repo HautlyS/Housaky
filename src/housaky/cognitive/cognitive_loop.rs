@@ -20,6 +20,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::{mpsc, RwLock};
 use tracing::info;
+use std::fmt::Write as _;
 
 pub struct CognitiveLoop {
     pub perception: PerceptionEngine,
@@ -38,6 +39,7 @@ pub struct CognitiveLoop {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct CognitiveLoopConfig {
     pub enable_reflection: bool,
     pub enable_learning: bool,
@@ -215,7 +217,7 @@ impl CognitiveLoop {
                 outcome.result,
                 crate::housaky::cognitive::action_selector::ActionResult::Success { .. }
             ),
-            start_time.elapsed().as_millis() as u64,
+            crate::util::time::duration_ms_u64(start_time.elapsed()),
         )
         .await;
 
@@ -386,12 +388,12 @@ impl CognitiveLoop {
             } => {
                 let mut response = String::from("I need some clarification:\n");
                 for q in questions {
-                    response.push_str(&format!("- {}\n", q));
+                    writeln!(response, "- {q}").ok();
                 }
                 if !assumptions.is_empty() {
                     response.push_str("\nI'm assuming:\n");
                     for a in assumptions {
-                        response.push_str(&format!("- {}\n", a));
+                        writeln!(response, "- {a}").ok();
                     }
                 }
                 thoughts.push("Requesting clarification".to_string());
@@ -455,7 +457,7 @@ impl CognitiveLoop {
             }
         };
 
-        let duration_ms = start_time.elapsed().as_millis() as u64;
+        let duration_ms = crate::util::time::duration_ms_u64(start_time.elapsed());
 
         let outcome = ActionOutcome {
             decision_id: format!("outcome_{}", uuid::Uuid::new_v4()),
@@ -510,30 +512,22 @@ impl CognitiveLoop {
         );
 
         if !memory_context.is_empty() {
-            system_prompt.push_str(&format!("## Relevant Context\n{}\n\n", memory_context));
+            writeln!(system_prompt, "## Relevant Context\n{memory_context}\n").ok();
         }
 
         if !active_goals.is_empty() {
             system_prompt.push_str("## Active Goals\n");
             for goal in active_goals.iter().take(3) {
-                system_prompt.push_str(&format!(
-                    "- {} ({}% complete)\n",
-                    goal.title,
-                    (goal.progress * 100.0) as i32
-                ));
+                #[allow(clippy::cast_possible_truncation)]
+                let progress_pct = (goal.progress * 100.0).round() as i32;
+                writeln!(system_prompt, "- {} ({}% complete)", goal.title, progress_pct).ok();
             }
             system_prompt.push('\n');
         }
 
-        system_prompt.push_str(&format!(
-            "## User Intent: {:?}\n",
-            perception.intent.primary
-        ));
-        system_prompt.push_str(&format!("## Detected Topics: {:?}\n", perception.topics));
-        system_prompt.push_str(&format!(
-            "## Confidence: {:.0}%\n\n",
-            decision.confidence * 100.0
-        ));
+        writeln!(system_prompt, "## User Intent: {:?}", perception.intent.primary).ok();
+        writeln!(system_prompt, "## Detected Topics: {:?}", perception.topics).ok();
+        writeln!(system_prompt, "## Confidence: {:.0}%\n", decision.confidence * 100.0).ok();
         system_prompt.push_str("Respond helpfully and accurately. If uncertain, say so.");
 
         let state = self.state.read().await;

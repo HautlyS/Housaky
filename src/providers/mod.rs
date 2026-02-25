@@ -5,8 +5,10 @@ pub mod gemini;
 pub mod ollama;
 pub mod openai;
 pub mod openrouter;
+pub mod limit;
 pub mod reliable;
 pub mod router;
+pub mod subject_router;
 pub mod timeout;
 pub mod traits;
 
@@ -25,6 +27,44 @@ pub use traits::{
 use compatible::{AuthStyle, OpenAiCompatibleProvider};
 use reliable::ReliableProvider;
 use std::sync::Arc;
+
+fn key_from_keys_manager(provider: &str) -> Option<String> {
+    // Best-effort: load keys.json and pick next enabled key.
+    // This does NOT modify config.toml and does not error if missing.
+    let km = crate::keys_manager::manager::get_global_keys_manager();
+    let rt = match tokio::runtime::Handle::try_current() {
+        Ok(h) => h,
+        Err(_) => return None,
+    };
+
+    rt.block_on(async {
+        let _ = km.load().await;
+        km.get_next_key(provider).await.map(|k| k.key)
+    })
+}
+
+pub fn build_model_routes_from_subjects(
+    routing: &crate::config::schema::RoutingConfig,
+) -> Vec<crate::config::ModelRouteConfig> {
+    let mut routes = Vec::new();
+
+    for (subject, cfg) in &routing.subjects {
+        let provider = cfg
+            .provider_chain
+            .first()
+            .cloned()
+            .unwrap_or_else(|| "openrouter".to_string());
+
+        routes.push(crate::config::ModelRouteConfig {
+            hint: subject.clone(),
+            provider,
+            model: cfg.model.clone(),
+            api_key: None,
+        });
+    }
+
+    routes
+}
 
 const MAX_API_ERROR_CHARS: usize = 200;
 
@@ -438,9 +478,12 @@ pub fn create_routed_provider(
     api_key: Option<&str>,
     reliability: &crate::config::ReliabilityConfig,
     model_routes: &[crate::config::ModelRouteConfig],
+    routing: &crate::config::schema::RoutingConfig,
     default_model: &str,
 ) -> anyhow::Result<Box<dyn Provider>> {
-    if model_routes.is_empty() {
+    // NOTE: `model_routes` is legacy and still supported.
+    // `routing.subjects` is the preferred per-subject config.
+    if model_routes.is_empty() && routing.subjects.is_empty() {
         return create_resilient_provider(primary_name, api_key, reliability);
     }
 
@@ -452,16 +495,57 @@ pub fn create_routed_provider(
         }
     }
 
+    for subject in routing.subjects.values() {
+        for p in &subject.provider_chain {
+            if !needed.iter().any(|n| n == p) {
+                needed.push(p.clone());
+            }
+        }
+    }
+
     // Create each provider (with its own resilience wrapper)
-    let mut providers: Vec<(String, Box<dyn Provider>)> = Vec::new();
+    let mut providers_vec: Vec<(String, Box<dyn Provider>)> = Vec::new();
     for name in &needed {
-        let key = model_routes
+        // key resolution order:
+        // 1) route-specific api_key
+        // 2) keys.json (KeysManager) provider key
+        // 3) passed api_key (default provider api_key)
+        let route_key = model_routes
             .iter()
             .find(|r| &r.provider == name)
-            .and_then(|r| r.api_key.as_deref())
-            .or(api_key);
-        match create_resilient_provider(name, key, reliability) {
-            Ok(provider) => providers.push((name.clone(), provider)),
+            .and_then(|r| r.api_key.as_deref());
+        let km_key = key_from_keys_manager(name);
+        let key = route_key
+            .map(|k| k.to_string())
+            .or(km_key)
+            .or_else(|| api_key.map(|k| k.to_string()));
+
+        match create_resilient_provider(name, key.as_deref(), reliability) {
+            Ok(provider) => {
+                // Optional concurrency limits: if any route config provides a per-provider limit,
+                // wrap this provider.
+                let max_in_flight = model_routes
+                    .iter()
+                    .filter(|r| &r.provider == name)
+                    .find_map(|r| {
+                        // For now, no per-route limits in legacy routes.
+                        // Subject-based limits will be enforced at call sites by choosing provider.
+                        let _ = r;
+                        None::<usize>
+                    });
+
+                let provider: Box<dyn Provider> = if let Some(max) = max_in_flight {
+                    Box::new(crate::providers::limit::LimitProvider::new_fail_fast(
+                        provider,
+                        max,
+                        format!("provider:{name}"),
+                    ))
+                } else {
+                    provider
+                };
+
+                providers_vec.push((name.clone(), provider));
+            }
             Err(e) => {
                 if name == primary_name {
                     return Err(e);
@@ -474,7 +558,7 @@ pub fn create_routed_provider(
         }
     }
 
-    // Build route table
+    // Legacy route table for RouterProvider.
     let routes: Vec<(String, router::Route)> = model_routes
         .iter()
         .map(|r| {
@@ -488,8 +572,67 @@ pub fn create_routed_provider(
         })
         .collect();
 
+    if !routing.subjects.is_empty() {
+        // Build subject routes (provider_chain + model + temperature + limits)
+        let mut subjects: std::collections::HashMap<String, crate::providers::subject_router::SubjectRoute> =
+            std::collections::HashMap::new();
+
+        for (name, cfg) in &routing.subjects {
+            let mut limits = std::collections::HashMap::new();
+            for (provider, limit_cfg) in &cfg.parallel_limits {
+                limits.insert(provider.clone(), limit_cfg.max_in_flight);
+            }
+
+            subjects.insert(
+                name.clone(),
+                crate::providers::subject_router::SubjectRoute {
+                    provider_chain: cfg.provider_chain.clone(),
+                    model: cfg.model.clone(),
+                    temperature: cfg.temperature,
+                    parallel_limits: limits,
+                },
+            );
+        }
+
+        // Convert providers_vec into a map for SubjectRouterProvider.
+        let mut provider_map: std::collections::HashMap<String, Box<dyn Provider>> =
+            std::collections::HashMap::new();
+        for (name, provider) in providers_vec {
+            // Apply global/per-subject concurrency limits at construction time:
+            // If any subject defines a limit for this provider, use the minimum.
+            let mut min_limit: Option<usize> = None;
+            for subject in subjects.values() {
+                if let Some(l) = subject.parallel_limits.get(&name).copied() {
+                    min_limit = Some(min_limit.map_or(l, |cur| cur.min(l)));
+                }
+            }
+
+            let provider: Box<dyn Provider> = if let Some(limit) = min_limit {
+                Box::new(crate::providers::limit::LimitProvider::new_fail_fast(
+                    provider,
+                    limit,
+                    format!("provider:{name}"),
+                ))
+            } else {
+                provider
+            };
+
+            provider_map.insert(name, provider);
+        }
+
+        let default_provider = primary_name.to_string();
+
+        return Ok(Box::new(crate::providers::subject_router::SubjectRouterProvider::new(
+            provider_map,
+            default_provider,
+            default_model.to_string(),
+            subjects,
+        )));
+    }
+
+    // Legacy RouterProvider (hint routes only, no provider_chain).
     Ok(Box::new(router::RouterProvider::new(
-        providers,
+        providers_vec,
         routes,
         default_model.to_string(),
     )))

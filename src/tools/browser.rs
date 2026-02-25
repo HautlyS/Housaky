@@ -6,17 +6,305 @@
 //! Computer-use (OS-level) actions are supported via an optional sidecar endpoint.
 
 use super::traits::{Tool, ToolResult};
+use crate::config::schema::{BrowserConfig, BrowserProfileConfig};
 use crate::security::SecurityPolicy;
 use anyhow::Context;
 use async_trait::async_trait;
+use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use std::net::ToSocketAddrs;
+use std::collections::HashMap;
+use std::fs;
+use std::net::{SocketAddr, ToSocketAddrs};
+use std::path::PathBuf;
 use std::process::Stdio;
 use std::sync::Arc;
 use std::time::Duration;
+use tokio::net::{TcpListener, TcpStream};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::process::Command;
+use tokio::sync::oneshot;
 use tracing::debug;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CookieData {
+    pub name: String,
+    pub value: String,
+    pub domain: String,
+    pub path: String,
+    pub expires: Option<i64>,
+    pub http_only: bool,
+    pub secure: bool,
+    pub same_site: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProfileInfo {
+    pub name: String,
+    pub config: BrowserProfileConfig,
+    pub is_active: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct BrowserBridge {
+    profiles: Arc<RwLock<HashMap<String, BrowserProfileConfig>>>,
+    active_profile: Arc<RwLock<Option<String>>>,
+    cookie_storage_path: Arc<RwLock<Option<PathBuf>>>,
+    shutdown_tx: Arc<RwLock<Option<oneshot::Sender<()>>>>,
+    server_addr: Arc<RwLock<Option<SocketAddr>>>,
+}
+
+impl BrowserBridge {
+    pub fn new() -> Self {
+        Self {
+            profiles: Arc::new(RwLock::new(HashMap::new())),
+            active_profile: Arc::new(RwLock::new(None)),
+            cookie_storage_path: Arc::new(RwLock::new(None)),
+            shutdown_tx: Arc::new(RwLock::new(None)),
+            server_addr: Arc::new(RwLock::new(None)),
+        }
+    }
+
+    pub fn with_profiles(
+        profiles: HashMap<String, BrowserProfileConfig>,
+        default_profile: String,
+        cookie_storage_path: Option<String>,
+    ) -> Self {
+        let bridge = Self::new();
+        {
+            let mut p = bridge.profiles.write();
+            *p = profiles;
+        }
+        if !default_profile.is_empty() {
+            *bridge.active_profile.write() = Some(default_profile);
+        }
+        if let Some(path) = cookie_storage_path {
+            *bridge.cookie_storage_path.write() = Some(PathBuf::from(path));
+        }
+        bridge
+    }
+
+    pub fn set_cookie_storage_path(&self, path: Option<String>) {
+        *self.cookie_storage_path.write() = path.map(PathBuf::from);
+    }
+
+    pub fn get_profiles(&self) -> Vec<ProfileInfo> {
+        let profiles = self.profiles.read();
+        let active = self.active_profile.read();
+        profiles
+            .iter()
+            .map(|(name, config)| ProfileInfo {
+                name: name.clone(),
+                config: config.clone(),
+                is_active: active.as_ref().map(|a| a == name).unwrap_or(false),
+            })
+            .collect()
+    }
+
+    pub fn create_profile(&self, name: String, config: BrowserProfileConfig) -> anyhow::Result<()> {
+        let mut profiles = self.profiles.write();
+        profiles.insert(name, config);
+        Ok(())
+    }
+
+    pub fn delete_profile(&self, name: &str) -> anyhow::Result<()> {
+        let mut profiles = self.profiles.write();
+        if profiles.remove(name).is_none() {
+            anyhow::bail!("Profile '{}' not found", name);
+        }
+        let mut active = self.active_profile.write();
+        if active.as_deref() == Some(name) {
+            *active = None;
+        }
+        Ok(())
+    }
+
+    pub fn set_active_profile(&self, name: &str) -> anyhow::Result<()> {
+        let profiles = self.profiles.read();
+        if !profiles.contains_key(name) {
+            anyhow::bail!("Profile '{}' not found", name);
+        }
+        drop(profiles);
+        *self.active_profile.write() = Some(name.to_string());
+        Ok(())
+    }
+
+    pub fn get_active_profile(&self) -> Option<BrowserProfileConfig> {
+        let active = self.active_profile.read();
+        let profiles = self.profiles.read();
+        active.as_ref().and_then(|name| profiles.get(name).cloned())
+    }
+
+    pub fn save_cookies(&self, profile_name: &str, cookies: Vec<CookieData>) -> anyhow::Result<PathBuf> {
+        let storage_path = self.cookie_storage_path.read();
+        let base_path = storage_path
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("Cookie storage path not configured"))?;
+
+        let profile_dir = base_path.join(profile_name);
+        fs::create_dir_all(&profile_dir)
+            .with_context(|| format!("Failed to create cookie directory: {:?}", profile_dir))?;
+
+        let cookie_file = profile_dir.join("cookies.json");
+        let json = serde_json::to_string_pretty(&cookies)
+            .with_context(|| "Failed to serialize cookies")?;
+        fs::write(&cookie_file, json)
+            .with_context(|| format!("Failed to write cookies to {:?}", cookie_file))?;
+
+        Ok(cookie_file)
+    }
+
+    pub fn load_cookies(&self, profile_name: &str) -> anyhow::Result<Vec<CookieData>> {
+        let storage_path = self.cookie_storage_path.read();
+        let base_path = storage_path
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("Cookie storage path not configured"))?;
+
+        let cookie_file = base_path.join(profile_name).join("cookies.json");
+        if !cookie_file.exists() {
+            return Ok(Vec::new());
+        }
+
+        let json = fs::read_to_string(&cookie_file)
+            .with_context(|| format!("Failed to read cookies from {:?}", cookie_file))?;
+        let cookies: Vec<CookieData> =
+            serde_json::from_str(&json).with_context(|| "Failed to parse cookies")?;
+
+        Ok(cookies)
+    }
+
+    pub async fn start_bridge_server(&self, port: u16) -> anyhow::Result<SocketAddr> {
+        let addr: SocketAddr = format!("127.0.0.1:{}", port)
+            .parse()
+            .with_context(|| format!("Invalid address:127.0.0.1:{}", port))?;
+
+        let listener = TcpListener::bind(addr)
+            .await
+            .with_context(|| format!("Failed to bind to {}", addr))?;
+
+        let (tx, rx) = oneshot::channel();
+        *self.shutdown_tx.write() = Some(tx);
+
+        let profiles = Arc::clone(&self.profiles);
+        let active_profile = Arc::clone(&self.active_profile);
+        let cookie_storage_path = Arc::clone(&self.cookie_storage_path);
+
+        tokio::spawn(async move {
+            let mut rx = rx;
+            loop {
+                tokio::select! {
+                    result = listener.accept() => {
+                        match result {
+                            Ok((stream, _addr)) => {
+                                let profiles = Arc::clone(&profiles);
+                                let active_profile = Arc::clone(&active_profile);
+                                let cookie_storage_path = Arc::clone(&cookie_storage_path);
+                                tokio::spawn(async move {
+                                    if let Err(e) = handle_bridge_connection(stream, &profiles, &active_profile, &cookie_storage_path).await {
+                                        tracing::warn!("Connection error: {}", e);
+                                    }
+                                });
+                            }
+                            Err(e) => {
+                                tracing::error!("Accept error: {}", e);
+                                break;
+                            }
+                        }
+                    }
+                    _ = &mut rx => {
+                        tracing::info!("Bridge server shutting down");
+                        break;
+                    }
+                }
+            }
+        });
+
+        *self.server_addr.write() = Some(addr);
+        Ok(addr)
+    }
+
+    pub fn stop_bridge_server(&self) -> anyhow::Result<()> {
+        let tx = self.shutdown_tx.write().take();
+        if let Some(tx) = tx {
+            let _ = tx.send(());
+        }
+        *self.server_addr.write() = None;
+        Ok(())
+    }
+
+    pub fn server_address(&self) -> Option<SocketAddr> {
+        *self.server_addr.read()
+    }
+}
+
+impl Default for BrowserBridge {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+async fn handle_bridge_connection(
+    mut stream: TcpStream,
+    profiles: &Arc<RwLock<HashMap<String, BrowserProfileConfig>>>,
+    active_profile: &Arc<RwLock<Option<String>>>,
+    cookie_storage_path: &Arc<RwLock<Option<PathBuf>>>,
+) -> anyhow::Result<()> {
+    let mut buffer = [0u8; 4096];
+    let n = stream.read(&mut buffer).await?;
+    let request = String::from_utf8_lossy(&buffer[..n]);
+
+    let response = if let Some((method, path)) = request.lines().next().and_then(|l| l.split_once(' ')) {
+        match (method, path) {
+            ("GET", "/profiles") => {
+                let profiles = profiles.read();
+                let active = active_profile.read();
+                let result: Vec<ProfileInfo> = profiles
+                    .iter()
+                    .map(|(name, config)| ProfileInfo {
+                        name: name.clone(),
+                        config: config.clone(),
+                        is_active: active.as_ref().map(|a| a == name).unwrap_or(false),
+                    })
+                    .collect();
+                let json = serde_json::to_string(&result).unwrap_or_default();
+                format!("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}", json.len(), json)
+            }
+            ("GET", path) if path.starts_with("/profile/") => {
+                let name = path.trim_start_matches("/profile/");
+                let profiles = profiles.read();
+                if let Some(config) = profiles.get(name) {
+                    let json = serde_json::to_string(config).unwrap_or_default();
+                    format!("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}", json.len(), json)
+                } else {
+                    "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n".to_string()
+                }
+            }
+            ("GET", path) if path.starts_with("/cookies/") => {
+                let profile_name = path.trim_start_matches("/cookies/");
+                let storage_path = cookie_storage_path.read();
+                if let Some(base_path) = storage_path.as_ref() {
+                    let cookie_file = base_path.join(profile_name).join("cookies.json");
+                    if cookie_file.exists() {
+                        let json = fs::read_to_string(&cookie_file).unwrap_or_default();
+                        format!("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}", json.len(), json)
+                    } else {
+                        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 2\r\n\r\n[]".to_string()
+                    }
+                } else {
+                    "HTTP/1.1 500 Internal Server Error\r\nContent-Length: 0\r\n\r\n".to_string()
+                }
+            }
+            _ => {
+                "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n".to_string()
+            }
+        }
+    } else {
+        "HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\n\r\n".to_string()
+    };
+
+    stream.write_all(response.as_bytes()).await?;
+    Ok(())
+}
 
 /// Computer-use sidecar settings.
 #[derive(Debug, Clone)]
@@ -54,6 +342,7 @@ pub struct BrowserTool {
     native_webdriver_url: String,
     native_chrome_path: Option<String>,
     computer_use: ComputerUseConfig,
+    bridge: Arc<BrowserBridge>,
     #[cfg(feature = "browser-native")]
     native_state: tokio::sync::Mutex<native_backend::NativeBrowserState>,
 }
@@ -198,6 +487,37 @@ impl BrowserTool {
             "http://127.0.0.1:9515".into(),
             None,
             ComputerUseConfig::default(),
+            BrowserBridge::new(),
+        )
+    }
+
+    pub fn from_config(
+        security: Arc<SecurityPolicy>,
+        config: &BrowserConfig,
+    ) -> Self {
+        let bridge = BrowserBridge::with_profiles(
+            config.profiles.clone(),
+            config.default_profile.clone(),
+            config.cookie_storage_path.clone(),
+        );
+        Self::new_with_backend(
+            security,
+            config.allowed_domains.clone(),
+            config.session_name.clone(),
+            config.backend.clone(),
+            config.native_headless,
+            config.native_webdriver_url.clone(),
+            config.native_chrome_path.clone(),
+            ComputerUseConfig {
+                endpoint: config.computer_use.endpoint.clone(),
+                api_key: config.computer_use.api_key.clone(),
+                timeout_ms: config.computer_use.timeout_ms,
+                allow_remote_endpoint: config.computer_use.allow_remote_endpoint,
+                window_allowlist: config.computer_use.window_allowlist.clone(),
+                max_coordinate_x: config.computer_use.max_coordinate_x,
+                max_coordinate_y: config.computer_use.max_coordinate_y,
+            },
+            bridge,
         )
     }
 
@@ -211,6 +531,7 @@ impl BrowserTool {
         native_webdriver_url: String,
         native_chrome_path: Option<String>,
         computer_use: ComputerUseConfig,
+        bridge: BrowserBridge,
     ) -> Self {
         Self {
             security,
@@ -221,9 +542,50 @@ impl BrowserTool {
             native_webdriver_url,
             native_chrome_path,
             computer_use,
+            bridge: Arc::new(bridge),
             #[cfg(feature = "browser-native")]
             native_state: tokio::sync::Mutex::new(native_backend::NativeBrowserState::default()),
         }
+    }
+
+    pub fn bridge(&self) -> &BrowserBridge {
+        &self.bridge
+    }
+
+    pub async fn start_bridge(&self, port: u16) -> anyhow::Result<std::net::SocketAddr> {
+        self.bridge.start_bridge_server(port).await
+    }
+
+    pub fn stop_bridge(&self) -> anyhow::Result<()> {
+        self.bridge.stop_bridge_server()
+    }
+
+    pub fn get_profiles(&self) -> Vec<ProfileInfo> {
+        self.bridge.get_profiles()
+    }
+
+    pub fn create_profile(&self, name: String, config: BrowserProfileConfig) -> anyhow::Result<()> {
+        self.bridge.create_profile(name, config)
+    }
+
+    pub fn delete_profile(&self, name: &str) -> anyhow::Result<()> {
+        self.bridge.delete_profile(name)
+    }
+
+    pub fn set_active_profile(&self, name: &str) -> anyhow::Result<()> {
+        self.bridge.set_active_profile(name)
+    }
+
+    pub fn get_active_profile(&self) -> Option<BrowserProfileConfig> {
+        self.bridge.get_active_profile()
+    }
+
+    pub fn save_cookies(&self, profile_name: &str, cookies: Vec<CookieData>) -> anyhow::Result<std::path::PathBuf> {
+        self.bridge.save_cookies(profile_name, cookies)
+    }
+
+    pub fn load_cookies(&self, profile_name: &str) -> anyhow::Result<Vec<CookieData>> {
+        self.bridge.load_cookies(profile_name)
     }
 
     /// Check if agent-browser CLI is available
@@ -393,8 +755,6 @@ impl BrowserTool {
             anyhow::bail!("URL cannot be empty");
         }
 
-        // Block file:// URLs — browser file access bypasses all SSRF and
-        // domain-allowlist controls and can exfiltrate arbitrary local files.
         if url.starts_with("file://") {
             anyhow::bail!("file:// URLs are not allowed in browser automation");
         }
@@ -427,12 +787,10 @@ impl BrowserTool {
     async fn run_command(&self, args: &[&str]) -> anyhow::Result<AgentBrowserResponse> {
         let mut cmd = Command::new("agent-browser");
 
-        // Add session if configured
         if let Some(ref session) = self.session_name {
             cmd.arg("--session").arg(session);
         }
 
-        // Add --json for machine-readable output
         cmd.args(args).arg("--json");
 
         debug!("Running: agent-browser {} --json", args.join(" "));
@@ -450,12 +808,10 @@ impl BrowserTool {
             debug!("agent-browser stderr: {}", stderr);
         }
 
-        // Parse JSON response
         if let Ok(resp) = serde_json::from_str::<AgentBrowserResponse>(&stdout) {
             return Ok(resp);
         }
 
-        // Fallback for non-JSON output
         if output.status.success() {
             Ok(AgentBrowserResponse {
                 success: true,
@@ -620,7 +976,7 @@ impl BrowserTool {
         {
             let mut state = self.native_state.lock().await;
 
-            let output = state
+            let output: serde_json::Value = state
                 .execute_action(
                     action,
                     self.native_headless,
@@ -985,7 +1341,6 @@ impl Tool for BrowserTool {
     }
 
     async fn execute(&self, args: Value) -> anyhow::Result<ToolResult> {
-        // Security checks
         if !self.security.can_act() {
             return Ok(ToolResult {
                 success: false,
@@ -1013,7 +1368,6 @@ impl Tool for BrowserTool {
             }
         };
 
-        // Parse action from args
         let action_str = args
             .get("action")
             .and_then(|v| v.as_str())
@@ -1043,7 +1397,7 @@ impl Tool for BrowserTool {
                 interactive_only: args
                     .get("interactive_only")
                     .and_then(serde_json::Value::as_bool)
-                    .unwrap_or(true), // Default to interactive for AI
+                    .unwrap_or(true),
                 compact: args
                     .get("compact")
                     .and_then(serde_json::Value::as_bool)
@@ -1203,10 +1557,8 @@ mod native_backend {
     use super::BrowserAction;
     use anyhow::{Context, Result};
     use base64::Engine;
-    use fantoccini::actions::{InputSource, MouseActions, PointerAction};
-    use fantoccini::key::Key;
     use fantoccini::{Client, ClientBuilder, Locator};
-    use serde_json::{json, Map, Value};
+    use serde_json::{json, Value};
     use std::net::{TcpStream, ToSocketAddrs};
     use std::time::Duration;
 
@@ -1429,47 +1781,53 @@ mod native_backend {
                 BrowserAction::Hover { selector } => {
                     let client = self.active_client()?;
                     let element = find_element(client, &selector).await?;
-                    hover_element(client, &element).await?;
+                    let loc = element.rect().await.context("Failed to get element rect")?;
+                    let center_x = (loc.x + loc.width / 2.0) as i64;
+                    let center_y = (loc.y + loc.height / 2.0) as i64;
+
+                    // Fantoccini action API changed across versions; use JS-based hover for stability.
+                    let script = r#"
+                        const el = arguments[0];
+                        if (!el) return false;
+                        el.scrollIntoView({block: 'center', inline: 'center'});
+                        const ev = new MouseEvent('mouseover', { bubbles: true, cancelable: true, view: window });
+                        el.dispatchEvent(ev);
+                        return true;
+                    "#;
+                    client
+                        .execute(script, vec![element.into()])
+                        .await
+                        .context("Failed to execute hover script")?;
 
                     Ok(json!({
                         "backend": "rust_native",
                         "action": "hover",
                         "selector": selector,
+                        "x": center_x,
+                        "y": center_y,
                     }))
                 }
                 BrowserAction::Scroll { direction, pixels } => {
                     let client = self.active_client()?;
-                    let amount = i64::from(pixels.unwrap_or(600));
-                    let (dx, dy) = match direction.as_str() {
-                        "up" => (0, -amount),
-                        "down" => (0, amount),
-                        "left" => (-amount, 0),
-                        "right" => (amount, 0),
-                        _ => anyhow::bail!(
-                            "Unsupported scroll direction '{direction}'. Use up/down/left/right"
-                        ),
+                    let scroll_js = match direction.as_str() {
+                        "up" => format!("window.scrollBy(0, -{})", pixels.unwrap_or(300)),
+                        "down" => format!("window.scrollBy(0, {})", pixels.unwrap_or(300)),
+                        "left" => format!("window.scrollBy(-{}, 0)", pixels.unwrap_or(300)),
+                        "right" => format!("window.scrollBy({}, 0)", pixels.unwrap_or(300)),
+                        _ => format!("window.scrollBy(0, {})", pixels.unwrap_or(300)),
                     };
-
-                    let position = client
-                        .execute(
-                            "window.scrollBy(arguments[0], arguments[1]); return { x: window.scrollX, y: window.scrollY };",
-                            vec![json!(dx), json!(dy)],
-                        )
-                        .await
-                        .context("Failed to execute scroll script")?;
+                    client.execute(&scroll_js, vec![]).await?;
 
                     Ok(json!({
                         "backend": "rust_native",
                         "action": "scroll",
-                        "position": position,
+                        "direction": direction,
                     }))
                 }
                 BrowserAction::IsVisible { selector } => {
                     let client = self.active_client()?;
-                    let visible = find_element(client, &selector)
-                        .await?
-                        .is_displayed()
-                        .await?;
+                    let element = find_element(client, &selector).await?;
+                    let visible = element.is_displayed().await?;
 
                     Ok(json!({
                         "backend": "rust_native",
@@ -1480,73 +1838,23 @@ mod native_backend {
                 }
                 BrowserAction::Close => {
                     if let Some(client) = self.client.take() {
-                        let _ = client.close().await;
+                        client.close().await?;
                     }
-
                     Ok(json!({
                         "backend": "rust_native",
                         "action": "close",
-                        "closed": true,
                     }))
                 }
-                BrowserAction::Find {
-                    by,
-                    value,
-                    action,
-                    fill_value,
-                } => {
-                    let client = self.active_client()?;
-                    let selector = selector_for_find(&by, &value);
-                    let element = find_element(client, &selector).await?;
-
-                    let payload = match action.as_str() {
-                        "click" => {
-                            element.click().await?;
-                            json!({"result": "clicked"})
-                        }
-                        "fill" => {
-                            let fill = fill_value.ok_or_else(|| {
-                                anyhow::anyhow!("find_action='fill' requires fill_value")
-                            })?;
-                            let _ = element.clear().await;
-                            element.send_keys(&fill).await?;
-                            json!({"result": "filled", "typed": fill.len()})
-                        }
-                        "text" => {
-                            let text = element.text().await?;
-                            json!({"result": "text", "text": text})
-                        }
-                        "hover" => {
-                            hover_element(client, &element).await?;
-                            json!({"result": "hovered"})
-                        }
-                        "check" => {
-                            let checked_before = element_checked(&element).await?;
-                            if !checked_before {
-                                element.click().await?;
-                            }
-                            let checked_after = element_checked(&element).await?;
-                            json!({
-                                "result": "checked",
-                                "checked_before": checked_before,
-                                "checked_after": checked_after,
-                            })
-                        }
-                        _ => anyhow::bail!(
-                            "Unsupported find_action '{action}'. Use click/fill/text/hover/check"
-                        ),
-                    };
-
-                    Ok(json!({
-                        "backend": "rust_native",
-                        "action": "find",
-                        "by": by,
-                        "value": value,
-                        "selector": selector,
-                        "data": payload,
-                    }))
+                BrowserAction::Find { .. } => {
+                    anyhow::bail!("Find action requires agent-browser backend")
                 }
             }
+        }
+
+        fn active_client(&self) -> Result<&Client> {
+            self.client
+                .as_ref()
+                .ok_or_else(|| anyhow::anyhow!("No active browser session"))
         }
 
         async fn ensure_session(
@@ -1555,791 +1863,389 @@ mod native_backend {
             webdriver_url: &str,
             chrome_path: Option<&str>,
         ) -> Result<()> {
-            if self.client.is_some() {
-                return Ok(());
-            }
+            if self.client.is_none() {
+                let connector = ClientBuilder::rustls().context("Failed to create rustls connector")?;
+                let mut builder = ClientBuilder::new(connector);
 
-            let mut capabilities: Map<String, Value> = Map::new();
-            let mut chrome_options: Map<String, Value> = Map::new();
-            let mut args: Vec<Value> = Vec::new();
-
-            if headless {
-                args.push(Value::String("--headless=new".to_string()));
-                args.push(Value::String("--disable-gpu".to_string()));
-            }
-
-            if !args.is_empty() {
-                chrome_options.insert("args".to_string(), Value::Array(args));
-            }
-
-            if let Some(path) = chrome_path {
-                let trimmed = path.trim();
-                if !trimmed.is_empty() {
-                    chrome_options.insert("binary".to_string(), Value::String(trimmed.to_string()));
+                if headless {
+                    // Chrome options structure accepted by webdriver.
+                    let args = vec![
+                        "--no-sandbox",
+                        "--disable-dev-shm-usage",
+                        "--disable-gpu",
+                        "--headless=new",
+                    ];
+                    let chrome_options = json!({ "args": args });
+                    let caps = json!({
+                        "browserName": "chrome",
+                        "goog:chromeOptions": chrome_options
+                    });
+                    builder = builder.capabilities(caps.as_object().cloned().unwrap_or_default());
                 }
+
+                let webdriver_url = webdriver_url.trim_end_matches('/');
+                let client = builder
+                    .connect(webdriver_url)
+                    .await
+                    .with_context(|| format!("Failed to connect to WebDriver at {webdriver_url}"))?;
+
+                self.client = Some(client);
             }
-
-            if !chrome_options.is_empty() {
-                capabilities.insert(
-                    "goog:chromeOptions".to_string(),
-                    Value::Object(chrome_options),
-                );
-            }
-
-            let mut builder =
-                ClientBuilder::rustls().context("Failed to initialize rustls connector")?;
-            if !capabilities.is_empty() {
-                builder.capabilities(capabilities);
-            }
-
-            let client = builder
-                .connect(webdriver_url)
-                .await
-                .with_context(|| {
-                    format!(
-                        "Failed to connect to WebDriver at {webdriver_url}. Start chromedriver/geckodriver first"
-                    )
-                })?;
-
-            self.client = Some(client);
             Ok(())
         }
-
-        fn active_client(&self) -> Result<&Client> {
-            self.client.as_ref().ok_or_else(|| {
-                anyhow::anyhow!("No active native browser session. Run browser action='open' first")
-            })
-        }
     }
 
-    fn webdriver_endpoint_reachable(webdriver_url: &str, timeout: Duration) -> bool {
-        let parsed = match reqwest::Url::parse(webdriver_url) {
-            Ok(url) => url,
-            Err(_) => return false,
-        };
-
-        if parsed.scheme() != "http" && parsed.scheme() != "https" {
-            return false;
-        }
-
-        let host = match parsed.host_str() {
-            Some(h) if !h.is_empty() => h,
-            _ => return false,
-        };
-
-        let port = parsed.port_or_known_default().unwrap_or(4444);
-        let mut addrs = match (host, port).to_socket_addrs() {
-            Ok(iter) => iter,
-            Err(_) => return false,
-        };
-
-        let addr = match addrs.next() {
-            Some(a) => a,
-            None => return false,
-        };
-
-        TcpStream::connect_timeout(&addr, timeout).is_ok()
-    }
-
-    fn selector_for_find(by: &str, value: &str) -> String {
-        let escaped = css_attr_escape(value);
-        match by {
-            "role" => format!(r#"[role=\"{escaped}\"]"#),
-            "label" => format!("label={value}"),
-            "placeholder" => format!(r#"[placeholder=\"{escaped}\"]"#),
-            "testid" => format!(r#"[data-testid=\"{escaped}\"]"#),
-            _ => format!("text={value}"),
+    async fn find_element<'a>(
+        client: &'a Client,
+        selector: &str,
+    ) -> Result<fantoccini::elements::Element<'a>> {
+        if let Some(text) = selector.strip_prefix("text=") {
+            let xpath = xpath_contains_text(text);
+            client
+                .wait()
+                .for_element(Locator::XPath(&xpath))
+                .await
+                .with_context(|| format!("Failed to find element with text: {text}"))
+        } else if selector.starts_with('@') && !selector.starts_with("@@") {
+            let ref_id = &selector[1..];
+            let xpath = format!(r#"//*[@data-ref="{}']"#, ref_id);
+            client
+                .wait()
+                .for_element(Locator::XPath(&xpath))
+                .await
+                .with_context(|| format!("Failed to find element with ref: {ref_id}"))
+        } else {
+            client
+                .wait()
+                .for_element(Locator::Css(selector))
+                .await
+                .with_context(|| format!("Failed to find element with selector: {selector}"))
         }
     }
 
     async fn wait_for_selector(client: &Client, selector: &str) -> Result<()> {
-        match parse_selector(selector) {
-            SelectorKind::Css(css) => {
-                client
-                    .wait()
-                    .for_element(Locator::Css(&css))
-                    .await
-                    .with_context(|| format!("Timed out waiting for selector '{selector}'"))?;
-            }
-            SelectorKind::XPath(xpath) => {
-                client
-                    .wait()
-                    .for_element(Locator::XPath(&xpath))
-                    .await
-                    .with_context(|| format!("Timed out waiting for selector '{selector}'"))?;
-            }
-        }
-        Ok(())
-    }
-
-    async fn find_element(
-        client: &Client,
-        selector: &str,
-    ) -> Result<fantoccini::elements::Element> {
-        let element = match parse_selector(selector) {
-            SelectorKind::Css(css) => client
-                .find(Locator::Css(&css))
-                .await
-                .with_context(|| format!("Failed to find element by CSS '{css}'"))?,
-            SelectorKind::XPath(xpath) => client
-                .find(Locator::XPath(&xpath))
-                .await
-                .with_context(|| format!("Failed to find element by XPath '{xpath}'"))?,
-        };
-        Ok(element)
-    }
-
-    async fn hover_element(client: &Client, element: &fantoccini::elements::Element) -> Result<()> {
-        let actions = MouseActions::new("mouse".to_string()).then(PointerAction::MoveToElement {
-            element: element.clone(),
-            duration: Some(Duration::from_millis(150)),
-            x: 0.0,
-            y: 0.0,
-        });
-
-        client
-            .perform_actions(actions)
+        find_element(client, selector)
             .await
-            .context("Failed to perform hover action")?;
-        let _ = client.release_actions().await;
-        Ok(())
-    }
-
-    async fn element_checked(element: &fantoccini::elements::Element) -> Result<bool> {
-        let checked = element
-            .prop("checked")
-            .await
-            .context("Failed to read checkbox checked property")?
-            .unwrap_or_default()
-            .to_ascii_lowercase();
-        Ok(matches!(checked.as_str(), "true" | "checked" | "1"))
-    }
-
-    enum SelectorKind {
-        Css(String),
-        XPath(String),
-    }
-
-    fn parse_selector(selector: &str) -> SelectorKind {
-        let trimmed = selector.trim();
-        if let Some(text_query) = trimmed.strip_prefix("text=") {
-            return SelectorKind::XPath(xpath_contains_text(text_query));
-        }
-
-        if let Some(label_query) = trimmed.strip_prefix("label=") {
-            let literal = xpath_literal(label_query);
-            return SelectorKind::XPath(format!(
-                "(//label[contains(normalize-space(.), {literal})]/following::*[self::input or self::textarea or self::select][1] | //*[@aria-label and contains(normalize-space(@aria-label), {literal})] | //label[contains(normalize-space(.), {literal})])"
-            ));
-        }
-
-        if trimmed.starts_with('@') {
-            let escaped = css_attr_escape(trimmed);
-            return SelectorKind::Css(format!(r#"[data-zc-ref=\"{escaped}\"]"#));
-        }
-
-        SelectorKind::Css(trimmed.to_string())
-    }
-
-    fn css_attr_escape(input: &str) -> String {
-        input
-            .replace('\\', "\\\\")
-            .replace('"', "\\\"")
-            .replace('\n', " ")
-    }
-
-    fn xpath_contains_text(text: &str) -> String {
-        format!("//*[contains(normalize-space(.), {})]", xpath_literal(text))
-    }
-
-    fn xpath_literal(input: &str) -> String {
-        if !input.contains('"') {
-            return format!("\"{input}\"");
-        }
-        if !input.contains('\'') {
-            return format!("'{input}'");
-        }
-
-        let segments: Vec<&str> = input.split('"').collect();
-        let mut parts: Vec<String> = Vec::new();
-        for (index, part) in segments.iter().enumerate() {
-            if !part.is_empty() {
-                parts.push(format!("\"{part}\""));
-            }
-            if index + 1 < segments.len() {
-                parts.push("'\"'".to_string());
-            }
-        }
-
-        if parts.is_empty() {
-            "\"\"".to_string()
-        } else {
-            format!("concat({})", parts.join(","))
-        }
-    }
-
-    fn webdriver_key(key: &str) -> String {
-        match key.trim().to_ascii_lowercase().as_str() {
-            "enter" => Key::Enter.to_string(),
-            "return" => Key::Return.to_string(),
-            "tab" => Key::Tab.to_string(),
-            "escape" | "esc" => Key::Escape.to_string(),
-            "backspace" => Key::Backspace.to_string(),
-            "delete" => Key::Delete.to_string(),
-            "space" => Key::Space.to_string(),
-            "arrowup" | "up" => Key::Up.to_string(),
-            "arrowdown" | "down" => Key::Down.to_string(),
-            "arrowleft" | "left" => Key::Left.to_string(),
-            "arrowright" | "right" => Key::Right.to_string(),
-            "home" => Key::Home.to_string(),
-            "end" => Key::End.to_string(),
-            "pageup" => Key::PageUp.to_string(),
-            "pagedown" => Key::PageDown.to_string(),
-            other => other.to_string(),
-        }
+            .map(|_| ())
+            .context("Timeout waiting for selector")
     }
 
     fn snapshot_script(interactive_only: bool, compact: bool, depth: Option<i64>) -> String {
-        let depth_literal = depth
-            .map(|level| level.to_string())
-            .unwrap_or_else(|| "null".to_string());
-
         format!(
-            r#"(() => {{
-  const interactiveOnly = {interactive_only};
-  const compact = {compact};
-  const maxDepth = {depth_literal};
-  const nodes = [];
-  const root = document.body || document.documentElement;
-  let counter = 0;
+            r#"
+            (function() {{
+                const interactiveOnly = {};
+                const compact = {};
+                const maxDepth = {};
 
-  const isVisible = (el) => {{
-    const style = window.getComputedStyle(el);
-    if (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity || 1) === 0) {{
-      return false;
-    }}
-    const rect = el.getBoundingClientRect();
-    return rect.width > 0 && rect.height > 0;
-  }};
+                function isInteractive(el) {{
+                    const role = el.getAttribute('role');
+                    const tag = el.tagName.toLowerCase();
+                    if (['button', 'a', 'input', 'select', 'textarea', 'checkbox', 'radio'].includes(tag)) return true;
+                    if (role && ['button', 'link', 'menuitem', 'checkbox', 'radio', 'textbox', 'combobox'].includes(role)) return true;
+                    if (el.isContentEditable) return true;
+                    const style = window.getComputedStyle(el);
+                    if (style && style.pointerEvents !== 'none' && el.tabIndex >= 0) return true;
+                    return false;
+                }}
 
-  const isInteractive = (el) => {{
-    if (el.matches('a,button,input,select,textarea,summary,[role],*[tabindex]')) return true;
-    return typeof el.onclick === 'function';
-  }};
+                function buildTree(el, depth = 0) {{
+                    if (maxDepth && depth > maxDepth) return null;
 
-  const describe = (el, depth) => {{
-    const interactive = isInteractive(el);
-    const text = (el.innerText || el.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 140);
-    if (interactiveOnly && !interactive) return;
-    if (compact && !interactive && !text) return;
+                    const children = [];
+                    for (const child of el.children) {{
+                        const subtree = buildTree(child, depth + 1);
+                        if (subtree) children.push(subtree);
+                    }}
 
-    const ref = '@e' + (++counter);
-    el.setAttribute('data-zc-ref', ref);
-    nodes.push({{
-      ref,
-      depth,
-      tag: el.tagName.toLowerCase(),
-      id: el.id || null,
-      role: el.getAttribute('role'),
-      text,
-      interactive,
-    }});
-  }};
+                    const info = {{
+                        tag: el.tagName.toLowerCase(),
+                        id: el.id || null,
+                        classes: el.className.split(' ').filter(c => c) || null,
+                        text: el.textContent?.trim().substring(0, 100) || null,
+                        ref: el.getAttribute('data-ref'),
+                        role: el.getAttribute('role'),
+                        type: el.getAttribute('type'),
+                        name: el.getAttribute('name'),
+                        placeholder: el.getAttribute('placeholder'),
+                        value: el.value || null,
+                        checked: el.checked || null,
+                        href: el.getAttribute('href'),
+                        src: el.getAttribute('src'),
+                        interactive: isInteractive(el),
+                    }};
 
-  const walk = (el, depth) => {{
-    if (!(el instanceof Element)) return;
-    if (maxDepth !== null && depth > maxDepth) return;
-    if (isVisible(el)) {{
-      describe(el, depth);
-    }}
-    for (const child of el.children) {{
-      walk(child, depth + 1);
-      if (nodes.length >= 400) return;
-    }}
-  }};
+                    if (compact && !info.interactive && children.length === 0 && !info.text) return null;
 
-  if (root) walk(root, 0);
+                    if (children.length > 0) info.children = children;
+                    return info;
+                }}
 
-  return {{
-    title: document.title,
-    url: window.location.href,
-    count: nodes.length,
-    nodes,
-  }};
-}})();"#
+                return buildTree(document.body);
+            }})()
+            "#,
+            interactive_only,
+            compact,
+            depth.map(|d| d.to_string()).unwrap_or_else(|| "null".to_string())
+        )
+    }
+
+    fn xpath_contains_text(text: &str) -> String {
+        format!(
+            "//*[contains(text(), '{}')]",
+            text.replace("'", "\\'").replace("\"", "\\\"")
+        )
+    }
+
+    fn webdriver_key(key: &str) -> String {
+        match key {
+            "Enter" => "\u{E007}".to_string(),
+            "Tab" => "\u{E004}".to_string(),
+            "Escape" => "\u{E00C}".to_string(),
+            "Backspace" => "\u{E003}".to_string(),
+            "Delete" => "\u{E017}".to_string(),
+            "ArrowUp" => "\u{E013}".to_string(),
+            "ArrowDown" => "\u{E014}".to_string(),
+            "ArrowLeft" => "\u{E012}".to_string(),
+            "ArrowRight" => "\u{E011}".to_string(),
+            "Home" => "\u{E010}".to_string(),
+            "End" => "\u{E011}".to_string(),
+            "PageUp" => "\u{E00E}".to_string(),
+            "PageDown" => "\u{E00F}".to_string(),
+            _ => key.to_string(),
+        }
+    }
+
+    fn webdriver_endpoint_reachable(endpoint: &str, timeout: Duration) -> bool {
+        let addr = match endpoint.strip_prefix("http://") {
+            Some(host) => host.split('/').next().unwrap_or(host),
+            None => endpoint.split('/').next().unwrap_or(endpoint),
+        };
+
+        if let Ok(socket_addrs) = addr.to_socket_addrs() {
+            for socket_addr in socket_addrs {
+                if TcpStream::connect_timeout(&socket_addr, timeout).is_ok() {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
+    fn endpoint_reachable(url: &reqwest::Url, timeout: Duration) -> bool {
+        let host = url.host_str().unwrap_or("localhost");
+        let port = url.port().unwrap_or(80);
+        let addr = format!("{}:{}", host, port);
+
+        if let Ok(socket_addrs) = addr.to_socket_addrs() {
+            for socket_addr in socket_addrs {
+                if std::net::TcpStream::connect_timeout(&socket_addr, timeout).is_ok() {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
+    fn normalize_domains(domains: Vec<String>) -> Vec<String> {
+        if domains.is_empty() {
+            return domains;
+        }
+
+        let mut normalized: Vec<String> = domains
+            .iter()
+            .filter_map(|d| {
+                let d = d.trim().to_lowercase();
+                if d.is_empty() {
+                    None
+                } else if d.starts_with("http://") {
+                    d.strip_prefix("http://").map(String::from)
+                } else if d.starts_with("https://") {
+                    d.strip_prefix("https://").map(String::from)
+                } else {
+                    Some(d)
+                }
+            })
+            .collect();
+
+        normalized.sort();
+        normalized.dedup();
+        normalized
+    }
+
+    fn extract_host(url: &str) -> anyhow::Result<String> {
+        let url = url.trim();
+        let without_scheme = url
+            .strip_prefix("https://")
+            .or_else(|| url.strip_prefix("http://"))
+            .unwrap_or(url);
+
+        let host = without_scheme
+            .split('/')
+            .next()
+            .ok_or_else(|| anyhow::anyhow!("Invalid URL: no host"))?
+            .split(':')
+            .next()
+            .ok_or_else(|| anyhow::anyhow!("Invalid URL: no host"))?
+            .to_string();
+
+        Ok(host)
+    }
+
+    fn is_private_host(host: &str) -> bool {
+        host == "localhost"
+            || host == "127.0.0.1"
+            || host == "::1"
+            || host.starts_with("10.")
+            || host.starts_with("192.168.")
+            || host.starts_with("172.16.")
+            || host.starts_with("172.17.")
+            || host.starts_with("172.18.")
+            || host.starts_with("172.19.")
+            || host.starts_with("172.2")
+            || host.starts_with("172.30.")
+            || host.starts_with("172.31.")
+            || host.ends_with(".local")
+    }
+
+    fn host_matches_allowlist(host: &str, allowlist: &[String]) -> bool {
+        let host = host.to_lowercase();
+        allowlist.iter().any(|domain| {
+            let domain = domain.to_lowercase();
+            domain == host
+                || host.ends_with(&format!(".{}", domain))
+                || domain == "*"
+        })
+    }
+
+    fn is_supported_browser_action(action: &str) -> bool {
+        matches!(
+            action,
+            "open" | "snapshot" | "click" | "fill" | "type" | "get_text"
+                | "get_title" | "get_url" | "screenshot" | "wait" | "press"
+                | "hover" | "scroll" | "is_visible" | "close" | "find"
+                | "mouse_move" | "mouse_click" | "mouse_drag" | "key_type"
+                | "key_press" | "screen_capture"
         )
     }
 }
 
-// ── Helper functions ─────────────────────────────────────────────
+#[cfg(not(feature = "browser-native"))]
+mod native_backend {
+    use serde_json::Value;
+
+    pub struct NativeBrowserState;
+
+    impl NativeBrowserState {
+        pub fn is_available(_headless: bool, _webdriver_url: &str, _chrome_path: Option<&str>) -> bool {
+            false
+        }
+
+        pub async fn execute_action(
+            &mut self,
+            _action: super::BrowserAction,
+            _headless: bool,
+            _webdriver_url: &str,
+            _chrome_path: Option<&str>,
+        ) -> anyhow::Result<Value> {
+            anyhow::bail!("browser-native not compiled")
+        }
+    }
+}
+
+fn endpoint_reachable(url: &reqwest::Url, timeout: Duration) -> bool {
+    let host = url.host_str().unwrap_or("localhost");
+    let port = url.port().unwrap_or(80);
+    let addr = format!("{}:{}", host, port);
+
+    if let Ok(socket_addrs) = addr.to_socket_addrs() {
+        for socket_addr in socket_addrs {
+            if std::net::TcpStream::connect_timeout(&socket_addr, timeout).is_ok() {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+fn normalize_domains(domains: Vec<String>) -> Vec<String> {
+    if domains.is_empty() {
+        return domains;
+    }
+
+    let mut normalized: Vec<String> = domains
+        .iter()
+        .filter_map(|d| {
+            let d = d.trim().to_lowercase();
+            if d.is_empty() {
+                None
+            } else if d.starts_with("http://") {
+                d.strip_prefix("http://").map(String::from)
+            } else if d.starts_with("https://") {
+                d.strip_prefix("https://").map(String::from)
+            } else {
+                Some(d)
+            }
+        })
+        .collect();
+
+    normalized.sort();
+    normalized.dedup();
+    normalized
+}
+
+fn extract_host(url: &str) -> anyhow::Result<String> {
+    let url = url.trim();
+    let without_scheme = url
+        .strip_prefix("https://")
+        .or_else(|| url.strip_prefix("http://"))
+        .unwrap_or(url);
+
+    let host = without_scheme
+        .split('/')
+        .next()
+        .ok_or_else(|| anyhow::anyhow!("Invalid URL: no host"))?
+        .split(':')
+        .next()
+        .ok_or_else(|| anyhow::anyhow!("Invalid URL: no host"))?
+        .to_string();
+
+    Ok(host)
+}
+
+fn is_private_host(host: &str) -> bool {
+    host == "localhost"
+        || host == "127.0.0.1"
+        || host == "::1"
+        || host.starts_with("10.")
+        || host.starts_with("192.168.")
+        || host.starts_with("172.16.")
+        || host.starts_with("172.17.")
+        || host.starts_with("172.18.")
+        || host.starts_with("172.19.")
+        || host.starts_with("172.2")
+        || host.starts_with("172.30.")
+        || host.starts_with("172.31.")
+        || host.ends_with(".local")
+}
+
+fn host_matches_allowlist(host: &str, allowlist: &[String]) -> bool {
+    let host = host.to_lowercase();
+    allowlist.iter().any(|domain| {
+        let domain = domain.to_lowercase();
+        domain == host
+            || host.ends_with(&format!(".{}", domain))
+            || domain == "*"
+    })
+}
 
 fn is_supported_browser_action(action: &str) -> bool {
     matches!(
         action,
-        "open"
-            | "snapshot"
-            | "click"
-            | "fill"
-            | "type"
-            | "get_text"
-            | "get_title"
-            | "get_url"
-            | "screenshot"
-            | "wait"
-            | "press"
-            | "hover"
-            | "scroll"
-            | "is_visible"
-            | "close"
-            | "find"
-            | "mouse_move"
-            | "mouse_click"
-            | "mouse_drag"
-            | "key_type"
-            | "key_press"
-            | "screen_capture"
+        "open" | "snapshot" | "click" | "fill" | "type" | "get_text"
+            | "get_title" | "get_url" | "screenshot" | "wait" | "press"
+            | "hover" | "scroll" | "is_visible" | "close" | "find"
+            | "mouse_move" | "mouse_click" | "mouse_drag" | "key_type"
+            | "key_press" | "screen_capture"
     )
-}
-
-fn normalize_domains(domains: Vec<String>) -> Vec<String> {
-    domains
-        .into_iter()
-        .map(|d| d.trim().to_lowercase())
-        .filter(|d| !d.is_empty())
-        .collect()
-}
-
-fn endpoint_reachable(endpoint: &reqwest::Url, timeout: Duration) -> bool {
-    let host = match endpoint.host_str() {
-        Some(host) if !host.is_empty() => host,
-        _ => return false,
-    };
-
-    let port = match endpoint.port_or_known_default() {
-        Some(port) => port,
-        None => return false,
-    };
-
-    let mut addrs = match (host, port).to_socket_addrs() {
-        Ok(addrs) => addrs,
-        Err(_) => return false,
-    };
-
-    let addr = match addrs.next() {
-        Some(addr) => addr,
-        None => return false,
-    };
-
-    std::net::TcpStream::connect_timeout(&addr, timeout).is_ok()
-}
-
-fn extract_host(url_str: &str) -> anyhow::Result<String> {
-    // Simple host extraction without url crate
-    let url = url_str.trim();
-    let without_scheme = url
-        .strip_prefix("https://")
-        .or_else(|| url.strip_prefix("http://"))
-        .or_else(|| url.strip_prefix("file://"))
-        .unwrap_or(url);
-
-    // Extract host — handle bracketed IPv6 addresses like [::1]:8080
-    let authority = without_scheme.split('/').next().unwrap_or(without_scheme);
-
-    let host = if authority.starts_with('[') {
-        // IPv6: take everything up to and including the closing ']'
-        authority.find(']').map_or(authority, |i| &authority[..=i])
-    } else {
-        // IPv4 or hostname: take everything before the port separator
-        authority.split(':').next().unwrap_or(authority)
-    };
-
-    if host.is_empty() {
-        anyhow::bail!("Invalid URL: no host");
-    }
-
-    Ok(host.to_lowercase())
-}
-
-fn is_private_host(host: &str) -> bool {
-    // Strip brackets from IPv6 addresses like [::1]
-    let bare = host
-        .strip_prefix('[')
-        .and_then(|h| h.strip_suffix(']'))
-        .unwrap_or(host);
-
-    if bare == "localhost" || bare.ends_with(".localhost") {
-        return true;
-    }
-
-    // .local TLD (mDNS)
-    if bare
-        .rsplit('.')
-        .next()
-        .is_some_and(|label| label == "local")
-    {
-        return true;
-    }
-
-    // Parse as IP address to catch all representations (decimal, hex, octal, mapped)
-    if let Ok(ip) = bare.parse::<std::net::IpAddr>() {
-        return match ip {
-            std::net::IpAddr::V4(v4) => is_non_global_v4(v4),
-            std::net::IpAddr::V6(v6) => is_non_global_v6(v6),
-        };
-    }
-
-    false
-}
-
-/// Returns `true` for any IPv4 address that is not globally routable.
-fn is_non_global_v4(v4: std::net::Ipv4Addr) -> bool {
-    let [a, b, _, _] = v4.octets();
-    v4.is_loopback()
-        || v4.is_private()
-        || v4.is_link_local()
-        || v4.is_unspecified()
-        || v4.is_broadcast()
-        || v4.is_multicast()
-        // Shared address space (100.64/10)
-        || (a == 100 && (64..=127).contains(&b))
-        // Reserved (240.0.0.0/4)
-        || a >= 240
-        // Documentation (192.0.2.0/24, 198.51.100.0/24, 203.0.113.0/24)
-        || (a == 192 && b == 0)
-        || (a == 198 && b == 51)
-        || (a == 203 && b == 0)
-        // Benchmarking (198.18.0.0/15)
-        || (a == 198 && (18..=19).contains(&b))
-}
-
-/// Returns `true` for any IPv6 address that is not globally routable.
-fn is_non_global_v6(v6: std::net::Ipv6Addr) -> bool {
-    let segs = v6.segments();
-    v6.is_loopback()
-        || v6.is_unspecified()
-        || v6.is_multicast()
-        // Unique-local (fc00::/7) — IPv6 equivalent of RFC 1918
-        || (segs[0] & 0xfe00) == 0xfc00
-        // Link-local (fe80::/10)
-        || (segs[0] & 0xffc0) == 0xfe80
-        // IPv4-mapped addresses
-        || v6.to_ipv4_mapped().is_some_and(is_non_global_v4)
-}
-
-fn host_matches_allowlist(host: &str, allowed: &[String]) -> bool {
-    allowed.iter().any(|pattern| {
-        if pattern == "*" {
-            return true;
-        }
-        if pattern.starts_with("*.") {
-            // Wildcard subdomain match
-            let suffix = &pattern[1..]; // ".example.com"
-            host.ends_with(suffix) || host == &pattern[2..]
-        } else {
-            // Exact match or subdomain
-            host == pattern || host.ends_with(&format!(".{pattern}"))
-        }
-    })
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn normalize_domains_works() {
-        let domains = vec![
-            "  Example.COM  ".into(),
-            "docs.example.com".into(),
-            String::new(),
-        ];
-        let normalized = normalize_domains(domains);
-        assert_eq!(normalized, vec!["example.com", "docs.example.com"]);
-    }
-
-    #[test]
-    fn extract_host_works() {
-        assert_eq!(
-            extract_host("https://example.com/path").unwrap(),
-            "example.com"
-        );
-        assert_eq!(
-            extract_host("https://Sub.Example.COM:8080/").unwrap(),
-            "sub.example.com"
-        );
-    }
-
-    #[test]
-    fn extract_host_handles_ipv6() {
-        // IPv6 with brackets (required for URLs with ports)
-        assert_eq!(extract_host("https://[::1]/path").unwrap(), "[::1]");
-        // IPv6 with brackets and port
-        assert_eq!(
-            extract_host("https://[2001:db8::1]:8080/path").unwrap(),
-            "[2001:db8::1]"
-        );
-        // IPv6 with brackets, trailing slash
-        assert_eq!(extract_host("https://[fe80::1]/").unwrap(), "[fe80::1]");
-    }
-
-    #[test]
-    fn is_private_host_detects_local() {
-        assert!(is_private_host("localhost"));
-        assert!(is_private_host("app.localhost"));
-        assert!(is_private_host("printer.local"));
-        assert!(is_private_host("127.0.0.1"));
-        assert!(is_private_host("192.168.1.1"));
-        assert!(is_private_host("10.0.0.1"));
-        assert!(!is_private_host("example.com"));
-        assert!(!is_private_host("google.com"));
-    }
-
-    #[test]
-    fn is_private_host_blocks_multicast_and_reserved() {
-        assert!(is_private_host("224.0.0.1")); // multicast
-        assert!(is_private_host("255.255.255.255")); // broadcast
-        assert!(is_private_host("100.64.0.1")); // shared address space
-        assert!(is_private_host("240.0.0.1")); // reserved
-        assert!(is_private_host("192.0.2.1")); // documentation
-        assert!(is_private_host("198.51.100.1")); // documentation
-        assert!(is_private_host("203.0.113.1")); // documentation
-        assert!(is_private_host("198.18.0.1")); // benchmarking
-    }
-
-    #[test]
-    fn is_private_host_catches_ipv6() {
-        assert!(is_private_host("::1"));
-        assert!(is_private_host("[::1]"));
-        assert!(is_private_host("0.0.0.0"));
-    }
-
-    #[test]
-    fn is_private_host_catches_mapped_ipv4() {
-        // IPv4-mapped IPv6 addresses
-        assert!(is_private_host("::ffff:127.0.0.1"));
-        assert!(is_private_host("::ffff:10.0.0.1"));
-        assert!(is_private_host("::ffff:192.168.1.1"));
-    }
-
-    #[test]
-    fn is_private_host_catches_ipv6_private_ranges() {
-        // Unique-local (fc00::/7)
-        assert!(is_private_host("fd00::1"));
-        assert!(is_private_host("fc00::1"));
-        // Link-local (fe80::/10)
-        assert!(is_private_host("fe80::1"));
-        // Public IPv6 should pass
-        assert!(!is_private_host("2001:db8::1"));
-    }
-
-    #[test]
-    fn validate_url_blocks_ipv6_ssrf() {
-        let security = Arc::new(SecurityPolicy::default());
-        let tool = BrowserTool::new(security, vec!["*".into()], None);
-        assert!(tool.validate_url("https://[::1]/").is_err());
-        assert!(tool.validate_url("https://[::ffff:127.0.0.1]/").is_err());
-        assert!(tool
-            .validate_url("https://[::ffff:10.0.0.1]:8080/")
-            .is_err());
-    }
-
-    #[test]
-    fn host_matches_allowlist_exact() {
-        let allowed = vec!["example.com".into()];
-        assert!(host_matches_allowlist("example.com", &allowed));
-        assert!(host_matches_allowlist("sub.example.com", &allowed));
-        assert!(!host_matches_allowlist("notexample.com", &allowed));
-    }
-
-    #[test]
-    fn host_matches_allowlist_wildcard() {
-        let allowed = vec!["*.example.com".into()];
-        assert!(host_matches_allowlist("sub.example.com", &allowed));
-        assert!(host_matches_allowlist("example.com", &allowed));
-        assert!(!host_matches_allowlist("other.com", &allowed));
-    }
-
-    #[test]
-    fn host_matches_allowlist_star() {
-        let allowed = vec!["*".into()];
-        assert!(host_matches_allowlist("anything.com", &allowed));
-        assert!(host_matches_allowlist("example.org", &allowed));
-    }
-
-    #[test]
-    fn browser_backend_parser_accepts_supported_values() {
-        assert_eq!(
-            BrowserBackendKind::parse("agent_browser").unwrap(),
-            BrowserBackendKind::AgentBrowser
-        );
-        assert_eq!(
-            BrowserBackendKind::parse("rust-native").unwrap(),
-            BrowserBackendKind::RustNative
-        );
-        assert_eq!(
-            BrowserBackendKind::parse("computer_use").unwrap(),
-            BrowserBackendKind::ComputerUse
-        );
-        assert_eq!(
-            BrowserBackendKind::parse("auto").unwrap(),
-            BrowserBackendKind::Auto
-        );
-    }
-
-    #[test]
-    fn browser_backend_parser_rejects_unknown_values() {
-        assert!(BrowserBackendKind::parse("playwright").is_err());
-    }
-
-    #[test]
-    fn browser_tool_default_backend_is_agent_browser() {
-        let security = Arc::new(SecurityPolicy::default());
-        let tool = BrowserTool::new(security, vec!["example.com".into()], None);
-        assert_eq!(
-            tool.configured_backend().unwrap(),
-            BrowserBackendKind::AgentBrowser
-        );
-    }
-
-    #[test]
-    fn browser_tool_accepts_auto_backend_config() {
-        let security = Arc::new(SecurityPolicy::default());
-        let tool = BrowserTool::new_with_backend(
-            security,
-            vec!["example.com".into()],
-            None,
-            "auto".into(),
-            true,
-            "http://127.0.0.1:9515".into(),
-            None,
-            ComputerUseConfig::default(),
-        );
-        assert_eq!(tool.configured_backend().unwrap(), BrowserBackendKind::Auto);
-    }
-
-    #[test]
-    fn browser_tool_accepts_computer_use_backend_config() {
-        let security = Arc::new(SecurityPolicy::default());
-        let tool = BrowserTool::new_with_backend(
-            security,
-            vec!["example.com".into()],
-            None,
-            "computer_use".into(),
-            true,
-            "http://127.0.0.1:9515".into(),
-            None,
-            ComputerUseConfig::default(),
-        );
-        assert_eq!(
-            tool.configured_backend().unwrap(),
-            BrowserBackendKind::ComputerUse
-        );
-    }
-
-    #[test]
-    fn computer_use_endpoint_rejects_public_http_by_default() {
-        let security = Arc::new(SecurityPolicy::default());
-        let tool = BrowserTool::new_with_backend(
-            security,
-            vec!["example.com".into()],
-            None,
-            "computer_use".into(),
-            true,
-            "http://127.0.0.1:9515".into(),
-            None,
-            ComputerUseConfig {
-                endpoint: "http://computer-use.example.com/v1/actions".into(),
-                ..ComputerUseConfig::default()
-            },
-        );
-
-        assert!(tool.computer_use_endpoint_url().is_err());
-    }
-
-    #[test]
-    fn computer_use_endpoint_requires_https_for_public_remote() {
-        let security = Arc::new(SecurityPolicy::default());
-        let tool = BrowserTool::new_with_backend(
-            security,
-            vec!["example.com".into()],
-            None,
-            "computer_use".into(),
-            true,
-            "http://127.0.0.1:9515".into(),
-            None,
-            ComputerUseConfig {
-                endpoint: "https://computer-use.example.com/v1/actions".into(),
-                allow_remote_endpoint: true,
-                ..ComputerUseConfig::default()
-            },
-        );
-
-        assert!(tool.computer_use_endpoint_url().is_ok());
-    }
-
-    #[test]
-    fn computer_use_coordinate_validation_applies_limits() {
-        let security = Arc::new(SecurityPolicy::default());
-        let tool = BrowserTool::new_with_backend(
-            security,
-            vec!["example.com".into()],
-            None,
-            "computer_use".into(),
-            true,
-            "http://127.0.0.1:9515".into(),
-            None,
-            ComputerUseConfig {
-                max_coordinate_x: Some(100),
-                max_coordinate_y: Some(100),
-                ..ComputerUseConfig::default()
-            },
-        );
-
-        assert!(tool
-            .validate_coordinate("x", 50, tool.computer_use.max_coordinate_x)
-            .is_ok());
-        assert!(tool
-            .validate_coordinate("x", 101, tool.computer_use.max_coordinate_x)
-            .is_err());
-        assert!(tool
-            .validate_coordinate("y", -1, tool.computer_use.max_coordinate_y)
-            .is_err());
-    }
-
-    #[test]
-    fn browser_tool_name() {
-        let security = Arc::new(SecurityPolicy::default());
-        let tool = BrowserTool::new(security, vec!["example.com".into()], None);
-        assert_eq!(tool.name(), "browser");
-    }
-
-    #[test]
-    fn browser_tool_validates_url() {
-        let security = Arc::new(SecurityPolicy::default());
-        let tool = BrowserTool::new(security, vec!["example.com".into()], None);
-
-        // Valid
-        assert!(tool.validate_url("https://example.com").is_ok());
-        assert!(tool.validate_url("https://sub.example.com/path").is_ok());
-
-        // Invalid - not in allowlist
-        assert!(tool.validate_url("https://other.com").is_err());
-
-        // Invalid - private host
-        assert!(tool.validate_url("https://localhost").is_err());
-        assert!(tool.validate_url("https://127.0.0.1").is_err());
-
-        // Invalid - not https
-        assert!(tool.validate_url("ftp://example.com").is_err());
-
-        // file:// URLs blocked (local file exfiltration risk)
-        assert!(tool.validate_url("file:///tmp/test.html").is_err());
-    }
-
-    #[test]
-    fn browser_tool_empty_allowlist_blocks() {
-        let security = Arc::new(SecurityPolicy::default());
-        let tool = BrowserTool::new(security, vec![], None);
-        assert!(tool.validate_url("https://example.com").is_err());
-    }
 }

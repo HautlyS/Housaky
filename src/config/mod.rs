@@ -7,11 +7,11 @@ pub use schema::{
     BrowserConfig, ChannelsConfig, CloudflareRuntimeConfig, ComposioConfig, Config, CostConfig,
     DelegateAgentConfig, DiscordConfig, DockerRuntimeConfig, FallbackConfig, FallbackProvider,
     GatewayConfig, HardwareConfig, HardwareTransport, HeartbeatConfig, HttpRequestConfig,
-    IMessageConfig, IdentityConfig, LarkConfig, MatrixConfig, MemoryConfig, ModelRouteConfig,
+    ClawdCursorConfig, IMessageConfig, IdentityConfig, LarkConfig, MatrixConfig, MemoryConfig, ModelRouteConfig,
     ObservabilityConfig, PeripheralBoardConfig, PeripheralsConfig, ReliabilityConfig,
     ResourceLimitsConfig, RuntimeConfig, SandboxBackend, SandboxConfig, SchedulerConfig,
     SecretsConfig, SecurityConfig, SlackConfig, TelegramConfig, ToolConfig, TunnelConfig,
-    WasmRuntimeConfig, WebhookConfig,
+    WasmRuntimeConfig, WebhookConfig, SkillsConfig,
 };
 
 #[allow(unused_imports)]

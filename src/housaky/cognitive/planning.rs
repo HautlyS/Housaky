@@ -268,6 +268,7 @@ impl PlanningEngine {
         score
     }
 
+    #[allow(clippy::self_only_used_in_recursion)]
     fn backpropagate(&self, node: &mut MCTSNode, reward: f64) {
         node.visits += 1;
         node.total_reward += reward;

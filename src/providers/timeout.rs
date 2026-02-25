@@ -1,3 +1,5 @@
+#![allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;

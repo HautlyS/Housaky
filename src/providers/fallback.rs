@@ -1,3 +1,5 @@
+#![allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+
 use anyhow::Result;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;

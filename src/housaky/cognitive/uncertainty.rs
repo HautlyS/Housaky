@@ -420,7 +420,8 @@ Return JSON with:
 
         let mut bins: Vec<Vec<&ConfidencePrediction>> = vec![vec![]; 10];
         for pred in &predictions_with_outcomes {
-            let bin_idx = ((pred.predicted_confidence * 10.0) as usize).min(9);
+            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+            let bin_idx = ((pred.predicted_confidence * 10.0).clamp(0.0, 9.0) as usize).min(9);
             bins[bin_idx].push(pred);
         }
 
@@ -615,7 +616,8 @@ Return JSON with:
 
         let mut bins: Vec<(f64, f64, usize)> = vec![(0.0, 0.0, 0); 10];
         for pred in history.iter().filter(|p| p.actual_outcome.is_some()) {
-            let bin_idx = ((pred.predicted_confidence * 10.0) as usize).min(9);
+            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+            let bin_idx = ((pred.predicted_confidence * 10.0).clamp(0.0, 9.0) as usize).min(9);
             bins[bin_idx].0 += pred.predicted_confidence;
             bins[bin_idx].1 += if pred.actual_outcome.unwrap() {
                 1.0
@@ -662,28 +664,24 @@ Return JSON with:
     }
 
     pub fn format_uncertainty_report(&self, assessment: &UncertaintyAssessment) -> String {
+        use std::fmt::Write as _;
         let mut report = String::new();
 
         report.push_str("Uncertainty Assessment\n");
         report.push_str("======================\n\n");
-        report.push_str(&format!(
-            "Overall Uncertainty: {:.0}%\n",
-            assessment.overall_uncertainty * 100.0
-        ));
-        report.push_str(&format!(
-            "Calibration Score: {:.0}%\n\n",
-            assessment.calibration_score * 100.0
-        ));
+        writeln!(report, "Overall Uncertainty: {:.0}%", assessment.overall_uncertainty * 100.0).ok();
+        writeln!(report, "Calibration Score: {:.0}%\n", assessment.calibration_score * 100.0).ok();
 
         if !assessment.sources.is_empty() {
             report.push_str("Uncertainty Sources:\n");
             for source in &assessment.sources {
-                report.push_str(&format!(
-                    "  - {:?}: {} (impact: {:.0}%)\n",
+                writeln!(
+                    report,
+                    "  - {:?}: {} (impact: {:.0}%)",
                     source.category,
                     source.description,
                     source.impact * 100.0
-                ));
+                ).ok();
             }
             report.push('\n');
         }
@@ -691,11 +689,12 @@ Return JSON with:
         if !assessment.knowledge_gaps.is_empty() {
             report.push_str("Knowledge Gaps:\n");
             for gap in &assessment.knowledge_gaps {
-                report.push_str(&format!(
-                    "  - {} (severity: {:.0}%)\n",
+                writeln!(
+                    report,
+                    "  - {} (severity: {:.0}%)",
                     gap.topic,
                     gap.severity * 100.0
-                ));
+                ).ok();
             }
             report.push('\n');
         }
@@ -703,7 +702,7 @@ Return JSON with:
         if assessment.should_ask_clarification {
             report.push_str("Clarification Recommended:\n");
             for q in &assessment.clarification_questions {
-                report.push_str(&format!("  ? {}\n", q));
+                writeln!(report, "  ? {q}").ok();
             }
         }
 

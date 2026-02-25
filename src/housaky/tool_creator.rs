@@ -1,3 +1,5 @@
+#![allow(clippy::match_same_arms, clippy::match_wildcard_for_single_variants, clippy::format_push_string, clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+
 use anyhow::{bail, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -1033,7 +1035,7 @@ if __name__ == "__main__":
             expected_output: serde_json::json!({"status": "success"}),
             actual_output,
             passed,
-            execution_time_ms: start.elapsed().as_millis() as u64,
+            execution_time_ms: crate::util::time::duration_ms_u64(start.elapsed()),
             error,
             sandbox_id: sandbox_id.map(|s| s.to_string()),
         })

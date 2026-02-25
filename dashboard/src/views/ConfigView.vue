@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed, reactive } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import Card from '@/components/ui/card.vue'
 import CardContent from '@/components/ui/card-content.vue'
@@ -9,6 +9,7 @@ import CardTitle from '@/components/ui/card-title.vue'
 import Button from '@/components/ui/button.vue'
 import Input from '@/components/ui/input.vue'
 import Badge from '@/components/ui/badge.vue'
+import Textarea from '@/components/ui/textarea.vue'
 import { 
   Settings, 
   Save,
@@ -16,12 +17,20 @@ import {
   Eye,
   EyeOff,
   Copy,
-  Download,
-  Upload,
   RefreshCw,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  Loader2,
+  FileText,
+  Folder,
+  Shield,
+  Cpu,
+  Database,
+  Radio,
+  Globe
 } from 'lucide-vue-next'
+
+const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 
 interface HousakyConfig {
   api_key?: string
@@ -111,17 +120,21 @@ async function loadConfig() {
   loading.value = true
   error.value = ''
   
+  if (!isTauri) {
+    error.value = 'Running in server mode - config not available'
+    loading.value = false
+    return
+  }
+  
   try {
-    const result = await invoke<{ version: string; config: string }>('get_status')
-    configPath.value = result.config
+    const status = await invoke<{ version: string; config: string }>('get_status')
+    configPath.value = status.config
     
-    // Get full config
     const fullConfig = await invoke<HousakyConfig>('get_config')
     if (fullConfig) {
       config.value = { ...config.value, ...fullConfig }
     }
     
-    // Store original for comparison
     originalConfig.value = JSON.stringify(config.value)
   } catch (e) {
     error.value = String(e)
@@ -136,12 +149,17 @@ async function saveConfig() {
   error.value = ''
   success.value = ''
   
+  if (!isTauri) {
+    error.value = 'Running in server mode - cannot save config'
+    saving.value = false
+    return
+  }
+  
   try {
     await invoke<string>('save_config', { config: config.value })
     success.value = 'Configuration saved successfully!'
     originalConfig.value = JSON.stringify(config.value)
     
-    // Clear success message after 3 seconds
     setTimeout(() => {
       success.value = ''
     }, 3000)
@@ -172,103 +190,22 @@ function hasChanges(): boolean {
   return JSON.stringify(config.value) !== originalConfig.value
 }
 
-const sections = computed(() => [
-  {
-    id: 'general',
-    name: 'General',
-    description: 'Provider and model settings',
-    fields: [
-      { key: 'api_key', path: 'api_key', label: 'API Key', type: 'password' as const, description: 'Your API key for the default provider' },
-      { key: 'default_provider', path: 'default_provider', label: 'Default Provider', type: 'select' as const, options: ['openrouter', 'anthropic', 'openai', 'ollama', 'gemini', 'groq', 'mistral', 'deepseek'] },
-      { key: 'default_model', path: 'default_model', label: 'Default Model', type: 'text' as const, description: 'Model ID (optional, uses provider default if empty)' },
-      { key: 'default_temperature', path: 'default_temperature', label: 'Temperature', type: 'number' as const, description: 'Sampling temperature (0-2)', min: 0, max: 2, step: 0.1 },
-    ]
-  },
-  {
-    id: 'memory',
-    name: 'Memory',
-    description: 'Memory backend configuration',
-    fields: [
-      { key: 'backend', path: 'memory.backend', label: 'Backend', type: 'select' as const, options: ['sqlite', 'lucid', 'markdown', 'none'] },
-      { key: 'auto_save', path: 'memory.auto_save', label: 'Auto Save', type: 'boolean' as const, description: 'Automatically save memory' },
-      { key: 'embedding_provider', path: 'memory.embedding_provider', label: 'Embedding Provider', type: 'select' as const, options: ['openai', 'noop'] },
-      { key: 'vector_weight', path: 'memory.vector_weight', label: 'Vector Weight', type: 'number' as const, description: 'Weight for vector search (0-1)', min: 0, max: 1, step: 0.1 },
-      { key: 'keyword_weight', path: 'memory.keyword_weight', label: 'Keyword Weight', type: 'number' as const, description: 'Weight for keyword search (0-1)', min: 0, max: 1, step: 0.1 },
-    ]
-  },
-  {
-    id: 'autonomy',
-    name: 'Autonomy',
-    description: 'Agent autonomy and security settings',
-    fields: [
-      { key: 'level', path: 'autonomy.level', label: 'Autonomy Level', type: 'select' as const, options: ['readonly', 'supervised', 'full'] },
-      { key: 'workspace_only', path: 'autonomy.workspace_only', label: 'Workspace Only', type: 'boolean' as const, description: 'Restrict file access to workspace' },
-      { key: 'max_actions_per_hour', path: 'autonomy.max_actions_per_hour', label: 'Max Actions/Hour', type: 'number' as const, min: 1, max: 10000 },
-      { key: 'max_cost_per_day_cents', path: 'autonomy.max_cost_per_day_cents', label: 'Max Cost/Day (cents)', type: 'number' as const, min: 0, max: 1000000 },
-    ]
-  },
-  {
-    id: 'runtime',
-    name: 'Runtime',
-    description: 'Execution runtime settings',
-    fields: [
-      { key: 'kind', path: 'runtime.kind', label: 'Runtime', type: 'select' as const, options: ['native', 'docker'] },
-    ]
-  },
-  {
-    id: 'heartbeat',
-    name: 'Heartbeat',
-    description: 'Periodic task configuration',
-    fields: [
-      { key: 'enabled', path: 'heartbeat.enabled', label: 'Enabled', type: 'boolean' as const },
-      { key: 'interval_minutes', path: 'heartbeat.interval_minutes', label: 'Interval (minutes)', type: 'number' as const, min: 1, max: 1440 },
-    ]
-  },
-  {
-    id: 'gateway',
-    name: 'Gateway',
-    description: 'Webhook server settings',
-    fields: [
-      { key: 'require_pairing', path: 'gateway.require_pairing', label: 'Require Pairing', type: 'boolean' as const, description: 'Require pairing code on first connect' },
-      { key: 'allow_public_bind', path: 'gateway.allow_public_bind', label: 'Allow Public Bind', type: 'boolean' as const, description: 'Allow binding to 0.0.0.0' },
-    ]
-  },
-  {
-    id: 'tunnel',
-    name: 'Tunnel',
-    description: 'Tunnel provider for public access',
-    fields: [
-      { key: 'provider', path: 'tunnel.provider', label: 'Provider', type: 'select' as const, options: ['none', 'cloudflare', 'tailscale', 'ngrok'] },
-    ]
-  },
-  {
-    id: 'secrets',
-    name: 'Secrets',
-    description: 'Secret management',
-    fields: [
-      { key: 'encrypt', path: 'secrets.encrypt', label: 'Encrypt Secrets', type: 'boolean' as const, description: 'Encrypt API keys with local key' },
-    ]
-  },
-])
+const sections = [
+  { id: 'general', name: 'General', icon: Settings, description: 'Provider and model settings' },
+  { id: 'memory', name: 'Memory', icon: Database, description: 'Memory backend configuration' },
+  { id: 'autonomy', name: 'Autonomy', icon: Shield, description: 'Agent autonomy and security' },
+  { id: 'runtime', name: 'Runtime', icon: Cpu, description: 'Execution runtime settings' },
+  { id: 'gateway', name: 'Gateway', icon: Globe, description: 'Webhook server settings' },
+  { id: 'tunnel', name: 'Tunnel', icon: Radio, description: 'Tunnel provider for public access' },
+]
 
 const activeSection = ref('general')
 
-const currentSection = computed(() => 
-  sections.value.find(s => s.id === activeSection.value) || sections.value[0]
-)
-
-function getValue(path: string): any {
-  return path.split('.').reduce((obj: any, key) => obj?.[key], config.value)
-}
-
-function setValue(path: string, value: any) {
-  const keys = path.split('.')
-  let obj: any = config.value
-  for (let i = 0; i < keys.length - 1; i++) {
-    obj = obj[keys[i]]
-  }
-  obj[keys[keys.length - 1]] = value
-}
+const providerOptions = ['openrouter', 'anthropic', 'openai', 'ollama', 'gemini', 'groq', 'mistral', 'deepseek']
+const memoryBackends = ['sqlite', 'lucid', 'markdown', 'none']
+const autonomyLevels = ['readonly', 'supervised', 'full']
+const runtimeKinds = ['native', 'docker']
+const tunnelProviders = ['none', 'cloudflare', 'tailscale', 'ngrok']
 
 onMounted(() => {
   loadConfig()
@@ -277,25 +214,27 @@ onMounted(() => {
 
 <template>
   <div class="p-6 space-y-6">
-    <!-- Header -->
     <div class="flex items-center justify-between">
       <div>
-        <h1 class="text-3xl font-bold">Configuration</h1>
-        <p class="text-muted-foreground">Manage Housaky settings</p>
+        <h1 class="text-2xl font-bold">Configuration</h1>
+        <p class="text-sm text-muted-foreground">Manage Housaky settings</p>
       </div>
-      <div class="flex gap-2">
-        <Button variant="outline" @click="loadConfig" :disabled="loading">
-          <RefreshCw class="w-4 h-4 mr-2" :class="{ 'animate-spin': loading }" />
+      <div class="flex items-center gap-2">
+        <Button variant="outline" size="sm" @click="loadConfig" :disabled="loading">
+          <RefreshCw :class="['w-4 h-4 mr-2', loading && 'animate-spin']" />
           Reload
         </Button>
-        <Button variant="outline" @click="copyConfig">
+        <Button variant="outline" size="sm" @click="copyConfig">
           <Copy class="w-4 h-4 mr-2" />
           Copy
+        </Button>
+        <Button size="sm" @click="saveConfig" :disabled="saving || !hasChanges()">
+          <Save class="w-4 h-4 mr-2" />
+          {{ saving ? 'Saving...' : 'Save' }}
         </Button>
       </div>
     </div>
 
-    <!-- Messages -->
     <div v-if="error" class="p-4 rounded-lg bg-destructive/10 text-destructive flex items-center gap-2">
       <AlertCircle class="w-5 h-5" />
       {{ error }}
@@ -306,14 +245,13 @@ onMounted(() => {
       {{ success }}
     </div>
 
-    <!-- Config Path -->
     <Card>
       <CardContent class="pt-6">
         <div class="flex items-center justify-between">
-          <div class="flex items-center gap-2">
-            <Settings class="w-5 h-5 text-muted-foreground" />
+          <div class="flex items-center gap-3">
+            <FileText class="w-5 h-5 text-muted-foreground" />
             <span class="text-sm text-muted-foreground">Config file:</span>
-            <code class="text-sm">{{ configPath || 'Loading...' }}</code>
+            <code class="text-sm bg-muted px-2 py-1 rounded">{{ configPath || 'Loading...' }}</code>
           </div>
           <Badge :variant="hasChanges() ? 'warning' : 'success'">
             {{ hasChanges() ? 'Modified' : 'Saved' }}
@@ -322,123 +260,316 @@ onMounted(() => {
       </CardContent>
     </Card>
 
-    <!-- Loading -->
     <div v-if="loading" class="flex items-center justify-center py-12">
-      <RefreshCw class="w-8 h-8 animate-spin text-muted-foreground" />
+      <Loader2 class="w-8 h-8 animate-spin text-muted-foreground" />
     </div>
 
-    <template v-else>
-      <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
-        <!-- Sidebar -->
-        <Card class="lg:col-span-1 h-fit">
-          <CardHeader>
-            <CardTitle>Sections</CardTitle>
-          </CardHeader>
-          <CardContent class="p-2">
-            <div class="space-y-1">
-              <button
-                v-for="section in sections"
-                :key="section.id"
-                @click="activeSection = section.id"
-                class="w-full text-left px-3 py-2 rounded-lg text-sm transition-colors"
-                :class="activeSection === section.id ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'"
-              >
-                {{ section.name }}
-              </button>
-            </div>
-          </CardContent>
-        </Card>
+    <div v-else class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+      <Card class="lg:col-span-1 h-fit">
+        <CardHeader class="py-4">
+          <CardTitle class="text-sm">Sections</CardTitle>
+        </CardHeader>
+        <CardContent class="p-2">
+          <div class="space-y-1">
+            <button
+              v-for="section in sections"
+              :key="section.id"
+              @click="activeSection = section.id"
+              :class="[
+                'w-full text-left px-3 py-2.5 rounded-lg text-sm transition-colors flex items-center gap-2',
+                activeSection === section.id 
+                  ? 'bg-primary text-primary-foreground' 
+                  : 'hover:bg-muted'
+              ]"
+            >
+              <component :is="section.icon" class="w-4 h-4" />
+              {{ section.name }}
+            </button>
+          </div>
+        </CardContent>
+      </Card>
 
-        <!-- Content -->
-        <Card class="lg:col-span-3">
+      <Card class="lg:col-span-3">
+        <template v-if="activeSection === 'general'">
           <CardHeader>
-            <CardTitle>{{ currentSection.name }}</CardTitle>
-            <CardDescription>{{ currentSection.description }}</CardDescription>
+            <CardTitle class="flex items-center gap-2">
+              <Settings class="w-5 h-5" />
+              General Settings
+            </CardTitle>
+            <CardDescription>Provider and model configuration</CardDescription>
           </CardHeader>
           <CardContent class="space-y-6">
-            <div 
-              v-for="field in currentSection.fields" 
-              :key="field.path"
-              class="space-y-2"
-            >
-              <label class="text-sm font-medium">{{ field.label }}</label>
-              
-              <!-- Text Input -->
-              <Input
-                v-if="field.type === 'text'"
-                :model-value="getValue(field.path)"
-                @update:model-value="setValue(field.path, $event)"
-                :placeholder="field.label"
-              />
-              
-              <!-- Password Input -->
-              <div v-else-if="field.type === 'password'" class="relative">
+            <div class="space-y-2">
+              <label class="text-sm font-medium">API Key</label>
+              <div class="relative">
                 <Input
-                  :model-value="getValue(field.path) || ''"
-                  @update:model-value="setValue(field.path, $event)"
-                  :type="showSecret[field.path] ? 'text' : 'password'"
-                  :placeholder="field.label"
+                  v-model="config.api_key"
+                  :type="showSecret['api_key'] ? 'text' : 'password'"
+                  placeholder="Enter your API key"
                 />
                 <button
-                  @click="toggleSecret(field.path)"
+                  @click="toggleSecret('api_key')"
                   class="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
                 >
-                  <Eye v-if="!showSecret[field.path]" class="w-4 h-4" />
+                  <Eye v-if="!showSecret['api_key']" class="w-4 h-4" />
                   <EyeOff v-else class="w-4 h-4" />
                 </button>
               </div>
-              
-              <!-- Number Input -->
-              <Input
-                v-else-if="field.type === 'number'"
-                :model-value="getValue(field.path)"
-                @update:model-value="setValue(field.path, Number($event))"
-                type="number"
-                :step="field.step || 1"
-                :min="field.min"
-                :max="field.max"
+            </div>
+
+            <div class="grid md:grid-cols-2 gap-4">
+              <div class="space-y-2">
+                <label class="text-sm font-medium">Default Provider</label>
+                <select v-model="config.default_provider" class="w-full h-10 rounded-md border bg-background px-3">
+                  <option v-for="p in providerOptions" :key="p" :value="p">{{ p }}</option>
+                </select>
+              </div>
+              <div class="space-y-2">
+                <label class="text-sm font-medium">Default Model</label>
+                <Input v-model="config.default_model" placeholder="Optional, uses provider default" />
+              </div>
+            </div>
+
+            <div class="space-y-2">
+              <label class="text-sm font-medium">Temperature: {{ config.default_temperature }}</label>
+              <input 
+                type="range" 
+                v-model.number="config.default_temperature" 
+                min="0" 
+                max="2" 
+                step="0.1"
+                class="w-full"
               />
-              
-              <!-- Select -->
-              <select
-                v-else-if="field.type === 'select'"
-                :model-value="getValue(field.path)"
-                @update:model-value="setValue(field.path, $event)"
-                class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-              >
-                <option v-for="opt in field.options" :key="opt" :value="opt">{{ opt }}</option>
-              </select>
-              
-              <!-- Boolean -->
-              <label v-else-if="field.type === 'boolean'" class="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  :checked="getValue(field.path)"
-                  @change="setValue(field.path, ($event.target as HTMLInputElement).checked)"
-                  class="w-4 h-4 rounded border-gray-300"
+              <p class="text-xs text-muted-foreground">Controls randomness (0 = deterministic, 2 = very creative)</p>
+            </div>
+          </CardContent>
+        </template>
+
+        <template v-else-if="activeSection === 'memory'">
+          <CardHeader>
+            <CardTitle class="flex items-center gap-2">
+              <Database class="w-5 h-5" />
+              Memory Settings
+            </CardTitle>
+            <CardDescription>Memory backend configuration</CardDescription>
+          </CardHeader>
+          <CardContent class="space-y-6">
+            <div class="grid md:grid-cols-2 gap-4">
+              <div class="space-y-2">
+                <label class="text-sm font-medium">Backend</label>
+                <select v-model="config.memory.backend" class="w-full h-10 rounded-md border bg-background px-3">
+                  <option v-for="b in memoryBackends" :key="b" :value="b">{{ b }}</option>
+                </select>
+              </div>
+              <div class="space-y-2">
+                <label class="text-sm font-medium">Embedding Provider</label>
+                <select v-model="config.memory.embedding_provider" class="w-full h-10 rounded-md border bg-background px-3">
+                  <option value="openai">OpenAI</option>
+                  <option value="noop">None</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="flex items-center gap-3">
+              <input 
+                type="checkbox" 
+                v-model="config.memory.auto_save"
+                class="w-4 h-4 rounded"
+              />
+              <label class="text-sm">Auto-save memory</label>
+            </div>
+
+            <div class="grid md:grid-cols-2 gap-4">
+              <div class="space-y-2">
+                <label class="text-sm font-medium">Vector Weight: {{ config.memory.vector_weight }}</label>
+                <input 
+                  type="range" 
+                  v-model.number="config.memory.vector_weight" 
+                  min="0" 
+                  max="1" 
+                  step="0.1"
+                  class="w-full"
                 />
-                <span class="text-sm text-muted-foreground">{{ field.description }}</span>
-              </label>
-              
-              <p v-if="field.description && field.type !== 'boolean'" class="text-xs text-muted-foreground">
-                {{ field.description }}
+              </div>
+              <div class="space-y-2">
+                <label class="text-sm font-medium">Keyword Weight: {{ config.memory.keyword_weight }}</label>
+                <input 
+                  type="range" 
+                  v-model.number="config.memory.keyword_weight" 
+                  min="0" 
+                  max="1" 
+                  step="0.1"
+                  class="w-full"
+                />
+              </div>
+            </div>
+          </CardContent>
+        </template>
+
+        <template v-else-if="activeSection === 'autonomy'">
+          <CardHeader>
+            <CardTitle class="flex items-center gap-2">
+              <Shield class="w-5 h-5" />
+              Autonomy & Security
+            </CardTitle>
+            <CardDescription>Agent autonomy and security settings</CardDescription>
+          </CardHeader>
+          <CardContent class="space-y-6">
+            <div class="space-y-2">
+              <label class="text-sm font-medium">Autonomy Level</label>
+              <select v-model="config.autonomy.level" class="w-full h-10 rounded-md border bg-background px-3">
+                <option v-for="l in autonomyLevels" :key="l" :value="l">{{ l }}</option>
+              </select>
+              <p class="text-xs text-muted-foreground">
+                {{ config.autonomy.level === 'readonly' ? 'Agent can only read files' : 
+                   config.autonomy.level === 'supervised' ? 'Agent asks permission for actions' : 
+                   'Agent can act autonomously' }}
               </p>
             </div>
 
-            <!-- Actions -->
-            <div class="flex justify-between pt-4 border-t">
-              <Button variant="outline" @click="resetToOriginal" :disabled="!hasChanges()">
-                <RotateCcw class="w-4 h-4 mr-2" />
-                Reset Changes
-              </Button>
-              <Button @click="saveConfig" :disabled="saving || !hasChanges()">
-                <Save class="w-4 h-4 mr-2" />
-                {{ saving ? 'Saving...' : 'Save Changes' }}
-              </Button>
+            <div class="flex items-center gap-3">
+              <input 
+                type="checkbox" 
+                v-model="config.autonomy.workspace_only"
+                class="w-4 h-4 rounded"
+              />
+              <div>
+                <label class="text-sm font-medium">Workspace Only</label>
+                <p class="text-xs text-muted-foreground">Restrict file access to workspace directory</p>
+              </div>
+            </div>
+
+            <div class="grid md:grid-cols-2 gap-4">
+              <div class="space-y-2">
+                <label class="text-sm font-medium">Max Actions/Hour</label>
+                <Input type="number" v-model.number="config.autonomy.max_actions_per_hour" />
+              </div>
+              <div class="space-y-2">
+                <label class="text-sm font-medium">Max Cost/Day (cents)</label>
+                <Input type="number" v-model.number="config.autonomy.max_cost_per_day_cents" />
+              </div>
             </div>
           </CardContent>
-        </Card>
-      </div>
-    </template>
+        </template>
+
+        <template v-else-if="activeSection === 'runtime'">
+          <CardHeader>
+            <CardTitle class="flex items-center gap-2">
+              <Cpu class="w-5 h-5" />
+              Runtime Settings
+            </CardTitle>
+            <CardDescription>Execution runtime configuration</CardDescription>
+          </CardHeader>
+          <CardContent class="space-y-6">
+            <div class="space-y-2">
+              <label class="text-sm font-medium">Runtime</label>
+              <select v-model="config.runtime.kind" class="w-full h-10 rounded-md border bg-background px-3">
+                <option v-for="r in runtimeKinds" :key="r" :value="r">{{ r }}</option>
+              </select>
+              <p class="text-xs text-muted-foreground">
+                {{ config.runtime.kind === 'native' ? 'Run directly on host system' : 'Run in Docker container' }}
+              </p>
+            </div>
+
+            <div class="space-y-2">
+              <label class="text-sm font-medium">Heartbeat</label>
+              <div class="flex items-center gap-4">
+                <label class="flex items-center gap-2">
+                  <input type="checkbox" v-model="config.heartbeat.enabled" class="w-4 h-4 rounded" />
+                  <span class="text-sm">Enabled</span>
+                </label>
+                <Input 
+                  v-if="config.heartbeat.enabled"
+                  type="number" 
+                  v-model.number="config.heartbeat.interval_minutes"
+                  placeholder="Minutes"
+                  class="w-32"
+                />
+                <span v-if="config.heartbeat.enabled" class="text-sm text-muted-foreground">minutes</span>
+              </div>
+            </div>
+          </CardContent>
+        </template>
+
+        <template v-else-if="activeSection === 'gateway'">
+          <CardHeader>
+            <CardTitle class="flex items-center gap-2">
+              <Globe class="w-5 h-5" />
+              Gateway Settings
+            </CardTitle>
+            <CardDescription>Webhook server configuration</CardDescription>
+          </CardHeader>
+          <CardContent class="space-y-6">
+            <div class="flex items-center gap-3">
+              <input 
+                type="checkbox" 
+                v-model="config.gateway.require_pairing"
+                class="w-4 h-4 rounded"
+              />
+              <div>
+                <label class="text-sm font-medium">Require Pairing</label>
+                <p class="text-xs text-muted-foreground">Require pairing code on first connection</p>
+              </div>
+            </div>
+
+            <div class="flex items-center gap-3">
+              <input 
+                type="checkbox" 
+                v-model="config.gateway.allow_public_bind"
+                class="w-4 h-4 rounded"
+              />
+              <div>
+                <label class="text-sm font-medium">Allow Public Bind</label>
+                <p class="text-xs text-muted-foreground">Allow binding to 0.0.0.0 (security risk)</p>
+              </div>
+            </div>
+
+            <div class="flex items-center gap-3">
+              <input 
+                type="checkbox" 
+                v-model="config.secrets.encrypt"
+                class="w-4 h-4 rounded"
+              />
+              <div>
+                <label class="text-sm font-medium">Encrypt Secrets</label>
+                <p class="text-xs text-muted-foreground">Encrypt API keys with local key</p>
+              </div>
+            </div>
+          </CardContent>
+        </template>
+
+        <template v-else-if="activeSection === 'tunnel'">
+          <CardHeader>
+            <CardTitle class="flex items-center gap-2">
+              <Radio class="w-5 h-5" />
+              Tunnel Settings
+            </CardTitle>
+            <CardDescription>Tunnel provider for public access</CardDescription>
+          </CardHeader>
+          <CardContent class="space-y-6">
+            <div class="space-y-2">
+              <label class="text-sm font-medium">Tunnel Provider</label>
+              <select v-model="config.tunnel.provider" class="w-full h-10 rounded-md border bg-background px-3">
+                <option v-for="t in tunnelProviders" :key="t" :value="t">{{ t }}</option>
+              </select>
+              <p class="text-xs text-muted-foreground">
+                Tunnel providers allow public access to your local Housaky instance
+              </p>
+            </div>
+          </CardContent>
+        </template>
+
+        <div class="flex justify-between p-6 border-t">
+          <Button variant="outline" @click="resetToOriginal" :disabled="!hasChanges()">
+            <RotateCcw class="w-4 h-4 mr-2" />
+            Reset Changes
+          </Button>
+          <Button @click="saveConfig" :disabled="saving || !hasChanges()">
+            <Save class="w-4 h-4 mr-2" />
+            {{ saving ? 'Saving...' : 'Save Changes' }}
+          </Button>
+        </div>
+      </Card>
+    </div>
   </div>
 </template>

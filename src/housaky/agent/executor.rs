@@ -162,7 +162,7 @@ impl ActionExecutor {
                     success: true,
                     output,
                     new_state,
-                    duration_ms: start_time.elapsed().as_millis() as u64,
+                    duration_ms: crate::util::time::duration_ms_u64(start_time.elapsed()),
                     error: None,
                 }
             }
@@ -174,7 +174,7 @@ impl ActionExecutor {
                     success: false,
                     output: String::new(),
                     new_state: current_state.clone(),
-                    duration_ms: start_time.elapsed().as_millis() as u64,
+                    duration_ms: crate::util::time::duration_ms_u64(start_time.elapsed()),
                     error: Some(e.to_string()),
                 }
             }
@@ -212,7 +212,7 @@ impl ActionExecutor {
         new_state
     }
 
-    /// Search the web using DuckDuckGo's HTML endpoint (no API key required)
+    /// Search the web using DuckDuckGo's Instant Answer JSON API (no API key required)
     async fn execute_search(&self, action: &Action) -> Result<String> {
         let query = action
             .parameters
@@ -220,7 +220,7 @@ impl ActionExecutor {
             .and_then(|v| v.as_str())
             .ok_or_else(|| anyhow::anyhow!("Missing 'query' parameter for search action"))?;
 
-        let browser = crate::housaky::web_browser::WebBrowser::new();
+        let mut browser = crate::housaky::web_browser::WebBrowser::new();
         let results = browser.search(query, 5).await?;
 
         if results.is_empty() {

@@ -48,8 +48,14 @@ pub struct Config {
     pub fallback: FallbackConfig,
 
     /// Model routing rules — route `hint:<name>` to specific provider+model combos.
+    ///
+    /// Legacy/compat: still supported. Prefer `routing.subjects` for per-subject routing.
     #[serde(default)]
     pub model_routes: Vec<ModelRouteConfig>,
+
+    /// Centralized routing config (per-subject provider/model routing + fallback chains).
+    #[serde(default)]
+    pub routing: RoutingConfig,
 
     #[serde(default)]
     pub heartbeat: HeartbeatConfig,
@@ -79,6 +85,9 @@ pub struct Config {
     pub http_request: HttpRequestConfig,
 
     #[serde(default)]
+    pub clawd_cursor: ClawdCursorConfig,
+
+    #[serde(default)]
     pub identity: IdentityConfig,
 
     #[serde(default)]
@@ -102,6 +111,18 @@ pub struct Config {
     /// Provider timeout configuration for LLM API calls.
     #[serde(default)]
     pub provider_timeout: ProviderTimeoutConfig,
+
+    /// Skill activation configuration (which marketplace skills are enabled).
+    #[serde(default)]
+    pub skills: SkillsConfig,
+}
+
+/// Skills configuration: enable/disable installed skills.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct SkillsConfig {
+    /// Map of skill name -> enabled.
+    #[serde(default)]
+    pub enabled: HashMap<String, bool>,
 }
 
 // ── Delegate Agents ──────────────────────────────────────────────
@@ -263,6 +284,7 @@ pub struct AgentConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct AGISubsystemConfig {
     /// Enable goal tracking during agent execution
     #[serde(default = "default_true")]
@@ -883,6 +905,37 @@ impl Default for SecretsConfig {
 // ── Browser (friendly-service browsing only) ───────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BrowserProfileConfig {
+    #[serde(default = "default_cdp_port")]
+    pub cdp_port: u16,
+    #[serde(default = "default_profile_color")]
+    pub color: String,
+    #[serde(default = "default_true")]
+    pub headless: bool,
+    #[serde(default)]
+    pub user_data_dir: Option<String>,
+}
+
+fn default_cdp_port() -> u16 {
+    9222
+}
+
+fn default_profile_color() -> String {
+    "#007acc".into()
+}
+
+impl Default for BrowserProfileConfig {
+    fn default() -> Self {
+        Self {
+            cdp_port: default_cdp_port(),
+            color: default_profile_color(),
+            headless: true,
+            user_data_dir: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BrowserComputerUseConfig {
     /// Sidecar endpoint for computer-use actions (OS-level mouse/keyboard/screenshot)
     #[serde(default = "default_browser_computer_use_endpoint")]
@@ -955,6 +1008,15 @@ pub struct BrowserConfig {
     /// Computer-use sidecar configuration
     #[serde(default)]
     pub computer_use: BrowserComputerUseConfig,
+    /// Named browser profiles for multi-profile management
+    #[serde(default)]
+    pub profiles: HashMap<String, BrowserProfileConfig>,
+    /// Default profile name
+    #[serde(default)]
+    pub default_profile: String,
+    /// Path for cookie persistence
+    #[serde(default)]
+    pub cookie_storage_path: Option<String>,
 }
 
 fn default_browser_backend() -> String {
@@ -976,6 +1038,9 @@ impl Default for BrowserConfig {
             native_webdriver_url: default_browser_webdriver_url(),
             native_chrome_path: None,
             computer_use: BrowserComputerUseConfig::default(),
+            profiles: HashMap::new(),
+            default_profile: "default".into(),
+            cookie_storage_path: None,
         }
     }
 }
@@ -1006,9 +1071,43 @@ fn default_http_timeout_secs() -> u64 {
     30
 }
 
+// ── Clawd Cursor (desktop automation sidecar) ─────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ClawdCursorConfig {
+    /// Enable clawd-cursor integration (adds `desktop_task` tool)
+    #[serde(default)]
+    pub enabled: bool,
+    /// Base URL for clawd-cursor REST API (default: http://127.0.0.1:3847)
+    #[serde(default = "default_clawd_cursor_base_url")]
+    pub base_url: String,
+    /// Request timeout in seconds
+    #[serde(default = "default_clawd_cursor_timeout_secs")]
+    pub timeout_secs: u64,
+}
+
+fn default_clawd_cursor_base_url() -> String {
+    "http://127.0.0.1:3847".into()
+}
+
+fn default_clawd_cursor_timeout_secs() -> u64 {
+    300
+}
+
+impl Default for ClawdCursorConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            base_url: default_clawd_cursor_base_url(),
+            timeout_secs: default_clawd_cursor_timeout_secs(),
+        }
+    }
+}
+
 // ── Memory ───────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct MemoryConfig {
     /// "sqlite" | "lucid" | "markdown" | "none" (`none` = explicit no-op memory)
     pub backend: String,
@@ -2074,6 +2173,77 @@ impl Default for SchedulerConfig {
     }
 }
 
+// ── Routing (per-subject) ───────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct RoutingConfig {
+    /// Per-subject routing table. The subject name is used as `hint:<subject>`.
+    ///
+    /// Example:
+    /// ```toml
+    /// [routing.subjects.code]
+    /// provider_chain = ["openrouter", "anthropic"]
+    /// model = "anthropic/claude-sonnet-4-20250514"
+    ///
+    /// [routing.subjects.review]
+    /// provider_chain = ["anthropic", "openrouter"]
+    /// model = "claude-opus-4-20250514"
+    /// ```
+    #[serde(default)]
+    pub subjects: HashMap<String, SubjectRouteConfig>,
+
+    /// Optional default provider chain used when a subject is missing.
+    #[serde(default)]
+    pub default_provider_chain: Vec<String>,
+
+    /// Optional default model used when a subject is missing.
+    #[serde(default)]
+    pub default_model: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SubjectRouteConfig {
+    /// Provider fallback chain in order (primary -> secondary -> ...)
+    #[serde(default)]
+    pub provider_chain: Vec<String>,
+
+    /// Model name to use on each provider in the chain.
+    ///
+    /// NOTE: Model naming depends on provider. For OpenRouter you typically use
+    /// "provider/model"; for Anthropic/OpenAI it is usually the raw model name.
+    pub model: String,
+
+    /// Optional temperature override for this subject.
+    #[serde(default)]
+    pub temperature: Option<f64>,
+
+    /// Optional per-provider parallel request limits for this subject.
+    #[serde(default)]
+    pub parallel_limits: HashMap<String, ParallelLimitsConfig>,
+}
+
+impl Default for SubjectRouteConfig {
+    fn default() -> Self {
+        Self {
+            provider_chain: Vec::new(),
+            model: String::new(),
+            temperature: None,
+            parallel_limits: HashMap::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ParallelLimitsConfig {
+    /// Maximum in-flight requests allowed to this provider for this subject.
+    #[serde(default = "default_parallel_limit")]
+    pub max_in_flight: usize,
+}
+
+fn default_parallel_limit() -> usize {
+    4
+}
+
 // ── Model routing ────────────────────────────────────────────────
 
 /// Route a task hint to a specific provider + model.
@@ -2221,6 +2391,10 @@ pub struct ChannelsConfig {
     /// Bootstrap max chars for channel context
     #[serde(default = "default_channel_bootstrap_max_chars")]
     pub bootstrap_max_chars: usize,
+    /// Send progress messages like "⏳ Initializing..." to channels while processing.
+    /// Default is false to avoid spamming and keep channel outputs deterministic.
+    #[serde(default)]
+    pub show_progress_messages: bool,
 }
 
 fn default_channel_message_timeout_secs() -> u64 {
@@ -2268,6 +2442,7 @@ impl Default for ChannelsConfig {
             max_in_flight_messages: default_channel_max_in_flight(),
             history_turns: default_channel_history_turns(),
             bootstrap_max_chars: default_channel_bootstrap_max_chars(),
+            show_progress_messages: false,
         }
     }
 }
@@ -2577,6 +2752,7 @@ impl Default for Config {
             tools: ToolConfig::default(),
             fallback: FallbackConfig::default(),
             model_routes: Vec::new(),
+            routing: RoutingConfig::default(),
             heartbeat: HeartbeatConfig::default(),
             channels_config: ChannelsConfig::default(),
             memory: MemoryConfig::default(),
@@ -2586,6 +2762,7 @@ impl Default for Config {
             secrets: SecretsConfig::default(),
             browser: BrowserConfig::default(),
             http_request: HttpRequestConfig::default(),
+            clawd_cursor: ClawdCursorConfig::default(),
             identity: IdentityConfig::default(),
             cost: CostConfig::default(),
             peripherals: PeripheralsConfig::default(),
@@ -2593,6 +2770,7 @@ impl Default for Config {
             hardware: HardwareConfig::default(),
             agi_enabled: true,
             provider_timeout: ProviderTimeoutConfig::default(),
+            skills: SkillsConfig::default(),
         }
     }
 }
@@ -3042,6 +3220,7 @@ mod tests {
             reliability: ReliabilityConfig::default(),
             scheduler: SchedulerConfig::default(),
             model_routes: Vec::new(),
+            routing: RoutingConfig::default(),
             heartbeat: HeartbeatConfig {
                 enabled: true,
                 interval_minutes: 15,
@@ -3068,6 +3247,7 @@ mod tests {
                 max_in_flight_messages: 64,
                 history_turns: 40,
                 bootstrap_max_chars: 20_000,
+                show_progress_messages: false,
             },
             memory: MemoryConfig::default(),
             tunnel: TunnelConfig::default(),
@@ -3076,6 +3256,7 @@ mod tests {
             secrets: SecretsConfig::default(),
             browser: BrowserConfig::default(),
             http_request: HttpRequestConfig::default(),
+            clawd_cursor: ClawdCursorConfig::default(),
             agent: AgentConfig::default(),
             tools: ToolConfig::default(),
             fallback: FallbackConfig::default(),
@@ -3086,6 +3267,7 @@ mod tests {
             hardware: HardwareConfig::default(),
             agi_enabled: true,
             provider_timeout: ProviderTimeoutConfig::default(),
+            skills: SkillsConfig::default(),
         };
 
         let toml_str = toml::to_string_pretty(&config).unwrap();
@@ -3225,6 +3407,7 @@ tool_dispatcher = "xml"
             reliability: ReliabilityConfig::default(),
             scheduler: SchedulerConfig::default(),
             model_routes: Vec::new(),
+            routing: RoutingConfig::default(),
             heartbeat: HeartbeatConfig::default(),
             channels_config: ChannelsConfig::default(),
             memory: MemoryConfig::default(),
@@ -3234,6 +3417,7 @@ tool_dispatcher = "xml"
             secrets: SecretsConfig::default(),
             browser: BrowserConfig::default(),
             http_request: HttpRequestConfig::default(),
+            clawd_cursor: ClawdCursorConfig::default(),
             agent: AgentConfig::default(),
             tools: ToolConfig::default(),
             fallback: FallbackConfig::default(),
@@ -3244,6 +3428,7 @@ tool_dispatcher = "xml"
             hardware: HardwareConfig::default(),
             agi_enabled: true,
             provider_timeout: ProviderTimeoutConfig::default(),
+            skills: SkillsConfig::default(),
         };
 
         config.save().unwrap();
@@ -3421,6 +3606,7 @@ tool_dispatcher = "xml"
             max_in_flight_messages: 64,
             history_turns: 40,
             bootstrap_max_chars: 20_000,
+            show_progress_messages: false,
         };
         let toml_str = toml::to_string_pretty(&c).unwrap();
         let parsed: ChannelsConfig = toml::from_str(&toml_str).unwrap();
@@ -3587,6 +3773,7 @@ channel_id = "C123"
             max_in_flight_messages: 64,
             history_turns: 40,
             bootstrap_max_chars: 20_000,
+            show_progress_messages: false,
         };
         let toml_str = toml::to_string_pretty(&c).unwrap();
         let parsed: ChannelsConfig = toml::from_str(&toml_str).unwrap();
@@ -3843,6 +4030,17 @@ default_temperature = 0.7
                 max_coordinate_x: Some(3840),
                 max_coordinate_y: Some(2160),
             },
+            cookie_storage_path: Some("/path/to/cookies".into()),
+            default_profile: "default".into(),
+            profiles: HashMap::from([(
+                "default".into(),
+                BrowserProfileConfig {
+                    cdp_port: 9222,
+                    color: "#007acc".into(),
+                    headless: true,
+                    user_data_dir: None,
+                },
+            )]),
         };
         let toml_str = toml::to_string(&b).unwrap();
         let parsed: BrowserConfig = toml::from_str(&toml_str).unwrap();
@@ -3866,6 +4064,13 @@ default_temperature = 0.7
         assert_eq!(parsed.computer_use.window_allowlist.len(), 2);
         assert_eq!(parsed.computer_use.max_coordinate_x, Some(3840));
         assert_eq!(parsed.computer_use.max_coordinate_y, Some(2160));
+        assert_eq!(
+            parsed.cookie_storage_path.as_deref(),
+            Some("/path/to/cookies")
+        );
+        assert_eq!(parsed.default_profile, "default");
+        assert_eq!(parsed.profiles.len(), 1);
+        assert!(parsed.profiles.contains_key("default"));
     }
 
     #[test]

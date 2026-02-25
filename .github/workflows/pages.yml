@@ -17,8 +17,12 @@ concurrency:
   group: pages
   cancel-in-progress: false
 
+env:
+  PNPM_VERSION: 10
+
 jobs:
   build:
+    name: Build Landing Page
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -27,7 +31,7 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: 10
+          version: ${{ env.PNPM_VERSION }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -43,6 +47,8 @@ jobs:
       - name: Build
         working-directory: ./landing
         run: pnpm run build
+        env:
+          NODE_ENV: production
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
@@ -50,6 +56,7 @@ jobs:
           path: ./landing/dist
 
   deploy:
+    name: Deploy to GitHub Pages
     needs: build
     runs-on: ubuntu-latest
     environment:

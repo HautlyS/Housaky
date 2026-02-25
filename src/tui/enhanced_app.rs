@@ -78,7 +78,7 @@ impl StreamingState {
 
     pub fn elapsed_ms(&self) -> u64 {
         self.start_time
-            .map(|t| t.elapsed().as_millis() as u64)
+            .map(|t| crate::util::time::duration_ms_u64(t.elapsed()))
             .unwrap_or(0)
     }
 

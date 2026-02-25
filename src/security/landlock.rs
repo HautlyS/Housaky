@@ -4,7 +4,7 @@
 //! This module uses the pure-Rust `landlock` crate for filesystem access control.
 
 #[cfg(all(feature = "sandbox-landlock", target_os = "linux"))]
-use landlock::{AccessFS, Ruleset, RulesetCreated};
+use landlock::{Access, AccessFs, Ruleset, RulesetAttr};
 
 use crate::security::traits::Sandbox;
 use std::path::Path;
@@ -26,7 +26,7 @@ impl LandlockSandbox {
     /// Create a Landlock sandbox with a specific workspace directory
     pub fn with_workspace(workspace_dir: Option<std::path::PathBuf>) -> std::io::Result<Self> {
         // Test if Landlock is available by trying to create a minimal ruleset
-        let test_ruleset = Ruleset::new().set_access_fs(AccessFS::read_file | AccessFS::write_file);
+        let test_ruleset = Ruleset::default().handle_access(AccessFs::from_all(landlock::path_beneath_rules::AccessFs::ReadFile | landlock::path_beneath_rules::AccessFs::WriteFile));
 
         match test_ruleset.create() {
             Ok(_) => Ok(Self { workspace_dir }),
@@ -47,26 +47,26 @@ impl LandlockSandbox {
 
     /// Apply Landlock restrictions to the current process
     fn apply_restrictions(&self) -> std::io::Result<()> {
-        let mut ruleset = Ruleset::new().set_access_fs(
-            AccessFS::read_file
-                | AccessFS::write_file
-                | AccessFS::read_dir
-                | AccessFS::remove_dir
-                | AccessFS::remove_file
-                | AccessFS::make_char
-                | AccessFS::make_sock
-                | AccessFS::make_fifo
-                | AccessFS::make_block
-                | AccessFS::make_reg
-                | AccessFS::make_sym,
-        );
+        let mut ruleset = Ruleset::default().handle_access(AccessFs::from_all(
+            AccessFs::READ_FILE
+                | AccessFs::WRITE_FILE
+                | AccessFs::READ_DIR
+                | AccessFs::REMOVE_DIR
+                | AccessFs::REMOVE_FILE
+                | AccessFs::MAKE_CHAR
+                | AccessFs::MAKE_SOCK
+                | AccessFs::MAKE_FIFO
+                | AccessFs::MAKE_BLOCK
+                | AccessFs::MAKE_REG
+                | AccessFs::MAKE_SYM,
+        ));
 
         // Allow workspace directory (read/write)
         if let Some(ref workspace) = self.workspace_dir {
             if workspace.exists() {
                 ruleset = ruleset.add_path(
                     workspace,
-                    AccessFS::read_file | AccessFS::write_file | AccessFS::read_dir,
+                    AccessFs::from_all(AccessFs::READ_FILE | AccessFs::WRITE_FILE | AccessFs::READ_DIR),
                 )?;
             }
         }
@@ -74,12 +74,18 @@ impl LandlockSandbox {
         // Allow /tmp for general operations
         ruleset = ruleset.add_path(
             Path::new("/tmp"),
-            AccessFS::read_file | AccessFS::write_file,
+            AccessFs::from_all(AccessFs::READ_FILE | AccessFs::WRITE_FILE),
         )?;
 
         // Allow /usr and /bin for executing commands
-        ruleset = ruleset.add_path(Path::new("/usr"), AccessFS::read_file | AccessFS::read_dir)?;
-        ruleset = ruleset.add_path(Path::new("/bin"), AccessFS::read_file | AccessFS::read_dir)?;
+        ruleset = ruleset.add_path(
+            Path::new("/usr"),
+            AccessFs::from_all(AccessFs::READ_FILE | AccessFs::READ_DIR),
+        )?;
+        ruleset = ruleset.add_path(
+            Path::new("/bin"),
+            AccessFs::from_all(AccessFs::READ_FILE | AccessFs::READ_DIR),
+        )?;
 
         // Apply the ruleset
         match ruleset.create() {
@@ -106,8 +112,8 @@ impl Sandbox for LandlockSandbox {
 
     fn is_available(&self) -> bool {
         // Try to create a minimal ruleset to verify availability
-        Ruleset::new()
-            .set_access_fs(AccessFS::read_file)
+        Ruleset::default()
+            .handle_access(AccessFs::from_all(AccessFs::READ_FILE))
             .create()
             .is_ok()
     }
@@ -186,8 +192,9 @@ mod tests {
     #[cfg(not(all(feature = "sandbox-landlock", target_os = "linux")))]
     #[test]
     fn landlock_not_available_on_non_linux() {
-        assert!(!LandlockSandbox.is_available());
-        assert_eq!(LandlockSandbox.name(), "landlock");
+        let sandbox = LandlockSandbox;
+        assert!(!sandbox.is_available());
+        assert_eq!(sandbox.name(), "landlock");
     }
 
     #[test]

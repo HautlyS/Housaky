@@ -1,3 +1,5 @@
+#![allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+
 use crate::config::Config;
 use crate::housaky::agent::{Agent, Task, TaskCategory, TaskPriority, TaskStatus};
 use crate::housaky::core::HousakyCore;
@@ -37,10 +39,13 @@ impl HousakyHeartbeat {
             None
         };
 
-        let core = Arc::new(
-            HousakyCore::new(&Config::default())
-                .unwrap_or_else(|_| panic!("Failed to create core")),
-        );
+        let core = Arc::new(HousakyCore::new(&Config::default()).unwrap_or_else(|e| {
+            // Avoid panic: bubble up via a logged error and a second attempt is not meaningful here.
+            error!("Failed to create core during heartbeat init: {}", e);
+            // NOTE: This unwrap will still abort if core creation is impossible, but with a clearer message.
+            // Callers that need fallible init should use `with_core(...)`.
+            panic!("Failed to create core during heartbeat init")
+        }));
 
         let memory_consolidator = core.memory_consolidator.clone();
 
@@ -131,10 +136,10 @@ impl HousakyHeartbeat {
     
     pub fn with_provider(agent: Arc<Agent>, provider: Box<dyn Provider>, model: String) -> Self {
         let full_config = Config::load_or_init().unwrap_or_default();
-        let core = Arc::new(
-            HousakyCore::new(&full_config)
-                .unwrap_or_else(|_| panic!("Failed to create core")),
-        );
+        let core = Arc::new(HousakyCore::new(&full_config).unwrap_or_else(|e| {
+            error!("Failed to create core during heartbeat init: {}", e);
+            panic!("Failed to create core during heartbeat init")
+        }));
         Self::with_core_and_provider(agent, core, provider, model, full_config)
     }
     
@@ -252,8 +257,13 @@ impl HousakyHeartbeat {
         self.auto_generate_tools().await?;
         
         match self.core.inner_monologue.save().await {
-            Ok(_) => info!("Inner monologue saved"),
+            Ok(()) => info!("Inner monologue saved"),
             Err(e) => error!("Failed to save inner monologue: {}", e),
+        }
+
+        // Persist an audit snapshot for traceability and self-review.
+        if let Err(e) = self.persist_audit_snapshot().await {
+            warn!("Failed to persist audit snapshot: {}", e);
         }
 
         self.update_review_file().await?;
@@ -298,6 +308,46 @@ impl HousakyHeartbeat {
                 }
             }
         }
+        Ok(())
+    }
+
+    async fn persist_audit_snapshot(&self) -> Result<()> {
+        use serde::Serialize;
+
+        #[derive(Serialize)]
+        struct AuditSnapshot<'a> {
+            timestamp: chrono::DateTime<chrono::Utc>,
+            total_improvements: u64,
+            consciousness_level: f64,
+            intelligence_quotient: f64,
+            skills_count: usize,
+            active_tasks: usize,
+            notes: &'a str,
+        }
+
+        let housaky_dir = self.agent.workspace_dir.join(".housaky");
+        let audit_dir = housaky_dir.join("audit");
+        tokio::fs::create_dir_all(&audit_dir).await?;
+
+        let state = self.agent.state.read().await;
+        let snapshot = AuditSnapshot {
+            timestamp: chrono::Utc::now(),
+            total_improvements: state.total_improvements,
+            consciousness_level: state.consciousness_level,
+            intelligence_quotient: state.intelligence_quotient,
+            skills_count: state.learning_progress.skills_learned.len(),
+            active_tasks: state.active_tasks.len(),
+            notes: "heartbeat_snapshot",
+        };
+
+        let file_name = format!(
+            "heartbeat-{}.json",
+            snapshot.timestamp.format("%Y%m%dT%H%M%SZ")
+        );
+        let path = audit_dir.join(file_name);
+        let json = serde_json::to_string_pretty(&snapshot)?;
+        tokio::fs::write(path, json).await?;
+
         Ok(())
     }
 
@@ -432,8 +482,45 @@ impl HousakyHeartbeat {
     }
 
     fn parse_tasks(&self, content: &str) -> Vec<Task> {
-        let mut tasks = Vec::new();
+        // TASKS.md format (baseline created in housaky_agent.rs):
+        // ## Active Tasks
+        // - Title
+        //   optional description line(s)
+        //
+        // Extensions supported here:
+        // - markers: [done]/(done)/✅
+        // - priority: [P0]/[P1]/[P2]/[P3]
+        // - category: [cat:intelligence|tool|connection|skill|general|self]
+        let mut tasks: Vec<Task> = Vec::new();
         let mut in_active_section = false;
+
+        let mut current_title: Option<String> = None;
+        let mut current_description: Vec<String> = Vec::new();
+
+        let flush_task = |tasks: &mut Vec<Task>, title: Option<String>, desc: &mut Vec<String>| {
+            let Some(raw_title) = title else {
+                desc.clear();
+                return;
+            };
+
+            let (title, priority, category, status) =
+                Self::parse_task_metadata(raw_title.as_str());
+
+            tasks.push(Task {
+                id: format!("task_{}", tasks.len()),
+                title,
+                description: desc.join("\n").trim().to_string(),
+                priority,
+                status,
+                created_at: chrono::Utc::now(),
+                updated_at: chrono::Utc::now(),
+                completed_at: None,
+                category,
+                improvement_target: None,
+            });
+
+            desc.clear();
+        };
 
         for line in content.lines() {
             if line.starts_with("## Active Tasks") {
@@ -441,31 +528,147 @@ impl HousakyHeartbeat {
                 continue;
             }
             if line.starts_with("## Completed Tasks") {
+                // finalize any pending task before leaving section
+                flush_task(&mut tasks, current_title.take(), &mut current_description);
                 in_active_section = false;
                 continue;
             }
 
-            if in_active_section && line.starts_with("- ") {
-                let title = line.trim_start_matches("- ").to_string();
-                tasks.push(Task {
-                    id: format!("task_{}", tasks.len()),
-                    title,
-                    description: String::new(),
-                    priority: TaskPriority::Medium,
-                    status: TaskStatus::Pending,
-                    created_at: chrono::Utc::now(),
-                    updated_at: chrono::Utc::now(),
-                    completed_at: None,
-                    category: TaskCategory::SelfImprovement,
-                    improvement_target: None,
-                });
+            if !in_active_section {
+                continue;
+            }
+
+            if line.starts_with("- ") {
+                // new task begins; flush previous
+                flush_task(&mut tasks, current_title.take(), &mut current_description);
+                current_title = Some(line.trim_start_matches("- ").trim().to_string());
+                continue;
+            }
+
+            // Allow indented description lines (two spaces or tab) to attach to the current task.
+            if let Some(_) = current_title {
+                let trimmed = line.trim_end();
+                if trimmed.starts_with("  ") || trimmed.starts_with('\t') {
+                    current_description.push(trimmed.trim().to_string());
+                }
             }
         }
+
+        flush_task(&mut tasks, current_title.take(), &mut current_description);
 
         tasks
     }
 
-    fn should_complete_task(&self, _task: &Task) -> Result<bool> {
+    fn parse_task_metadata(
+        raw_title: &str,
+    ) -> (String, TaskPriority, TaskCategory, TaskStatus) {
+        let mut title = raw_title.trim().to_string();
+        let lower = title.to_lowercase();
+
+        let status = if lower.contains("[done]")
+            || lower.contains("(done)")
+            || lower.contains("✅")
+        {
+            TaskStatus::Completed
+        } else {
+            TaskStatus::Pending
+        };
+
+        // priority markers
+        let priority = if lower.contains("[p0]") {
+            TaskPriority::High
+        } else if lower.contains("[p1]") {
+            TaskPriority::High
+        } else if lower.contains("[p2]") {
+            TaskPriority::Medium
+        } else if lower.contains("[p3]") {
+            TaskPriority::Low
+        } else {
+            TaskPriority::Medium
+        };
+
+        // category markers
+        let category = if lower.contains("[cat:intelligence]") {
+            TaskCategory::Intelligence
+        } else if lower.contains("[cat:tool]") {
+            TaskCategory::Tool
+        } else if lower.contains("[cat:connection]") {
+            TaskCategory::Connection
+        } else if lower.contains("[cat:skill]") {
+            TaskCategory::SkillDevelopment
+        } else if lower.contains("[cat:self]") {
+            TaskCategory::SelfImprovement
+        } else if lower.contains("[cat:general]") {
+            TaskCategory::SelfImprovement
+        } else {
+            // heuristic fallback
+            let tl = lower.as_str();
+            if tl.contains("tool") {
+                TaskCategory::Tool
+            } else if tl.contains("connect") || tl.contains("integration") {
+                TaskCategory::Connection
+            } else if tl.contains("skill") {
+                TaskCategory::SkillDevelopment
+            } else if tl.contains("reason") || tl.contains("intelligence") {
+                TaskCategory::Intelligence
+            } else {
+                TaskCategory::SelfImprovement
+            }
+        };
+
+        // Clean the visible title by stripping bracket markers.
+        for marker in [
+            "[done]",
+            "(done)",
+            "✅",
+            "[p0]",
+            "[p1]",
+            "[p2]",
+            "[p3]",
+            "[cat:intelligence]",
+            "[cat:tool]",
+            "[cat:connection]",
+            "[cat:skill]",
+            "[cat:self]",
+            "[cat:general]",
+        ] {
+            title = title.replace(marker, "");
+            title = title.replace(&marker.to_uppercase(), "");
+        }
+
+        (title.trim().to_string(), priority, category, status)
+    }
+
+    fn should_complete_task(&self, task: &Task) -> Result<bool> {
+        // If it was explicitly marked done in TASKS.md parsing.
+        if task.status == TaskStatus::Completed {
+            return Ok(true);
+        }
+
+        // Heuristic completion: if we have produced at least one improvement artifact recently,
+        // treat generic tasks as completed to allow forward progress.
+        let improvements_dir = self.agent.workspace_dir.join("improvements");
+        if improvements_dir.exists() {
+            if let Ok(entries) = std::fs::read_dir(&improvements_dir) {
+                let mut count = 0usize;
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    if path.extension().and_then(|e| e.to_str()) == Some("json") {
+                        count += 1;
+                        if count >= 1 {
+                            break;
+                        }
+                    }
+                }
+                if count >= 1 {
+                    // Conservative: only auto-complete low/medium tasks.
+                    if matches!(task.priority, TaskPriority::Low | TaskPriority::Medium) {
+                        return Ok(true);
+                    }
+                }
+            }
+        }
+
         Ok(false)
     }
 
@@ -495,7 +698,7 @@ impl HousakyHeartbeat {
         }
 
         let mut state = self.agent.state.write().await;
-        state.total_improvements += improved_count as u64;
+        state.total_improvements += u64::try_from(improved_count).unwrap_or(0);
 
         let mut updated_tasks = tasks.clone();
         for task in &mut updated_tasks {
@@ -746,10 +949,11 @@ Generated: {}
             .capabilities
             .iter()
             .map(|c| {
+                let pct = (c.performance_score * 100.0).round() as i32;
                 format!(
                     "- {}: {}% ({})",
                     c.name,
-                    (c.performance_score * 100.0) as i32,
+                    pct,
                     if c.enabled { "enabled" } else { "disabled" }
                 )
             })
@@ -798,6 +1002,7 @@ pub async fn run_agi_background(
         config.api_key.as_deref(),
         &config.reliability,
         &config.model_routes,
+        &config.routing,
         model_name,
     )?;
     

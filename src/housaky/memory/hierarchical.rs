@@ -6,6 +6,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::info;
+use std::fmt::Write as _;
 
 pub struct HierarchicalMemory {
     working: Arc<RwLock<WorkingMemoryLayer>>,
@@ -538,7 +539,7 @@ impl HierarchicalMemory {
             if tokens + item.token_count > max_tokens / 2 {
                 break;
             }
-            context.push_str(&format!("[Working] {}\n", item.content));
+            writeln!(context, "[Working] {}", item.content).ok();
             tokens += item.token_count;
         }
 
@@ -547,10 +548,11 @@ impl HierarchicalMemory {
             if tokens + ep_tokens > max_tokens * 3 / 4 {
                 break;
             }
-            context.push_str(&format!(
-                "[Episode] {}\n",
+            writeln!(
+                context,
+                "[Episode] {}",
                 episode.context.chars().take(200).collect::<String>()
-            ));
+            ).ok();
             tokens += ep_tokens;
         }
 

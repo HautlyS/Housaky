@@ -176,6 +176,7 @@ impl DecisionJournal for InMemoryDecisionJournal {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct AGIConfig {
     pub enable_goal_tracking: bool,
     pub enable_learning: bool,

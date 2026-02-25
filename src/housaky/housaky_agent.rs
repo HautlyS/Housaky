@@ -57,6 +57,7 @@ pub struct ProviderConfig {
 
 /// Kowalski integration configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct KowalskiIntegrationConfig {
     pub enabled: bool,
     pub kowalski_path: PathBuf,

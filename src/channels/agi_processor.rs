@@ -168,7 +168,7 @@ impl AGIChannelProcessor {
         context
     }
 
-    async fn send_status(status_tx: &Option<Sender<String>>, msg: &str) {
+    async fn send_status(status_tx: Option<&Sender<String>>, msg: &str) {
         if let Some(tx) = status_tx {
             let _ = tx.send(msg.to_string()).await;
         }
@@ -190,7 +190,7 @@ impl AGIChannelProcessor {
     ) -> Result<String> {
         let conversation_id = format!("{}:{}", msg.channel, msg.sender);
         
-        Self::send_status(&status_tx, "📥 Loading session...").await;
+        Self::send_status(status_tx.as_ref(), "📥 Loading session...").await;
 
         println!(
             "  🧠 [AGI {}] Processing from {}",
@@ -201,7 +201,7 @@ impl AGIChannelProcessor {
         let (inner_monologue, _reasoning, goal_engine, turn_count, _session_id) = 
             self.get_or_create_agi_state(&conversation_id).await;
 
-        Self::send_status(&status_tx, "💭 Recording thought...").await;
+        Self::send_status(status_tx.as_ref(), "💭 Recording thought...").await;
 
         inner_monologue.add_thought_with_type(
             &format!("User message: {}", msg.content.chars().take(200).collect::<String>()),
@@ -210,11 +210,11 @@ impl AGIChannelProcessor {
             ThoughtSource::UserInteraction,
         ).await?;
 
-        Self::send_status(&status_tx, "🧠 Building AGI context...").await;
+        Self::send_status(status_tx.as_ref(), "🧠 Building AGI context...").await;
 
         let agi_context = self.build_agi_context(&inner_monologue, &goal_engine).await;
 
-        Self::send_status(&status_tx, "📚 Loading memory...").await;
+        Self::send_status(status_tx.as_ref(), "📚 Loading memory...").await;
 
         let memory_context = self.build_memory_context(&msg.content).await;
 
@@ -230,7 +230,7 @@ impl AGIChannelProcessor {
                 .await;
         }
 
-        Self::send_status(&status_tx, "🤖 Generating response...").await;
+        Self::send_status(status_tx.as_ref(), "🤖 Generating response...").await;
 
         let mut enriched_message = String::new();
         if !agi_context.is_empty() {

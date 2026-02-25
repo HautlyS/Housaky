@@ -96,12 +96,12 @@ impl Tool for HardwareMemoryReadTool {
             .unwrap_or("0x20000000");
         let _address = parse_hex_address(address_str).unwrap_or(NUCLEO_RAM_BASE);
 
-        let length = args.get("length").and_then(|v| v.as_u64()).unwrap_or(128) as usize;
-        let _length = length.min(256).max(1);
+        let _length = args.get("length").and_then(|v| v.as_u64()).unwrap_or(128) as usize;
+        let _length = _length.min(256).max(1);
 
         #[cfg(feature = "probe")]
         {
-            match probe_read_memory(chip.unwrap(), address, length) {
+            match probe_read_memory(chip.unwrap(), _address, _length) {
                 Ok(output) => {
                     return Ok(ToolResult {
                         success: true,

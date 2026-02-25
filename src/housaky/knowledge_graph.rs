@@ -7,6 +7,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::info;
+use std::fmt::Write as _;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct EntityId(String);
@@ -751,12 +752,13 @@ impl KnowledgeGraphEngine {
                 x if x >= 0.5 => "lightblue",
                 _ => "lightgray",
             };
-            dot.push_str(&format!(
-                "  \"{}\" [label=\"{}\" style=filled fillcolor={}];\n",
+            writeln!(
+                dot,
+                "  \"{}\" [label=\"{}\" style=filled fillcolor={}];",
                 entity.id.as_str(),
                 label,
                 color
-            ));
+            ).ok();
         }
 
         dot.push('\n');
@@ -768,13 +770,14 @@ impl KnowledgeGraphEngine {
             } else {
                 "dashed"
             };
-            dot.push_str(&format!(
-                "  \"{}\" -> \"{}\" [label=\"{}\" style={}];\n",
+            writeln!(
+                dot,
+                "  \"{}\" -> \"{}\" [label=\"{}\" style={}];",
                 relation.from_entity.as_str(),
                 relation.to_entity.as_str(),
                 label,
                 style
-            ));
+            ).ok();
         }
 
         dot.push_str("}\n");

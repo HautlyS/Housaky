@@ -6,3 +6,4 @@ firmware/*/target
 .wt-pr37/
 .env
 .worktrees/
+/.planning/

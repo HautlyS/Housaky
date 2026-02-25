@@ -1,4 +1,6 @@
-use crate::config::schema::*;
+#![allow(clippy::cast_possible_truncation)]
+
+use crate::config::schema::{AuthMethod, ReliabilityConfig};
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -348,7 +350,7 @@ impl KvmKeyManager {
                             failed_requests: ak.usage.failed_requests,
                             rate_limited_count: 0,
                             last_request_at: None,
-                            usage_percent: ak.usage.usage_percent as f64,
+                            usage_percent: f64::from(ak.usage.usage_percent),
                         },
                     })
                     .collect(),
@@ -549,7 +551,7 @@ impl KvmKeyManager {
             }
         };
 
-        enabled_keys.get(index).cloned().cloned()
+        enabled_keys.get(index).copied().cloned()
     }
 
     pub async fn report_key_success(&self, provider_name: &str, key_id: &str) {
@@ -600,7 +602,7 @@ impl KvmKeyManager {
         if let Some(state) = rotation_states.get(provider_name) {
             let failures = state.consecutive_failures.fetch_add(1, Ordering::Relaxed) + 1;
             
-            if failures >= failure_threshold as u64 {
+            if failures >= u64::from(failure_threshold) {
                 state.is_healthy.store(false, Ordering::Relaxed);
                 
                 let idx = (state.current_key_index.load(Ordering::Relaxed) + 1)

@@ -1,4 +1,7 @@
 use anyhow::Result;
+
+pub mod claude;
+pub mod marketplace;
 use directories::UserDirs;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -69,7 +72,9 @@ fn default_version() -> String {
     "0.1.0".to_string()
 }
 
-/// Load all skills from the workspace skills directory
+/// Load all skills from the workspace skills directory.
+///
+/// This returns *all installed* skills (workspace + open-skills).
 pub fn load_skills(workspace_dir: &Path) -> Vec<Skill> {
     let mut skills = Vec::new();
 
@@ -79,6 +84,15 @@ pub fn load_skills(workspace_dir: &Path) -> Vec<Skill> {
 
     skills.extend(load_workspace_skills(workspace_dir));
     skills
+}
+
+/// Load only skills that are enabled in config.
+pub fn load_active_skills(workspace_dir: &Path, config: &crate::config::Config) -> Vec<Skill> {
+    let installed = load_skills(workspace_dir);
+    installed
+        .into_iter()
+        .filter(|s| config.skills.enabled.get(&s.name).copied().unwrap_or(false))
+        .collect()
 }
 
 fn load_workspace_skills(workspace_dir: &Path) -> Vec<Skill> {
@@ -455,6 +469,42 @@ fn copy_dir_recursive(src: &Path, dest: &Path) -> Result<()> {
 #[allow(clippy::too_many_lines)]
 pub fn handle_command(command: crate::SkillCommands, workspace_dir: &Path) -> Result<()> {
     match command {
+        crate::SkillCommands::Ui => {
+            // Repo root: current executable working dir might differ; best-effort use CWD.
+            let repo_root = std::env::current_dir().unwrap_or_else(|_| workspace_dir.to_path_buf());
+            let config = crate::Config::load_or_init()?;
+            crate::tui::run_skills_market_tui(config.clone(), repo_root)?;
+            Ok(())
+        }
+        crate::SkillCommands::Get { name, enable } => {
+            // First try: vendored OpenClaw skills from repo (developer checkout) if present.
+            let repo_root = std::env::current_dir().unwrap_or_else(|_| workspace_dir.to_path_buf());
+            let src = repo_root.join("openclaw").join("skills").join(&name);
+            let src_md = src.join("SKILL.md");
+            if !src_md.exists() {
+                anyhow::bail!("Skill '{name}' not found in vendored openclaw/skills. Try `housaky skills ui` or `housaky skills install <url>`.");
+            }
+            let dest_dir = workspace_dir.join("skills").join(&name);
+            std::fs::create_dir_all(&dest_dir)?;
+            std::fs::copy(&src_md, dest_dir.join("SKILL.md"))?;
+
+            let mut config = crate::Config::load_or_init()?;
+            let mut should_enable = enable;
+            if !should_enable {
+                should_enable = dialoguer::Confirm::new()
+                    .with_prompt(format!("Enable skill '{name}' now?"))
+                    .default(true)
+                    .interact()?;
+            }
+            if should_enable {
+                config.skills.enabled.insert(name.clone(), true);
+                config.save()?;
+                println!("✓ Enabled skill: {name}");
+            } else {
+                println!("Installed skill: {name} (not enabled)");
+            }
+            Ok(())
+        }
         crate::SkillCommands::List => {
             let skills = load_skills(workspace_dir);
             if skills.is_empty() {
@@ -491,6 +541,12 @@ pub fn handle_command(command: crate::SkillCommands, workspace_dir: &Path) -> Re
                 }
             }
             println!();
+            Ok(())
+        }
+        crate::SkillCommands::Convert { path } => {
+            let content = std::fs::read_to_string(&path)?;
+            let toml = crate::skills::claude::claude_skill_md_to_skill_toml(&content)?;
+            println!("{toml}");
             Ok(())
         }
         crate::SkillCommands::Install { source } => {

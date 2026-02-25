@@ -1,3 +1,5 @@
+#![allow(clippy::format_push_string, clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+
 use crate::housaky::core::TurnContext;
 use crate::housaky::reasoning_engine::{ReasoningEngine, ReasoningType};
 use crate::providers::Provider;

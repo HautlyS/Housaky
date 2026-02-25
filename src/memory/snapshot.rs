@@ -1,3 +1,5 @@
+#![allow(clippy::format_push_string)]
+
 //! Memory snapshot — export/import core memories as human-readable Markdown.
 //!
 //! **Atomic Soul Export**: dumps `MemoryCategory::Core` from SQLite into

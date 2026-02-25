@@ -372,13 +372,13 @@ impl KowalskiBridge {
                 success: true,
                 output,
                 error: None,
-                execution_time_ms: start_time.elapsed().as_millis() as u64,
+                execution_time_ms: crate::util::time::duration_ms_u64(start_time.elapsed()),
             },
             Err(e) => TaskResult {
                 success: false,
                 output: String::new(),
                 error: Some(format!("{}", e)),
-                execution_time_ms: start_time.elapsed().as_millis() as u64,
+                execution_time_ms: crate::util::time::duration_ms_u64(start_time.elapsed()),
             },
         };
 

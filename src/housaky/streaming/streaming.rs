@@ -65,7 +65,7 @@ impl StreamingSession {
         self.last_update = std::time::Instant::now();
         self.state = StreamState::Streaming;
 
-        let elapsed = self.start_time.elapsed().as_millis() as u64;
+        let elapsed = crate::util::time::duration_ms_u64(self.start_time.elapsed());
         let tps = if elapsed > 0 && self.token_count > 0 {
             (self.token_count as f64) / (elapsed as f64 / 1000.0)
         } else {
@@ -85,7 +85,7 @@ impl StreamingSession {
 
     pub fn complete(&mut self) -> StreamChunk {
         self.state = StreamState::Complete;
-        let elapsed = self.start_time.elapsed().as_millis() as u64;
+        let elapsed = crate::util::time::duration_ms_u64(self.start_time.elapsed());
         let tps = if elapsed > 0 && self.token_count > 0 {
             (self.token_count as f64) / (elapsed as f64 / 1000.0)
         } else {
@@ -111,7 +111,7 @@ impl StreamingSession {
             delta: error.to_string(),
             is_complete: true,
             token_count: 0,
-            elapsed_ms: self.start_time.elapsed().as_millis() as u64,
+            elapsed_ms: crate::util::time::duration_ms_u64(self.start_time.elapsed()),
             tokens_per_second: 0.0,
         }
     }
@@ -126,7 +126,7 @@ impl StreamingSession {
     }
 
     pub fn elapsed_ms(&self) -> u64 {
-        self.start_time.elapsed().as_millis() as u64
+        crate::util::time::duration_ms_u64(self.start_time.elapsed())
     }
 }
 

@@ -6,6 +6,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::info;
+use std::fmt::Write as _;
 
 const MAX_THOUGHTS: usize = 1000;
 const RECENT_CAPACITY: usize = 50;
@@ -359,15 +360,11 @@ impl InnerMonologue {
         reflection_content.push_str("Reflection: ");
 
         if !low_confidence.is_empty() {
-            reflection_content.push_str(&format!(
-                "{} thoughts have low confidence. ",
-                low_confidence.len()
-            ));
+            write!(reflection_content, "{} thoughts have low confidence. ", low_confidence.len()).ok();
         }
 
         if !unprocessed.is_empty() {
-            reflection_content
-                .push_str(&format!("{} thoughts need processing. ", unprocessed.len()));
+            write!(reflection_content, "{} thoughts need processing. ", unprocessed.len()).ok();
         }
 
         drop(stream);
@@ -495,18 +492,19 @@ impl InnerMonologue {
 
         let mut summary = String::new();
         summary.push_str("# Inner Monologue Summary\n\n");
-        summary.push_str(&format!("Total thoughts: {}\n", stream.total_thoughts));
-        summary.push_str(&format!("Current thoughts: {}\n", stream.thoughts.len()));
-        summary.push_str(&format!("Unprocessed: {}\n\n", stream.unprocessed_count));
+        writeln!(summary, "Total thoughts: {}", stream.total_thoughts).ok();
+        writeln!(summary, "Current thoughts: {}", stream.thoughts.len()).ok();
+        writeln!(summary, "Unprocessed: {}\n", stream.unprocessed_count).ok();
 
         summary.push_str("## Recent Thoughts\n\n");
         for thought in stream.thoughts.iter().rev().take(10) {
-            summary.push_str(&format!(
-                "- [{:?}] {} (confidence: {:.0}%)\n",
+            writeln!(
+                summary,
+                "- [{:?}] {} (confidence: {:.0}%)",
                 thought.thought_type,
                 thought.content.chars().take(80).collect::<String>(),
                 thought.confidence * 100.0
-            ));
+            ).ok();
         }
 
         summary

@@ -1,0 +1,21 @@
+name,keywords,effects,accessibility_notes,complexity
+glassmorphism,"transparent,frosted,glass,blur","backdrop-filter,transparency,blur,light borders","ensure contrast ratios,avoid for text-heavy content",medium
+neumorphism,"soft,embossed,extruded,realistic","inner shadows,subtle gradients,depth","low contrast issues,not recommended for accessibility-critical",high
+brutalism,"raw,bold,unpolished,experimental","thick borders,bold colors,asymmetric","high contrast friendly,simple structure",low
+dark_mode,"dark,night,eye-comfort,modern","dark backgrounds,light text,accent colors","follow WCAG 2.1 for dark themes,ensure contrast",medium
+soft_ui,"soft,gentle,calming,minimal","subtle shadows,rounded corners,pastel colors","good for general use,ensure color contrast",low
+flat_design,"flat,minimal,clean,simple","no shadows,solid colors,geometric","excellent accessibility,simple and clear",low
+skeuomorphism,"realistic,physical,tactile,real-world","textures,gradients,shadows,depth","can be overdone,maintain clarity",high
+gradient_ui,"colorful,modern,vibrant,eye-catching","color gradients,blends,transitions","ensure text readability over gradients",medium
+minimalism,"clean,simple,essential,zen","whitespace,typography,subtle details","excellent for focus and accessibility",low
+responsive,"adaptive,flexible,mobile-first,universal","media queries,flexbox,grid,viewport","essential for all modern interfaces",medium
+material_design,"google,structured,elevation,interactive","shadow layers,ripple effects,paper metaphor","well documented accessibility guidelines",medium
+retro_vintage,"nostalgic,classic,aged,traditional","sepia tones,texture overlays,vintage fonts","ensure modern accessibility standards",medium
+cyberpunk,"futuristic,neon,dark,tech-noir","glowing edges,neon accents,dark themes","high contrast neon on dark works well",high
+organic_natural,"earthy,calming,natural,sustainable","organic shapes,earth tones,soft edges","generally accessible with earth tones",low
+corporate_professional,"business,trust,stable,enterprise","clean lines,professional colors,structured","high contrast for business readability",low
+playful_fun,"colorful,energetic,friendly,animated","bright colors,rounded shapes,animations","ensure animations respect reduced motion",medium
+luxury_premium,"elegant,sophisticated,exclusive,high-end","gold accents,serif fonts,dark themes","maintain elegance with accessibility",high
+tech_startup,"modern,innovative,disruptive,bold","gradient accents,bold typography,dark modes","balance innovation with usability",medium
+editorial_publishing,"content-focused,typography,readability,editorial","serif headings,generous whitespace,columns","optimized for long-form reading",low
+gamified_ui,"achievements,progress,rewards,engaging","badges,progress bars,animations,points","can be distracting,keep core tasks simple",high

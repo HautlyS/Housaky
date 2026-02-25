@@ -15,6 +15,9 @@ use std::sync::Arc;
 use std::time::Instant;
 use uuid::Uuid;
 
+use crate::observability::flight_journal::FlightJournal;
+use crate::observability::running_registry::RunningRegistry;
+
 const MAX_HISTORY_MESSAGES: usize = 50;
 
 pub fn autosave_memory_key(prefix: &str) -> String {
@@ -422,6 +425,7 @@ pub(crate) async fn agent_turn(
     history: &mut Vec<ChatMessage>,
     tools_registry: &[Box<dyn Tool>],
     observer: &dyn Observer,
+    flight_journal: Option<Arc<FlightJournal>>,
     provider_name: &str,
     model: &str,
     temperature: f64,
@@ -433,6 +437,7 @@ pub(crate) async fn agent_turn(
         history,
         tools_registry,
         observer,
+        flight_journal,
         provider_name,
         model,
         temperature,
@@ -450,6 +455,7 @@ pub(crate) async fn run_tool_call_loop(
     history: &mut Vec<ChatMessage>,
     tools_registry: &[Box<dyn Tool>],
     observer: &dyn Observer,
+    flight_journal: Option<Arc<FlightJournal>>,
     provider_name: &str,
     model: &str,
     temperature: f64,
@@ -462,6 +468,20 @@ pub(crate) async fn run_tool_call_loop(
             model: model.to_string(),
             messages_count: history.len(),
         });
+        if let Some(ref journal) = flight_journal {
+            let _ = journal.append_event(
+                "llm_request",
+                Some(provider_name),
+                Some(model),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                Some("request dispatched"),
+            );
+        }
 
         let llm_started_at = Instant::now();
         let response = match provider
@@ -469,23 +489,54 @@ pub(crate) async fn run_tool_call_loop(
             .await
         {
             Ok(resp) => {
+                let dur = llm_started_at.elapsed();
                 observer.record_event(&ObserverEvent::LlmResponse {
                     provider: provider_name.to_string(),
                     model: model.to_string(),
-                    duration: llm_started_at.elapsed(),
+                    duration: dur,
                     success: true,
                     error_message: None,
                 });
+                if let Some(ref journal) = flight_journal {
+                    let _ = journal.append_event(
+                        "llm_response",
+                        Some(provider_name),
+                        Some(model),
+                        None,
+                        None,
+                        None,
+                        Some(true),
+                        Some(crate::util::time::duration_ms_u64(dur)),
+                        None,
+                        None,
+                    );
+                }
                 resp
             }
             Err(e) => {
+                let dur = llm_started_at.elapsed();
+                let sanitized = crate::providers::sanitize_api_error(&e.to_string());
                 observer.record_event(&ObserverEvent::LlmResponse {
                     provider: provider_name.to_string(),
                     model: model.to_string(),
-                    duration: llm_started_at.elapsed(),
+                    duration: dur,
                     success: false,
-                    error_message: Some(crate::providers::sanitize_api_error(&e.to_string())),
+                    error_message: Some(sanitized.clone()),
                 });
+                if let Some(ref journal) = flight_journal {
+                    let _ = journal.append_event(
+                        "llm_response",
+                        Some(provider_name),
+                        Some(model),
+                        None,
+                        None,
+                        None,
+                        Some(false),
+                        Some(crate::util::time::duration_ms_u64(dur)),
+                        Some(&sanitized),
+                        None,
+                    );
+                }
                 return Err(e);
             }
         };
@@ -516,15 +567,44 @@ pub(crate) async fn run_tool_call_loop(
             observer.record_event(&ObserverEvent::ToolCallStart {
                 tool: call.name.clone(),
             });
+            if let Some(ref journal) = flight_journal {
+                let _ = journal.append_event(
+                    "tool_start",
+                    Some(provider_name),
+                    Some(model),
+                    None,
+                    None,
+                    Some(&call.name),
+                    None,
+                    None,
+                    None,
+                    None,
+                );
+            }
             let start = Instant::now();
             let result = if let Some(tool) = find_tool(tools_registry, &call.name) {
                 match tool.execute(call.arguments.clone()).await {
                     Ok(r) => {
+                        let dur = start.elapsed();
                         observer.record_event(&ObserverEvent::ToolCall {
                             tool: call.name.clone(),
-                            duration: start.elapsed(),
+                            duration: dur,
                             success: r.success,
                         });
+                        if let Some(ref journal) = flight_journal {
+                            let _ = journal.append_event(
+                                "tool_end",
+                                Some(provider_name),
+                                Some(model),
+                                None,
+                                None,
+                                Some(&call.name),
+                                Some(r.success),
+                                Some(crate::util::time::duration_ms_u64(dur)),
+                                r.error.as_deref(),
+                                None,
+                            );
+                        }
                         if r.success {
                             r.output
                         } else {
@@ -532,11 +612,27 @@ pub(crate) async fn run_tool_call_loop(
                         }
                     }
                     Err(e) => {
+                        let dur = start.elapsed();
                         observer.record_event(&ObserverEvent::ToolCall {
                             tool: call.name.clone(),
-                            duration: start.elapsed(),
+                            duration: dur,
                             success: false,
                         });
+                        if let Some(ref journal) = flight_journal {
+                            let msg = format!("Error executing {}: {e}", call.name);
+                            let _ = journal.append_event(
+                                "tool_end",
+                                Some(provider_name),
+                                Some(model),
+                                None,
+                                None,
+                                Some(&call.name),
+                                Some(false),
+                                Some(crate::util::time::duration_ms_u64(dur)),
+                                Some(&msg),
+                                None,
+                            );
+                        }
                         format!("Error executing {}: {e}", call.name)
                     }
                 }
@@ -774,6 +870,31 @@ pub async fn run(
     // ── Wire up agnostic subsystems ──────────────────────────────
     let base_observer = observability::create_observer(&config.observability);
     let observer: Arc<dyn Observer> = Arc::from(base_observer);
+
+    // Per-process agent id (for cross-agent grep/review). Uses PID + random suffix.
+    let agent_id = format!(
+        "agent/{}-pid{}",
+        Uuid::new_v4().to_string(),
+        std::process::id()
+    );
+    let agent_id = agent_id;
+    let flight_journal = Arc::new(FlightJournal::new(&config.workspace_dir, agent_id.clone()));
+
+    let running_registry = Arc::new(RunningRegistry::new(&config.workspace_dir));
+    // We'll update provider/model once resolved below.
+    let _ = running_registry
+        .register_start(&agent_id, "agent", None, None)
+        .await;
+
+    // Keep RUNNING.toml fresh while this process is alive.
+    let running_registry_bg = running_registry.clone();
+    let agent_id_bg = agent_id.clone();
+    let heartbeat_task = tokio::spawn(async move {
+        loop {
+            let _ = running_registry_bg.heartbeat(&agent_id_bg).await;
+            tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+        }
+    });
     let runtime: Arc<dyn runtime::RuntimeAdapter> =
         Arc::from(runtime::create_runtime(&config.runtime)?);
     let security = Arc::new(SecurityPolicy::from_config(
@@ -843,6 +964,7 @@ pub async fn run(
         config.api_key.as_deref(),
         &config.reliability,
         &config.model_routes,
+        &config.routing,
         model_name,
     )?;
 
@@ -850,6 +972,25 @@ pub async fn run(
         provider: provider_name.to_string(),
         model: model_name.to_string(),
     });
+
+    // Persist agent start in day-partitioned TOML journal (best-effort).
+    let _ = flight_journal.append_event(
+        "agent_start",
+        Some(provider_name),
+        Some(model_name),
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+    );
+
+    // Update RUNNING.toml with provider/model now that they're resolved.
+    let _ = running_registry
+        .register_start(&agent_id, "agent", Some(provider_name), Some(model_name))
+        .await;
 
     // ── Hardware RAG (datasheet retrieval when peripherals + datasheet_dir) ──
     let hardware_rag: Option<crate::rag::HardwareRag> = config
@@ -872,7 +1013,7 @@ pub async fn run(
         .collect();
 
     // ── Build system prompt from workspace MD files (OpenClaw framework) ──
-    let skills = crate::skills::load_skills(&config.workspace_dir);
+    let skills = crate::skills::load_active_skills(&config.workspace_dir, &config);
     let mut tool_descs: Vec<(&str, &str)> = vec![
         (
             "shell",
@@ -1012,6 +1153,7 @@ pub async fn run(
             &mut history,
             &tools_registry,
             observer.as_ref(),
+            Some(flight_journal.clone()),
             provider_name,
             model_name,
             temperature,
@@ -1075,6 +1217,7 @@ pub async fn run(
                 &mut history,
                 &tools_registry,
                 observer.as_ref(),
+                Some(flight_journal.clone()),
                 provider_name,
                 model_name,
                 temperature,
@@ -1129,6 +1272,22 @@ pub async fn run(
         duration,
         tokens_used: None,
     });
+
+    let _ = flight_journal.append_event(
+        "agent_end",
+        Some(provider_name),
+        Some(model_name),
+        None,
+        None,
+        None,
+        Some(true),
+        Some(crate::util::time::duration_ms_u64(duration)),
+        None,
+        None,
+    );
+
+    heartbeat_task.abort();
+    let _ = running_registry.register_stop(&agent_id).await;
 
     Ok(())
 }
@@ -1185,6 +1344,7 @@ pub async fn process_message(config: Config, message: &str) -> Result<String> {
         config.api_key.as_deref(),
         &config.reliability,
         &config.model_routes,
+        &config.routing,
         &model_name,
     )?;
 
@@ -1203,7 +1363,7 @@ pub async fn process_message(config: Config, message: &str) -> Result<String> {
         .map(|b| b.board.clone())
         .collect();
 
-    let skills = crate::skills::load_skills(&config.workspace_dir);
+    let skills = crate::skills::load_active_skills(&config.workspace_dir, &config);
     let mut tool_descs: Vec<(&str, &str)> = vec![
         ("shell", "Execute terminal commands."),
         ("file_read", "Read file contents."),
@@ -1285,6 +1445,7 @@ pub async fn process_message(config: Config, message: &str) -> Result<String> {
         &mut history,
         &tools_registry,
         observer.as_ref(),
+        Some(Arc::new(FlightJournal::new(&config.workspace_dir, "agent/process_message"))),
         provider_name,
         &model_name,
         config.default_temperature,

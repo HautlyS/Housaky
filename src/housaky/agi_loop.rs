@@ -1,3 +1,5 @@
+#![allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+
 use crate::agent::loop_::{build_tool_instructions, find_tool};
 use crate::config::Config;
 use crate::housaky::core::{AGIAction, HousakyCore};
@@ -330,11 +332,13 @@ impl AGIAgentLoop {
         if !active.is_empty() {
             println!("\nActive Goals:");
             for goal in active {
+                let progress_pct = (goal.progress * 100.0).round();
+                let progress_pct_i32 = progress_pct as i32;
                 println!(
                     "  - {} [{}] {}%",
                     goal.title,
                     format!("{:?}", goal.priority),
-                    (goal.progress * 100.0) as i32
+                    progress_pct_i32
                 );
             }
         }
@@ -416,6 +420,7 @@ pub async fn run_agi_loop(
         config.api_key.as_deref(),
         &config.reliability,
         &config.model_routes,
+        &config.routing,
         model_name,
     )?;
 
@@ -461,7 +466,7 @@ pub async fn run_agi_loop(
     let peripheral_tools = crate::peripherals::create_peripheral_tools(&config.peripherals).await?;
     tools_registry.extend(peripheral_tools);
 
-    let skills = crate::skills::load_skills(&config.workspace_dir);
+    let skills = crate::skills::load_active_skills(&config.workspace_dir, &config);
     let tool_descs: Vec<(&str, &str)> = tools_registry
         .iter()
         .map(|t| (t.name(), t.description()))

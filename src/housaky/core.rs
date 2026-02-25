@@ -1,3 +1,5 @@
+#![allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+
 use crate::config::Config;
 use crate::housaky::agent::Agent;
 use crate::housaky::cognitive::cognitive_loop::{CognitiveLoop, CognitiveResponse};
@@ -5,7 +7,7 @@ use crate::housaky::goal_engine::{Goal, GoalEngine, GoalPriority, GoalStatus};
 use crate::housaky::inner_monologue::InnerMonologue;
 use crate::housaky::knowledge_graph::KnowledgeGraphEngine;
 use crate::housaky::memory::consolidation::MemoryConsolidator;
-use crate::housaky::memory::hierarchical::HierarchicalMemory;
+use crate::housaky::memory::hierarchical::{HierarchicalMemory, HierarchicalMemoryConfig};
 use crate::housaky::meta_cognition::MetaCognitionEngine;
 use crate::housaky::reasoning_pipeline::{ReasoningPipeline, ReasoningResult};
 use crate::housaky::streaming::streaming::StreamingManager;
@@ -59,6 +61,7 @@ pub struct HousakyCoreState {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct HousakyCoreConfig {
     pub enabled: bool,
     pub auto_reflect: bool,
@@ -148,7 +151,7 @@ impl HousakyCore {
         let inner_monologue = Arc::new(InnerMonologue::new(&workspace_dir));
         let reasoning_pipeline = Arc::new(ReasoningPipeline::new());
         let cognitive_loop = Arc::new(CognitiveLoop::with_inner_monologue(config, Some(inner_monologue.clone()))?);
-        let hierarchical_memory = Arc::new(HierarchicalMemory::new(Default::default()));
+        let hierarchical_memory = Arc::new(HierarchicalMemory::new(HierarchicalMemoryConfig::default()));
         let memory_consolidator = Arc::new(MemoryConsolidator::new(
             hierarchical_memory.clone(),
             &workspace_dir,
@@ -309,11 +312,8 @@ impl HousakyCore {
 
         let top_goal = context.active_goals.first().cloned();
         let goal_context = top_goal.as_ref().map(|g| {
-            format!(
-                "Active Goal: {} ({}% complete)",
-                g.title,
-                (g.progress * 100.0) as i32
-            )
+            let progress_pct = (g.progress * 100.0).round() as i32;
+            format!("Active Goal: {} ({}% complete)", g.title, progress_pct)
         });
 
         let tool_names: Vec<&str> = available_tools.iter().map(|t| t.name()).collect();
@@ -533,7 +533,7 @@ impl HousakyCore {
 
     pub async fn get_state(&self) -> HousakyCoreState {
         let mut state = self.state.read().await.clone();
-        state.uptime_seconds = (Utc::now() - state.started_at).num_seconds() as u64;
+        state.uptime_seconds = u64::try_from((Utc::now() - state.started_at).num_seconds()).unwrap_or(0);
         state
     }
 
@@ -741,10 +741,11 @@ impl HousakyCore {
                     .await
                 {
                     Ok(procedure_id) => {
+                        let success_pct = (pattern.success_rate * 100.0).round() as i32;
                         learned.push(format!(
                             "Learned procedure: {} ({}% success)",
                             pattern.description,
-                            (pattern.success_rate * 100.0) as i32
+                            success_pct
                         ));
 
                         self.inner_monologue
@@ -807,11 +808,8 @@ impl HousakyCore {
 
         let top_goal = context.active_goals.first().cloned();
         let goal_context = top_goal.as_ref().map(|g| {
-            format!(
-                "Active Goal: {} ({}% complete)",
-                g.title,
-                (g.progress * 100.0) as i32
-            )
+            let progress_pct = (g.progress * 100.0).round() as i32;
+            format!("Active Goal: {} ({}% complete)", g.title, progress_pct)
         });
 
         let tool_names: Vec<&str> = available_tools.iter().map(|t| t.name()).collect();

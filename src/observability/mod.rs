@@ -1,3 +1,5 @@
+pub mod flight_journal;
+pub mod running_registry;
 pub mod log;
 pub mod multi;
 pub mod noop;

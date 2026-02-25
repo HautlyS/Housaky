@@ -32,6 +32,8 @@
 /// // Empty string
 /// assert_eq!(truncate_with_ellipsis("", 10), "");
 /// ```
+pub mod time;
+
 pub fn truncate_with_ellipsis(s: &str, max_chars: usize) -> String {
     match s.char_indices().nth(max_chars) {
         Some((idx, _)) => {

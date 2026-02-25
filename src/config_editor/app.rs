@@ -16,6 +16,7 @@ pub enum EditorMode {
     Editing,
 }
 
+#[allow(clippy::struct_excessive_bools)]
 pub struct ConfigEditorApp {
     pub config: Config,
     pub original_config: Config,
@@ -134,10 +135,8 @@ impl ConfigEditorApp {
             MenuCategory::Channels => 6,
             MenuCategory::Gateway => 12,
             MenuCategory::Memory => 8,
-            MenuCategory::Providers => 3,
-            MenuCategory::Fallback => 3,
-            MenuCategory::Security => 4,
-            MenuCategory::Cost => 4,
+            MenuCategory::Providers | MenuCategory::Fallback => 3,
+            MenuCategory::Security | MenuCategory::Cost => 4,
         }
     }
 

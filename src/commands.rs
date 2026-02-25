@@ -42,17 +42,40 @@ pub enum ChannelCommands {
 /// Skills management subcommands
 #[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum SkillCommands {
+    /// Open the Skills marketplace TUI (Claude official + OpenClaw).
+    ///
+    /// This will refresh registries and let you enable/disable skills.
+    Ui,
+
     /// List all installed skills
     List,
+
     /// Install a new skill from a URL or local path
     Install {
         /// Source URL or local path
         source: String,
     },
+
     /// Remove an installed skill
     Remove {
         /// Skill name to remove
         name: String,
+    },
+
+    /// Convert a Claude Code SKILL.md into a Housaky SKILL.toml (prints to stdout)
+    Convert {
+        /// Path to Claude SKILL.md
+        path: std::path::PathBuf,
+    },
+
+    /// Convenience: install by name (searches local markets first) and optionally enable.
+    Get {
+        /// Skill name/slug
+        name: String,
+
+        /// Enable immediately (skip prompt)
+        #[arg(long)]
+        enable: bool,
     },
 }
 
@@ -179,24 +202,31 @@ pub enum PeripheralCommands {
 }
 
 /// Key management subcommands
-#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+///
+/// Backwards compatible wrapper around the legacy `KeyCommands` (KVM-based)
+/// plus the new centralized keys manager commands.
+#[derive(Subcommand, Debug, Clone)]
 pub enum KeyCommands {
-    /// List all configured API keys
+    /// Legacy: list all configured API keys (KVM store).
     List,
-    /// Add a new API key for a provider
+    /// Legacy: add a new API key for a provider (KVM store).
     Add {
         /// Provider name (e.g., openrouter, anthropic, openai)
         provider: String,
         /// API key value
         key: String,
     },
-    /// Remove an API key
+    /// Legacy: remove an API key (removes provider from KVM store).
     Remove {
         /// Provider name
         provider: String,
     },
-    /// Rotate API keys (KVM mode)
+    /// Legacy: rotate API keys (KVM mode).
     Rotate,
+
+    /// New: centralized keys/provider/model manager.
+    #[command(subcommand)]
+    Manager(crate::keys_manager::commands::KeysManagerCommands),
 }
 
 /// KVM (Key Virtual Management) subcommands

@@ -321,8 +321,7 @@ impl MultiAgentCoordinator {
                 assigned_agent: active_task.assigned_agent,
                 completed_at: chrono::Utc::now(),
                 result,
-                total_duration_ms: (chrono::Utc::now() - active_task.started_at).num_milliseconds()
-                    as u64,
+                total_duration_ms: u64::try_from((chrono::Utc::now() - active_task.started_at).num_milliseconds()).unwrap_or(0),
             };
 
             self.registry

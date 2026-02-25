@@ -643,7 +643,7 @@ mod tests {
 
         for i in 0..5 {
             let entry = DecisionEntry::new(format!("goal {}", i % 2))
-                .with_outcome(OutcomeRecord::new(i < 3, 0.5 + (i as f64 * 0.1), "test".to_string()));
+                .with_outcome(OutcomeRecord::new(i < 3, 0.5 + (f64::from(i) * 0.1), "test".to_string()));
             journal.record_decision(entry).await.unwrap();
         }
 

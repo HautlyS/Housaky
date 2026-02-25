@@ -214,7 +214,7 @@ impl MemoryConsolidator {
             .split(" -> ")
             .enumerate()
             .map(|(i, action)| ProcedureStep {
-                order: i as u32 + 1,
+                order: u32::try_from(i).unwrap_or(u32::MAX) + 1,
                 action: action.to_string(),
                 parameters: std::collections::HashMap::new(),
                 expected_outcome: "Task completed successfully".to_string(),
