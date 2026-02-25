@@ -696,7 +696,11 @@ impl CognitiveLoop {
         info!("Starting continuous cognitive loop");
 
         let provider = create_provider(&provider_name, api_key.as_deref())?;
-        let tools: Vec<Box<dyn Tool>> = vec![];
+
+        // In continuous mode we still want full tool access (subject to SecurityPolicy).
+        // This is required for genuine agentic behavior (plan → act → observe loops).
+        let security = Arc::new(crate::security::SecurityPolicy::default());
+        let tools: Vec<Box<dyn Tool>> = crate::tools::default_tools(security);
         let tool_refs: Vec<&dyn Tool> = tools.iter().map(|t| t.as_ref()).collect();
 
         while let Some(request) = receiver.recv().await {

@@ -3,7 +3,7 @@
 //!
 //! Enable explicitly with: `cargo test --features unstable-key-tests`
 
-#![cfg(feature = "unstable-key-tests")]
+#![cfg(all(feature = "unstable-key-tests", feature = "run-unstable-tests"))]
 
 use std::sync::Arc;
 

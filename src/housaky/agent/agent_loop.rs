@@ -12,6 +12,7 @@ use crate::housaky::knowledge_graph::KnowledgeGraphEngine;
 use crate::housaky::memory::{BeliefTracker, HierarchicalMemory};
 use crate::housaky::reasoning_engine::ReasoningEngine;
 use crate::housaky::working_memory::WorkingMemoryEngine;
+use crate::tools::Tool;
 
 pub struct UnifiedAgentLoop {
     pub cognitive_loop: Arc<CognitiveLoop>,
@@ -26,6 +27,9 @@ pub struct UnifiedAgentLoop {
     pub goal_engine: Arc<GoalEngine>,
     pub hierarchical_memory: Arc<HierarchicalMemory>,
     pub session: Arc<RwLock<Option<Session>>>,
+    /// Optional tools registry for agentic tool use.
+    /// When None, the loop runs in "no-tools" mode.
+    pub tools: Option<Arc<Vec<Box<dyn Tool>>>>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -88,7 +92,13 @@ impl UnifiedAgentLoop {
                 crate::housaky::memory::hierarchical::HierarchicalMemoryConfig::default(),
             )),
             session: Arc::new(RwLock::new(None)),
+            tools: None,
         })
+    }
+
+    pub fn with_tools(mut self, tools: Arc<Vec<Box<dyn Tool>>>) -> Self {
+        self.tools = Some(tools);
+        self
     }
 
     pub async fn run_turn(
@@ -107,8 +117,11 @@ impl UnifiedAgentLoop {
             .add_message(&input.message, "user")
             .await?;
 
-        let tools: Vec<Box<dyn crate::tools::Tool>> = vec![];
-        let tool_refs: Vec<&dyn crate::tools::Tool> = tools.iter().map(|t| t.as_ref()).collect();
+        let tool_refs: Vec<&dyn Tool> = self
+            .tools
+            .as_ref()
+            .map(|t| t.iter().map(|x| x.as_ref()).collect())
+            .unwrap_or_else(Vec::new);
 
         let cognitive_response = self
             .cognitive_loop

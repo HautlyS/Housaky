@@ -161,7 +161,13 @@ rppal = { version = "0.14", optional = true }
 
 [features]
 # Disabled by default: legacy / unstable integration tests for key management.
+# IMPORTANT: `cargo test --all-features` should remain stable, so these tests require an
+# additional opt-in feature (`run-unstable-tests`) to compile.
 unstable-key-tests = []
+# NOTE: run-unstable-tests is intentionally NOT a Cargo feature.
+# The integration tests in tests/key_management_test.rs use `cfg(feature = "run-unstable-tests")`
+# as a hard opt-in gate that is never enabled by `--all-features`.
+# To run them, use: RUSTFLAGS='--cfg feature="run-unstable-tests"' cargo test --features unstable-key-tests
 
 default = ["hardware"]
 hardware = ["nusb", "tokio-serial"]

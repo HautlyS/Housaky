@@ -258,7 +258,14 @@ impl AGIChannelProcessor {
 
         let mut agi_ctx = AGIContext::disabled();
         if self.config.agi_enabled {
-            agi_ctx = AGIContext::new(&self.workspace_dir, crate::housaky::agi_context::AGIConfig::default());
+            agi_ctx = AGIContext::new(
+                &self.workspace_dir,
+                crate::housaky::agi_context::AGIConfig::default(),
+            );
+            // Best-effort hydrate of continuous learning model.
+            if let Err(e) = agi_ctx.try_load_learning_model().await {
+                tracing::warn!("Failed to load continuous learning model: {e}");
+            }
         }
 
         let llm_result = tokio::time::timeout(

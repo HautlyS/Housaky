@@ -203,7 +203,10 @@ pub enum PeripheralCommands {
 
 /// Key management subcommands
 ///
-/// Backwards compatible wrapper around the legacy `KeyCommands` (KVM-based)
+/// NOTE: The legacy KVM store (`kvm_keys.json`) is deprecated.
+/// Prefer `housaky keys manager ...` which uses the centralized keys store (`~/.housaky/keys.json`).
+///
+/// This enum remains as a backwards-compatible wrapper around legacy KVM commands
 /// plus the new centralized keys manager commands.
 #[derive(Subcommand, Debug, Clone)]
 pub enum KeyCommands {
@@ -222,6 +225,8 @@ pub enum KeyCommands {
         provider: String,
     },
     /// Legacy: rotate API keys (KVM mode).
+    ///
+    /// Prefer: KeysManager performs per-request rotation via provider state.
     Rotate,
 
     /// New: centralized keys/provider/model manager.

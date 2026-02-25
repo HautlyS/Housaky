@@ -210,6 +210,7 @@ pub struct AGIContext {
     pub decision_journal: Option<Arc<dyn DecisionJournal>>,
     pub drift_detector: Option<Arc<Mutex<ValueDriftDetector>>>,
     pub config: AGIConfig,
+    workspace_dir: PathBuf,
     turn_counter: Arc<Mutex<u32>>,
 }
 
@@ -259,6 +260,7 @@ impl AGIContext {
             decision_journal,
             drift_detector,
             config,
+            workspace_dir: workspace_dir.clone(),
             turn_counter: Arc::new(Mutex::new(0)),
         }
     }
@@ -280,6 +282,7 @@ impl AGIContext {
                 drift_check_interval_turns: 0,
                 max_decisions_in_journal: 0,
             },
+            workspace_dir: PathBuf::new(),
             turn_counter: Arc::new(Mutex::new(0)),
         }
     }
@@ -325,9 +328,74 @@ impl AGIContext {
                 timestamp: Utc::now(),
                 reward: if success { 1.0 } else { -0.5 },
             };
+
             let mut engine = engine.lock().await;
             engine.record_feedback(feedback);
+
+            // Persist the learning model so self-improvement survives restarts.
+            // This is intentionally best-effort; a failure to persist should not break runtime.
+            if let Err(e) = self.persist_learning_model(&engine).await {
+                tracing::warn!("Failed to persist ContinuousLearningEngine model: {e}");
+            }
         }
+    }
+
+    async fn persist_learning_model(
+        &self,
+        engine: &ContinuousLearningEngine,
+    ) -> Result<()> {
+        use tokio::io::AsyncWriteExt;
+
+        // If disabled() was used, workspace_dir may be empty.
+        if self.workspace_dir.as_os_str().is_empty() {
+            return Ok(());
+        }
+
+        let dir = self.workspace_dir.join(".housaky").join("learning");
+        tokio::fs::create_dir_all(&dir).await?;
+
+        let model = engine.export_model();
+        let json = serde_json::to_vec_pretty(&model)?;
+
+        let tmp_path = dir.join("continuous_learning.json.tmp");
+        let final_path = dir.join("continuous_learning.json");
+
+        let mut f = tokio::fs::File::create(&tmp_path).await?;
+        f.write_all(&json).await?;
+        f.flush().await?;
+        drop(f);
+
+        // Atomic-ish replace.
+        tokio::fs::rename(&tmp_path, &final_path).await?;
+
+        Ok(())
+    }
+
+    pub async fn try_load_learning_model(&self) -> Result<()> {
+        if let Some(ref engine) = self.learning_engine {
+            if self.workspace_dir.as_os_str().is_empty() {
+                return Ok(());
+            }
+
+            let path = self
+                .workspace_dir
+                .join(".housaky")
+                .join("learning")
+                .join("continuous_learning.json");
+
+            if !path.exists() {
+                return Ok(());
+            }
+
+            let bytes = tokio::fs::read(&path).await?;
+            let model: crate::housaky::self_improvement_mod::LearningModel =
+                serde_json::from_slice(&bytes)?;
+
+            let mut engine = engine.lock().await;
+            engine.import_model(model);
+        }
+
+        Ok(())
     }
 
     pub async fn record_decision(

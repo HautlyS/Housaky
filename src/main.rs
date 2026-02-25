@@ -535,8 +535,10 @@ async fn main() -> Result<()> {
                                 let store = kvm.store.read().await;
                         if store.providers.is_empty() {
                             println!("No KVM providers configured.");
-                            println!("  Use `housaky kvm add-provider` to add providers with keys.");
-                            println!("  Or use `housaky kvm interactive` for interactive mode.");
+                            println!("  This legacy store is deprecated.");
+                            println!("  Prefer: `housaky keys manager migrate-from-kvm` then `housaky keys manager list`." );
+                            println!("  Or use `housaky kvm add-provider` to add providers with keys (legacy)." );
+                            println!("  Or use `housaky kvm interactive` for interactive mode (legacy)." );
                         } else {
                             println!("KVM Providers:");
                             for (name, provider) in &store.providers {
@@ -832,8 +834,9 @@ async fn main() -> Result<()> {
                         Ok(())
                     }
                     KvmCommands::Interactive => {
-                        println!("Starting interactive KVM TUI...");
-                        println!("Not implemented yet - use CLI commands for now.");
+                        // KVM store has its own schema and manager type.
+                        // A dedicated interactive TUI for KVM can be added later.
+                        println!("Interactive KVM TUI is not implemented yet. Use subcommands like list/add/enable/disable/export/import.");
                         Ok(())
                     }
                 }

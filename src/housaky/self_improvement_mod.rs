@@ -991,8 +991,12 @@ impl ContinuousLearningEngine {
             .find(|p| p.context == context)
         {
             pattern.frequency += 1;
-            let n = pattern.frequency as f64;
-            pattern.success_rate = ((n - 1.0) * pattern.success_rate + 1.0) / n;
+            // Like failures, this function only sees successes; a plain running average is not
+            // informative. Treat `success_rate` as confidence that this context/action is a
+            // persistent success mode, with a bounded, decayed update.
+            pattern.success_rate = (pattern.success_rate * (1.0 - self.learning_rate)
+                + 1.0 * self.learning_rate)
+                .clamp(0.0, 1.0);
         } else {
             self.success_patterns.push(SuccessPattern {
                 context,
@@ -1014,8 +1018,13 @@ impl ContinuousLearningEngine {
             .find(|p| p.context == context)
         {
             pattern.frequency += 1;
-            let n = pattern.frequency as f64;
-            pattern.failure_rate = ((n - 1.0) * pattern.failure_rate + 1.0) / n;
+            // All events reaching this function are failures, so a plain running average would
+            // trivially converge to 1.0 and become uninformative.
+            // Instead, treat `failure_rate` as a confidence score that this context/action is a
+            // persistent failure mode, using a bounded, decayed update.
+            pattern.failure_rate = (pattern.failure_rate * (1.0 - self.learning_rate)
+                + 1.0 * self.learning_rate)
+                .clamp(0.0, 1.0);
 
             if pattern.failure_rate > 0.7 && pattern.suggested_alternatives.is_empty() {
                 pattern.suggested_alternatives = alternatives;
@@ -1068,6 +1077,8 @@ impl ContinuousLearningEngine {
         to_remove.clear();
 
         for (i, pattern) in self.failure_patterns.iter_mut().enumerate() {
+            // Drop failure patterns that are no longer reliably failing.
+            // If a pattern's observed failure_rate is low, it's not a useful "avoid" signal.
             if pattern.frequency > 10 && pattern.failure_rate < 0.3 {
                 to_remove.push(i);
             }

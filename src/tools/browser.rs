@@ -1582,11 +1582,11 @@ mod native_backend {
             action: BrowserAction,
             headless: bool,
             webdriver_url: &str,
-            chrome_path: Option<&str>,
+            _chrome_path: Option<&str>,
         ) -> Result<Value> {
             match action {
                 BrowserAction::Open { url } => {
-                    self.ensure_session(headless, webdriver_url, chrome_path)
+                    self.ensure_session(headless, webdriver_url, _chrome_path)
                         .await?;
                     let client = self.active_client()?;
                     client
@@ -1781,11 +1781,9 @@ mod native_backend {
                 BrowserAction::Hover { selector } => {
                     let client = self.active_client()?;
                     let element = find_element(client, &selector).await?;
-                    let loc = element.rect().await.context("Failed to get element rect")?;
-                    let center_x = (loc.x + loc.width / 2.0) as i64;
-                    let center_y = (loc.y + loc.height / 2.0) as i64;
 
                     // Fantoccini action API changed across versions; use JS-based hover for stability.
+                    // We pass the element handle directly as a JS argument.
                     let script = r#"
                         const el = arguments[0];
                         if (!el) return false;
@@ -1795,7 +1793,11 @@ mod native_backend {
                         return true;
                     "#;
                     client
-                        .execute(script, vec![element.into()])
+                        .execute(
+                            script,
+                            vec![serde_json::to_value(&element)
+                                .context("Failed to serialize element for JS")?],
+                        )
                         .await
                         .context("Failed to execute hover script")?;
 
@@ -1803,8 +1805,6 @@ mod native_backend {
                         "backend": "rust_native",
                         "action": "hover",
                         "selector": selector,
-                        "x": center_x,
-                        "y": center_y,
                     }))
                 }
                 BrowserAction::Scroll { direction, pixels } => {
@@ -1861,11 +1861,10 @@ mod native_backend {
             &mut self,
             headless: bool,
             webdriver_url: &str,
-            chrome_path: Option<&str>,
+            _chrome_path: Option<&str>,
         ) -> Result<()> {
             if self.client.is_none() {
-                let connector = ClientBuilder::rustls().context("Failed to create rustls connector")?;
-                let mut builder = ClientBuilder::new(connector);
+                let mut builder = ClientBuilder::rustls().context("Failed to create rustls connector")?;
 
                 if headless {
                     // Chrome options structure accepted by webdriver.
@@ -1880,13 +1879,11 @@ mod native_backend {
                         "browserName": "chrome",
                         "goog:chromeOptions": chrome_options
                     });
-                    builder = builder.capabilities(caps.as_object().cloned().unwrap_or_default());
+                    builder.capabilities(caps.as_object().cloned().unwrap_or_default());
                 }
 
                 let webdriver_url = webdriver_url.trim_end_matches('/');
-                let client = builder
-                    .connect(webdriver_url)
-                    .await
+                let client = builder.connect(webdriver_url).await
                     .with_context(|| format!("Failed to connect to WebDriver at {webdriver_url}"))?;
 
                 self.client = Some(client);
@@ -1895,10 +1892,10 @@ mod native_backend {
         }
     }
 
-    async fn find_element<'a>(
-        client: &'a Client,
+    async fn find_element(
+        client: &Client,
         selector: &str,
-    ) -> Result<fantoccini::elements::Element<'a>> {
+    ) -> Result<fantoccini::elements::Element> {
         if let Some(text) = selector.strip_prefix("text=") {
             let xpath = xpath_contains_text(text);
             client
@@ -1908,7 +1905,7 @@ mod native_backend {
                 .with_context(|| format!("Failed to find element with text: {text}"))
         } else if selector.starts_with('@') && !selector.starts_with("@@") {
             let ref_id = &selector[1..];
-            let xpath = format!(r#"//*[@data-ref="{}']"#, ref_id);
+            let xpath = format!(r#"//*[@data-ref='{}']"#, ref_id);
             client
                 .wait()
                 .for_element(Locator::XPath(&xpath))
