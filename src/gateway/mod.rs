@@ -282,27 +282,41 @@ pub async fn run_gateway(host: &str, port: u16, config: Config) -> Result<()> {
     )));
 
     // ── Tunnel ────────────────────────────────────────────────
+    // Start tunnel AFTER axum is serving (spawned task with short delay)
+    // so ngrok connects to a live socket instead of getting ECONNREFUSED.
     let tunnel = crate::tunnel::create_tunnel(&config.tunnel)?;
-    let mut tunnel_url: Option<String> = None;
 
-    if let Some(ref tun) = tunnel {
-        println!("🔗 Starting {} tunnel...", tun.name());
-        match tun.start(host, actual_port).await {
-            Ok(url) => {
-                println!("🌐 Tunnel active: {url}");
-                tunnel_url = Some(url);
-            }
-            Err(e) => {
-                println!("⚠️  Tunnel failed to start: {e}");
-                println!("   Falling back to local-only mode.");
-            }
-        }
-    }
+    // Keep tunnel alive for the full server lifetime — wrapping in Arc prevents
+    // the child process (ngrok/cloudflared) from being killed when the start()
+    // future completes and the local variable would otherwise be dropped.
+    let _tunnel_guard: Option<std::sync::Arc<Box<dyn crate::tunnel::Tunnel>>> =
+        if let Some(tun) = tunnel {
+            let tun = std::sync::Arc::new(tun);
+            let tun_clone = tun.clone();
+            let host_owned = host.to_string();
+            tokio::spawn(async move {
+                // Wait for axum to be accepting connections
+                tokio::time::sleep(tokio::time::Duration::from_millis(800)).await;
+                tracing::info!("Starting {} tunnel...", tun_clone.name());
+                match tun_clone.start(&host_owned, actual_port).await {
+                    Ok(url) => {
+                        println!("🌐 Tunnel active: {url}");
+                        println!("   Webhook URL: {url}/whatsapp");
+                    }
+                    Err(e) => {
+                        tracing::warn!("Tunnel failed to start: {e}");
+                        println!("⚠️  Tunnel failed to start: {e}");
+                    }
+                }
+                // Keep this task (and the Arc clone) alive until the server exits
+                std::future::pending::<()>().await;
+            });
+            Some(tun)
+        } else {
+            None
+        };
 
     println!("🦀 Housaky Gateway listening on http://{display_addr}");
-    if let Some(ref url) = tunnel_url {
-        println!("  🌐 Public URL: {url}");
-    }
     println!("  POST /pair      — pair a new client (X-Pairing-Code header)");
     println!("  POST /webhook   — {{\"message\": \"your prompt\"}}");
     if whatsapp_channel.is_some() {

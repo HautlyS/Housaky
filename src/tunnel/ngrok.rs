@@ -36,62 +36,61 @@ impl Tunnel for NgrokTunnel {
             .output()
             .await?;
 
-        // Build command: ngrok http <port> [--domain <domain>]
+        // Write ngrok logs to a temp file — NOT stdout pipe.
+        // If ngrok writes to a piped stdout and the reader is dropped after
+        // we find the URL, ngrok receives SIGPIPE and exits. Using a log file
+        // keeps the process alive for the full server lifetime.
+        let log_path = std::env::temp_dir().join("housaky_ngrok.log");
+        // Truncate any previous log so we read fresh output
+        std::fs::write(&log_path, b"").ok();
+
+        // Build command: ngrok http <port> [--url <domain>]
         let mut args = vec!["http".to_string(), local_port.to_string()];
         if let Some(ref domain) = self.domain {
-            args.push("--domain".into());
+            args.push("--url".into());
             args.push(domain.clone());
         }
-        // Output log to stdout for URL extraction
         args.push("--log".into());
-        args.push("stdout".into());
+        args.push(log_path.to_string_lossy().into_owned());
         args.push("--log-format".into());
         args.push("logfmt".into());
 
-        let mut child = Command::new("ngrok")
+        let child = Command::new("ngrok")
             .args(&args)
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
             .kill_on_drop(true)
             .spawn()?;
 
-        let stdout = child
-            .stdout
-            .take()
-            .ok_or_else(|| anyhow::anyhow!("Failed to capture ngrok stdout"))?;
-
-        let mut reader = tokio::io::BufReader::new(stdout).lines();
+        // Poll the log file for the tunnel URL
         let mut public_url = String::new();
-
-        // Wait up to 15s for the tunnel URL
-        let deadline = tokio::time::Instant::now() + tokio::time::Duration::from_secs(15);
+        let deadline = tokio::time::Instant::now() + tokio::time::Duration::from_secs(20);
         while tokio::time::Instant::now() < deadline {
-            let line =
-                tokio::time::timeout(tokio::time::Duration::from_secs(3), reader.next_line()).await;
+            tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
 
-            match line {
-                Ok(Ok(Some(l))) => {
-                    tracing::debug!("ngrok: {l}");
-                    // ngrok logfmt: url=https://xxxx.ngrok-free.app
-                    if let Some(idx) = l.find("url=https://") {
-                        let url_start = idx + 4; // skip "url="
-                        let url_part = &l[url_start..];
-                        let end = url_part
-                            .find(|c: char| c.is_whitespace())
-                            .unwrap_or(url_part.len());
-                        public_url = url_part[..end].to_string();
-                        break;
-                    }
+            let contents = tokio::fs::read_to_string(&log_path).await.unwrap_or_default();
+            for line in contents.lines() {
+                tracing::debug!("ngrok: {line}");
+                if line.contains("ERR_NGROK") || line.contains("authentication failed") {
+                    bail!("ngrok error: {line}");
                 }
-                Ok(Ok(None)) => break,
-                Ok(Err(e)) => bail!("Error reading ngrok output: {e}"),
-                Err(_) => {}
+                // logfmt: url=https://...
+                if let Some(idx) = line.find("url=https://") {
+                    let url_part = &line[idx + 4..];
+                    let end = url_part
+                        .find(|c: char| c.is_whitespace())
+                        .unwrap_or(url_part.len());
+                    public_url = url_part[..end].to_string();
+                    break;
+                }
+            }
+            if !public_url.is_empty() {
+                break;
             }
         }
 
         if public_url.is_empty() {
-            child.kill().await.ok();
-            bail!("ngrok did not produce a public URL within 15s. Is the auth token valid?");
+            bail!("ngrok did not produce a public URL within 20s. Check auth token and domain.");
         }
 
         let mut guard = self.proc.lock().await;

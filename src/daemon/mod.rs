@@ -1,3 +1,5 @@
+pub mod control;
+
 use crate::config::Config;
 use anyhow::Result;
 use chrono::Utc;

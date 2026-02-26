@@ -48,6 +48,29 @@ use housaky::{
     agent, channels, commands, config_editor, cron, daemon, dashboard, doctor, gateway, hardware,
     integrations, migration, onboard, peripherals, service, skills, tui, Config,
 };
+use housaky::daemon::control as daemon_control;
+
+#[derive(Subcommand, Debug)]
+enum DaemonAction {
+    /// Start the daemon (default when no subcommand given)
+    Start {
+        #[arg(short, long, default_value = "8080")]
+        port: u16,
+        #[arg(long, default_value = "127.0.0.1")]
+        host: String,
+    },
+    /// Stop a running daemon
+    Stop,
+    /// Restart: stop any running daemon then start a fresh one
+    Restart {
+        #[arg(short, long, default_value = "8080")]
+        port: u16,
+        #[arg(long, default_value = "127.0.0.1")]
+        host: String,
+    },
+    /// Show whether the daemon is running
+    Status,
+}
 
 use commands::{
     ChannelCommands, CronCommands, HardwareCommands, HousakyCommands, IntegrationCommands,
@@ -125,14 +148,17 @@ enum Commands {
         host: String,
     },
 
-    /// Start long-running autonomous runtime (gateway + channels + heartbeat + scheduler)
+    /// Manage the long-running autonomous runtime (gateway + channels + heartbeat + scheduler)
     Daemon {
-        /// Port to listen on (use 0 for random available port)
-        #[arg(short, long, default_value = "8080")]
+        #[command(subcommand)]
+        action: Option<DaemonAction>,
+
+        /// Port to listen on — used when no subcommand given (start)
+        #[arg(short, long, default_value = "8080", global = true)]
         port: u16,
 
-        /// Host to bind to
-        #[arg(long, default_value = "127.0.0.1")]
+        /// Host to bind to — used when no subcommand given (start)
+        #[arg(long, default_value = "127.0.0.1", global = true)]
         host: String,
     },
 
@@ -602,13 +628,34 @@ async fn main() -> Result<()> {
                     gateway::run_gateway(&host, port, config).await
                 },
 
-                Commands::Daemon { port, host } => {
-                    if port == 0 {
-                        info!("🧠 Starting Housaky Daemon on {host} (random port)");
-                    } else {
-                        info!("🧠 Starting Housaky Daemon on {host}:{port}");
+                Commands::Daemon { action, port, host } => {
+                    match action.unwrap_or(DaemonAction::Start { port, host: host.clone() }) {
+                        DaemonAction::Start { port, host } => {
+                            if port == 0 {
+                                info!("🧠 Starting Housaky Daemon on {host} (random port)");
+                            } else {
+                                info!("🧠 Starting Housaky Daemon on {host}:{port}");
+                            }
+                            daemon::run(config, host, port).await
+                        }
+                        DaemonAction::Stop => {
+                            daemon_control::stop();
+                            Ok(())
+                        }
+                        DaemonAction::Restart { port, host } => {
+                            daemon_control::stop();
+                            if port == 0 {
+                                info!("🧠 Restarting Housaky Daemon on {host} (random port)");
+                            } else {
+                                info!("🧠 Restarting Housaky Daemon on {host}:{port}");
+                            }
+                            daemon::run(config, host, port).await
+                        }
+                        DaemonAction::Status => {
+                            daemon_control::status();
+                            Ok(())
+                        }
                     }
-                    daemon::run(config, host, port).await
                 },
 
                 Commands::Run { message, provider, model, verbose } => {
@@ -679,6 +726,13 @@ async fn main() -> Result<()> {
                         ("Telegram", config.channels_config.telegram.is_some()),
                         ("Discord", config.channels_config.discord.is_some()),
                         ("Slack", config.channels_config.slack.is_some()),
+                        ("WhatsApp", config.channels_config.whatsapp.is_some()),
+                        ("Matrix", config.channels_config.matrix.is_some()),
+                        ("iMessage", config.channels_config.imessage.is_some()),
+                        ("Email", config.channels_config.email.is_some()),
+                        ("IRC", config.channels_config.irc.is_some()),
+                        ("Lark", config.channels_config.lark.is_some()),
+                        ("DingTalk", config.channels_config.dingtalk.is_some()),
                         ("Webhook", config.channels_config.webhook.is_some()),
                     ] {
                         println!(
