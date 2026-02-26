@@ -2449,6 +2449,7 @@ fn setup_channels() -> Result<ChannelsConfig> {
                 config.telegram = Some(TelegramConfig {
                     bot_token: token,
                     allowed_users,
+                    elevenlabs: None,
                 });
             }
             1 => {

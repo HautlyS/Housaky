@@ -1,4 +1,5 @@
 use super::traits::{Channel, ChannelMessage};
+use crate::config::schema::TelegramElevenLabsConfig;
 use async_trait::async_trait;
 use reqwest::multipart::{Form, Part};
 use std::path::Path;
@@ -65,6 +66,8 @@ pub struct TelegramChannel {
     bot_token: String,
     allowed_users: Vec<String>,
     client: reqwest::Client,
+    /// Optional ElevenLabs integration for voice input (STT) and voice replies (TTS).
+    elevenlabs: Option<TelegramElevenLabsConfig>,
 }
 
 impl TelegramChannel {
@@ -73,7 +76,159 @@ impl TelegramChannel {
             bot_token,
             allowed_users,
             client: reqwest::Client::new(),
+            elevenlabs: None,
         }
+    }
+
+    pub fn with_elevenlabs(mut self, cfg: TelegramElevenLabsConfig) -> Self {
+        self.elevenlabs = Some(cfg);
+        self
+    }
+
+    /// Resolve the ElevenLabs API key from the config or environment.
+    fn elevenlabs_api_key(cfg: &TelegramElevenLabsConfig) -> Option<String> {
+        cfg.api_key
+            .clone()
+            .or_else(|| std::env::var("ELEVENLABS_API_KEY").ok())
+    }
+
+    /// Download a Telegram file by `file_id` and return its bytes.
+    async fn download_telegram_file(&self, file_id: &str) -> anyhow::Result<Vec<u8>> {
+        // Step 1: get the file path on Telegram servers
+        let get_file_url = self.api_url("getFile");
+        let resp: serde_json::Value = self
+            .client
+            .post(&get_file_url)
+            .json(&serde_json::json!({ "file_id": file_id }))
+            .send()
+            .await?
+            .json()
+            .await?;
+
+        let file_path = resp
+            .get("result")
+            .and_then(|r| r.get("file_path"))
+            .and_then(|p| p.as_str())
+            .ok_or_else(|| anyhow::anyhow!("Telegram getFile: missing file_path in response"))?;
+
+        // Step 2: download the actual bytes
+        let download_url = format!(
+            "https://api.telegram.org/file/bot{}/{}",
+            self.bot_token, file_path
+        );
+        let bytes = self
+            .client
+            .get(&download_url)
+            .send()
+            .await?
+            .bytes()
+            .await?;
+
+        Ok(bytes.to_vec())
+    }
+
+    /// Transcribe audio bytes (OGG/OPUS from Telegram) via ElevenLabs STT.
+    /// Returns the transcript text.
+    async fn transcribe_with_elevenlabs(
+        &self,
+        cfg: &TelegramElevenLabsConfig,
+        audio_bytes: Vec<u8>,
+    ) -> anyhow::Result<String> {
+        let api_key = Self::elevenlabs_api_key(cfg)
+            .ok_or_else(|| anyhow::anyhow!("ELEVENLABS_API_KEY not set"))?;
+
+        let part = Part::bytes(audio_bytes)
+            .file_name("voice.ogg")
+            .mime_str("audio/ogg")?;
+
+        let form = Form::new()
+            .text("model_id", "scribe_v1")
+            .part("file", part);
+
+        let resp: serde_json::Value = self
+            .client
+            .post("https://api.elevenlabs.io/v1/speech-to-text")
+            .header("xi-api-key", &api_key)
+            .multipart(form)
+            .send()
+            .await?
+            .error_for_status()?
+            .json()
+            .await?;
+
+        let text = resp
+            .get("text")
+            .and_then(|t| t.as_str())
+            .unwrap_or("")
+            .trim()
+            .to_string();
+
+        Ok(text)
+    }
+
+    /// Synthesise `text` to speech via ElevenLabs TTS REST API.
+    /// Returns raw MP3 bytes.
+    async fn synthesise_with_elevenlabs(
+        &self,
+        cfg: &TelegramElevenLabsConfig,
+        text: &str,
+    ) -> anyhow::Result<Vec<u8>> {
+        let api_key = Self::elevenlabs_api_key(cfg)
+            .ok_or_else(|| anyhow::anyhow!("ELEVENLABS_API_KEY not set"))?;
+
+        let url = format!(
+            "https://api.elevenlabs.io/v1/text-to-speech/{}",
+            cfg.voice_id
+        );
+
+        let body = serde_json::json!({
+            "text": text,
+            "model_id": "eleven_multilingual_v2",
+            "voice_settings": {
+                "stability": 0.5,
+                "similarity_boost": 0.75
+            }
+        });
+
+        let bytes = self
+            .client
+            .post(&url)
+            .header("xi-api-key", &api_key)
+            .header("Accept", "audio/mpeg")
+            .json(&body)
+            .send()
+            .await?
+            .error_for_status()?
+            .bytes()
+            .await?;
+
+        Ok(bytes.to_vec())
+    }
+
+    /// Send a voice note (MP3 bytes) to `chat_id` using Telegram sendVoice.
+    async fn send_voice_bytes(&self, chat_id: &str, audio_bytes: Vec<u8>) -> anyhow::Result<()> {
+        let part = Part::bytes(audio_bytes)
+            .file_name("reply.mp3")
+            .mime_str("audio/mpeg")?;
+
+        let form = Form::new()
+            .text("chat_id", chat_id.to_string())
+            .part("voice", part);
+
+        let resp = self
+            .client
+            .post(self.api_url("sendVoice"))
+            .multipart(form)
+            .send()
+            .await?;
+
+        if !resp.status().is_success() {
+            let err = resp.text().await?;
+            anyhow::bail!("Telegram sendVoice (bytes) failed: {err}");
+        }
+
+        tracing::info!("Telegram voice reply sent to {chat_id}");
+        Ok(())
     }
 
     fn api_url(&self, method: &str) -> String {
@@ -426,6 +581,22 @@ impl Channel for TelegramChannel {
     }
 
     async fn send(&self, message: &str, chat_id: &str) -> anyhow::Result<()> {
+        // ── Optional ElevenLabs TTS voice reply ──────────────────────────────
+        if let Some(ref el_cfg) = self.elevenlabs {
+            if el_cfg.voice_reply {
+                match self.synthesise_with_elevenlabs(el_cfg, message).await {
+                    Ok(audio_bytes) => {
+                        if let Err(e) = self.send_voice_bytes(chat_id, audio_bytes).await {
+                            tracing::warn!("ElevenLabs TTS voice reply failed: {e}");
+                        }
+                    }
+                    Err(e) => {
+                        tracing::warn!("ElevenLabs TTS synthesis failed: {e}");
+                    }
+                }
+            }
+        }
+
         // Split message if it exceeds Telegram's 4096 character limit
         let chunks = split_message_for_telegram(message);
 
@@ -515,7 +686,7 @@ impl Channel for TelegramChannel {
             let body = serde_json::json!({
                 "offset": offset,
                 "timeout": POLL_TIMEOUT_SECS,
-                "allowed_updates": ["message", "edited_message"]
+                "allowed_updates": ["message", "edited_message", "channel_post"]
             });
 
             let resp = match self
@@ -589,8 +760,55 @@ impl Channel for TelegramChannel {
                         continue;
                     };
 
-                    let Some(text) = message.get("text").and_then(serde_json::Value::as_str) else {
-                        // Skip non-text updates (stickers, photos without captions, etc.)
+                    // ── Resolve message text: plain text OR voice transcription ─────
+                    let text_opt = message.get("text").and_then(serde_json::Value::as_str);
+
+                    // Detect voice / audio message — the file_id lives under
+                    // message.voice.file_id or message.audio.file_id
+                    let voice_file_id = message
+                        .get("voice")
+                        .or_else(|| message.get("audio"))
+                        .and_then(|v| v.get("file_id"))
+                        .and_then(serde_json::Value::as_str);
+
+                    // Resolve to a final text string
+                    let resolved_text: Option<String> = if let Some(t) = text_opt {
+                        Some(t.to_string())
+                    } else if let (Some(file_id), Some(ref el_cfg)) =
+                        (voice_file_id, &self.elevenlabs)
+                    {
+                        // Download the voice OGG and transcribe it
+                        match self.download_telegram_file(file_id).await {
+                            Ok(audio_bytes) => {
+                                match self.transcribe_with_elevenlabs(el_cfg, audio_bytes).await {
+                                    Ok(transcript) if !transcript.is_empty() => {
+                                        tracing::info!(
+                                            "Telegram voice transcribed ({} chars)",
+                                            transcript.len()
+                                        );
+                                        Some(transcript)
+                                    }
+                                    Ok(_) => {
+                                        tracing::warn!("Telegram voice transcription returned empty text");
+                                        None
+                                    }
+                                    Err(e) => {
+                                        tracing::warn!("ElevenLabs STT error: {e}");
+                                        None
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                tracing::warn!("Failed to download Telegram voice file: {e}");
+                                None
+                            }
+                        }
+                    } else {
+                        // Non-text, non-voice update (sticker, photo, etc.) — skip
+                        None
+                    };
+
+                    let Some(text) = resolved_text else {
                         continue;
                     };
 
@@ -651,7 +869,7 @@ Allowlist Telegram @username or numeric user ID, then run `housaky onboard --cha
                     let msg = ChannelMessage {
                         id: format!("telegram_{chat_id}_{message_id}"),
                         sender: chat_id.clone(),
-                        content: text.to_string(),
+                        content: text,
                         channel: "telegram".to_string(),
                         timestamp: std::time::SystemTime::now()
                             .duration_since(std::time::UNIX_EPOCH)

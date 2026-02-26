@@ -1146,8 +1146,14 @@ pub async fn run_agi_with_tui(
     message: Option<String>,
     provider: Option<String>,
     model: Option<String>,
-    _verbose: bool,
+    verbose: bool,
 ) -> Result<()> {
+    // Propagate verbose flag to the background thread via env so it can be
+    // read by any downstream component (e.g. cognitive loop output).
+    if verbose {
+        std::env::set_var("HOUSAKY_VERBOSE", "1");
+    }
+
     let cfg = config.clone();
     std::thread::spawn(move || {
         let rt = tokio::runtime::Runtime::new().unwrap();
@@ -1157,10 +1163,10 @@ pub async fn run_agi_with_tui(
             }
         });
     });
-    
+
     tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
-    
+
     crate::tui::run_agi_tui(config, None, None)?;
-    
+
     Ok(())
 }

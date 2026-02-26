@@ -10,7 +10,8 @@ pub use schema::{
     ClawdCursorConfig, IMessageConfig, IdentityConfig, LarkConfig, MatrixConfig, MemoryConfig, ModelRouteConfig,
     ObservabilityConfig, PeripheralBoardConfig, PeripheralsConfig, ReliabilityConfig,
     ResourceLimitsConfig, RuntimeConfig, SandboxBackend, SandboxConfig, SchedulerConfig,
-    SecretsConfig, SecurityConfig, SlackConfig, TelegramConfig, ToolConfig, TunnelConfig,
+    SecretsConfig, SecurityConfig, SlackConfig, TelegramConfig, TelegramElevenLabsConfig,
+    ToolConfig, TunnelConfig,
     WasmRuntimeConfig, WebhookConfig, SkillsConfig,
 };
 
@@ -35,6 +36,7 @@ mod tests {
         let telegram = TelegramConfig {
             bot_token: "token".into(),
             allowed_users: vec!["alice".into()],
+            elevenlabs: None,
         };
 
         let discord = DiscordConfig {

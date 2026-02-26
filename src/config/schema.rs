@@ -2362,6 +2362,41 @@ impl Default for ChannelsConfig {
 pub struct TelegramConfig {
     pub bot_token: String,
     pub allowed_users: Vec<String>,
+    /// Optional ElevenLabs integration.
+    /// When present and `ELEVENLABS_API_KEY` is set:
+    ///   - Incoming Telegram voice messages are transcribed via ElevenLabs STT.
+    ///   - Agent text replies are synthesised and sent back as Telegram voice notes.
+    #[serde(default)]
+    pub elevenlabs: Option<TelegramElevenLabsConfig>,
+}
+
+/// ElevenLabs sub-config embedded inside `TelegramConfig`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TelegramElevenLabsConfig {
+    /// ElevenLabs voice ID used for TTS replies (e.g. "21m00Tcm4TlvDq8ikWAM").
+    /// Defaults to the ElevenLabs "Rachel" demo voice when omitted.
+    #[serde(default = "default_elevenlabs_voice_id")]
+    pub voice_id: String,
+    /// When true the bot sends a voice note in addition to the text reply.
+    #[serde(default)]
+    pub voice_reply: bool,
+    /// Optional API key override. Falls back to `ELEVENLABS_API_KEY` env var.
+    #[serde(default)]
+    pub api_key: Option<String>,
+}
+
+fn default_elevenlabs_voice_id() -> String {
+    "21m00Tcm4TlvDq8ikWAM".to_string()
+}
+
+impl Default for TelegramElevenLabsConfig {
+    fn default() -> Self {
+        Self {
+            voice_id: default_elevenlabs_voice_id(),
+            voice_reply: false,
+            api_key: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -3319,6 +3354,7 @@ mod tests {
                 telegram: Some(TelegramConfig {
                     bot_token: "123:ABC".into(),
                     allowed_users: vec!["user1".into()],
+                    elevenlabs: None,
                 }),
                 discord: None,
                 slack: None,
@@ -3576,6 +3612,7 @@ tool_dispatcher = "xml"
         let tc = TelegramConfig {
             bot_token: "123:XYZ".into(),
             allowed_users: vec!["alice".into(), "bob".into()],
+            elevenlabs: None,
         };
         let json = serde_json::to_string(&tc).unwrap();
         let parsed: TelegramConfig = serde_json::from_str(&json).unwrap();

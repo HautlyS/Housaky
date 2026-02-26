@@ -36,6 +36,7 @@
 
 use anyhow::{bail, Result};
 use clap::{Parser, Subcommand};
+use std::path::PathBuf;
 use tracing::{info, Level};
 use tracing_subscriber::FmtSubscriber;
 
@@ -298,9 +299,9 @@ fn get_api_key_from_keys_manager_or_config(config: &Config) -> Option<String> {
     config.api_key.clone()
 }
 
-/// Start the complete Housaky system: daemon + dashboard + TUI
+/// Start the complete Housaky system: daemon + dashboard + AGI TUI
 /// This is the default behavior when running `housaky` with no subcommand
-async fn start_full_system(config: Config) -> Result<()> {
+async fn start_full_system(config: Config, verbose: bool) -> Result<()> {
     use tokio::time::{sleep, Duration};
 
     println!("🚀 Starting Full Housaky AGI System...");
@@ -310,63 +311,157 @@ async fn start_full_system(config: Config) -> Result<()> {
     let gateway_port = 8080u16;
     let dashboard_port = 3000u16;
 
+    // Check for required configuration
+    let has_api_key = config.api_key.as_ref().map_or(false, |k| !k.is_empty());
+    let has_provider = config.default_provider.as_ref().map_or(false, |p| !p.is_empty());
+
+    if !has_api_key && !has_provider {
+        println!("⚠️  No API key or provider configured.");
+        println!("   Run `housaky onboard` to set up your configuration.");
+        println!();
+        // Still continue - the AGI system may use environment variables
+    }
+
+    // Set workspace env for all components
+    std::env::set_var("HOUSAKY_WORKSPACE", config.workspace_dir.to_string_lossy().to_string());
+
     // 1. Start daemon (gateway + channels + heartbeat + AGI)
+    println!("🧠 Starting daemon (gateway + channels + heartbeat + AGI)...");
     let daemon_config = config.clone();
-    let daemon_handle = tokio::spawn(async move {
-        if let Err(e) = daemon::run(daemon_config, host.clone(), gateway_port).await {
-            eprintln!("Daemon error: {}", e);
+    let daemon_host = host.clone();
+    let daemon_task = tokio::spawn(async move {
+        if let Err(e) = daemon::run(daemon_config, daemon_host, gateway_port).await {
+            eprintln!("❌ Daemon error: {}", e);
+        } else {
+            println!("✅ Daemon stopped cleanly");
         }
     });
+    let daemon_abort = daemon_task.abort_handle();
 
     // 2. Start dashboard web server (if installed)
-    let dashboard_handle = tokio::spawn(async move {
-        if dashboard::check_dashboard_installed() {
-            println!("📊 Dashboard detected, starting server on port {}...", dashboard_port);
-            if let Err(e) = dashboard::start_dashboard_server("127.0.0.1", dashboard_port, false).await {
-                eprintln!("Dashboard error: {}", e);
+    let dashboard_installed = dashboard::check_dashboard_installed();
+    let dashboard_abort = if dashboard_installed {
+        println!("📊 Dashboard detected, starting server on port {}...", dashboard_port);
+        let dashboard_host = host.clone();
+        let t = tokio::spawn(async move {
+            if let Err(e) = dashboard::start_dashboard_server(&dashboard_host, dashboard_port, false).await {
+                eprintln!("❌ Dashboard error: {}", e);
+            } else {
+                println!("✅ Dashboard stopped cleanly");
             }
-        } else {
-            println!("💡 Dashboard not installed. Build it with: cd dashboard && pnpm install && pnpm build");
-        }
-    });
+        });
+        Some(t.abort_handle())
+    } else {
+        println!("💡 Dashboard not installed. Build it with: cd dashboard && pnpm install && pnpm build");
+        None
+    };
 
     // Give services time to start
-    sleep(Duration::from_millis(800)).await;
+    sleep(Duration::from_millis(1000)).await;
+
+    // Print status of configured channels (including voice)
+    print_channel_status(&config);
 
     // 3. Start AGI with TUI (this blocks until user exits)
-    println!("🤖 Starting AGI interface...");
+    println!();
+    println!("🤖 Starting AGI interface with cognitive loop...");
+    println!("   Press Ctrl+C to exit");
     println!();
 
     let result = housaky::housaky::heartbeat::run_agi_with_tui(
         config.clone(),
-        None, // No initial message
-        None, // Use default provider
-        None, // Use default model
-        false, // Not verbose by default
+        None,  // No initial message
+        None,  // Use default provider
+        None,  // Use default model
+        verbose,
     ).await;
 
     // Shutdown sequence
     println!("\n👋 Shutting down Housaky system...");
-    daemon_handle.abort();
-    dashboard_handle.abort();
+    if let Some(abort) = dashboard_abort {
+        abort.abort();
+    }
+    daemon_abort.abort();
+    // Give background tasks a moment to acknowledge the abort
+    sleep(Duration::from_secs(2)).await;
 
-    let _daemon_result = tokio::time::timeout(Duration::from_secs(2), daemon_handle).await;
-    let _dashboard_result = tokio::time::timeout(Duration::from_secs(2), dashboard_handle).await;
-
+    println!("✅ Housaky system stopped");
     result
 }
 
-/// Check if this is a first-time run (no valid config exists)
-fn is_first_run() -> bool {
-    // Try to load existing config
+/// Print status of configured channels
+fn print_channel_status(config: &Config) {
+    let channels_config = &config.channels_config;
+    let mut active_channels = Vec::new();
+    
+    if channels_config.telegram.is_some() {
+        active_channels.push("Telegram");
+    }
+    if channels_config.discord.is_some() {
+        active_channels.push("Discord");
+    }
+    if channels_config.slack.is_some() {
+        active_channels.push("Slack");
+    }
+    if channels_config.whatsapp.is_some() {
+        active_channels.push("WhatsApp");
+    }
+    if channels_config.matrix.is_some() {
+        active_channels.push("Matrix");
+    }
+    if channels_config.imessage.is_some() {
+        active_channels.push("iMessage");
+    }
+    if channels_config.email.is_some() {
+        active_channels.push("Email");
+    }
+    if channels_config.irc.is_some() {
+        active_channels.push("IRC");
+    }
+    if channels_config.lark.is_some() {
+        active_channels.push("Lark");
+    }
+    if channels_config.dingtalk.is_some() {
+        active_channels.push("DingTalk");
+    }
+    
+    if !active_channels.is_empty() {
+        println!("📡 Active channels: {}", active_channels.join(", "));
+    }
+    
+    // Voice integration check
+    if std::env::var("ELEVENLABS_API_KEY").is_ok() {
+        println!("🎙️  Voice integration: Enabled (ElevenLabs)");
+    }
+}
+
+/// Check if this is a first-time run (no valid config exists).
+/// Returns `(true, None)` when onboarding is needed, or `(false, Some(config))` when
+/// a usable config already exists so the caller does not re-load it.
+fn is_first_run() -> (bool, Option<Config>) {
+    let home = directories::UserDirs::new()
+        .map(|u| u.home_dir().to_path_buf())
+        .unwrap_or_else(|| PathBuf::from("."));
+    let config_path = home.join(".housaky").join("config.toml");
+
+    // First run if config file doesn't exist
+    if !config_path.exists() {
+        return (true, None);
+    }
+
+    // Try to load existing config and check if it has essential settings
     match Config::load_or_init() {
         Ok(config) => {
-            // Check if config has essential settings
-            config.api_key.is_none() && 
-            config.default_provider.is_none() &&
-            !config.config_path.exists()
+            let has_api_key = config.api_key.as_ref().map_or(false, |k| !k.is_empty());
+            let has_provider = config.default_provider.as_ref().map_or(false, |p| !p.is_empty());
+            // If neither API key nor provider is set, treat as first run
+            if !has_api_key && !has_provider {
+                (true, None)
+            } else {
+                (false, Some(config))
+            }
         }
-        Err(_) => true,
+        Err(_) => (true, None),
     }
 }
 
@@ -385,50 +480,45 @@ async fn main() -> Result<()> {
     let no_subcommand = args.len() == 1 || (args.len() > 1 && args[1].starts_with('-'));
 
     if no_subcommand {
-        // Check for first run - no config exists
-        if is_first_run() {
+        // Initialize logging once for the no-subcommand paths
+        let subscriber = FmtSubscriber::builder()
+            .with_max_level(Level::INFO)
+            .finish();
+        // Ignore error: subscriber may already be set in integration tests
+        let _ = tracing::subscriber::set_global_default(subscriber);
+
+        // Initialize keys manager once
+        let _ = housaky::keys_manager::manager::init_global_keys_manager();
+        housaky::keys_manager::manager::load_keys_from_file().await;
+
+        // Check for first run — reuse the loaded Config to avoid a double load
+        let (first_run, existing_config) = is_first_run();
+        if first_run {
             println!("👋 Welcome to Housaky!");
             println!("   Starting interactive setup...\n");
-            
-            // Initialize logging
-            let subscriber = FmtSubscriber::builder()
-                .with_max_level(Level::INFO)
-                .finish();
-            let _subscriber_result = tracing::subscriber::set_global_default(subscriber);
-
-            // Initialize keys manager
-            let _keys_init_result = housaky::keys_manager::manager::init_global_keys_manager();
-            housaky::keys_manager::manager::load_keys_from_file().await;
 
             // Run the interactive wizard
             let config = onboard::run_wizard()?;
-            
-            // After wizard, check if we should auto-start
+
+            // After wizard, check if we should auto-start channels
             if std::env::var("HOUSAKY_AUTOSTART_CHANNELS").as_deref() == Ok("1") {
                 println!("\n🚀 Auto-starting channels...");
                 channels::start_channels(config.clone()).await?;
             }
 
             // Start full system with the new config
-            return start_full_system(config).await;
+            return start_full_system(config, false).await;
         } else {
-            // Not first run, start full system directly
-            let config = Config::load_or_init()?;
-            
-            // Initialize logging
-            let subscriber = FmtSubscriber::builder()
-                .with_max_level(Level::INFO)
-                .finish();
-            let _subscriber_result = tracing::subscriber::set_global_default(subscriber);
-
-            // Initialize keys manager
-            let _keys_init_result = housaky::keys_manager::manager::init_global_keys_manager();
-            housaky::keys_manager::manager::load_keys_from_file().await;
+            // Reuse the config already loaded by is_first_run() when available
+            let config = match existing_config {
+                Some(c) => c,
+                None => Config::load_or_init()?,
+            };
 
             // Set workspace env
             std::env::set_var("HOUSAKY_WORKSPACE", config.workspace_dir.to_string_lossy().to_string());
 
-            return start_full_system(config).await;
+            return start_full_system(config, false).await;
         }
     }
 
@@ -439,11 +529,11 @@ async fn main() -> Result<()> {
     let subscriber = FmtSubscriber::builder()
         .with_max_level(Level::INFO)
         .finish();
+    // Ignore error: subscriber may already be set (e.g. in tests)
+    let _ = tracing::subscriber::set_global_default(subscriber);
 
-    tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
-
-    // Initialize the new keys manager and load keys from disk
-    let _keys_init_result = housaky::keys_manager::manager::init_global_keys_manager();
+    // Initialize the keys manager
+    let _ = housaky::keys_manager::manager::init_global_keys_manager();
     housaky::keys_manager::manager::load_keys_from_file().await;
 
     // Provide workspace dir as env for channel commands (/logs today, /grep, etc.).
@@ -523,14 +613,15 @@ async fn main() -> Result<()> {
 
                 Commands::Run { message, provider, model, verbose } => {
                     println!("🚀 Starting Full Housaky AGI System with TUI Chat...");
-                    println!("   Verbose mode: {}", verbose);
-                    
+                    if verbose {
+                        println!("   Verbose mode: on");
+                    }
                     housaky::housaky::heartbeat::run_agi_with_tui(
-                        config, 
-                        message, 
-                        provider, 
-                        model, 
-                        verbose
+                        config,
+                        message,
+                        provider,
+                        model,
+                        verbose,
                     ).await
                 },
 
@@ -889,17 +980,6 @@ async fn main() -> Result<()> {
         }
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use clap::CommandFactory;
-
-    #[test]
-    fn cli_definition_has_no_flag_conflicts() {
-        Cli::command().debug_assert();
-    }
-    }
 
 #[cfg(test)]
 mod tests {

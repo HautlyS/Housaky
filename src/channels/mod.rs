@@ -922,13 +922,11 @@ pub async fn doctor_channels(config: Config) -> Result<()> {
     let mut channels: Vec<(&'static str, Arc<dyn Channel>)> = Vec::new();
 
     if let Some(ref tg) = config.channels_config.telegram {
-        channels.push((
-            "Telegram",
-            Arc::new(TelegramChannel::new(
-                tg.bot_token.clone(),
-                tg.allowed_users.clone(),
-            )),
-        ));
+        let mut ch = TelegramChannel::new(tg.bot_token.clone(), tg.allowed_users.clone());
+        if let Some(ref el) = tg.elevenlabs {
+            ch = ch.with_elevenlabs(el.clone());
+        }
+        channels.push(("Telegram", Arc::new(ch)));
     }
 
     if let Some(ref dc) = config.channels_config.discord {
@@ -1217,10 +1215,11 @@ pub async fn start_channels(config: Config) -> Result<()> {
     let mut channels: Vec<Arc<dyn Channel>> = Vec::new();
 
     if let Some(ref tg) = config.channels_config.telegram {
-        channels.push(Arc::new(TelegramChannel::new(
-            tg.bot_token.clone(),
-            tg.allowed_users.clone(),
-        )));
+        let mut ch = TelegramChannel::new(tg.bot_token.clone(), tg.allowed_users.clone());
+        if let Some(ref el) = tg.elevenlabs {
+            ch = ch.with_elevenlabs(el.clone());
+        }
+        channels.push(Arc::new(ch));
     }
 
     if let Some(ref dc) = config.channels_config.discord {
@@ -1423,12 +1422,10 @@ pub async fn start_channels(config: Config) -> Result<()> {
         running_registry,
     });
 
-    // Ensure heartbeat task is stopped once the channel loop exits.
-    // (Loop is long-running; this is mainly for graceful shutdown / tests.)
-    let _channels_heartbeat_task = channels_heartbeat_task;
-
-
     run_message_dispatch_loop(rx, runtime_ctx, max_in_flight_messages).await;
+
+    // Stop the heartbeat task once the channel dispatch loop exits.
+    channels_heartbeat_task.abort();
 
     // Wait for all channel tasks
     for h in handles {
