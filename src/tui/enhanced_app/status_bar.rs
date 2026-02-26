@@ -5,10 +5,10 @@ use ratatui::{
     Frame,
 };
 use crate::tui::enhanced_app::theme::{
-    Palette, style_dim, style_error, style_muted, style_status_err, style_status_loading,
-    style_status_ok, style_warning, LOGO,
+    Palette, style_dim, style_muted, style_status_err, style_status_loading,
+    style_status_ok, LOGO,
 };
-use crate::tui::enhanced_app::state::{AppState, StreamStatus, ViewMode};
+use crate::tui::enhanced_app::state::{AppState, StreamStatus};
 
 pub fn draw(f: &mut Frame, area: Rect, state: &AppState, provider: &str, model: &str) {
     let zones = Layout::default()
@@ -100,7 +100,7 @@ fn draw_center(f: &mut Frame, area: Rect, provider: &str, model: &str, state: &A
     f.render_widget(Paragraph::new(line), area);
 }
 
-fn draw_right(f: &mut Frame, area: Rect, state: &AppState) {
+fn draw_right(f: &mut Frame, area: Rect, _state: &AppState) {
     // Contextual hints based on mode
     let hints: Vec<Span> = vec![
         Span::styled(" Ctrl+P ", ratatui::style::Style::default().fg(Palette::CYAN).add_modifier(ratatui::style::Modifier::BOLD)),

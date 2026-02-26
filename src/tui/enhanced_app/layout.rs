@@ -1,32 +1,43 @@
-use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use crate::tui::enhanced_app::state::ViewMode;
+use ratatui::layout::{Constraint, Direction, Layout, Rect};
 
 // ── Terminal size breakpoints ─────────────────────────────────────────────────
 
 pub struct TermSize {
-    pub width:  u16,
+    pub width: u16,
     pub height: u16,
 }
 
 impl TermSize {
     pub fn from(area: Rect) -> Self {
-        Self { width: area.width, height: area.height }
+        Self {
+            width: area.width,
+            height: area.height,
+        }
     }
 
-    pub fn is_narrow(&self) -> bool { self.width < 100 }
-    pub fn is_compact(&self) -> bool { self.height < 30 }
+    pub fn is_narrow(&self) -> bool {
+        self.width < 100
+    }
+    pub fn is_compact(&self) -> bool {
+        self.height < 30
+    }
     pub fn sidebar_width(&self) -> u16 {
-        if self.is_narrow() { 0 } else { 32 }
+        if self.is_narrow() {
+            0
+        } else {
+            32
+        }
     }
 }
 
 // ── Top-level zones ───────────────────────────────────────────────────────────
 
 pub struct RootZones {
-    pub header:  Rect,   // title bar + tab bar
-    pub body:    Rect,   // main content (chat + optional sidebar)
-    pub input:   Rect,   // message input box
-    pub footer:  Rect,   // status bar
+    pub header: Rect, // title bar + tab bar
+    pub body: Rect,   // main content (chat + optional sidebar)
+    pub input: Rect,  // message input box
+    pub footer: Rect, // status bar
 }
 
 impl RootZones {
@@ -37,17 +48,17 @@ impl RootZones {
         let vert = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Length(2),           // header
-                Constraint::Min(8),              // body
-                Constraint::Length(input_height),// input
-                Constraint::Length(1),           // footer
+                Constraint::Length(2),            // header
+                Constraint::Min(8),               // body
+                Constraint::Length(input_height), // input
+                Constraint::Length(1),            // footer
             ])
             .split(area);
 
         RootZones {
             header: vert[0],
-            body:   vert[1],
-            input:  vert[2],
+            body: vert[1],
+            input: vert[2],
             footer: vert[3],
         }
     }
@@ -56,7 +67,7 @@ impl RootZones {
 // ── Body zones (depends on ViewMode + sidebar toggle) ────────────────────────
 
 pub struct BodyZones {
-    pub main:    Rect,
+    pub main: Rect,
     pub sidebar: Option<Rect>,
 }
 
@@ -65,22 +76,25 @@ impl BodyZones {
         let sz = TermSize::from(body);
 
         match view {
-            ViewMode::Full => BodyZones { main: body, sidebar: None },
+            ViewMode::Full => BodyZones {
+                main: body,
+                sidebar: None,
+            },
 
             ViewMode::Split => {
                 if !sidebar_visible || sz.is_narrow() {
-                    BodyZones { main: body, sidebar: None }
+                    BodyZones {
+                        main: body,
+                        sidebar: None,
+                    }
                 } else {
                     let sidebar_w = sz.sidebar_width();
                     let horiz = Layout::default()
                         .direction(Direction::Horizontal)
-                        .constraints([
-                            Constraint::Min(40),
-                            Constraint::Length(sidebar_w),
-                        ])
+                        .constraints([Constraint::Min(40), Constraint::Length(sidebar_w)])
                         .split(body);
                     BodyZones {
-                        main:    horiz[0],
+                        main: horiz[0],
                         sidebar: Some(horiz[1]),
                     }
                 }
@@ -88,18 +102,18 @@ impl BodyZones {
 
             ViewMode::Dashboard => {
                 if sz.is_narrow() {
-                    BodyZones { main: body, sidebar: None }
+                    BodyZones {
+                        main: body,
+                        sidebar: None,
+                    }
                 } else {
                     let sidebar_w = (body.width / 2).max(36);
                     let horiz = Layout::default()
                         .direction(Direction::Horizontal)
-                        .constraints([
-                            Constraint::Min(30),
-                            Constraint::Length(sidebar_w),
-                        ])
+                        .constraints([Constraint::Min(30), Constraint::Length(sidebar_w)])
                         .split(body);
                     BodyZones {
-                        main:    horiz[0],
+                        main: horiz[0],
                         sidebar: Some(horiz[1]),
                     }
                 }
@@ -111,8 +125,8 @@ impl BodyZones {
 // ── Sidebar internal zones ────────────────────────────────────────────────────
 
 pub struct SidebarZones {
-    pub metrics:  Rect,
-    pub goals:    Rect,
+    pub metrics: Rect,
+    pub goals: Rect,
     pub activity: Rect,
 }
 
@@ -127,8 +141,8 @@ impl SidebarZones {
             ])
             .split(sidebar);
         SidebarZones {
-            metrics:  vert[0],
-            goals:    vert[1],
+            metrics: vert[0],
+            goals: vert[1],
             activity: vert[2],
         }
     }
@@ -138,8 +152,8 @@ impl SidebarZones {
 
 pub struct HeaderZones {
     pub brand: Rect,
-    pub tabs:  Rect,
-    pub meta:  Rect,
+    pub tabs: Rect,
+    pub meta: Rect,
 }
 
 impl HeaderZones {
@@ -148,14 +162,14 @@ impl HeaderZones {
             .direction(Direction::Horizontal)
             .constraints([
                 Constraint::Length(16),
-                Constraint::Min(20),
+                Constraint::Min(35),
                 Constraint::Length(24),
             ])
             .split(header);
         HeaderZones {
             brand: horiz[0],
-            tabs:  horiz[1],
-            meta:  horiz[2],
+            tabs: horiz[1],
+            meta: horiz[2],
         }
     }
 }

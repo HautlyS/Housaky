@@ -9,7 +9,7 @@ use ratatui::{
 };
 
 use crate::config::Config;
-use crate::providers::{create_provider, ChatMessage};
+use crate::providers::{create_provider_with_keys_manager, ChatMessage};
 
 use super::chat_pane::ChatPane;
 use super::command_palette::{CommandPalette, PaletteAction};
@@ -642,6 +642,7 @@ impl EnhancedApp {
             (KeyModifiers::NONE, KeyCode::Char('3')) => { self.state.active_tab = MainTab::Tools; }
             (KeyModifiers::NONE, KeyCode::Char('4')) => { self.state.active_tab = MainTab::Goals; }
             (KeyModifiers::NONE, KeyCode::Char('5')) => { self.state.active_tab = MainTab::Metrics; }
+            (KeyModifiers::NONE, KeyCode::Char('6')) => { self.state.active_tab = MainTab::Config; }
 
             // Quit
             (KeyModifiers::NONE, KeyCode::Char('q')) => {
@@ -750,11 +751,12 @@ impl EnhancedApp {
                 self.state.tool_log.clear();
                 self.notifs.info("Tool log cleared");
             }
-            (KeyModifiers::NONE, KeyCode::Char('1'))      => { self.state.active_tab = MainTab::Chat; }
-            (KeyModifiers::NONE, KeyCode::Char('2'))      => { self.state.active_tab = MainTab::Skills; }
-            (KeyModifiers::NONE, KeyCode::Char('3'))      => { self.state.active_tab = MainTab::Tools; }
-            (KeyModifiers::NONE, KeyCode::Char('4'))      => { self.state.active_tab = MainTab::Goals; }
-            (KeyModifiers::NONE, KeyCode::Char('5'))      => { self.state.active_tab = MainTab::Metrics; }
+            (KeyModifiers::NONE, KeyCode::Char('1'))       => { self.state.active_tab = MainTab::Chat; }
+            (KeyModifiers::NONE, KeyCode::Char('2'))       => { self.state.active_tab = MainTab::Skills; }
+            (KeyModifiers::NONE, KeyCode::Char('3'))       => { self.state.active_tab = MainTab::Tools; }
+            (KeyModifiers::NONE, KeyCode::Char('4'))       => { self.state.active_tab = MainTab::Goals; }
+            (KeyModifiers::NONE, KeyCode::Char('5'))       => { self.state.active_tab = MainTab::Metrics; }
+            (KeyModifiers::NONE, KeyCode::Char('6'))       => { self.state.active_tab = MainTab::Config; }
             (KeyModifiers::NONE, KeyCode::Char('?'))
             | (KeyModifiers::NONE, KeyCode::F(1))         => { self.help.toggle(); }
             _ => {}
@@ -774,6 +776,7 @@ impl EnhancedApp {
             (KeyModifiers::NONE, KeyCode::Char('3'))       => { self.state.active_tab = MainTab::Tools; }
             (KeyModifiers::NONE, KeyCode::Char('4'))       => { self.state.active_tab = MainTab::Goals; }
             (KeyModifiers::NONE, KeyCode::Char('5'))       => { self.state.active_tab = MainTab::Metrics; }
+            (KeyModifiers::NONE, KeyCode::Char('6'))       => { self.state.active_tab = MainTab::Config; }
             (KeyModifiers::NONE, KeyCode::Char('?'))
             | (KeyModifiers::NONE, KeyCode::F(1))          => { self.help.toggle(); }
             _ => {}
@@ -793,6 +796,7 @@ impl EnhancedApp {
             (KeyModifiers::NONE, KeyCode::Char('3'))       => { self.state.active_tab = MainTab::Tools; }
             (KeyModifiers::NONE, KeyCode::Char('4'))       => { self.state.active_tab = MainTab::Goals; }
             (KeyModifiers::NONE, KeyCode::Char('5'))       => { self.state.active_tab = MainTab::Metrics; }
+            (KeyModifiers::NONE, KeyCode::Char('6'))       => { self.state.active_tab = MainTab::Config; }
             (KeyModifiers::NONE, KeyCode::Char('?'))
             | (KeyModifiers::NONE, KeyCode::F(1))          => { self.help.toggle(); }
             _ => {}
@@ -946,8 +950,7 @@ impl EnhancedApp {
         self.state.metrics.total_requests += 1;
         self.sidebar.push_activity(ActivityKind::Thought, format!("User: {}", truncate_str(&text, 40)));
 
-        let api_key = self.config.api_key.clone();
-        let provider = create_provider(&self.provider_name, api_key.as_deref())?;
+        let provider = create_provider_with_keys_manager(&self.provider_name, Some(&self.model_name))?;
 
         let chat_messages: Vec<ChatMessage> = self.chat.messages.iter()
             .map(|m| ChatMessage {

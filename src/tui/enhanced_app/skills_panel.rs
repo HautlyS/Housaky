@@ -1,15 +1,14 @@
 use std::path::PathBuf;
 use ratatui::{
-    layout::{Alignment, Constraint, Direction, Layout, Rect},
+    layout::{Constraint, Direction, Layout, Rect},
     style::Modifier,
     text::{Line, Span},
-    widgets::{Block, Borders, Clear, Gauge, List, ListItem, Paragraph, Tabs, Wrap},
+    widgets::{Block, Borders, Clear, Gauge, List, ListItem, Paragraph, Wrap},
     Frame,
 };
 use crate::tui::enhanced_app::theme::{
-    Palette, render_gauge_bar, style_border, style_border_active, style_border_focus,
-    style_dim, style_muted, style_tag_skill, style_title, style_error, style_success,
-    style_warning,
+    Palette, style_border, style_border_active, style_border_focus,
+    style_dim, style_muted, style_tag_skill, style_success,
 };
 
 // ── Skill source ──────────────────────────────────────────────────────────────

@@ -8,7 +8,7 @@ use ratatui::{
 use crate::tui::enhanced_app::theme::{
     Palette, render_gauge_bar, style_border, style_dim, style_error, style_muted,
     style_success, style_tag_goal, style_tag_skill, style_tag_thought, style_tag_tool,
-    style_title, style_warning,
+    style_title,
 };
 use crate::tui::enhanced_app::state::SessionMetrics;
 
