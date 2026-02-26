@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import DashboardView from '@/views/DashboardView.vue'
 import ChatView from '@/views/ChatView.vue'
+import AGIView from '@/views/AGIView.vue'
 import SkillsView from '@/views/SkillsView.vue'
 import ChannelsView from '@/views/ChannelsView.vue'
 import IntegrationsView from '@/views/IntegrationsView.vue'
@@ -20,6 +21,11 @@ const router = createRouter({
       path: '/chat',
       name: 'chat',
       component: ChatView,
+    },
+    {
+      path: '/agi',
+      name: 'agi',
+      component: AGIView,
     },
     {
       path: '/skills',

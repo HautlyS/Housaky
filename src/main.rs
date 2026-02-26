@@ -325,6 +325,20 @@ fn get_api_key_from_keys_manager_or_config(config: &Config) -> Option<String> {
     config.api_key.clone()
 }
 
+fn is_daemon_running() -> bool {
+    use std::net::TcpStream;
+    use std::time::Duration;
+
+    if let Ok(stream) = TcpStream::connect_timeout(
+        &"127.0.0.1:8080".parse().unwrap(),
+        Duration::from_secs(1),
+    ) {
+        let _ = stream.shutdown(std::net::Shutdown::Both);
+        return true;
+    }
+    false
+}
+
 /// Start the complete Housaky system: daemon + dashboard + AGI TUI
 /// This is the default behavior when running `housaky` with no subcommand
 async fn start_full_system(config: Config, verbose: bool) -> Result<()> {
@@ -351,18 +365,28 @@ async fn start_full_system(config: Config, verbose: bool) -> Result<()> {
     // Set workspace env for all components
     std::env::set_var("HOUSAKY_WORKSPACE", config.workspace_dir.to_string_lossy().to_string());
 
-    // 1. Start daemon (gateway + channels + heartbeat + AGI)
-    println!("🧠 Starting daemon (gateway + channels + heartbeat + AGI)...");
-    let daemon_config = config.clone();
-    let daemon_host = host.clone();
-    let daemon_task = tokio::spawn(async move {
-        if let Err(e) = daemon::run(daemon_config, daemon_host, gateway_port).await {
-            eprintln!("❌ Daemon error: {}", e);
-        } else {
-            println!("✅ Daemon stopped cleanly");
-        }
-    });
-    let daemon_abort = daemon_task.abort_handle();
+    // Check if daemon is already running
+    let daemon_already_running = is_daemon_running();
+
+    let daemon_abort: tokio::task::AbortHandle = if daemon_already_running {
+        println!("🔗 Connecting to existing daemon on port {}...", gateway_port);
+        println!("   Gateway:  http://{}:{}", host, gateway_port);
+        println!("   Components: gateway, channels, heartbeat, housaky, scheduler");
+        tokio::task::spawn(async {}).abort_handle()
+    } else {
+        // 1. Start daemon (gateway + channels + heartbeat + AGI)
+        println!("🧠 Starting daemon (gateway + channels + heartbeat + AGI)...");
+        let daemon_config = config.clone();
+        let daemon_host = host.clone();
+        let daemon_task = tokio::spawn(async move {
+            if let Err(e) = daemon::run(daemon_config, daemon_host, gateway_port).await {
+                eprintln!("❌ Daemon error: {}", e);
+            } else {
+                println!("✅ Daemon stopped cleanly");
+            }
+        });
+        daemon_task.abort_handle()
+    };
 
     // 2. Start dashboard web server (if installed)
     let dashboard_installed = dashboard::check_dashboard_installed();
@@ -382,8 +406,12 @@ async fn start_full_system(config: Config, verbose: bool) -> Result<()> {
         None
     };
 
-    // Give services time to start
-    sleep(Duration::from_millis(1000)).await;
+    // Give services time to start (shorter if connecting to existing daemon)
+    if daemon_already_running {
+        sleep(Duration::from_millis(200)).await;
+    } else {
+        sleep(Duration::from_millis(1000)).await;
+    }
 
     // Print status of configured channels (including voice)
     print_channel_status(&config);
@@ -507,8 +535,14 @@ async fn main() -> Result<()> {
 
     if no_subcommand {
         // Initialize logging once for the no-subcommand paths
+        // Use a writer that discards output to avoid breaking the TUI with tracing messages
         let subscriber = FmtSubscriber::builder()
-            .with_max_level(Level::INFO)
+            .with_max_level(Level::WARN)
+            .with_target(false)
+            .with_thread_ids(false)
+            .with_file(false)
+            .with_line_number(false)
+            .with_writer(std::io::sink)
             .finish();
         // Ignore error: subscriber may already be set in integration tests
         let _ = tracing::subscriber::set_global_default(subscriber);

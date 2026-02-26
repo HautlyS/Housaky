@@ -5,7 +5,7 @@ pub mod app;
 pub mod chat;
 pub mod command;
 pub mod command_palette;
-pub mod enhanced_app;
+pub mod enhanced_app;  // now a folder: src/tui/enhanced_app/
 pub mod help;
 pub mod live;
 pub mod provider;
@@ -76,11 +76,12 @@ pub fn run_skills_market_tui(config: Config, repo_root: std::path::PathBuf) -> R
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = ratatui::Terminal::new(backend)?;
 
-    let mut app = skills_market::SkillsMarketApp::new(config, repo_root)?;
+    let mut app = skills_market::SkillsMarketApp::new(config, repo_root);
+    app.load_skills();
 
     let res = loop {
         terminal.draw(|f| app.draw(f))?;
-        if event::poll(Duration::from_millis(50))? {
+        if event::poll(Duration::from_millis(33))? {
             if let Event::Key(key) = event::read()? {
                 app.handle_key(key)?;
                 if app.quit {
@@ -130,35 +131,29 @@ fn run_enhanced_app(
     terminal: &mut ratatui::Terminal<CrosstermBackend<io::Stdout>>,
     app: &mut EnhancedApp,
 ) -> Result<()> {
-    let mut last_update = std::time::Instant::now();
+    let tick = Duration::from_millis(33); // ~30 fps
+    let mut last_draw = std::time::Instant::now();
 
     loop {
-        // Update UI at 30 FPS
-        if last_update.elapsed() >= Duration::from_millis(33) {
+        // Tick state (spinner, notifications, etc.)
+        app.update();
+
+        // Draw at ~30 fps
+        if last_draw.elapsed() >= tick {
             terminal.draw(|f| app.draw(f))?;
-            last_update = std::time::Instant::now();
+            last_draw = std::time::Instant::now();
         }
 
-        // Handle events with timeout for responsive UI
+        // Poll for events — short timeout keeps animations smooth
         if event::poll(Duration::from_millis(10))? {
             if let Event::Key(key) = event::read()? {
-                match (key.modifiers, key.code) {
-                    (KeyModifiers::CONTROL, KeyCode::Char('c')) => {
-                        return Ok(());
-                    }
-                    (_, KeyCode::Esc) => {
-                        if app.should_quit() {
-                            return Ok(());
-                        }
-                    }
-                    _ => {}
-                }
                 app.handle_key(key)?;
             }
         }
 
-        // Update status bar animations
-        app.update();
+        if app.should_quit() {
+            return Ok(());
+        }
     }
 }
 

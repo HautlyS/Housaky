@@ -211,11 +211,11 @@ onMounted(async () => {
           <p class="text-sm text-muted-foreground mb-3 line-clamp-2">{{ skill.description }}</p>
           
           <div class="flex flex-wrap gap-1 mb-3">
-            <Badge v-for="tag in skill.tags.slice(0, 3)" :key="tag" variant="outline" class="text-xs">
+            <Badge v-for="tag in (skill.tags ?? []).slice(0, 3)" :key="tag" variant="outline" class="text-xs">
               {{ tag }}
             </Badge>
-            <Badge v-if="skill.tags.length > 3" variant="outline" class="text-xs">
-              +{{ skill.tags.length - 3 }}
+            <Badge v-if="(skill.tags ?? []).length > 3" variant="outline" class="text-xs">
+              +{{ (skill.tags ?? []).length - 3 }}
             </Badge>
           </div>
           

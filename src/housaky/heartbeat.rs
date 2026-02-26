@@ -1117,7 +1117,6 @@ pub async fn run_agi_background(
             Ok(cog_response) => {
                 info!("Message processed: confidence={:.2}, thoughts={}", 
                     cog_response.confidence, cog_response.thoughts.len());
-                println!("\n🤖 Response: {}", cog_response.content);
                 
                 if let Err(e) = core.inner_monologue.save().await {
                     error!("Failed to save inner monologue after message: {}", e);

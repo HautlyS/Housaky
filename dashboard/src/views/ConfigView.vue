@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import Card from '@/components/ui/card.vue'
 import CardContent from '@/components/ui/card-content.vue'
@@ -75,9 +75,12 @@ const loading = ref(true)
 const saving = ref(false)
 const error = ref('')
 const success = ref('')
+const warnings = ref<string[]>([])
 const showSecret = ref<Record<string, boolean>>({})
 const configPath = ref('')
 const originalConfig = ref<string>('')
+const autoSaveTimer = ref<number | null>(null)
+const lastSaved = ref<Date | null>(null)
 
 const config = ref<HousakyConfig>({
   default_provider: 'openrouter',
@@ -144,30 +147,42 @@ async function loadConfig() {
   }
 }
 
+async function validateAndWarn() {
+  if (!isTauri) return
+  try {
+    const result = await invoke<string[]>('validate_config', { config: config.value })
+    warnings.value = Array.isArray(result) ? result : []
+  } catch { warnings.value = [] }
+}
+
 async function saveConfig() {
   saving.value = true
   error.value = ''
   success.value = ''
-  
+
   if (!isTauri) {
-    error.value = 'Running in server mode - cannot save config'
+    error.value = 'Running in server mode — cannot save config'
     saving.value = false
     return
   }
-  
+
   try {
+    await validateAndWarn()
     await invoke<string>('save_config', { config: config.value })
-    success.value = 'Configuration saved successfully!'
+    success.value = 'Configuration saved!'
     originalConfig.value = JSON.stringify(config.value)
-    
-    setTimeout(() => {
-      success.value = ''
-    }, 3000)
+    lastSaved.value = new Date()
+    setTimeout(() => { success.value = '' }, 3000)
   } catch (e) {
     error.value = String(e)
   } finally {
     saving.value = false
   }
+}
+
+function scheduleAutoValidate() {
+  if (autoSaveTimer.value) clearTimeout(autoSaveTimer.value)
+  autoSaveTimer.value = window.setTimeout(validateAndWarn, 800)
 }
 
 function resetToOriginal() {
@@ -201,6 +216,8 @@ const sections = [
 
 const activeSection = ref('general')
 
+watch(() => JSON.stringify(config.value), scheduleAutoValidate)
+
 const providerOptions = ['openrouter', 'anthropic', 'openai', 'ollama', 'gemini', 'groq', 'mistral', 'deepseek']
 const memoryBackends = ['sqlite', 'lucid', 'markdown', 'none']
 const autonomyLevels = ['readonly', 'supervised', 'full']
@@ -214,35 +231,49 @@ onMounted(() => {
 
 <template>
   <div class="p-6 space-y-6">
-    <div class="flex items-center justify-between">
+    <div class="flex flex-wrap items-center justify-between gap-3">
       <div>
-        <h1 class="text-2xl font-bold">Configuration</h1>
-        <p class="text-sm text-muted-foreground">Manage Housaky settings</p>
+        <h1 class="text-2xl font-bold tracking-tight flex items-center gap-2">
+          <Settings class="w-6 h-6 text-primary" />
+          Configuration
+        </h1>
+        <p class="text-sm text-muted-foreground">
+          Async config editor
+          <span v-if="lastSaved" class="ml-2 text-green-600">· saved {{ lastSaved.toLocaleTimeString() }}</span>
+        </p>
       </div>
       <div class="flex items-center gap-2">
         <Button variant="outline" size="sm" @click="loadConfig" :disabled="loading">
-          <RefreshCw :class="['w-4 h-4 mr-2', loading && 'animate-spin']" />
+          <RefreshCw :class="['w-4 h-4 mr-1.5', loading && 'animate-spin']" />
           Reload
         </Button>
         <Button variant="outline" size="sm" @click="copyConfig">
-          <Copy class="w-4 h-4 mr-2" />
+          <Copy class="w-4 h-4 mr-1.5" />
           Copy
         </Button>
-        <Button size="sm" @click="saveConfig" :disabled="saving || !hasChanges()">
-          <Save class="w-4 h-4 mr-2" />
-          {{ saving ? 'Saving...' : 'Save' }}
+        <Button size="sm" @click="saveConfig" :disabled="saving || !hasChanges()" class="gap-1.5">
+          <Loader2 v-if="saving" class="w-4 h-4 animate-spin" />
+          <Save v-else class="w-4 h-4" />
+          {{ saving ? 'Saving…' : 'Save' }}
         </Button>
       </div>
     </div>
 
-    <div v-if="error" class="p-4 rounded-lg bg-destructive/10 text-destructive flex items-center gap-2">
-      <AlertCircle class="w-5 h-5" />
-      {{ error }}
+    <div v-if="error" class="p-3 rounded-lg bg-destructive/10 text-destructive flex items-center gap-2 text-sm">
+      <AlertCircle class="w-4 h-4 flex-shrink-0" />{{ error }}
     </div>
-    
-    <div v-if="success" class="p-4 rounded-lg bg-green-500/10 text-green-600 flex items-center gap-2">
-      <CheckCircle2 class="w-5 h-5" />
-      {{ success }}
+
+    <div v-if="success" class="p-3 rounded-lg bg-green-500/10 text-green-700 flex items-center gap-2 text-sm">
+      <CheckCircle2 class="w-4 h-4 flex-shrink-0" />{{ success }}
+    </div>
+
+    <div v-if="warnings.length > 0" class="space-y-1.5">
+      <div v-for="(w, i) in warnings" :key="i"
+        class="p-3 rounded-lg bg-yellow-500/10 border border-yellow-400/40 text-yellow-700 dark:text-yellow-400 flex items-start gap-2 text-sm"
+      >
+        <AlertCircle class="w-4 h-4 flex-shrink-0 mt-0.5" />
+        <span>{{ w }}</span>
+      </div>
     </div>
 
     <Card>

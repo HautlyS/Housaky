@@ -730,6 +730,179 @@ async fn run_doctor() -> Result<String, String> {
     run_housaky_command(&["doctor"])
 }
 
+// ── AGI Telemetry ──────────────────────────────────────────────────────────
+
+#[derive(serde::Serialize)]
+struct AgiTelemetry {
+    total_tokens: u64,
+    total_cost: f64,
+    total_requests: u64,
+    avg_latency_ms: u64,
+    tokens_per_sec: f64,
+    provider: String,
+    model: String,
+}
+
+#[tauri::command]
+async fn get_agi_telemetry() -> Result<AgiTelemetry, String> {
+    // Try to read telemetry from housaky telemetry-id / stats file
+    let workspace = get_workspace_path();
+    let stats_path = workspace.join(".housaky").join("telemetry.json");
+    if stats_path.exists() {
+        if let Ok(data) = std::fs::read_to_string(&stats_path) {
+            if let Ok(v) = serde_json::from_str::<serde_json::Value>(&data) {
+                return Ok(AgiTelemetry {
+                    total_tokens:   v["total_tokens"].as_u64().unwrap_or(0),
+                    total_cost:     v["total_cost"].as_f64().unwrap_or(0.0),
+                    total_requests: v["total_requests"].as_u64().unwrap_or(0),
+                    avg_latency_ms: v["avg_latency_ms"].as_u64().unwrap_or(0),
+                    tokens_per_sec: v["tokens_per_sec"].as_f64().unwrap_or(0.0),
+                    provider:       v["provider"].as_str().unwrap_or("").to_string(),
+                    model:          v["model"].as_str().unwrap_or("").to_string(),
+                });
+            }
+        }
+    }
+    // Fallback: parse from get_status
+    let status = get_status().await?;
+    Ok(AgiTelemetry {
+        total_tokens:   0,
+        total_cost:     0.0,
+        total_requests: 0,
+        avg_latency_ms: 0,
+        tokens_per_sec: 0.0,
+        provider:       status.provider,
+        model:          status.model.unwrap_or_default(),
+    })
+}
+
+// ── Agent Thoughts ─────────────────────────────────────────────────────────
+
+#[derive(serde::Serialize)]
+struct AgentThought {
+    role:      String,
+    content:   String,
+    timestamp: String,
+    metadata:  Option<String>,
+}
+
+#[tauri::command]
+async fn get_agent_thoughts() -> Result<Vec<AgentThought>, String> {
+    let workspace = get_workspace_path();
+    let log_path = workspace.join(".housaky").join("thoughts.jsonl");
+    if !log_path.exists() {
+        return Ok(vec![]);
+    }
+    let data = std::fs::read_to_string(&log_path).map_err(|e| e.to_string())?;
+    let mut thoughts = Vec::new();
+    for line in data.lines().rev().take(50) {
+        if let Ok(v) = serde_json::from_str::<serde_json::Value>(line) {
+            thoughts.push(AgentThought {
+                role:      v["role"].as_str().unwrap_or("thought").to_string(),
+                content:   v["content"].as_str().unwrap_or("").to_string(),
+                timestamp: v["timestamp"].as_str().unwrap_or("").to_string(),
+                metadata:  v["metadata"].as_str().map(String::from),
+            });
+        }
+    }
+    Ok(thoughts)
+}
+
+// ── Memory Entries ─────────────────────────────────────────────────────────
+
+#[derive(serde::Serialize)]
+struct MemoryEntry {
+    content:     String,
+    memory_type: String,
+    score:       f64,
+    timestamp:   String,
+}
+
+#[tauri::command]
+async fn get_memory_entries() -> Result<Vec<MemoryEntry>, String> {
+    match run_housaky_command(&["memory", "list", "--json"]) {
+        Ok(output) => {
+            if let Ok(arr) = serde_json::from_str::<Vec<serde_json::Value>>(&output) {
+                let entries = arr.iter().map(|v| MemoryEntry {
+                    content:     v["content"].as_str().unwrap_or("").to_string(),
+                    memory_type: v["memory_type"].as_str().unwrap_or("semantic").to_string(),
+                    score:       v["score"].as_f64().unwrap_or(0.0),
+                    timestamp:   v["timestamp"].as_str().unwrap_or("").to_string(),
+                }).collect();
+                return Ok(entries);
+            }
+            Ok(vec![])
+        }
+        Err(_) => Ok(vec![]),
+    }
+}
+
+// ── Conversations ──────────────────────────────────────────────────────────
+
+#[derive(serde::Serialize)]
+struct ConversationSummary {
+    id:            String,
+    title:         String,
+    last_message:  String,
+    timestamp:     String,
+    message_count: u64,
+}
+
+#[tauri::command]
+async fn get_conversations() -> Result<Vec<ConversationSummary>, String> {
+    let workspace = get_workspace_path();
+    let conv_dir = workspace.join(".housaky").join("conversations");
+    if !conv_dir.exists() {
+        return Ok(vec![]);
+    }
+    let mut conversations = Vec::new();
+    if let Ok(entries) = std::fs::read_dir(&conv_dir) {
+        for entry in entries.flatten().take(20) {
+            let path = entry.path();
+            if path.extension().and_then(|e| e.to_str()) == Some("json") {
+                if let Ok(data) = std::fs::read_to_string(&path) {
+                    if let Ok(v) = serde_json::from_str::<serde_json::Value>(&data) {
+                        let id = path.file_stem()
+                            .and_then(|s| s.to_str())
+                            .unwrap_or("")
+                            .to_string();
+                        conversations.push(ConversationSummary {
+                            id:            id.clone(),
+                            title:         v["title"].as_str().unwrap_or("Untitled").to_string(),
+                            last_message:  v["last_message"].as_str().unwrap_or("").to_string(),
+                            timestamp:     v["timestamp"].as_str().unwrap_or("").to_string(),
+                            message_count: v["message_count"].as_u64().unwrap_or(0),
+                        });
+                    }
+                }
+            }
+        }
+    }
+    // Sort by timestamp descending
+    conversations.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+    Ok(conversations)
+}
+
+// ── Async Config Save with validation ─────────────────────────────────────
+
+#[tauri::command]
+async fn validate_config(config: HousakyConfig) -> Result<Vec<String>, String> {
+    let mut warnings: Vec<String> = Vec::new();
+    if config.api_key.as_deref().unwrap_or("").is_empty() {
+        warnings.push("No API key set — AI features will not work".to_string());
+    }
+    if config.autonomy.max_cost_per_day_cents == 0 {
+        warnings.push("Daily cost limit is $0 — agent will be blocked immediately".to_string());
+    }
+    if !config.secrets.encrypt {
+        warnings.push("Secrets are stored in plaintext — consider enabling encryption".to_string());
+    }
+    if config.autonomy.level == "full" && !config.autonomy.workspace_only {
+        warnings.push("Full autonomy with no workspace sandbox is a security risk".to_string());
+    }
+    Ok(warnings)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -743,6 +916,7 @@ pub fn run() {
             get_status,
             get_config,
             save_config,
+            validate_config,
             send_message,
             run_housaky_command_cmd,
             get_skills,
@@ -755,6 +929,10 @@ pub fn run() {
             get_integrations,
             hardware_discover,
             run_doctor,
+            get_agi_telemetry,
+            get_agent_thoughts,
+            get_memory_entries,
+            get_conversations,
         ])
         .setup(|app| {
             log::info!("Housaky Dashboard starting...");
