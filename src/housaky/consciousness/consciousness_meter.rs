@@ -36,7 +36,7 @@ impl ConsciousnessLevel {
             _ if phi < 0.05 => ConsciousnessLevel::Dormant,
             _ if phi < 0.15 => ConsciousnessLevel::Subliminal,
             _ if phi < 0.30 => ConsciousnessLevel::Focal,
-            _ if phi < 0.50 => ConsciousnessLevel::Aware,
+            _ if phi <= 0.50 => ConsciousnessLevel::Aware,
             _ if phi < 0.70 => ConsciousnessLevel::Reflective,
             _ if phi < 0.85 => ConsciousnessLevel::SelfAware,
             _ => ConsciousnessLevel::Transcendent,

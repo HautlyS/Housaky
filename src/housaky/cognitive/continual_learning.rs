@@ -476,8 +476,10 @@ mod tests {
         learner.update_importance("skill-1", 0.3).await;
         assert!(!learner.should_protect("skill-1").await);
 
-        // High importance → protected
-        learner.update_importance("skill-2", 0.95).await;
+        // High importance → protected (multiple updates needed to converge EMA above threshold)
+        for _ in 0..10 {
+            learner.update_importance("skill-2", 0.95).await;
+        }
         assert!(learner.should_protect("skill-2").await);
     }
 

@@ -62,7 +62,7 @@ use commands::{
 #[command(about = "The fastest, smallest AI assistant.", long_about = None)]
 struct Cli {
     #[command(subcommand)]
-    command: Commands,
+    command: Option<Commands>,
 }
 
 #[derive(Subcommand, Debug)]
@@ -298,6 +298,78 @@ fn get_api_key_from_keys_manager_or_config(config: &Config) -> Option<String> {
     config.api_key.clone()
 }
 
+/// Start the complete Housaky system: daemon + dashboard + TUI
+/// This is the default behavior when running `housaky` with no subcommand
+async fn start_full_system(config: Config) -> Result<()> {
+    use tokio::time::{sleep, Duration};
+
+    println!("🚀 Starting Full Housaky AGI System...");
+    println!();
+
+    let host = "127.0.0.1".to_string();
+    let gateway_port = 8080u16;
+    let dashboard_port = 3000u16;
+
+    // 1. Start daemon (gateway + channels + heartbeat + AGI)
+    let daemon_config = config.clone();
+    let daemon_handle = tokio::spawn(async move {
+        if let Err(e) = daemon::run(daemon_config, host.clone(), gateway_port).await {
+            eprintln!("Daemon error: {}", e);
+        }
+    });
+
+    // 2. Start dashboard web server (if installed)
+    let dashboard_handle = tokio::spawn(async move {
+        if dashboard::check_dashboard_installed() {
+            println!("📊 Dashboard detected, starting server on port {}...", dashboard_port);
+            if let Err(e) = dashboard::start_dashboard_server("127.0.0.1", dashboard_port, false).await {
+                eprintln!("Dashboard error: {}", e);
+            }
+        } else {
+            println!("💡 Dashboard not installed. Build it with: cd dashboard && pnpm install && pnpm build");
+        }
+    });
+
+    // Give services time to start
+    sleep(Duration::from_millis(800)).await;
+
+    // 3. Start AGI with TUI (this blocks until user exits)
+    println!("🤖 Starting AGI interface...");
+    println!();
+
+    let result = housaky::housaky::heartbeat::run_agi_with_tui(
+        config.clone(),
+        None, // No initial message
+        None, // Use default provider
+        None, // Use default model
+        false, // Not verbose by default
+    ).await;
+
+    // Shutdown sequence
+    println!("\n👋 Shutting down Housaky system...");
+    daemon_handle.abort();
+    dashboard_handle.abort();
+
+    let _daemon_result = tokio::time::timeout(Duration::from_secs(2), daemon_handle).await;
+    let _dashboard_result = tokio::time::timeout(Duration::from_secs(2), dashboard_handle).await;
+
+    result
+}
+
+/// Check if this is a first-time run (no valid config exists)
+fn is_first_run() -> bool {
+    // Try to load existing config
+    match Config::load_or_init() {
+        Ok(config) => {
+            // Check if config has essential settings
+            config.api_key.is_none() && 
+            config.default_provider.is_none() &&
+            !config.config_path.exists()
+        }
+        Err(_) => true,
+    }
+}
+
 #[tokio::main]
 #[allow(clippy::too_many_lines)]
 async fn main() -> Result<()> {
@@ -308,6 +380,59 @@ async fn main() -> Result<()> {
         eprintln!("Warning: Failed to install default crypto provider: {e:?}");
     }
 
+    // Check if running without any subcommand (bare `housaky`)
+    let args: Vec<String> = std::env::args().collect();
+    let no_subcommand = args.len() == 1 || (args.len() > 1 && args[1].starts_with('-'));
+
+    if no_subcommand {
+        // Check for first run - no config exists
+        if is_first_run() {
+            println!("👋 Welcome to Housaky!");
+            println!("   Starting interactive setup...\n");
+            
+            // Initialize logging
+            let subscriber = FmtSubscriber::builder()
+                .with_max_level(Level::INFO)
+                .finish();
+            let _subscriber_result = tracing::subscriber::set_global_default(subscriber);
+
+            // Initialize keys manager
+            let _keys_init_result = housaky::keys_manager::manager::init_global_keys_manager();
+            housaky::keys_manager::manager::load_keys_from_file().await;
+
+            // Run the interactive wizard
+            let config = onboard::run_wizard()?;
+            
+            // After wizard, check if we should auto-start
+            if std::env::var("HOUSAKY_AUTOSTART_CHANNELS").as_deref() == Ok("1") {
+                println!("\n🚀 Auto-starting channels...");
+                channels::start_channels(config.clone()).await?;
+            }
+
+            // Start full system with the new config
+            return start_full_system(config).await;
+        } else {
+            // Not first run, start full system directly
+            let config = Config::load_or_init()?;
+            
+            // Initialize logging
+            let subscriber = FmtSubscriber::builder()
+                .with_max_level(Level::INFO)
+                .finish();
+            let _subscriber_result = tracing::subscriber::set_global_default(subscriber);
+
+            // Initialize keys manager
+            let _keys_init_result = housaky::keys_manager::manager::init_global_keys_manager();
+            housaky::keys_manager::manager::load_keys_from_file().await;
+
+            // Set workspace env
+            std::env::set_var("HOUSAKY_WORKSPACE", config.workspace_dir.to_string_lossy().to_string());
+
+            return start_full_system(config).await;
+        }
+    }
+
+    // Normal CLI parsing with subcommand
     let cli = Cli::parse();
 
     // Initialize logging
@@ -318,7 +443,7 @@ async fn main() -> Result<()> {
     tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
 
     // Initialize the new keys manager and load keys from disk
-    let _ = housaky::keys_manager::manager::init_global_keys_manager();
+    let _keys_init_result = housaky::keys_manager::manager::init_global_keys_manager();
     housaky::keys_manager::manager::load_keys_from_file().await;
 
     // Provide workspace dir as env for channel commands (/logs today, /grep, etc.).
@@ -328,434 +453,453 @@ async fn main() -> Result<()> {
         }
     }
 
-    // Onboard runs quick setup by default, or the interactive wizard with --interactive
-    if let Commands::Onboard {
-        interactive,
-        channels_only,
-        api_key,
-        provider,
-        memory,
-    } = &cli.command
-    {
-        if *interactive && *channels_only {
-            bail!("Use either --interactive or --channels-only, not both");
-        }
-        if *channels_only && (api_key.is_some() || provider.is_some() || memory.is_some()) {
-            bail!("--channels-only does not accept --api-key, --provider, or --memory");
-        }
-
-        let config = if *channels_only {
-            onboard::run_channels_repair_wizard()?
-        } else if *interactive {
-            onboard::run_wizard()?
-        } else {
-            onboard::run_quick_setup(api_key.as_deref(), provider.as_deref(), memory.as_deref())?
-        };
-        // Auto-start channels if user said yes during wizard
-        if std::env::var("HOUSAKY_AUTOSTART_CHANNELS").as_deref() == Ok("1") {
-            channels::start_channels(config).await?;
-        }
-        return Ok(());
-    }
-
-    // All other commands need config loaded first
-    let mut config = Config::load_or_init()?;
-    config.apply_env_overrides();
-
+    // Handle subcommands (unwrap is safe because we checked above)
     match cli.command {
-        Commands::Onboard { .. } => unreachable!(),
+        None => {
+            // Should never reach here - handled above
+            unreachable!()
+        }
 
-        Commands::Agent {
-            message,
+        // Onboard runs quick setup by default, or the interactive wizard with --interactive
+        Some(Commands::Onboard {
+            interactive,
+            channels_only,
+            api_key,
             provider,
-            model,
-            temperature,
-            peripheral,
-        } => agent::run(config, message, provider, model, temperature, peripheral).await,
+            memory,
+        }) => {
+            if interactive && channels_only {
+                bail!("Use either --interactive or --channels-only, not both");
+            }
+            if channels_only && (api_key.is_some() || provider.is_some() || memory.is_some()) {
+                bail!("--channels-only does not accept --api-key, --provider, or --memory");
+            }
 
-        Commands::Gateway { port, host } => {
-            if port == 0 {
-                info!("🚀 Starting Housaky Gateway on {host} (random port)");
+            let config = if channels_only {
+                onboard::run_channels_repair_wizard()?
+            } else if interactive {
+                onboard::run_wizard()?
             } else {
-                info!("🚀 Starting Housaky Gateway on {host}:{port}");
+                onboard::run_quick_setup(api_key.as_deref(), provider.as_deref(), memory.as_deref())?
+            };
+            // Auto-start channels if user said yes during wizard
+            if std::env::var("HOUSAKY_AUTOSTART_CHANNELS").as_deref() == Ok("1") {
+                channels::start_channels(config).await?;
             }
-            gateway::run_gateway(&host, port, config).await
-        }
-
-        Commands::Daemon { port, host } => {
-            if port == 0 {
-                info!("🧠 Starting Housaky Daemon on {host} (random port)");
-            } else {
-                info!("🧠 Starting Housaky Daemon on {host}:{port}");
-            }
-            daemon::run(config, host, port).await
-        }
-
-        Commands::Run { message, provider, model, verbose } => {
-            println!("🚀 Starting Full Housaky AGI System with TUI Chat...");
-            println!("   Verbose mode: {}", verbose);
-            
-            housaky::housaky::heartbeat::run_agi_with_tui(
-                config, 
-                message, 
-                provider, 
-                model, 
-                verbose
-            ).await
-        }
-
-        Commands::Status => {
-            println!("🦀 Housaky Status");
-            println!();
-            println!("Version:     {}", env!("CARGO_PKG_VERSION"));
-            println!("Workspace:   {}", config.workspace_dir.display());
-            println!("Config:      {}", config.config_path.display());
-            println!();
-            println!(
-                "🤖 Provider:      {}",
-                config.default_provider.as_deref().unwrap_or("openrouter")
-            );
-            println!(
-                "   Model:         {}",
-                config.default_model.as_deref().unwrap_or("(default)")
-            );
-            println!("📊 Observability:  {}", config.observability.backend);
-            println!("🛡️  Autonomy:      {:?}", config.autonomy.level);
-            println!("⚙️  Runtime:       {}", config.runtime.kind);
-            println!(
-                "💓 Heartbeat:      {}",
-                if config.heartbeat.enabled {
-                    format!("every {}min", config.heartbeat.interval_minutes)
-                } else {
-                    "disabled".into()
-                }
-            );
-            println!(
-                "🧠 Memory:         {} (auto-save: {})",
-                config.memory.backend,
-                if config.memory.auto_save { "on" } else { "off" }
-            );
-
-            println!();
-            println!("Security:");
-            println!("  Workspace only:    {}", config.autonomy.workspace_only);
-            println!(
-                "  Allowed commands:  {}",
-                config.autonomy.allowed_commands.join(", ")
-            );
-            println!(
-                "  Max actions/hour:  {}",
-                config.autonomy.max_actions_per_hour
-            );
-            println!(
-                "  Max cost/day:      ${:.2}",
-                f64::from(config.autonomy.max_cost_per_day_cents) / 100.0
-            );
-            println!();
-            println!("Channels:");
-            println!("  CLI:      ✅ always");
-            for (name, configured) in [
-                ("Telegram", config.channels_config.telegram.is_some()),
-                ("Discord", config.channels_config.discord.is_some()),
-                ("Slack", config.channels_config.slack.is_some()),
-                ("Webhook", config.channels_config.webhook.is_some()),
-            ] {
-                println!(
-                    "  {name:9} {}",
-                    if configured {
-                        "✅ configured"
-                    } else {
-                        "❌ not configured"
-                    }
-                );
-            }
-            println!();
-            println!("Peripherals:");
-            println!(
-                "  Enabled:   {}",
-                if config.peripherals.enabled {
-                    "yes"
-                } else {
-                    "no"
-                }
-            );
-            println!("  Boards:    {}", config.peripherals.boards.len());
-
             Ok(())
         }
 
-        Commands::Dashboard { start, host, port, open, desktop } => {
-            if desktop {
-                return dashboard::launch_desktop_app();
-            }
+        // All other commands need config loaded first
+        Some(cmd) => {
+            let mut config = Config::load_or_init()?;
+            config.apply_env_overrides();
 
-            if start {
-                let bind_host = host.as_deref().unwrap_or("127.0.0.1");
-                let should_open = open || host.is_none();
-                dashboard::start_dashboard_server(bind_host, port, should_open).await
-            } else {
-                dashboard::print_status(port);
-                println!();
-                println!("Options:");
-                println!("  --start       Start the dashboard web server");
-                println!("  --host <ip>   Bind to specific host (use \"0.0.0.0\" for network)");
-                println!("  --port <n>    Port number (default: 3000)");
-                println!("  --open        Open in browser after starting");
-                println!("  --desktop     Launch the desktop app instead");
-                Ok(())
-            }
-        }
+            match cmd {
+                Commands::Agent {
+                    message,
+                    provider,
+                    model,
+                    temperature,
+                    peripheral,
+                } => agent::run(config, message, provider, model, temperature, peripheral).await,
 
-        Commands::Cron { cron_command } => cron::handle_command(cron_command, &config),
-
-        Commands::Models { model_command } => match model_command {
-            ModelCommands::Refresh { provider, force } => {
-                onboard::run_models_refresh(&config, provider.as_deref(), force)
-            }
-        },
-
-        Commands::Service { service_command } => service::handle_command(&service_command, &config),
-
-        Commands::Keys { key_command } => {
-            let keys_manager = housaky::keys_manager::manager::get_global_keys_manager();
-            
-            async fn handle_keys_command(
-                config: &mut Config,
-                keys_manager: &housaky::keys_manager::manager::KeysManager,
-                cmd: KeyCommands,
-            ) -> Result<()> {
-                match cmd {
-                    KeyCommands::Manager(manager_cmd) => {
-                        housaky::keys_manager::commands::handle_keys_manager_command(
-                            config,
-                            keys_manager,
-                            manager_cmd,
-                        )
-                        .await
+                Commands::Gateway { port, host } => {
+                    if port == 0 {
+                        info!("🚀 Starting Housaky Gateway on {host} (random port)");
+                    } else {
+                        info!("🚀 Starting Housaky Gateway on {host}:{port}");
                     }
-                    KeyCommands::List => {
-                        let _ = keys_manager.load().await;
-                        let providers = keys_manager.get_providers().await;
-                        if !providers.is_empty() {
-                            println!("Keys (keys_manager):");
-                            for provider in &providers {
-                                let enabled_count = provider.keys.iter().filter(|key| key.enabled).count();
-                                println!("  - {}: {} keys ({} enabled)", provider.name, provider.keys.len(), enabled_count);
-                                for key in &provider.keys {
-                                    let suffix = if key.key.len() > 4 { &key.key[key.key.len()-4..] } else { &key.key };
-                                    let status = if key.enabled { "enabled" } else { "disabled" };
-                                    println!("      ...{} - {}", suffix, status);
-                                }
-                            }
-                            Ok(())
+                    gateway::run_gateway(&host, port, config).await
+                },
+
+                Commands::Daemon { port, host } => {
+                    if port == 0 {
+                        info!("🧠 Starting Housaky Daemon on {host} (random port)");
+                    } else {
+                        info!("🧠 Starting Housaky Daemon on {host}:{port}");
+                    }
+                    daemon::run(config, host, port).await
+                },
+
+                Commands::Run { message, provider, model, verbose } => {
+                    println!("🚀 Starting Full Housaky AGI System with TUI Chat...");
+                    println!("   Verbose mode: {}", verbose);
+                    
+                    housaky::housaky::heartbeat::run_agi_with_tui(
+                        config, 
+                        message, 
+                        provider, 
+                        model, 
+                        verbose
+                    ).await
+                },
+
+                Commands::Status => {
+                    println!("🦀 Housaky Status");
+                    println!();
+                    println!("Version:     {}", env!("CARGO_PKG_VERSION"));
+                    println!("Workspace:   {}", config.workspace_dir.display());
+                    println!("Config:      {}", config.config_path.display());
+                    println!();
+                    println!(
+                        "🤖 Provider:      {}",
+                        config.default_provider.as_deref().unwrap_or("openrouter")
+                    );
+                    println!(
+                        "   Model:         {}",
+                        config.default_model.as_deref().unwrap_or("(default)")
+                    );
+                    println!("📊 Observability:  {}", config.observability.backend);
+                    println!("🛡️  Autonomy:      {:?}", config.autonomy.level);
+                    println!("⚙️  Runtime:       {}", config.runtime.kind);
+                    println!(
+                        "💓 Heartbeat:      {}",
+                        if config.heartbeat.enabled {
+                            format!("every {}min", config.heartbeat.interval_minutes)
                         } else {
-                            println!("No keys configured.");
-                            println!("  Use `housaky keys manager add-provider` to add your first key.");
-                            Ok(())
+                            "disabled".into()
                         }
+                    );
+                    println!(
+                        "🧠 Memory:         {} (auto-save: {})",
+                        config.memory.backend,
+                        if config.memory.auto_save { "on" } else { "off" }
+                    );
+
+                    println!();
+                    println!("Security:");
+                    println!("  Workspace only:    {}", config.autonomy.workspace_only);
+                    println!(
+                        "  Allowed commands:  {}",
+                        config.autonomy.allowed_commands.join(", ")
+                    );
+                    println!(
+                        "  Max actions/hour:  {}",
+                        config.autonomy.max_actions_per_hour
+                    );
+                    println!(
+                        "  Max cost/day:      ${:.2}",
+                        f64::from(config.autonomy.max_cost_per_day_cents) / 100.0
+                    );
+                    println!();
+                    println!("Channels:");
+                    println!("  CLI:      ✅ always");
+                    for (name, configured) in [
+                        ("Telegram", config.channels_config.telegram.is_some()),
+                        ("Discord", config.channels_config.discord.is_some()),
+                        ("Slack", config.channels_config.slack.is_some()),
+                        ("Webhook", config.channels_config.webhook.is_some()),
+                    ] {
+                        println!(
+                            "  {name:9} {}",
+                            if configured {
+                                "✅ configured"
+                            } else {
+                                "❌ not configured"
+                            }
+                        );
                     }
-                    KeyCommands::Add { provider, key } => {
-                        match keys_manager.add_key(&provider, key, None).await {
-                            Ok(_) => {
-                                println!("Added key to provider: {}", provider);
-                                keys_manager.save().await.ok();
-                                Ok(())
-                            }
-                            Err(e) => {
-                                println!("Error adding key: {}", e);
-                                Err(anyhow::anyhow!(e))
-                            }
+                    println!();
+                    println!("Peripherals:");
+                    println!(
+                        "  Enabled:   {}",
+                        if config.peripherals.enabled {
+                            "yes"
+                        } else {
+                            "no"
                         }
+                    );
+                    println!("  Boards:    {}", config.peripherals.boards.len());
+
+                    Ok(())
+                }
+
+                Commands::Dashboard { start, host, port, open, desktop } => {
+                    if desktop {
+                        return dashboard::launch_desktop_app();
                     }
-                    KeyCommands::Remove { provider } => {
-                        match keys_manager.remove_provider(&provider).await {
-                            Ok(_) => {
-                                println!("Removed provider: {}", provider);
-                                keys_manager.save().await.ok();
-                                Ok(())
-                            }
-                            Err(e) => {
-                                println!("Error removing provider: {}", e);
-                                Err(anyhow::anyhow!(e))
-                            }
-                        }
-                    }
-                    KeyCommands::Rotate => {
-                        println!("Key rotation is handled per-provider in keys_manager.");
-                        println!("  Use `housaky keys manager rotate <provider>` instead.");
+
+                    if start {
+                        let bind_host = host.as_deref().unwrap_or("127.0.0.1");
+                        let should_open = open || host.is_none();
+                        dashboard::start_dashboard_server(bind_host, port, should_open).await
+                    } else {
+                        dashboard::print_status(port);
+                        println!();
+                        println!("Options:");
+                        println!("  --start       Start the dashboard web server");
+                        println!("  --host <ip>   Bind to specific host (use \"0.0.0.0\" for network)");
+                        println!("  --port <n>    Port number (default: 3000)");
+                        println!("  --open        Open in browser after starting");
+                        println!("  --desktop     Launch the desktop app instead");
                         Ok(())
                     }
                 }
-            }
-            
-            handle_keys_command(&mut config, &keys_manager, key_command).await
-        }
 
-        Commands::Doctor => doctor::run(&config),
+                Commands::Cron { cron_command } => cron::handle_command(cron_command, &config),
 
-        Commands::Channel { channel_command } => match channel_command {
-            ChannelCommands::Start => channels::start_channels(config).await,
-            ChannelCommands::Doctor => channels::doctor_channels(config).await,
-            other => channels::handle_command(other, &config),
-        },
-
-        Commands::Integrations {
-            integration_command,
-        } => integrations::handle_command(integration_command, &config),
-
-        Commands::Skills { skill, skill_command } => {
-            let cmd = if let Some(name) = skill {
-                SkillCommands::Get { name, enable: false }
-            } else {
-                skill_command.unwrap_or(SkillCommands::Ui)
-            };
-            skills::handle_command(cmd, &config.workspace_dir)
-        }
-
-        Commands::Migrate { migrate_command } => {
-            migration::handle_command(migrate_command, &config).await
-        }
-
-        Commands::Hardware { hardware_command } => {
-            hardware::handle_command(hardware_command.clone(), &config)
-        }
-
-        Commands::Peripheral { peripheral_command } => {
-            peripherals::handle_command(peripheral_command.clone(), &config)
-        }
-
-        Commands::Tui { provider, model } => {
-            // Run TUI in a blocking task to avoid nested runtime issues
-            tokio::task::spawn_blocking(move || tui::run_chat_tui(config, provider, model))
-                .await
-                .map_err(|e| anyhow::anyhow!("TUI task failed: {e}"))?
-                .map_err(|e| anyhow::anyhow!("TUI error: {e}"))?;
-            Ok(())
-        }
-
-        Commands::Config { section, reset, restore } => {
-            if restore {
-                match Config::restore_from_backup() {
-                    Ok(restored) => {
-                        println!("✅ Restored config from backup at {}", restored.config_path.display());
+                Commands::Models { model_command } => match model_command {
+                    ModelCommands::Refresh { provider, force } => {
+                        onboard::run_models_refresh(&config, provider.as_deref(), force)
                     }
-                    Err(e) => {
-                        println!("❌ Failed to restore config: {}", e);
-                        println!("   No backup found. Your config is safe at ~/.housaky/config.toml");
+                },
+
+                Commands::Service { service_command } => service::handle_command(&service_command, &config),
+
+                Commands::Keys { key_command } => {
+                    let keys_manager = housaky::keys_manager::manager::get_global_keys_manager();
+                    
+                    async fn handle_keys_command(
+                        config: &mut Config,
+                        keys_manager: &housaky::keys_manager::manager::KeysManager,
+                        cmd: KeyCommands,
+                    ) -> Result<()> {
+                        match cmd {
+                            KeyCommands::Manager(manager_cmd) => {
+                                housaky::keys_manager::commands::handle_keys_manager_command(
+                                    config,
+                                    keys_manager,
+                                    manager_cmd,
+                                )
+                                .await
+                            }
+                            KeyCommands::List => {
+                                let _load_result = keys_manager.load().await;
+                                let providers = keys_manager.get_providers().await;
+                                if !providers.is_empty() {
+                                    println!("Keys (keys_manager):");
+                                    for provider in &providers {
+                                        let enabled_count = provider.keys.iter().filter(|key| key.enabled).count();
+                                        println!("  - {}: {} keys ({} enabled)", provider.name, provider.keys.len(), enabled_count);
+                                        for key in &provider.keys {
+                                            let suffix = if key.key.len() > 4 { &key.key[key.key.len()-4..] } else { &key.key };
+                                            let status = if key.enabled { "enabled" } else { "disabled" };
+                                            println!("      ...{} - {}", suffix, status);
+                                        }
+                                    }
+                                    Ok(())
+                                } else {
+                                    println!("No keys configured.");
+                                    println!("  Use `housaky keys manager add-provider` to add your first key.");
+                                    Ok(())
+                                }
+                            }
+                            KeyCommands::Add { provider, key } => {
+                                match keys_manager.add_key(&provider, key, None).await {
+                                    Ok(_) => {
+                                        println!("Added key to provider: {}", provider);
+                                        keys_manager.save().await.ok();
+                                        Ok(())
+                                    }
+                                    Err(e) => {
+                                        println!("Error adding key: {}", e);
+                                        Err(anyhow::anyhow!(e))
+                                    }
+                                }
+                            }
+                            KeyCommands::Remove { provider } => {
+                                match keys_manager.remove_provider(&provider).await {
+                                    Ok(_) => {
+                                        println!("Removed provider: {}", provider);
+                                        keys_manager.save().await.ok();
+                                        Ok(())
+                                    }
+                                    Err(e) => {
+                                        println!("Error removing provider: {}", e);
+                                        Err(anyhow::anyhow!(e))
+                                    }
+                                }
+                            }
+                            KeyCommands::Rotate => {
+                                println!("Key rotation is handled per-provider in keys_manager.");
+                                println!("  Use `housaky keys manager rotate <provider>` instead.");
+                                Ok(())
+                            }
+                        }
                     }
+                    
+                    handle_keys_command(&mut config, &keys_manager, key_command).await
                 }
-                return Ok(());
-            }
-            if reset {
-                let mut default_config = Config::default();
-                default_config.config_path = config.config_path.clone();
-                default_config.workspace_dir = config.workspace_dir.clone();
-                default_config.save()?;
-                println!(
-                    "Config reset to defaults at {}",
-                    default_config.config_path.display()
-                );
-                Ok(())
-            } else {
-                // Run config editor TUI in a blocking task
-                tokio::task::spawn_blocking(move || config_editor::run_config_tui(config, section))
-                    .await
-                    .map_err(|e| anyhow::anyhow!("Config TUI task failed: {e}"))?
-                    .map_err(|e| anyhow::anyhow!("Config TUI error: {e}"))?;
-                Ok(())
-            }
-        }
 
-        Commands::Housaky { housaky_command } => {
-            housaky::housaky::handle_command(housaky_command, &config).await?;
-            Ok(())
-        }
+                Commands::Doctor => doctor::run(&config),
 
-        Commands::Quantum { quantum_command } => {
-            use housaky::quantum::{
-                AmazonBraketBackend, QuantumBackend, QuantumConfig, SimulatorBackend,
-            };
-            use housaky::quantum::circuit::{Gate, QuantumCircuit};
+                Commands::Channel { channel_command } => match channel_command {
+                    ChannelCommands::Start => channels::start_channels(config).await,
+                    ChannelCommands::Doctor => channels::doctor_channels(config).await,
+                    other => channels::handle_command(other, &config),
+                },
 
-            /// Build and return a 2-qubit Bell-state circuit (H q[0]; CNOT q[0],q[1]; measure all).
-            fn bell_circuit() -> QuantumCircuit {
-                let mut c = QuantumCircuit::new(2);
-                c.add_gate(Gate::h(0));
-                c.add_gate(Gate::cnot(0, 1));
-                c.measure_all();
-                c
-            }
+                Commands::Integrations {
+                    integration_command,
+                } => integrations::handle_command(integration_command, &config),
 
-            match quantum_command {
-                QuantumCommands::RunBraket { shots, device, bucket, prefix } => {
-                    println!("Submitting Bell-state circuit to Amazon Braket...");
-                    println!("  Device : {device}");
-                    println!("  Shots  : {shots}");
-                    println!("  Bucket : s3://{bucket}/{prefix}");
-                    let cfg = QuantumConfig {
-                        backend: "braket".to_string(),
-                        shots,
-                        braket_device_arn: device,
-                        braket_s3_bucket: bucket,
-                        braket_s3_prefix: prefix,
-                        ..QuantumConfig::default()
+                Commands::Skills { skill, skill_command } => {
+                    let cmd = if let Some(name) = skill {
+                        SkillCommands::Get { name, enable: false }
+                    } else {
+                        skill_command.unwrap_or(SkillCommands::Ui)
                     };
-                    let backend = AmazonBraketBackend::from_config(&cfg).await?;
-                    let circuit = bell_circuit();
-                    let result = backend.execute_circuit(&circuit).await?;
-                    println!("\nTask ARN  : {}", result.backend_id);
-                    println!("Shots run : {}", result.shots);
-                    println!("Runtime   : {} ms", result.execution_time_ms);
-                    println!("\nCounts:");
-                    let mut counts: Vec<_> = result.counts.iter().collect();
-                    counts.sort_by(|a, b| b.1.cmp(a.1));
-                    for (bitstring, count) in &counts {
-                        let pct = (**count as f64 / result.shots as f64) * 100.0;
-                        println!("  |{bitstring}> : {count:5}  ({pct:.1}%)", count = **count);
-                    }
+                    skills::handle_command(cmd, &config.workspace_dir)
+                }
+
+                Commands::Migrate { migrate_command } => {
+                    migration::handle_command(migrate_command, &config).await
+                }
+
+                Commands::Hardware { hardware_command } => {
+                    hardware::handle_command(hardware_command.clone(), &config)
+                }
+
+                Commands::Peripheral { peripheral_command } => {
+                    peripherals::handle_command(peripheral_command.clone(), &config)
+                }
+
+                Commands::Tui { provider, model } => {
+                    tokio::task::spawn_blocking(move || tui::run_chat_tui(config, provider, model))
+                        .await
+                        .map_err(|e| anyhow::anyhow!("TUI task failed: {e}"))?
+                        .map_err(|e| anyhow::anyhow!("TUI error: {e}"))?;
                     Ok(())
                 }
 
-                QuantumCommands::RunSimulator { shots } => {
-                    println!("Running Bell-state circuit on local statevector simulator...");
-                    println!("  Shots : {shots}");
-                    let backend = SimulatorBackend::new(2, shots);
-                    let circuit = bell_circuit();
-                    let result = backend.execute_circuit(&circuit).await?;
-                    println!("\nShots run : {}", result.shots);
-                    println!("Runtime   : {} ms", result.execution_time_ms);
-                    println!("\nCounts:");
-                    let mut counts: Vec<_> = result.counts.iter().collect();
-                    counts.sort_by(|a, b| b.1.cmp(a.1));
-                    for (bitstring, count) in &counts {
-                        let n = **count;
-                        let pct = (n as f64 / result.shots as f64) * 100.0;
-                        println!("  |{bitstring}> : {n:5}  ({pct:.1}%)");
+                Commands::Config { section, reset, restore } => {
+                    if restore {
+                        match Config::restore_from_backup() {
+                            Ok(restored) => {
+                                println!("✅ Restored config from backup at {}", restored.config_path.display());
+                            }
+                            Err(e) => {
+                                println!("❌ Failed to restore config: {}", e);
+                                println!("   No backup found. Your config is safe at ~/.housaky/config.toml");
+                            }
+                        }
+                        return Ok(());
                     }
+                    if reset {
+                        let mut default_config = Config::default();
+                        default_config.config_path = config.config_path.clone();
+                        default_config.workspace_dir = config.workspace_dir.clone();
+                        default_config.save()?;
+                        println!(
+                            "Config reset to defaults at {}",
+                            default_config.config_path.display()
+                        );
+                        Ok(())
+                    } else {
+                        tokio::task::spawn_blocking(move || config_editor::run_config_tui(config, section))
+                            .await
+                            .map_err(|e| anyhow::anyhow!("Config TUI task failed: {e}"))?
+                            .map_err(|e| anyhow::anyhow!("Config TUI error: {e}"))?;
+                        Ok(())
+                    }
+                }
+
+                Commands::Housaky { housaky_command } => {
+                    housaky::housaky::handle_command(housaky_command, &config).await?;
                     Ok(())
                 }
 
-                QuantumCommands::DeviceInfo { device, bucket } => {
-                    println!("Querying Braket device info...");
-                    let cfg = QuantumConfig {
-                        backend: "braket".to_string(),
-                        braket_device_arn: device,
-                        braket_s3_bucket: bucket,
-                        ..QuantumConfig::default()
+                Commands::Quantum { quantum_command } => {
+                    use housaky::quantum::{
+                        AmazonBraketBackend, QuantumBackend, QuantumConfig, SimulatorBackend,
                     };
-                    let backend = AmazonBraketBackend::from_config(&cfg).await?;
-                    let info = backend.get_backend_info().await;
-                    println!("  ID          : {}", info.id);
-                    println!("  Max qubits  : {}", info.max_qubits);
-                    println!("  Max shots   : {}", info.max_shots);
-                    println!("  Online      : {}", info.online);
-                    println!("  Gates       : {}", info.supported_gates.join(", "));
-                    Ok(())
+                    use housaky::quantum::circuit::{Gate, QuantumCircuit};
+
+                    fn bell_circuit() -> QuantumCircuit {
+                        let mut c = QuantumCircuit::new(2);
+                        c.add_gate(Gate::h(0));
+                        c.add_gate(Gate::cnot(0, 1));
+                        c.measure_all();
+                        c
+                    }
+
+                    match quantum_command {
+                        QuantumCommands::RunBraket { shots, device, bucket, prefix } => {
+                            println!("Submitting Bell-state circuit to Amazon Braket...");
+                            println!("  Device : {device}");
+                            println!("  Shots  : {shots}");
+                            println!("  Bucket : s3://{bucket}/{prefix}");
+                            let cfg = QuantumConfig {
+                                backend: "braket".to_string(),
+                                shots,
+                                braket_device_arn: device,
+                                braket_s3_bucket: bucket,
+                                braket_s3_prefix: prefix,
+                                ..QuantumConfig::default()
+                            };
+                            let backend = AmazonBraketBackend::from_config(&cfg).await?;
+                            let circuit = bell_circuit();
+                            let result = backend.execute_circuit(&circuit).await?;
+                            println!("\nTask ARN  : {}", result.backend_id);
+                            println!("Shots run : {}", result.shots);
+                            println!("Runtime   : {} ms", result.execution_time_ms);
+                            println!("\nCounts:");
+                            let mut counts: Vec<_> = result.counts.iter().collect();
+                            counts.sort_by(|a, b| b.1.cmp(a.1));
+                            for (bitstring, count) in &counts {
+                                let pct = (**count as f64 / result.shots as f64) * 100.0;
+                                println!("  |{bitstring}> : {count:5}  ({pct:.1}%)", count = **count);
+                            }
+                            Ok(())
+                        }
+
+                        QuantumCommands::RunSimulator { shots } => {
+                            println!("Running Bell-state circuit on local statevector simulator...");
+                            println!("  Shots : {shots}");
+                            let backend = SimulatorBackend::new(2, shots);
+                            let circuit = bell_circuit();
+                            let result = backend.execute_circuit(&circuit).await?;
+                            println!("\nShots run : {}", result.shots);
+                            println!("Runtime   : {} ms", result.execution_time_ms);
+                            println!("\nCounts:");
+                            let mut counts: Vec<_> = result.counts.iter().collect();
+                            counts.sort_by(|a, b| b.1.cmp(a.1));
+                            for (bitstring, count) in &counts {
+                                let n = **count;
+                                let pct = (n as f64 / result.shots as f64) * 100.0;
+                                println!("  |{bitstring}> : {n:5}  ({pct:.1}%)");
+                            }
+                            Ok(())
+                        }
+
+                        QuantumCommands::DeviceInfo { device, bucket } => {
+                            println!("Querying Braket device info...");
+                            let cfg = QuantumConfig {
+                                backend: "braket".to_string(),
+                                braket_device_arn: device,
+                                braket_s3_bucket: bucket,
+                                ..QuantumConfig::default()
+                            };
+                            let backend = AmazonBraketBackend::from_config(&cfg).await?;
+                            let info = backend.get_backend_info().await;
+                            println!("  ID          : {}", info.id);
+                            println!("  Max qubits  : {}", info.max_qubits);
+                            println!("  Max shots   : {}", info.max_shots);
+                            println!("  Online      : {}", info.online);
+                            println!("  Gates       : {}", info.supported_gates.join(", "));
+                            Ok(())
+                        }
+                    }
+                }
+                Commands::Onboard { .. } => {
+                    // Onboard is handled above, this should not be reached
+                    unreachable!("Onboard command should be handled above")
                 }
             }
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use clap::CommandFactory;
+
+    #[test]
+    fn cli_definition_has_no_flag_conflicts() {
+        Cli::command().debug_assert();
+    }
+    }
 
 #[cfg(test)]
 mod tests {

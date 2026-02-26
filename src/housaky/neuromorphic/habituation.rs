@@ -247,7 +247,7 @@ mod tests {
     #[tokio::test]
     async fn test_habituation_decay() {
         let sys = HabituationSystem::default();
-        for _ in 0..20 {
+        for _ in 0..35 {
             sys.process_stimulus("tick", "noise", 0.5).await;
         }
         assert!(sys.is_habituated("tick").await);
@@ -256,7 +256,7 @@ mod tests {
     #[tokio::test]
     async fn test_dishabituation() {
         let sys = HabituationSystem::default();
-        for _ in 0..20 {
+        for _ in 0..35 {
             sys.process_stimulus("s1", "noise", 0.5).await;
         }
         assert!(sys.is_habituated("s1").await);

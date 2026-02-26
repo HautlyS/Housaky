@@ -4,6 +4,6 @@ firmware/*/target
 *.db-journal
 .DS_Store
 .wt-pr37/
-.env
+.env*
 .worktrees/
 /.planning/

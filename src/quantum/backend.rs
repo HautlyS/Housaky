@@ -805,7 +805,9 @@ mod tests {
         // We only test the JSON serialisation, not the actual AWS call.
         let backend = AmazonBraketBackend {
             client: {
-                let sdk_cfg = aws_config::SdkConfig::builder().build();
+                let sdk_cfg = aws_config::SdkConfig::builder()
+                    .behavior_version(aws_config::BehaviorVersion::latest())
+                    .build();
                 Client::new(&sdk_cfg)
             },
             device_arn: cfg.braket_device_arn.clone(),
@@ -823,12 +825,11 @@ mod tests {
     // ── Amazon Braket integration tests (require BRAKET_INTEGRATION=1) ────────
     //
     // Run with:
-    //   BRAKET_INTEGRATION=1 cargo test braket_ -- --nocapture --ignored
+    //   BRAKET_INTEGRATION=1 cargo test braket_
     //
     // These tests actually submit tasks to SV1 and write results to S3.
 
     #[tokio::test]
-    #[ignore = "requires BRAKET_INTEGRATION=1 and live AWS credentials"]
     async fn braket_bell_state_sv1() {
         if std::env::var("BRAKET_INTEGRATION").as_deref() != Ok("1") {
             println!("Skipped: set BRAKET_INTEGRATION=1 to run");
@@ -848,7 +849,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore = "requires BRAKET_INTEGRATION=1 and live AWS credentials"]
     async fn braket_ghz3_sv1() {
         if std::env::var("BRAKET_INTEGRATION").as_deref() != Ok("1") {
             println!("Skipped: set BRAKET_INTEGRATION=1 to run");
@@ -865,7 +865,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore = "requires BRAKET_INTEGRATION=1 and live AWS credentials"]
     async fn braket_device_info_sv1() {
         if std::env::var("BRAKET_INTEGRATION").as_deref() != Ok("1") {
             println!("Skipped: set BRAKET_INTEGRATION=1 to run");

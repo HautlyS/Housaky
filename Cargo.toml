@@ -91,7 +91,7 @@ console = "0.15"
 # Hardware discovery (device path globbing)
 glob = "0.3"
 
-# Discord WebSocket gateway
+# Discord / ElevenLabs WebSocket gateway
 tokio-tungstenite = { version = "0.24", features = ["rustls-tls-webpki-roots"] }
 futures-util = { version = "0.3", default-features = false, features = ["sink"] }
 hostname = "0.4.2"
@@ -162,7 +162,7 @@ tokio-stream = "0.1"
 md-5 = "0.10"
 
 # AWS SDK for Amazon Braket quantum computing
-aws-config = { version = "1", default-features = false, features = ["behavior-version-latest", "rustls", "rt-tokio", "credentials-process"] }
+aws-config = { version = "1", default-features = false, features = ["behavior-version-latest", "rustls", "rt-tokio", "credentials-process", "credentials-login"] }
 aws-sdk-braket = "1"
 aws-smithy-runtime = { version = "1", features = ["rt-tokio"] }
 
@@ -212,6 +212,9 @@ lto = "fat"
 codegen-units = 1
 strip = true
 panic = "abort"
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(feature, values("run-unstable-tests"))'] }
 
 [dev-dependencies]
 tokio-test = "0.4"

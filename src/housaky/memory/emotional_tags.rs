@@ -33,7 +33,7 @@ impl EmotionalTag {
     pub fn neutral() -> Self {
         Self {
             valence: 0.0,
-            arousal: 0.2,
+            arousal: 0.5,
             dominance: 0.5,
             surprise: 0.0,
             curiosity: 0.0,

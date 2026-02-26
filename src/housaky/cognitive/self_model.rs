@@ -216,13 +216,15 @@ impl PhenomenalSelfModel {
 
     /// Register an epistemic feeling.
     pub async fn feel(&self, feeling: EpistemicFeeling) {
-        let mut feelings = self.epistemic_feelings.write().await;
         let label = feeling.label().to_string();
         let intensity = feeling.intensity();
 
-        feelings.push(feeling);
-        if feelings.len() > self.max_feelings {
-            feelings.remove(0);
+        {
+            let mut feelings = self.epistemic_feelings.write().await;
+            feelings.push(feeling);
+            if feelings.len() > self.max_feelings {
+                feelings.remove(0);
+            }
         }
 
         self.add_narrative(&format!(

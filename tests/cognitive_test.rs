@@ -45,6 +45,7 @@ use housaky::tui::live::suggestions::{
     SuggestionContext, SuggestionEngine,
 };
 
+#[allow(dead_code)]
 fn temp_workspace() -> PathBuf {
     std::env::temp_dir().join(format!("housaky_test_{}", uuid::Uuid::new_v4()))
 }

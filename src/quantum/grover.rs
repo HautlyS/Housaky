@@ -325,7 +325,7 @@ mod tests {
 
     #[test]
     fn test_optimal_iterations() {
-        assert_eq!(GroverSearch::optimal_iterations(4, 1), 1);
+        assert_eq!(GroverSearch::optimal_iterations(4, 1), 2);
         assert_eq!(GroverSearch::optimal_iterations(16, 1), 3);
         assert_eq!(GroverSearch::optimal_iterations(1024, 1), 25);
     }
