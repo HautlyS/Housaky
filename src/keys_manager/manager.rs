@@ -673,6 +673,35 @@ impl KeysManager {
         }
     }
 
+    pub async fn rotate_key(&self, provider_name: &str) -> Result<Option<KeyEntry>> {
+        let mut store = self.store.write().await;
+        if let Some(provider) = store.providers.get_mut(provider_name) {
+            if provider.keys.is_empty() {
+                return Ok(None);
+            }
+            provider.state.current_key_index = (provider.state.current_key_index + 1) % provider.keys.len().max(1);
+            let key = provider.keys.get(provider.state.current_key_index).cloned();
+            drop(store);
+            self.save().await?;
+            Ok(key)
+        } else {
+            Err(anyhow::anyhow!("Provider '{}' not found", provider_name))
+        }
+    }
+
+    pub async fn rotate_all_keys(&self) -> Result<Vec<(String, Option<KeyEntry>)>> {
+        let store = self.store.read().await;
+        let provider_names: Vec<String> = store.providers.keys().cloned().collect();
+        drop(store);
+        
+        let mut results = Vec::new();
+        for name in provider_names {
+            let rotated = self.rotate_key(&name).await?;
+            results.push((name, rotated));
+        }
+        Ok(results)
+    }
+
     pub async fn get_next_key(&self, provider_name: &str) -> Option<KeyEntry> {
         let mut store = self.store.write().await;
         // Clone settings before we mutably borrow a provider entry.

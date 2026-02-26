@@ -18,10 +18,11 @@ use axum::{
     body::Bytes,
     extract::{Query, State},
     http::{header, HeaderMap, StatusCode},
-    response::{IntoResponse, Json},
+    response::{sse::Event, sse::Sse, IntoResponse},
     routing::{get, post},
-    Router,
+    Json, Router,
 };
+use tokio::sync::broadcast;
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
@@ -183,6 +184,15 @@ pub struct AppState {
     pub whatsapp: Option<Arc<WhatsAppChannel>>,
     /// `WhatsApp` app secret for webhook signature verification (`X-Hub-Signature-256`)
     pub whatsapp_app_secret: Option<Arc<str>>,
+    pub events: broadcast::Sender<GatewayEvent>,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum GatewayEvent {
+    Paired { client_key: String },
+    WebhookReceived { client_key: String, message_preview: String },
+    WebhookResponded { model: String, success: bool },
 }
 
 /// Run the HTTP gateway using axum with proper HTTP/1.1 compliance.
@@ -207,6 +217,7 @@ pub async fn run_gateway(host: &str, port: u16, config: Config) -> Result<()> {
         config.default_provider.as_deref().unwrap_or("openrouter"),
         config.api_key.as_deref(),
         &config.reliability,
+        None,
     )?);
     let model = config
         .default_model
@@ -319,6 +330,7 @@ pub async fn run_gateway(host: &str, port: u16, config: Config) -> Result<()> {
     crate::health::mark_component_ok("gateway");
 
     // Build shared state
+    let (events, _rx) = broadcast::channel(256);
     let state = AppState {
         provider,
         model,
@@ -331,6 +343,7 @@ pub async fn run_gateway(host: &str, port: u16, config: Config) -> Result<()> {
         idempotency_store,
         whatsapp: whatsapp_channel,
         whatsapp_app_secret,
+        events,
     };
 
     // Build router with middleware
@@ -338,6 +351,7 @@ pub async fn run_gateway(host: &str, port: u16, config: Config) -> Result<()> {
         .route("/health", get(handle_health))
         .route("/pair", post(handle_pair))
         .route("/webhook", post(handle_webhook))
+        .route("/events", get(handle_events))
         .route("/whatsapp", get(handle_whatsapp_verify))
         .route("/whatsapp", post(handle_whatsapp_message))
         .with_state(state)
@@ -387,6 +401,9 @@ async fn handle_pair(State(state): State<AppState>, headers: HeaderMap) -> impl 
     match state.pairing.try_pair(code) {
         Ok(Some(token)) => {
             tracing::info!("🔐 New client paired successfully");
+            let _ = state
+                .events
+                .send(GatewayEvent::Paired { client_key: client_key.clone() });
             let body = serde_json::json!({
                 "paired": true,
                 "token": token,
@@ -497,6 +514,11 @@ async fn handle_webhook(
 
     let message = &webhook_body.message;
 
+    let _ = state.events.send(GatewayEvent::WebhookReceived {
+        client_key: client_key.clone(),
+        message_preview: truncate_with_ellipsis(message, 80),
+    });
+
     if state.auto_save {
         let key = webhook_memory_key();
         let _ = state
@@ -511,6 +533,10 @@ async fn handle_webhook(
         .await
     {
         Ok(response) => {
+            let _ = state.events.send(GatewayEvent::WebhookResponded {
+                model: state.model.clone(),
+                success: true,
+            });
             let body = serde_json::json!({"response": response, "model": state.model});
             (StatusCode::OK, Json(body))
         }
@@ -519,10 +545,47 @@ async fn handle_webhook(
                 "Webhook provider error: {}",
                 providers::sanitize_api_error(&e.to_string())
             );
+            let _ = state.events.send(GatewayEvent::WebhookResponded {
+                model: state.model.clone(),
+                success: false,
+            });
             let err = serde_json::json!({"error": "LLM request failed"});
             (StatusCode::INTERNAL_SERVER_ERROR, Json(err))
         }
     }
+}
+
+async fn handle_events(State(state): State<AppState>, headers: HeaderMap) -> impl IntoResponse {
+    if state.pairing.require_pairing() {
+        let auth = headers
+            .get(header::AUTHORIZATION)
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("");
+        let token = auth.strip_prefix("Bearer ").unwrap_or("");
+        if !state.pairing.is_authenticated(token) {
+            let err = serde_json::json!({
+                "error": "Unauthorized — pair first via POST /pair, then send Authorization: Bearer <token>"
+            });
+            return (StatusCode::UNAUTHORIZED, Json(err)).into_response();
+        }
+    }
+
+    let mut rx = state.events.subscribe();
+    let stream = tokio_stream::iter(std::iter::from_fn(move || {
+        match rx.try_recv() {
+            Ok(ev) => {
+                let json = serde_json::to_string(&ev).unwrap_or_else(|_| "{}".to_string());
+                Some(Ok::<Event, std::convert::Infallible>(Event::default().data(json)))
+            }
+            Err(tokio::sync::broadcast::error::TryRecvError::Empty) => None,
+            Err(tokio::sync::broadcast::error::TryRecvError::Closed) => None,
+            Err(tokio::sync::broadcast::error::TryRecvError::Lagged(_)) => None,
+        }
+    }));
+
+    Sse::new(stream)
+        .keep_alive(axum::response::sse::KeepAlive::new())
+        .into_response()
 }
 
 /// `WhatsApp` verification query params
@@ -955,6 +1018,7 @@ mod tests {
         let provider_impl = Arc::new(MockProvider::default());
         let provider: Arc<dyn Provider> = provider_impl.clone();
         let memory: Arc<dyn Memory> = Arc::new(MockMemory);
+        let (events, _rx) = broadcast::channel(256);
 
         let state = AppState {
             provider,
@@ -968,6 +1032,7 @@ mod tests {
             idempotency_store: Arc::new(IdempotencyStore::new(Duration::from_secs(300))),
             whatsapp: None,
             whatsapp_app_secret: None,
+            events,
         };
 
         let mut headers = HeaderMap::new();
@@ -1003,6 +1068,7 @@ mod tests {
 
         let tracking_impl = Arc::new(TrackingMemory::default());
         let memory: Arc<dyn Memory> = tracking_impl.clone();
+        let (events, _rx) = broadcast::channel(256);
 
         let state = AppState {
             provider,
@@ -1016,6 +1082,7 @@ mod tests {
             idempotency_store: Arc::new(IdempotencyStore::new(Duration::from_secs(300))),
             whatsapp: None,
             whatsapp_app_secret: None,
+            events,
         };
 
         let headers = HeaderMap::new();

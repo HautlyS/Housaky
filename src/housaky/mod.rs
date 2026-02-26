@@ -18,6 +18,7 @@
 
 pub mod agent;
 pub mod agi_context;
+pub mod agi_integration;
 pub mod agi_loop;
 pub mod alignment;
 pub mod cognitive;
@@ -42,7 +43,64 @@ pub mod tool_creator;
 pub mod web_browser;
 pub mod working_memory;
 
+// New self-improving infrastructure
+pub mod self_improvement_loop;
+pub mod recursive_self_modifier;
+pub mod tool_chain_composer;
+pub mod knowledge_guided_goal_selector;
+pub mod unified_feedback_loop;
+pub mod capability_growth_tracker;
+
+// Self-improvement code modification
+pub mod rust_code_modifier;
+pub mod git_sandbox;
+pub mod self_improve_interface;
+
+// GSD-inspired orchestration system
+pub mod gsd_orchestration;
+
+// Introspection for NL queries
+pub mod introspection;
+
+// Phase 1 — AGI Singularity Foundation
+pub mod self_replication;
+pub mod self_modification;
+pub mod learning;
+
+// Phase 2 — Quantum-Hybrid & Distributed Cognition
+pub mod swarm;
+pub mod neuromorphic;
+pub mod federation;
+
+// Phase 3 — Consciousness Substrate & Self-Awareness
+pub mod consciousness;
+
+// Phase 4 — Unbounded Self-Improvement
+pub mod architecture_search;
+pub mod verification;
+pub mod knowledge_acquisition;
+
+// Phase 5 — Physical Embodiment & World Interaction
+pub mod embodiment;
+pub mod perception;
+
+// Phase 6 — Singularity Convergence (Cycles 10 000–∞)
+pub mod singularity;
+
+// Re-export runtime WASM plugin functionality
+pub use crate::runtime::wasm::{WasmRuntime, WasmExecutionResult, WasmCapabilities};
+
+pub use gsd_orchestration::{
+    GSDOrchestrator, GSDExecutionEngine, ExecutionSummary, VerificationReport, TaskAwareness, TaskAwarenessReport,
+    CapabilityProfile, TaskPerformance, SelfImprovementIntegration, CapabilityUpdate,
+};
+
 pub use agent::{AgentInput, AgentOutput, Session as AgentSession, UnifiedAgentLoop};
+pub use agi_integration::{
+    AGIAction, AGIActionType, AGICycleContext, AGICycleInput, AGICycleOutput, AGIHubState,
+    AGIIntegrationHub, AGIPhase, FailureAnalysis, FailureRecord, HubMetrics, ReflectionSummary,
+    SingularityProgress,
+};
 pub use decision_journal::{
     ChosenOption, ConsideredOption, DecisionBuilder, DecisionContext, DecisionEntry,
     DecisionJournal, DecisionJournalError, ExecutionRecord, FileDecisionJournal, JournalStats,
@@ -53,9 +111,10 @@ pub use housaky_agent::{
 };
 pub use session_manager::{Session, SessionManager, SessionSummary};
 
-use crate::commands::{GoalCommands, HousakyCommands};
+use crate::commands::{GoalCommands, GSDCommands, HousakyCommands, SelfModCommands};
 use crate::config::Config;
 use anyhow::Result;
+use std::collections::HashMap;
 use std::sync::Arc;
 
 pub async fn handle_command(command: HousakyCommands, config: &Config) -> Result<()> {
@@ -110,6 +169,15 @@ pub async fn handle_command(command: HousakyCommands, config: &Config) -> Result
             println!("Knowledge:");
             println!("  Entities:  {}", metrics.knowledge_entities);
             println!("  Relations: {}", metrics.knowledge_relations);
+            println!();
+
+            let hub_metrics = core.agi_hub.get_hub_metrics().await;
+            println!("AGI Hub:");
+            println!("  Phase:              {:?}", hub_metrics.current_phase);
+            println!("  Singularity Score:  {:.3}", hub_metrics.singularity_score);
+            println!("  Cycles Completed:   {}", hub_metrics.cycles_completed);
+            println!("  Goals Created:      {}", hub_metrics.goals_created);
+            println!("  Tools Generated:    {}", hub_metrics.tools_generated);
         }
 
         HousakyCommands::Init => {
@@ -272,6 +340,14 @@ pub async fn handle_command(command: HousakyCommands, config: &Config) -> Result
         HousakyCommands::Goals { goal_command } => {
             handle_goal_command(goal_command, config).await?;
         }
+
+        HousakyCommands::SelfMod { self_mod_command } => {
+            handle_self_mod_command(self_mod_command, config).await?;
+        }
+
+        HousakyCommands::GSD { gsd_command } => {
+            handle_gsd_command(gsd_command, config).await?;
+        }
     }
 
     Ok(())
@@ -340,6 +416,367 @@ async fn handle_goal_command(command: GoalCommands, config: &Config) -> Result<(
                 .update_progress(&id, 1.0, "Manually completed")
                 .await?;
             println!("✓ Goal {} marked as complete", id);
+        }
+    }
+
+    Ok(())
+}
+
+async fn handle_self_mod_command(command: SelfModCommands, config: &Config) -> Result<()> {
+    let housaky_dir = config.workspace_dir.join(".housaky");
+    let params_path = housaky_dir.join("self_mod_parameters.json");
+    let experiments_path = housaky_dir.join("improvement_experiments.json");
+
+    match command {
+        SelfModCommands::Run { provider, model } => {
+            let core = core::HousakyCore::new(config)?;
+            core.initialize().await?;
+
+            let provider_name = provider
+                .or_else(|| config.default_provider.clone())
+                .unwrap_or_else(|| "openrouter".to_string());
+            let model_name = model
+                .or_else(|| config.default_model.clone())
+                .unwrap_or_else(|| "arcee-ai/trinity-large-preview:free".to_string());
+
+            let provider_instance = match crate::providers::create_provider(
+                &provider_name,
+                config.api_key.as_deref(),
+            ) {
+                Ok(provider_instance) => Some(provider_instance),
+                Err(e) => {
+                    println!(
+                        "⚠ Could not initialize provider '{}': {}",
+                        provider_name, e
+                    );
+                    println!("  Proceeding in offline mode for this cycle.");
+                    None
+                }
+            };
+
+            let recursive_loop = self_improvement_loop::SelfImprovementLoop::new(
+                &config.workspace_dir,
+                core.goal_engine.clone(),
+                core.meta_cognition.clone(),
+            );
+
+            println!("🧠 Running one recursive self-improvement cycle...");
+            let cycle = recursive_loop
+                .run_full_cycle(
+                    provider_instance.as_ref().map(|provider| provider.as_ref()),
+                    &model_name,
+                )
+                .await?;
+
+            println!("✓ Cycle completed");
+            println!("  ID:               {}", cycle.id);
+            println!("  Confidence:       {:.2}", cycle.confidence);
+            println!("  New goals:        {}", cycle.outputs.new_goals.len());
+            println!("  New tools:        {}", cycle.outputs.new_tools.len());
+            println!("  New skills:       {}", cycle.outputs.new_skills.len());
+            println!("  Modifications:    {}", cycle.self_modifications.len());
+            println!(
+                "  Successful mods:  {}",
+                cycle.self_modifications.iter().filter(|m| m.success).count()
+            );
+        }
+
+        SelfModCommands::Status => {
+            let overrides: HashMap<String, HashMap<String, serde_json::Value>> =
+                if params_path.exists() {
+                    let content = tokio::fs::read_to_string(&params_path).await?;
+                    serde_json::from_str(&content).unwrap_or_default()
+                } else {
+                    HashMap::new()
+                };
+
+            let experiments: Vec<self_improvement_loop::ImprovementExperiment> =
+                if experiments_path.exists() {
+                    let content = tokio::fs::read_to_string(&experiments_path).await?;
+                    serde_json::from_str(&content).unwrap_or_default()
+                } else {
+                    Vec::new()
+                };
+
+            println!("🔧 Self-Modification Status");
+            println!();
+
+            println!("Overrides:");
+            if overrides.is_empty() {
+                println!("  (none)");
+            } else {
+                for (component, params) in &overrides {
+                    println!("  {}", component);
+                    for (key, value) in params {
+                        println!("    - {} = {}", key, value);
+                    }
+                }
+            }
+
+            println!();
+            let success_count = experiments.iter().filter(|exp| exp.success).count();
+            let total_count = experiments.len();
+            let success_rate = if total_count > 0 {
+                (success_count as f64 / total_count as f64) * 100.0
+            } else {
+                0.0
+            };
+
+            println!("Experiments:");
+            println!("  Total:        {}", total_count);
+            println!("  Successful:   {}", success_count);
+            println!("  Success Rate: {:.1}%", success_rate);
+
+            if let Some(last) = experiments.last() {
+                println!();
+                println!("Latest:");
+                println!("  ID:         {}", last.id);
+                println!("  Target:     {}", last.target_component);
+                println!("  Success:    {}", last.success);
+                println!("  Timestamp:  {}", last.timestamp.to_rfc3339());
+            }
+        }
+
+        SelfModCommands::Experiments { count } => {
+            let experiments: Vec<self_improvement_loop::ImprovementExperiment> =
+                if experiments_path.exists() {
+                    let content = tokio::fs::read_to_string(&experiments_path).await?;
+                    serde_json::from_str(&content).unwrap_or_default()
+                } else {
+                    Vec::new()
+                };
+
+            if experiments.is_empty() {
+                println!("No self-modification experiments recorded yet.");
+                return Ok(());
+            }
+
+            let shown = count.min(experiments.len());
+            println!("🧪 Recent Self-Modification Experiments ({} shown)", shown);
+            println!();
+
+            for experiment in experiments.iter().rev().take(shown) {
+                println!("- {}", experiment.id);
+                println!("  Target:      {}", experiment.target_component);
+                println!("  Type:        {:?}", experiment.modification_type);
+                println!("  Success:     {}", experiment.success);
+                println!("  Confidence:  {:.2}", experiment.confidence);
+                println!("  Expected:    {}", experiment.expected_effect);
+                println!("  Timestamp:   {}", experiment.timestamp.to_rfc3339());
+
+                if let Some(delta) = experiment.singularity_score_delta {
+                    println!("  ΔScore:      {:+.4}", delta);
+                }
+
+                if let Some(delta) = experiment.goal_achievement_rate_delta {
+                    println!("  ΔGoal Rate:  {:+.4}", delta);
+                }
+
+                if let Some(reason) = &experiment.failure_reason {
+                    println!("  Failure:     {}", reason);
+                }
+
+                println!();
+            }
+        }
+
+        SelfModCommands::Set { target, key, value } => {
+            let parsed_value = serde_json::from_str::<serde_json::Value>(&value)
+                .unwrap_or(serde_json::Value::String(value.clone()));
+
+            let mut params = HashMap::new();
+            params.insert(key.clone(), parsed_value.clone());
+
+            self_improvement_loop::SelfImprovementLoop::validate_parameter_change_request(
+                &target,
+                &params,
+            )?;
+
+            tokio::fs::create_dir_all(&housaky_dir).await?;
+
+            let mut overrides: HashMap<String, HashMap<String, serde_json::Value>> =
+                if params_path.exists() {
+                    let content = tokio::fs::read_to_string(&params_path).await?;
+                    serde_json::from_str(&content).unwrap_or_default()
+                } else {
+                    HashMap::new()
+                };
+
+            overrides
+                .entry(target.clone())
+                .or_insert_with(HashMap::new)
+                .insert(key.clone(), parsed_value);
+
+            let json = serde_json::to_string_pretty(&overrides)?;
+            tokio::fs::write(&params_path, json).await?;
+
+            println!("✓ Saved self-mod override: {}.{}", target, key);
+            println!("  This will be applied on the next self-improvement cycle.");
+        }
+
+        SelfModCommands::Unset { target, key } => {
+            if !params_path.exists() {
+                println!("No self-mod override file found.");
+                return Ok(());
+            }
+
+            let content = tokio::fs::read_to_string(&params_path).await?;
+            let mut overrides: HashMap<String, HashMap<String, serde_json::Value>> =
+                serde_json::from_str(&content).unwrap_or_default();
+
+            let mut removed = false;
+
+            if let Some(component_params) = overrides.get_mut(&target) {
+                removed = component_params.remove(&key).is_some();
+                if component_params.is_empty() {
+                    overrides.remove(&target);
+                }
+            }
+
+            if removed {
+                let json = serde_json::to_string_pretty(&overrides)?;
+                tokio::fs::write(&params_path, json).await?;
+                println!("✓ Removed self-mod override: {}.{}", target, key);
+            } else {
+                println!("No override found for {}.{}", target, key);
+            }
+        }
+    }
+
+    Ok(())
+}
+
+async fn handle_gsd_command(command: GSDCommands, config: &Config) -> Result<()> {
+        use crate::housaky::gsd_orchestration::GSDExecutionEngine;
+    use crate::providers::create_provider;
+    use crate::providers::Provider;
+
+    println!("🚀 GSD Orchestration System");
+    println!("============================\n");
+
+    let provider = create_provider(
+        config.default_provider.as_deref().unwrap_or("openrouter"),
+        config.api_key.as_deref(),
+    )?;
+
+    let model = config.default_model.clone()
+        .unwrap_or_else(|| "arcee-ai/trinity-large-preview:free".to_string());
+
+    let boxed_provider: Box<dyn Provider> = provider;
+    let engine = GSDExecutionEngine::new(
+        config.workspace_dir.clone(),
+        Some(boxed_provider),
+        model,
+    );
+
+    engine.initialize().await?;
+
+    match command {
+        GSDCommands::NewProject { name, vision } => {
+            println!("📁 Creating new GSD project: {}", name);
+            let content = engine.create_project(name.clone(), vision).await?;
+            println!("✓ Project '{}' created", name);
+            println!("\nProject context:");
+            println!("{}", content);
+        }
+
+        GSDCommands::Phase { name, description, goals } => {
+            println!("📋 Creating phase: {}", name);
+            let phase_id = engine.create_phase(name.clone(), description, goals.clone()).await?;
+            println!("✓ Phase '{}' created (ID: {})", name, phase_id);
+        }
+
+        GSDCommands::Discuss { phase_id, answers } => {
+            println!("💬 Discussing phase: {}", phase_id);
+            let content = engine.discuss_phase(&phase_id, answers).await?;
+            println!("✓ Phase context saved");
+            println!("\nContext:\n{}", content);
+        }
+
+        GSDCommands::Execute { phase_id, task } => {
+            println!("⚡ Executing phase: {}", phase_id);
+            println!("Task: {}\n", task);
+            
+            let summary = engine.execute_with_llm(&phase_id, &task).await?;
+            
+            println!("\n📊 Execution Summary:");
+            println!("  Total tasks: {}", summary.total_tasks);
+            println!("  Successful:  {}", summary.successful_tasks);
+            println!("  Failed:      {}", summary.failed_tasks);
+            println!("  Duration:    {}ms", summary.total_duration_ms);
+        }
+
+        GSDCommands::Quick { task } => {
+            println!("⚡ Quick execute: {}", task);
+            println!();
+            
+            let summary = engine.quick_execute(&task).await?;
+            
+            println!("\n📊 Execution Summary:");
+            println!("  Total tasks: {}", summary.total_tasks);
+            println!("  Successful:  {}", summary.successful_tasks);
+            println!("  Failed:      {}", summary.failed_tasks);
+            println!("  Duration:    {}ms", summary.total_duration_ms);
+        }
+
+        GSDCommands::Verify { phase_id } => {
+            println!("🔍 Verifying phase: {}", phase_id);
+            let report = engine.verify_phase(&phase_id).await?;
+            
+            println!("\n📋 Verification Report:");
+            println!("  Total items: {}", report.total_items);
+            println!("  Verified:     {}", report.verified);
+            println!("  Failed:       {}", report.failed);
+            
+            if !report.recommendations.is_empty() {
+                println!("\n💡 Recommendations:");
+                for rec in &report.recommendations {
+                    println!("  - {}", rec);
+                }
+            }
+        }
+
+        GSDCommands::Status => {
+            if let Some(phase) = engine.get_current_phase().await {
+                println!("📍 Current Phase:");
+                println!("  Name:        {}", phase.name);
+                println!("  Description: {}", phase.description);
+                println!("  Status:      {:?}", phase.status);
+                println!("  Tasks:       {}", phase.tasks.len());
+            } else {
+                println!("No active phase");
+            }
+        }
+
+        GSDCommands::Analyze { task } => {
+            let decomposer = crate::housaky::gsd_orchestration::StepDecomposer::new();
+            let analysis = decomposer.analyze_complexity(&task);
+            
+            println!("🔍 Task Complexity Analysis:");
+            println!("  Score:     {:.2}", analysis.score);
+            println!("  Category:  {:?}", analysis.category);
+            println!("\n📌 Indicators:");
+            for ind in &analysis.indicators {
+                println!("  - {}", ind);
+            }
+        }
+
+        GSDCommands::Awareness => {
+            let report = engine.get_awareness_report().await;
+            
+            println!("🧠 Task Awareness Report:");
+            println!("\n📊 Capability Profile:");
+            println!("  Code Generation: {:.0}%", report.capability_profile.code_generation * 100.0);
+            println!("  Testing:         {:.0}%", report.capability_profile.testing * 100.0);
+            println!("  Debugging:       {:.0}%", report.capability_profile.debugging * 100.0);
+            println!("  Refactoring:     {:.0}%", report.capability_profile.refactoring * 100.0);
+            println!("  Architecture:    {:.0}%", report.capability_profile.architecture * 100.0);
+            println!("  API Design:      {:.0}%", report.capability_profile.api_design * 100.0);
+            println!("  Security:        {:.0}%", report.capability_profile.security * 100.0);
+            println!("\n📈 Performance:");
+            println!("  Tasks analyzed:     {}", report.total_tasks_analyzed);
+            println!("  Avg success rate:  {:.1}%", report.avg_success_rate * 100.0);
+            println!("  Complexity bias:   {:.2}", report.complexity_bias);
         }
     }
 

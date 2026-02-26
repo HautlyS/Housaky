@@ -26,22 +26,6 @@ pub use traits::{
 
 use compatible::{AuthStyle, OpenAiCompatibleProvider};
 use reliable::ReliableProvider;
-use std::sync::Arc;
-
-fn key_from_keys_manager(provider: &str) -> Option<String> {
-    // Best-effort: load keys.json and pick next enabled key.
-    // This does NOT modify config.toml and does not error if missing.
-    let km = crate::keys_manager::manager::get_global_keys_manager();
-    let rt = match tokio::runtime::Handle::try_current() {
-        Ok(h) => h,
-        Err(_) => return None,
-    };
-
-    rt.block_on(async {
-        let _ = km.load().await;
-        km.get_next_key(provider).await.map(|k| k.key)
-    })
-}
 
 pub fn build_model_routes_from_subjects(
     routing: &crate::config::schema::RoutingConfig,
@@ -367,23 +351,72 @@ pub fn create_provider(name: &str, api_key: Option<&str>) -> anyhow::Result<Box<
     }
 }
 
+/// Create provider using keys_manager for API key resolution
+pub fn create_provider_with_keys_manager(
+    name: &str,
+    _model: Option<&str>,
+) -> anyhow::Result<Box<dyn Provider>> {
+    let km = crate::keys_manager::manager::get_global_keys_manager();
+    let rt = match tokio::runtime::Handle::try_current() {
+        Ok(h) => h,
+        Err(_) => {
+            return create_provider(name, None);
+        }
+    };
+
+    let key = rt.block_on(async {
+        let _ = km.load().await;
+        km.get_next_key(name).await.map(|k| k.key)
+    });
+
+    create_provider(name, key.as_deref())
+}
+
+fn key_from_keys_manager(provider: &str) -> Option<String> {
+    let km = crate::keys_manager::manager::get_global_keys_manager();
+    let rt = match tokio::runtime::Handle::try_current() {
+        Ok(h) => h,
+        Err(_) => return None,
+    };
+
+    rt.block_on(async {
+        let _ = km.load().await;
+        km.get_next_key(provider).await.map(|k| k.key)
+    })
+}
+
 /// Create provider chain with retry and fallback behavior.
 pub fn create_resilient_provider(
     primary_name: &str,
     api_key: Option<&str>,
     reliability: &crate::config::ReliabilityConfig,
+    use_keys_manager: Option<bool>,
 ) -> anyhow::Result<Box<dyn Provider>> {
     let mut providers: Vec<(String, Box<dyn Provider>)> = Vec::new();
 
+    let resolved_key = if use_keys_manager.unwrap_or(false) {
+        key_from_keys_manager(primary_name)
+            .or_else(|| api_key.map(|k| k.to_string()))
+    } else {
+        api_key.map(|k| k.to_string())
+    };
+
     providers.push((
         primary_name.to_string(),
-        create_provider(primary_name, api_key)?,
+        create_provider(primary_name, resolved_key.as_deref())?,
     ));
 
     for fallback in &reliability.fallback_providers {
         if fallback == primary_name || providers.iter().any(|(name, _)| name == fallback) {
             continue;
         }
+
+        let fallback_key = if use_keys_manager.unwrap_or(false) {
+            key_from_keys_manager(fallback)
+                .or_else(|| api_key.map(|k| k.to_string()))
+        } else {
+            api_key.map(|k| k.to_string())
+        };
 
         if api_key.is_some() && fallback != "ollama" {
             tracing::warn!(
@@ -394,57 +427,7 @@ pub fn create_resilient_provider(
             );
         }
 
-        match create_provider(fallback, api_key) {
-            Ok(provider) => providers.push((fallback.clone(), provider)),
-            Err(e) => {
-                tracing::warn!(
-                    fallback_provider = fallback,
-                    "Ignoring invalid fallback provider: {e}"
-                );
-            }
-        }
-    }
-
-    let reliable = ReliableProvider::new(
-        providers,
-        reliability.provider_retries,
-        reliability.provider_backoff_ms,
-    )
-    .with_api_keys(reliability.api_keys.clone())
-    .with_model_fallbacks(reliability.model_fallbacks.clone());
-
-    Ok(Box::new(reliable))
-}
-
-/// Create provider with KVM key management for advanced rotation
-pub fn create_resilient_provider_with_kvm(
-    primary_name: &str,
-    api_key: Option<&str>,
-    reliability: &crate::config::ReliabilityConfig,
-    kvm_manager: Option<Arc<crate::key_management::KvmKeyManager>>,
-) -> anyhow::Result<Box<dyn Provider>> {
-    let mut providers: Vec<(String, Box<dyn Provider>)> = Vec::new();
-
-    providers.push((
-        primary_name.to_string(),
-        create_provider(primary_name, api_key)?,
-    ));
-
-    for fallback in &reliability.fallback_providers {
-        if fallback == primary_name || providers.iter().any(|(name, _)| name == fallback) {
-            continue;
-        }
-
-        if api_key.is_some() && fallback != "ollama" {
-            tracing::warn!(
-                fallback_provider = fallback,
-                primary_provider = primary_name,
-                "Fallback provider will use the primary provider's API key — \
-                 this will fail if the providers require different keys"
-            );
-        }
-
-        match create_provider(fallback, api_key) {
+        match create_provider(fallback, fallback_key.as_deref()) {
             Ok(provider) => providers.push((fallback.clone(), provider)),
             Err(e) => {
                 tracing::warn!(
@@ -463,8 +446,9 @@ pub fn create_resilient_provider_with_kvm(
     .with_api_keys(reliability.api_keys.clone())
     .with_model_fallbacks(reliability.model_fallbacks.clone());
 
-    if let Some(kvm) = kvm_manager {
-        reliable = reliable.with_kvm_manager(kvm);
+    if use_keys_manager.unwrap_or(false) {
+        let km = crate::keys_manager::manager::get_global_keys_manager();
+        reliable = reliable.with_keys_manager(km);
     }
 
     Ok(Box::new(reliable))
@@ -484,7 +468,7 @@ pub fn create_routed_provider(
     // NOTE: `model_routes` is legacy and still supported.
     // `routing.subjects` is the preferred per-subject config.
     if model_routes.is_empty() && routing.subjects.is_empty() {
-        return create_resilient_provider(primary_name, api_key, reliability);
+        return create_resilient_provider(primary_name, api_key, reliability, None);
     }
 
     // Collect unique provider names needed
@@ -520,7 +504,7 @@ pub fn create_routed_provider(
             .or(km_key)
             .or_else(|| api_key.map(|k| k.to_string()));
 
-        match create_resilient_provider(name, key.as_deref(), reliability) {
+        match create_resilient_provider(name, key.as_deref(), reliability, None) {
             Ok(provider) => {
                 // Optional concurrency limits: if any route config provides a per-provider limit,
                 // wrap this provider.
@@ -949,7 +933,6 @@ mod tests {
             "openai".into(),
         ];
         reliability.auto_rotate_on_limit = true;
-        reliability.kvm_keys_path = None;
         reliability.api_keys = Vec::new();
         reliability.model_fallbacks = std::collections::HashMap::new();
         reliability.channel_initial_backoff_secs = 2;
@@ -957,14 +940,14 @@ mod tests {
         reliability.scheduler_poll_secs = 15;
         reliability.scheduler_retries = 2;
 
-        let provider = create_resilient_provider("openrouter", Some("sk-test"), &reliability);
+        let provider = create_resilient_provider("openrouter", Some("sk-test"), &reliability, None);
         assert!(provider.is_ok());
     }
 
     #[test]
     fn resilient_provider_errors_for_invalid_primary() {
         let reliability = crate::config::ReliabilityConfig::default();
-        let provider = create_resilient_provider("totally-invalid", Some("sk-test"), &reliability);
+        let provider = create_resilient_provider("totally-invalid", Some("sk-test"), &reliability, None);
         assert!(provider.is_err());
     }
 

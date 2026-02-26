@@ -203,138 +203,31 @@ pub enum PeripheralCommands {
 
 /// Key management subcommands
 ///
-/// NOTE: The legacy KVM store (`kvm_keys.json`) is deprecated.
-/// Prefer `housaky keys manager ...` which uses the centralized keys store (`~/.housaky/keys.json`).
-///
-/// This enum remains as a backwards-compatible wrapper around legacy KVM commands
-/// plus the new centralized keys manager commands.
+/// Use `housaky keys manager ...` to manage keys with the centralized keys store (`~/.housaky/keys.json`).
 #[derive(Subcommand, Debug, Clone)]
 pub enum KeyCommands {
-    /// Legacy: list all configured API keys (KVM store).
+    /// List all configured API keys.
     List,
-    /// Legacy: add a new API key for a provider (KVM store).
+    /// Add a new API key for a provider.
     Add {
         /// Provider name (e.g., openrouter, anthropic, openai)
         provider: String,
         /// API key value
         key: String,
     },
-    /// Legacy: remove an API key (removes provider from KVM store).
+    /// Remove an API key (removes provider).
     Remove {
         /// Provider name
         provider: String,
     },
-    /// Legacy: rotate API keys (KVM mode).
+    /// Rotate API keys.
     ///
     /// Prefer: KeysManager performs per-request rotation via provider state.
     Rotate,
 
-    /// New: centralized keys/provider/model manager.
+    /// Centralized keys/provider/model manager.
     #[command(subcommand)]
     Manager(crate::keys_manager::commands::KeysManagerCommands),
-}
-
-/// KVM (Key Virtual Management) subcommands
-#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub enum KvmCommands {
-    /// List all providers and their keys
-    List,
-    /// Add a new provider with keys
-    AddProvider {
-        /// Provider name
-        name: String,
-        /// Template to use (openrouter, anthropic, openai, custom)
-        #[arg(long, short)]
-        template: Option<String>,
-        /// Base URL (required if not using template)
-        #[arg(long, short)]
-        base_url: Option<String>,
-        /// Authentication method (api_key, bearer, etc.)
-        #[arg(long, short)]
-        auth_method: Option<String>,
-        /// API keys (can be specified multiple times)
-        #[arg(long, short = 'k', value_delimiter = ',')]
-        keys: Vec<String>,
-        /// Models (can be specified multiple times)
-        #[arg(long, short = 'm', value_delimiter = ',')]
-        models: Vec<String>,
-    },
-    /// Add a key to an existing provider
-    AddKey {
-        /// Provider name
-        provider: String,
-        /// API key value
-        key: String,
-    },
-    /// Remove a provider and all its keys
-    RemoveProvider {
-        /// Provider name
-        name: String,
-    },
-    /// Remove a key from a provider
-    RemoveKey {
-        /// Provider name
-        provider: String,
-        /// Key ID or key value (partial match)
-        key: String,
-    },
-    /// Rotate to next key for a provider
-    Rotate {
-        /// Provider name (default: all providers)
-        provider: Option<String>,
-    },
-    /// Show key statistics for a provider
-    Stats {
-        /// Provider name (default: all)
-        provider: Option<String>,
-    },
-    /// Set rotation strategy for a provider
-    SetStrategy {
-        /// Provider name
-        provider: String,
-        /// Strategy (round-robin, priority, usage-based, error-based, health-based, adaptive)
-        #[arg(value_parser = parse_strategy)]
-        strategy: String,
-    },
-    /// Enable a disabled key
-    EnableKey {
-        /// Provider name
-        provider: String,
-        /// Key ID or key value
-        key: String,
-    },
-    /// Disable a key (won't be used for requests)
-    DisableKey {
-        /// Provider name
-        provider: String,
-        /// Key ID or key value
-        key: String,
-    },
-    /// Export keys to a JSON file
-    Export {
-        /// Output file path
-        path: Option<String>,
-    },
-    /// Import keys from a JSON file
-    Import {
-        /// Input file path
-        path: String,
-    },
-    /// Interactive TUI for KVM management
-    Interactive,
-}
-
-fn parse_strategy(s: &str) -> Result<String, String> {
-    let lower = s.to_lowercase();
-    match lower.as_str() {
-        "round-robin" | "roundrobin" | "rr" => Ok("RoundRobin".to_string()),
-        "priority" | "prio" => Ok("Priority".to_string()),
-        "usage-based" | "usagebased" | "usage" => Ok("UsageBased".to_string()),
-        "error-based" | "errorbased" | "error" => Ok("ErrorBased".to_string()),
-        "health-based" | "healthbased" | "health" => Ok("HealthBased".to_string()),
-        "adaptive" | "adapt" => Ok("Adaptive".to_string()),
-        _ => Err(format!("Unknown strategy: {}. Valid: round-robin, priority, usage-based, error-based, health-based, adaptive", s)),
-    }
 }
 
 /// Housaky AGI agent subcommands
@@ -398,6 +291,16 @@ pub enum HousakyCommands {
         #[command(subcommand)]
         goal_command: GoalCommands,
     },
+    /// Manage self-modification parameters and experiment ledger
+    SelfMod {
+        #[command(subcommand)]
+        self_mod_command: SelfModCommands,
+    },
+    /// GSD Orchestration Commands
+    GSD {
+        #[command(subcommand)]
+        gsd_command: GSDCommands,
+    },
 }
 
 /// Goal management subcommands
@@ -421,4 +324,142 @@ pub enum GoalCommands {
         /// Goal ID
         id: String,
     },
+}
+
+/// Self-modification controls and observability
+#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum SelfModCommands {
+    /// Run one full recursive self-improvement cycle now
+    Run {
+        /// Override provider name (falls back to configured default)
+        #[arg(long)]
+        provider: Option<String>,
+        /// Override model name (falls back to configured default)
+        #[arg(long)]
+        model: Option<String>,
+    },
+    /// Show current parameter overrides and ledger summary
+    Status,
+    /// List recent self-modification experiments
+    Experiments {
+        /// Number of most recent experiments to show
+        #[arg(short, long, default_value = "10")]
+        count: usize,
+    },
+    /// Persist a parameter override for a target component
+    Set {
+        /// Target component (e.g. reasoning_engine, goal_engine)
+        #[arg(long)]
+        target: String,
+        /// Parameter key (e.g. max_steps, learning_value_weight)
+        #[arg(long)]
+        key: String,
+        /// JSON literal value (e.g. 25, 0.35, true, "text")
+        #[arg(long)]
+        value: String,
+    },
+    /// Remove a persisted parameter override
+    Unset {
+        /// Target component (e.g. reasoning_engine, goal_engine)
+        #[arg(long)]
+        target: String,
+        /// Parameter key to remove
+        #[arg(long)]
+        key: String,
+    },
+}
+
+/// Quantum computing subcommands (Amazon Braket + local simulator)
+#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum QuantumCommands {
+    /// Run a Bell-state circuit on Amazon Braket SV1 and print results
+    RunBraket {
+        /// Number of shots
+        #[arg(short, long, default_value = "1000")]
+        shots: u64,
+        /// Device ARN (defaults to SV1 simulator)
+        #[arg(long, default_value = "arn:aws:braket:::device/quantum-simulator/amazon/sv1")]
+        device: String,
+        /// S3 bucket for results (defaults to project bucket)
+        #[arg(long, default_value = "amazon-braket-housaky-541739678328")]
+        bucket: String,
+        /// S3 key prefix
+        #[arg(long, default_value = "housaky-results")]
+        prefix: String,
+    },
+    /// Run a Bell-state circuit on the local statevector simulator (no AWS needed)
+    RunSimulator {
+        /// Number of shots
+        #[arg(short, long, default_value = "4096")]
+        shots: u64,
+    },
+    /// Show info (online status, max qubits) for a Braket device
+    DeviceInfo {
+        /// Device ARN
+        #[arg(long, default_value = "arn:aws:braket:::device/quantum-simulator/amazon/sv1")]
+        device: String,
+        /// S3 bucket (needed to create the backend)
+        #[arg(long, default_value = "amazon-braket-housaky-541739678328")]
+        bucket: String,
+    },
+}
+
+/// GSD Orchestration Commands - Inspired by get-shit-done system
+#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum GSDCommands {
+    /// Initialize a new GSD project
+    NewProject {
+        /// Project name
+        name: String,
+        /// Project vision/description
+        vision: String,
+    },
+    /// Create a new phase
+    Phase {
+        /// Phase name
+        name: String,
+        /// Phase description
+        description: String,
+        /// Goals for this phase (can be repeated)
+        #[arg(short, long)]
+        goals: Vec<String>,
+    },
+    /// Discuss a phase (capture implementation decisions)
+    Discuss {
+        /// Phase ID
+        #[arg(short, long)]
+        phase_id: String,
+        /// Your decisions/answers (can be repeated)
+        #[arg(short, long)]
+        answers: Vec<String>,
+    },
+    /// Plan and execute a phase
+    Execute {
+        /// Phase ID
+        #[arg(short, long)]
+        phase_id: String,
+        /// Task description
+        #[arg(short, long)]
+        task: String,
+    },
+    /// Quick execute - just run a task directly
+    Quick {
+        /// Task to execute
+        task: String,
+    },
+    /// Verify phase completion
+    Verify {
+        /// Phase ID
+        #[arg(short, long)]
+        phase_id: String,
+    },
+    /// Show current phase status
+    Status,
+    /// Analyze task complexity
+    Analyze {
+        /// Task description
+        task: String,
+    },
+    /// Show awareness report
+    Awareness,
 }

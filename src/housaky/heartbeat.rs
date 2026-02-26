@@ -5,11 +5,13 @@ use crate::housaky::agent::{Agent, Task, TaskCategory, TaskPriority, TaskStatus}
 use crate::housaky::core::HousakyCore;
 use crate::housaky::kowalski_integration::KowalskiBridge;
 use crate::housaky::memory::consolidation::MemoryConsolidator;
+use crate::housaky::self_improvement_loop::SelfImprovementLoop;
 use crate::housaky::self_improvement_mod::SelfImprovementEngine;
 use crate::housaky::skills::{SkillCreator, SkillRegistry};
 use crate::providers::{create_provider, Provider};
 use crate::util::write_toml_file;
 use anyhow::Result;
+use std::collections::HashSet;
 use std::sync::Arc;
 use tokio::time::{interval, Duration};
 use tracing::{error, info, warn};
@@ -20,10 +22,11 @@ pub struct HousakyHeartbeat {
     skill_registry: Arc<SkillRegistry>,
     kowalski_bridge: Option<Arc<KowalskiBridge>>,
     self_improvement: Arc<SelfImprovementEngine>,
+    recursive_improvement_loop: Arc<SelfImprovementLoop>,
     memory_consolidator: Arc<MemoryConsolidator>,
     interval_seconds: u64,
     config: Config,
-    provider: Option<Box<dyn Provider>>,
+    provider: Option<Arc<dyn Provider>>,
     model: String,
 }
 
@@ -53,7 +56,8 @@ impl HousakyHeartbeat {
             &agent.config.provider.name,
             agent.config.provider.api_key.as_deref(),
         )
-        .ok();
+        .ok()
+        .map(Arc::from);
         let model = agent.config.provider.model.clone();
 
         let self_improvement_provider = create_provider(
@@ -71,12 +75,19 @@ impl HousakyHeartbeat {
             Arc::new(SelfImprovementEngine::new(agent.clone()))
         };
 
+        let recursive_improvement_loop = Arc::new(SelfImprovementLoop::new(
+            &agent.workspace_dir,
+            core.goal_engine.clone(),
+            core.meta_cognition.clone(),
+        ));
+
         Self {
             agent,
             core,
             skill_registry,
             kowalski_bridge,
             self_improvement,
+            recursive_improvement_loop,
             memory_consolidator,
             interval_seconds: 120,
             config: Config::default(),
@@ -102,7 +113,8 @@ impl HousakyHeartbeat {
             &agent.config.provider.name,
             agent.config.provider.api_key.as_deref(),
         )
-        .ok();
+        .ok()
+        .map(Arc::from);
         let model = agent.config.provider.model.clone();
 
         let self_improvement_provider = create_provider(
@@ -120,12 +132,19 @@ impl HousakyHeartbeat {
             Arc::new(SelfImprovementEngine::new(agent.clone()))
         };
 
+        let recursive_improvement_loop = Arc::new(SelfImprovementLoop::new(
+            &agent.workspace_dir,
+            core.goal_engine.clone(),
+            core.meta_cognition.clone(),
+        ));
+
         Self {
             agent,
             core,
             skill_registry,
             kowalski_bridge,
             self_improvement,
+            recursive_improvement_loop,
             memory_consolidator,
             interval_seconds: 120,
             config: config.clone(),
@@ -187,16 +206,23 @@ impl HousakyHeartbeat {
             Arc::new(SelfImprovementEngine::new(agent.clone()))
         };
 
+        let recursive_improvement_loop = Arc::new(SelfImprovementLoop::new(
+            &agent.workspace_dir,
+            core.goal_engine.clone(),
+            core.meta_cognition.clone(),
+        ));
+
         Self {
             agent,
             core,
             skill_registry,
             kowalski_bridge,
             self_improvement,
+            recursive_improvement_loop,
             memory_consolidator,
             interval_seconds: 120,
             config,
-            provider: Some(provider),
+            provider: Some(Arc::from(provider)),
             model,
         }
     }
@@ -246,6 +272,17 @@ impl HousakyHeartbeat {
 
         self.self_improve().await?;
 
+        if self.agent.config.enable_self_improvement {
+            let loop_provider = self.provider.as_ref().map(|provider| provider.as_ref());
+            if let Err(e) = self
+                .recursive_improvement_loop
+                .run_full_cycle(loop_provider, &self.model)
+                .await
+            {
+                warn!("Recursive self-improvement loop error: {}", e);
+            }
+        }
+
         if let Err(e) = self.core.run_memory_consolidation().await {
             warn!("Memory consolidation error: {}", e);
         }
@@ -255,6 +292,30 @@ impl HousakyHeartbeat {
         }
 
         self.auto_generate_tools().await?;
+
+        let provider = self.provider.as_ref().map(Arc::clone);
+        let mut available_tools = self
+            .agent
+            .capabilities
+            .iter()
+            .map(|capability| capability.name.clone())
+            .collect::<HashSet<_>>();
+
+        for tool in self.core.tool_creator.list_tools().await {
+            available_tools.insert(tool.id);
+            available_tools.insert(tool.spec.name);
+        }
+
+        let available_tools = available_tools.into_iter().collect::<Vec<_>>();
+        let recent_failures = self.collect_recent_failures().await;
+
+        if let Err(e) = self
+            .core
+            .run_agi_hub_cycle(provider, Some(self.model.clone()), available_tools, recent_failures)
+            .await
+        {
+            warn!("AGI Hub cycle error: {}", e);
+        }
         
         match self.core.inner_monologue.save().await {
             Ok(()) => info!("Inner monologue saved"),
@@ -370,6 +431,28 @@ impl HousakyHeartbeat {
             }
         }
         Ok(())
+    }
+
+    async fn collect_recent_failures(&self) -> Vec<crate::housaky::agi_integration::FailureRecord> {
+        let state = self.agent.state.read().await;
+
+        state
+            .active_tasks
+            .iter()
+            .filter(|task| task.status == TaskStatus::Failed)
+            .take(8)
+            .map(|task| crate::housaky::agi_integration::FailureRecord {
+                id: task.id.clone(),
+                action: task.title.clone(),
+                error: if task.description.is_empty() {
+                    "Task marked as failed during heartbeat review".to_string()
+                } else {
+                    task.description.clone()
+                },
+                timestamp: chrono::Utc::now(),
+                analysis: Some(format!("category={:?}, priority={:?}", task.category, task.priority)),
+            })
+            .collect()
     }
 
     async fn analyze_state(&self) -> Result<()> {

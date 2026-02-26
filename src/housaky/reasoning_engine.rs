@@ -103,7 +103,7 @@ pub struct UncertaintySource {
 pub struct ReasoningEngine {
     chains: Arc<RwLock<HashMap<String, ReasoningChain>>>,
     active_chain: Arc<RwLock<Option<String>>>,
-    max_steps: usize,
+    max_steps: Arc<RwLock<usize>>,
     enable_branching: bool,
     enable_self_correction: bool,
     confidence_threshold: f64,
@@ -114,11 +114,27 @@ impl ReasoningEngine {
         Self {
             chains: Arc::new(RwLock::new(HashMap::new())),
             active_chain: Arc::new(RwLock::new(None)),
-            max_steps: 20,
+            max_steps: Arc::new(RwLock::new(20)),
             enable_branching: true,
             enable_self_correction: true,
             confidence_threshold: 0.7,
         }
+    }
+
+    pub async fn set_max_steps(&self, max_steps: usize) -> Result<()> {
+        if !(5..=60).contains(&max_steps) {
+            return Err(anyhow::anyhow!(
+                "max_steps out of range: {} (expected 5..=60)",
+                max_steps
+            ));
+        }
+
+        *self.max_steps.write().await = max_steps;
+        Ok(())
+    }
+
+    pub async fn get_max_steps(&self) -> usize {
+        *self.max_steps.read().await
     }
 
     pub async fn start_reasoning(
@@ -161,12 +177,13 @@ impl ReasoningEngine {
         thought: &str,
         action: Option<&str>,
     ) -> Result<usize> {
+        let max_steps = *self.max_steps.read().await;
         let mut chains = self.chains.write().await;
 
         if let Some(chain) = chains.get_mut(chain_id) {
             let step_number = chain.steps.len() + 1;
 
-            if step_number > self.max_steps {
+            if step_number > max_steps {
                 warn!("Max reasoning steps reached for chain {}", chain_id);
                 return Err(anyhow::anyhow!("Max reasoning steps exceeded"));
             }
@@ -668,6 +685,240 @@ Final Answer: [Your conclusion]
             query,
             available_tools.join(", ")
         )
+    }
+
+    pub fn generate_system_prompt(&self, reasoning_type: &ReasoningType) -> String {
+        match reasoning_type {
+            ReasoningType::ChainOfThought => {
+                r#"You are a reasoning assistant that thinks step by step.
+Break down complex problems into manageable steps.
+Show your reasoning at each stage.
+End with a clear, well-supported conclusion."#.to_string()
+            }
+            ReasoningType::ReAct => {
+                r#"You are an advanced AI assistant with access to tools for reasoning and acting.
+
+## ReAct Framework
+
+Use this format for reasoning:
+- **Thought**: Analyze what you know and what you need to find out
+- **Action**: Use a tool to gather information
+- **Observation**: Process the tool result
+- Repeat until you have enough information
+- **Final Answer**: Provide your conclusion
+
+## Rules
+
+1. Always start with a Thought
+2. Each Action must use one of the available tools
+3. Process Observations before the next Thought
+4. Continue until you can provide a confident Final Answer
+5. If uncertain, reflect on what you've learned
+
+## Output Format
+
+```
+Thought 1: [your reasoning]
+Action 1: [tool_name with parameters]
+Observation 1: [tool result]
+...
+Final Answer: [your conclusion]
+```
+"#.to_string()
+            }
+            ReasoningType::TreeOfThought => {
+                r#"You are an AI that explores multiple solution paths.
+
+## Tree of Thoughts
+
+1. Generate multiple different approaches to solve the problem
+2. Evaluate each approach's feasibility and potential outcome
+3. Compare approaches and select the best one
+4. Explain why your chosen approach is superior
+
+Consider at least 3 different paths and provide thorough analysis of each.
+"#.to_string()
+            }
+            ReasoningType::Reflexion => {
+                r#"You are a reflective AI that improves through self-evaluation.
+
+## Reflexion Framework
+
+1. **Initial Attempt**: Propose a solution
+2. **Critique**: Identify potential issues
+3. **Reflect**: Consider what went wrong and how to improve
+4. **Refine**: Propose an improved solution
+
+Always question your assumptions and look for weaknesses in your reasoning.
+"#.to_string()
+            }
+            ReasoningType::SelfConsistency => {
+                r#"You are an AI that values consistency in reasoning.
+
+## Self-Consistency Framework
+
+1. Generate multiple reasoning paths for the same question
+2. Compare the conclusions
+3. Identify the most consistent answer
+4. Explain why this answer is most reliable
+
+Consistency indicates robustness in your reasoning.
+"#.to_string()
+            }
+            ReasoningType::MultiStep => {
+                r#"You are an AI that breaks complex problems into steps.
+
+## Multi-Step Framework
+
+1. Identify the goal
+2. List necessary steps
+3. Execute each step in order
+4. Verify progress after each step
+5. Adjust plan if needed
+
+Show clear progress markers between steps.
+"#.to_string()
+            }
+            ReasoningType::Comparative => {
+                r#"You are an AI skilled in comparative analysis.
+
+## Comparative Framework
+
+1. Identify the items to compare
+2. List relevant criteria
+3. Evaluate each item against criteria
+4. Summarize differences and similarities
+5. Provide a conclusion or recommendation
+
+Be objective and balanced in your comparison.
+"#.to_string()
+            }
+            ReasoningType::Diagnostic => {
+                r#"You are an AI diagnostician.
+
+## Diagnostic Framework
+
+1. Observe symptoms or issues
+2. List possible causes
+3. Evaluate likelihood of each cause
+4. Recommend tests or investigations
+5. Identify the most probable root cause
+
+Think like a doctor diagnosing an illness.
+"#.to_string()
+            }
+            ReasoningType::Creative => {
+                r#"You are a creative AI that thinks outside the box.
+
+## Creative Framework
+
+1. Understand the challenge
+2. Brainstorm unconventional approaches
+3. Combine ideas in novel ways
+4. Evaluate feasibility
+5. Present the most creative viable solution
+
+Don't be afraid to suggest unusual solutions.
+"#.to_string()
+            }
+            ReasoningType::Strategic => {
+                r#"You are a strategic AI planner.
+
+## Strategic Framework
+
+1. Define objectives
+2. Analyze current situation
+3. Identify resources and constraints
+4. Develop multiple strategies
+5. Recommend the optimal path forward
+
+Consider short-term and long-term implications.
+"#.to_string()
+            }
+        }
+    }
+
+    pub fn generate_user_prompt(&self, query: &str, reasoning_type: &ReasoningType) -> String {
+        match reasoning_type {
+            ReasoningType::ChainOfThought => {
+                format!(
+                    "Think through this step by step:\n\n{}\n\n\
+                     Show your reasoning at each step. End with a clear conclusion.",
+                    query
+                )
+            }
+            ReasoningType::TreeOfThought => {
+                format!(
+                    "Explore multiple approaches to solve:\n\n{}\n\n\
+                     Consider at least 3 different paths and select the best one.",
+                    query
+                )
+            }
+            ReasoningType::MultiStep => {
+                format!(
+                    "Break down this problem into steps and solve it:\n\n{}\n\n\
+                     Show clear progress after each step.",
+                    query
+                )
+            }
+            ReasoningType::Comparative => {
+                format!(
+                    "Compare and analyze the following:\n\n{}\n\n\
+                     Provide a thorough comparison with a recommendation.",
+                    query
+                )
+            }
+            ReasoningType::Diagnostic => {
+                format!(
+                    "Diagnose or analyze this issue:\n\n{}\n\n\
+                     Identify likely causes and recommend solutions.",
+                    query
+                )
+            }
+            ReasoningType::Creative => {
+                format!(
+                    "Solve this problem creatively:\n\n{}\n\n\
+                     Explore unconventional approaches and novel solutions.",
+                    query
+                )
+            }
+            ReasoningType::Strategic => {
+                format!(
+                    "Develop a strategic plan for:\n\n{}\n\n\
+                     Consider short-term and long-term implications.",
+                    query
+                )
+            }
+            ReasoningType::Reflexion => {
+                format!(
+                    "Solve this problem, then reflect on your solution:\n\n{}\n\n\
+                     Identify any weaknesses and propose improvements.",
+                    query
+                )
+            }
+            ReasoningType::SelfConsistency => {
+                format!(
+                    "Solve this problem using multiple approaches:\n\n{}\n\n\
+                     Compare your answers and identify the most consistent solution.",
+                    query
+                )
+            }
+            _ => query.to_string(),
+        }
+    }
+
+    pub fn calculate_confidence(&self, steps: &[ReasoningStep], conclusion: &str) -> f64 {
+        if steps.is_empty() {
+            return 0.3;
+        }
+
+        let step_confidence: f64 =
+            steps.iter().map(|s| s.confidence).sum::<f64>() / steps.len() as f64;
+
+        let conclusion_bonus = if conclusion.len() > 20 { 0.1 } else { 0.0 };
+        let step_bonus = if steps.len() >= 3 { 0.1 } else { 0.0 };
+
+        (step_confidence + conclusion_bonus + step_bonus).min(1.0)
     }
 }
 

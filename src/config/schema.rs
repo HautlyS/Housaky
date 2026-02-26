@@ -115,6 +115,18 @@ pub struct Config {
     /// Skill activation configuration (which marketplace skills are enabled).
     #[serde(default)]
     pub skills: SkillsConfig,
+
+    /// Phase 1: AST-level self-modification configuration.
+    #[serde(default)]
+    pub self_modification: SelfModificationConfig,
+
+    /// Phase 1: Closed-loop self-compilation and binary hot-swap.
+    #[serde(default)]
+    pub self_replication: SelfReplicationConfig,
+
+    /// Phase 1: Gradient-free CMA-ES optimization loop.
+    #[serde(default)]
+    pub gradient_free_optimizer: GradientFreeOptimizerConfig,
 }
 
 /// Skills configuration: enable/disable installed skills.
@@ -1563,12 +1575,6 @@ pub struct ReliabilityConfig {
     /// Enable automatic API key rotation on rate-limit (429) errors.
     #[serde(default = "default_true")]
     pub auto_rotate_on_limit: bool,
-    /// Path to KVM-style keys.json for auto-loading rotated keys.
-    #[serde(default)]
-    pub kvm_keys_path: Option<String>,
-    /// KVM providers - inline provider/key configuration (alternative to kvm_keys_path)
-    #[serde(default)]
-    pub kvm_providers: Vec<KvmProviderConfig>,
     /// Additional API keys for round-robin rotation on rate-limit (429) errors.
     /// The primary `api_key` is always tried first; these are extras.
     #[serde(default)]
@@ -1650,32 +1656,6 @@ pub struct RotationConfig {
     /// Cooldown period between rotations
     #[serde(default = "default_cooldown")]
     pub cooldown_secs: u64,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct KvmProviderConfig {
-    /// Provider name (e.g., openrouter, anthropic, openai)
-    pub name: String,
-    /// Template to use (openrouter, anthropic, openai, custom)
-    #[serde(default)]
-    pub template: Option<String>,
-    /// Base URL (required if not using template)
-    #[serde(default)]
-    pub base_url: Option<String>,
-    /// Authentication method
-    #[serde(default)]
-    pub auth_method: Option<String>,
-    /// API keys for this provider
-    pub keys: Vec<String>,
-    /// Models available with this provider
-    #[serde(default)]
-    pub models: Vec<String>,
-    /// Custom headers
-    #[serde(default)]
-    pub headers: std::collections::HashMap<String, String>,
-    /// Rate limit configuration
-    #[serde(default)]
-    pub rate_limit: Option<RateLimitConfig>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -2046,73 +2026,6 @@ fn default_scheduler_retries() -> u32 {
     2
 }
 
-impl ReliabilityConfig {
-    /// Load API keys from a KVM-style keys.json file.
-    /// The file should have the format:
-    /// ```json
-    /// {
-    ///   "provider_name": {
-    ///     "keys": [{"key": "sk-xxx", ...}],
-    ///     "activeIndex": 0
-    ///   }
-    /// }
-    /// ```
-    pub fn load_kvm_keys(&mut self) -> Result<()> {
-        let Some(ref path) = self.kvm_keys_path else {
-            return Ok(());
-        };
-
-        let expanded = shellexpand::tilde(path);
-        let kvm_path = PathBuf::from(expanded.as_ref());
-
-        if !kvm_path.exists() {
-            tracing::debug!("KVM keys file not found at {}", kvm_path.display());
-            return Ok(());
-        }
-
-        let contents = fs::read_to_string(&kvm_path)
-            .with_context(|| format!("Failed to read KVM keys file: {}", kvm_path.display()))?;
-
-        let kvm_data: serde_json::Value = serde_json::from_str(&contents)
-            .with_context(|| "Failed to parse KVM keys file as JSON")?;
-
-        let mut loaded_keys = Vec::new();
-
-        if let Some(obj) = kvm_data.as_object() {
-            for (provider_name, provider_data) in obj {
-                if let Some(keys_array) = provider_data.get("keys").and_then(|k| k.as_array()) {
-                    for key_entry in keys_array {
-                        if let Some(key) = key_entry.get("key").and_then(|k| k.as_str()) {
-                            if !key.is_empty() && !loaded_keys.contains(&key.to_string()) {
-                                tracing::debug!(
-                                    provider = provider_name,
-                                    key_suffix = &key[key.len().saturating_sub(4)..],
-                                    "Loaded API key from KVM"
-                                );
-                                loaded_keys.push(key.to_string());
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        if !loaded_keys.is_empty() {
-            for key in loaded_keys {
-                if !self.api_keys.contains(&key) {
-                    self.api_keys.push(key);
-                }
-            }
-            tracing::info!(
-                count = self.api_keys.len(),
-                "Loaded API keys from KVM for automatic rotation"
-            );
-        }
-
-        Ok(())
-    }
-}
-
 impl Default for ReliabilityConfig {
     fn default() -> Self {
         Self {
@@ -2124,8 +2037,6 @@ impl Default for ReliabilityConfig {
             provider_backoff_ms: default_provider_backoff_ms(),
             fallback_providers: Vec::new(),
             auto_rotate_on_limit: true,
-            kvm_keys_path: None,
-            kvm_providers: Vec::new(),
             api_keys: Vec::new(),
             model_fallbacks: std::collections::HashMap::new(),
             channel_initial_backoff_secs: default_channel_backoff_secs(),
@@ -2771,6 +2682,9 @@ impl Default for Config {
             agi_enabled: true,
             provider_timeout: ProviderTimeoutConfig::default(),
             skills: SkillsConfig::default(),
+            self_modification: SelfModificationConfig::default(),
+            self_replication: SelfReplicationConfig::default(),
+            gradient_free_optimizer: GradientFreeOptimizerConfig::default(),
         }
     }
 }
@@ -2797,14 +2711,8 @@ impl Config {
             // Set computed paths that are skipped during serialization
             config.config_path = config_path.clone();
             config.workspace_dir = housaky_dir.join("workspace");
-            // Load KVM keys if configured and auto-rotate is enabled
-            if config.reliability.auto_rotate_on_limit {
-                if let Err(e) = config.reliability.load_kvm_keys() {
-                    tracing::warn!("Failed to load KVM keys: {e}");
-                }
-            }
             config.apply_env_overrides();
-            config.apply_vkm_config();
+            config.apply_keys_config();
             Ok(config)
         } else {
             let mut config = Config::default();
@@ -2812,37 +2720,82 @@ impl Config {
             config.workspace_dir = housaky_dir.join("workspace");
             config.save()?;
             config.apply_env_overrides();
-            config.apply_vkm_config();
+            config.apply_keys_config();
             Ok(config)
         }
     }
 
-    /// Apply VKM (Virtual Key Manager) configuration for dynamic API key rotation
-    pub fn apply_vkm_config(&mut self) {
-        if let Some(vkm_config) = crate::vkm_client::get_vkm_config() {
-            tracing::info!(
-                provider = vkm_config.provider.as_deref().unwrap_or("unknown"),
-                model = vkm_config.model.as_deref().unwrap_or("unknown"),
-                "Loaded active config from VKM"
-            );
 
-            if !vkm_config.api_key.is_empty() {
-                self.api_key = Some(vkm_config.api_key);
+
+    /// Sync the legacy config.toml `api_key` / `default_provider` / `default_model` fields
+    /// into the keys-manager store so that provider fallback, rotation and per-key tracking
+    /// work even when the user only set a single key in config.toml.
+    ///
+    /// This is intentionally *non-destructive*: if the keys store already contains a
+    /// provider entry with at least one key, no duplicate is injected.
+    pub fn apply_keys_config(&self) {
+        let api_key = match self.api_key.as_deref() {
+            Some(k) if !k.trim().is_empty() => k.to_string(),
+            _ => return, // nothing to sync
+        };
+
+        let provider_name = self
+            .default_provider
+            .as_deref()
+            .unwrap_or("openrouter")
+            .to_string();
+
+        let manager = crate::keys_manager::manager::get_global_keys_manager();
+
+        // We need a small Tokio runtime shim because `load_or_init` (the caller) is sync.
+        // If we are already inside a runtime we use `block_in_place`, otherwise spin one up.
+        let sync_work = async {
+            // Ensure whatever is on disk is loaded first.
+            let _ = manager.load().await;
+
+            let store = manager.store.read().await;
+            let needs_key = store
+                .providers
+                .get(&provider_name)
+                .map(|p| p.keys.is_empty())
+                .unwrap_or(true);
+            drop(store);
+
+            if !needs_key {
+                return; // provider already has keys – nothing to do
             }
 
-            let base_url_opt: &Option<String> = &vkm_config.base_url;
-            if let Some(base_url) = base_url_opt {
-                if !base_url.is_empty() {
-                    self.default_provider = Some(format!("custom:{}", base_url));
-                }
+            let template = if manager.provider_templates.contains_key(provider_name.as_str()) {
+                provider_name.as_str()
+            } else {
+                "custom"
+            };
+
+            let _ = manager
+                .add_provider_with_template(
+                    &provider_name,
+                    template,
+                    vec![api_key.clone()],
+                    crate::keys_manager::manager::ProviderPriority::Primary,
+                )
+                .await;
+
+            // Honour default_model when present.
+            if let Some(ref model) = self.default_model {
+                let _ = manager.set_default_model(&provider_name, model).await;
             }
 
-            let model_opt: &Option<String> = &vkm_config.model;
-            if let Some(model) = model_opt {
-                if !model.is_empty() {
-                    self.default_model = Some(model.clone());
-                }
-            }
+            let _ = manager.save().await;
+        };
+
+        if let Ok(handle) = tokio::runtime::Handle::try_current() {
+            // Already inside a Tokio runtime – use task::block_in_place so we can
+            // call `.await` without nesting `block_on`.
+            tokio::task::block_in_place(|| handle.block_on(sync_work));
+        } else {
+            // No runtime yet (e.g. very early startup). Spin up a temporary one.
+            let rt = tokio::runtime::Runtime::new().expect("failed to create tokio runtime");
+            rt.block_on(sync_work);
         }
     }
 
@@ -3093,7 +3046,7 @@ impl Config {
         config.workspace_dir = housaky_dir.join("workspace");
         fs::copy(restore_path, &config_path)?;
         config.apply_env_overrides();
-        config.apply_vkm_config();
+        config.apply_keys_config();
         Ok(config)
     }
 }
@@ -3111,6 +3064,142 @@ fn sync_directory(path: &Path) -> Result<()> {
 fn sync_directory(_path: &Path) -> Result<()> {
     Ok(())
 }
+
+// ── Phase 1: Self-Modification Config ────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SelfModificationConfig {
+    /// Enable AST-level source mutations (requires explicit opt-in).
+    #[serde(default)]
+    pub enable_ast_mutations: bool,
+    /// Maximum number of mutations applied per self-improvement cycle.
+    #[serde(default = "default_max_mutations_per_cycle")]
+    pub max_mutations_per_cycle: usize,
+    /// Require all tests to pass before merging a mutation.
+    #[serde(default = "default_true")]
+    pub require_test_pass: bool,
+    /// Require measurable benchmark improvement before merging.
+    #[serde(default = "default_true")]
+    pub require_benchmark_improvement: bool,
+    /// Minimum fitness delta required to promote a mutation (2% default).
+    #[serde(default = "default_min_fitness_delta")]
+    pub min_fitness_delta: f64,
+    /// Crates permitted for use in generated mutations.
+    #[serde(default = "default_allowed_crates")]
+    pub allowed_crates: Vec<String>,
+    /// Module path fragments that mutations are forbidden from touching.
+    #[serde(default = "default_forbidden_modules")]
+    pub forbidden_modules: Vec<String>,
+}
+
+impl Default for SelfModificationConfig {
+    fn default() -> Self {
+        Self {
+            enable_ast_mutations: false,
+            max_mutations_per_cycle: default_max_mutations_per_cycle(),
+            require_test_pass: true,
+            require_benchmark_improvement: true,
+            min_fitness_delta: default_min_fitness_delta(),
+            allowed_crates: default_allowed_crates(),
+            forbidden_modules: default_forbidden_modules(),
+        }
+    }
+}
+
+fn default_max_mutations_per_cycle() -> usize { 3 }
+fn default_min_fitness_delta() -> f64 { 0.02 }
+fn default_allowed_crates() -> Vec<String> {
+    vec!["syn".to_string(), "quote".to_string(), "proc-macro2".to_string()]
+}
+fn default_forbidden_modules() -> Vec<String> {
+    vec!["security".to_string(), "alignment".to_string()]
+}
+
+// ── Phase 1: Self-Replication Config ─────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SelfReplicationConfig {
+    /// Enable closed-loop self-compilation and hot-swap. Disabled by default.
+    #[serde(default)]
+    pub enable_replication: bool,
+    /// Maximum mutations bundled into one replication cycle.
+    #[serde(default = "default_max_mutations_per_cycle")]
+    pub max_mutations_per_cycle: usize,
+    /// Block promotion if tests fail.
+    #[serde(default = "default_true")]
+    pub require_tests: bool,
+    /// Block promotion if benchmarks regress.
+    #[serde(default)]
+    pub require_benchmark_improvement: bool,
+    /// Minimum fitness improvement needed to promote (fraction, e.g. 0.02 = 2%).
+    #[serde(default = "default_min_fitness_delta")]
+    pub min_fitness_delta: f64,
+    /// Maximum cargo build time before the cycle is abandoned (seconds).
+    #[serde(default = "default_max_build_time_secs")]
+    pub max_build_time_secs: u64,
+    /// Binary size increase percentage that triggers a regression block.
+    #[serde(default = "default_binary_size_regression_pct")]
+    pub binary_size_regression_pct: f64,
+    /// Module paths forbidden from being mutated (safety modules).
+    #[serde(default = "default_forbidden_modules")]
+    pub forbidden_modules: Vec<String>,
+}
+
+impl Default for SelfReplicationConfig {
+    fn default() -> Self {
+        Self {
+            enable_replication: false,
+            max_mutations_per_cycle: default_max_mutations_per_cycle(),
+            require_tests: true,
+            require_benchmark_improvement: false,
+            min_fitness_delta: default_min_fitness_delta(),
+            max_build_time_secs: default_max_build_time_secs(),
+            binary_size_regression_pct: default_binary_size_regression_pct(),
+            forbidden_modules: default_forbidden_modules(),
+        }
+    }
+}
+
+fn default_max_build_time_secs() -> u64 { 300 }
+fn default_binary_size_regression_pct() -> f64 { 5.0 }
+
+// ── Phase 1: Gradient-Free Optimizer Config ───────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GradientFreeOptimizerConfig {
+    /// Enable CMA-ES optimization loop connecting to real task replay buffer.
+    #[serde(default)]
+    pub enabled: bool,
+    /// CMA-ES population size (number of candidate genomes per generation).
+    #[serde(default = "default_cmaes_population_size")]
+    pub population_size: usize,
+    /// Initial step size (sigma) for CMA-ES exploration.
+    #[serde(default = "default_cmaes_sigma")]
+    pub initial_sigma: f64,
+    /// Number of recent tasks to sample from the replay buffer per generation.
+    #[serde(default = "default_replay_sample_size")]
+    pub replay_sample_size: usize,
+    /// Path (relative to workspace) where the optimal genome is persisted.
+    #[serde(default = "default_genome_path")]
+    pub genome_path: String,
+}
+
+impl Default for GradientFreeOptimizerConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            population_size: default_cmaes_population_size(),
+            initial_sigma: default_cmaes_sigma(),
+            replay_sample_size: default_replay_sample_size(),
+            genome_path: default_genome_path(),
+        }
+    }
+}
+
+fn default_cmaes_population_size() -> usize { 20 }
+fn default_cmaes_sigma() -> f64 { 0.3 }
+fn default_replay_sample_size() -> usize { 50 }
+fn default_genome_path() -> String { ".housaky/evolution/optimal_genome.json".to_string() }
 
 #[cfg(test)]
 mod tests {
@@ -3268,6 +3357,9 @@ mod tests {
             agi_enabled: true,
             provider_timeout: ProviderTimeoutConfig::default(),
             skills: SkillsConfig::default(),
+            self_modification: SelfModificationConfig::default(),
+            self_replication: SelfReplicationConfig::default(),
+            gradient_free_optimizer: GradientFreeOptimizerConfig::default(),
         };
 
         let toml_str = toml::to_string_pretty(&config).unwrap();
@@ -3429,6 +3521,9 @@ tool_dispatcher = "xml"
             agi_enabled: true,
             provider_timeout: ProviderTimeoutConfig::default(),
             skills: SkillsConfig::default(),
+            self_modification: SelfModificationConfig::default(),
+            self_replication: SelfReplicationConfig::default(),
+            gradient_free_optimizer: GradientFreeOptimizerConfig::default(),
         };
 
         config.save().unwrap();

@@ -32,18 +32,23 @@ pub struct ProjectContext {
 // ── Banner ───────────────────────────────────────────────────────
 
 const BANNER: &str = r"
-    ⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡
+    4444444444444444444444444444444444444444444444444444444444444444444444444444444
 
-    ███████╗███████╗██████╗  ██████╗  ██████╗██╗      █████╗ ██╗    ██╗
-    ╚══███╔╝██╔════╝██╔══██╗██╔═══██╗██╔════╝██║     ██╔══██╗██║    ██║
-      ███╔╝ █████╗  ██████╔╝██║   ██║██║     ██║     ███████║██║ █╗ ██║
-     ███╔╝  ██╔══╝  ██╔══██╗██║   ██║██║     ██║     ██╔══██║██║███╗██║
-    ███████╗███████╗██║  ██║╚██████╔╝╚██████╗███████╗██║  ██║╚███╔███╔╝
-    ╚══════╝╚══════╝╚═╝  ╚═╝ ╚═════╝  ╚═════╝╚══════╝╚═╝  ╚═╝ ╚══╝╚══╝
+    44    44   99999999   44    44   99999999      4444    99    99   44      44
+    44    44   99999999   44    44   99999999     44  44   99   99    44      44
+    44    44   99    99   44    44   99          44    44   99  99      44    44 
+    44    44   99    99   44    44   99         44      44   99 99        44  44  
+    44444444   99    99   44    44   99         44      44   9999          4444   
+    44444444   99    99   44    44   99999999   4444444444   9999           44    
+    44    44   99    99   44    44   99999999   4444444444   99 99          44    
+    44    44   99    99   44    44         99   44      44   99  99         44    
+    44    44   99    99   44    44         99   44      44   99   99        44    
+    44    44   99999999   44444444   99999999   44      44   99    99       44    
+    44    44   99999999   44444444   99999999   44      44   99     99      44    
 
-    Zero overhead. Zero compromise. 100% Rust. 100% Agnostic.
+    --> | OM TARE TAM SOHA --- OM GATE GATE PARAGATE PARASAMGATE BODHI SVAHA | <---
 
-    ⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡
+    4444444444444444444444444444444444444444444444444444444444444444444444444444444
 ";
 
 const LIVE_MODEL_MAX_OPTIONS: usize = 120;
@@ -137,6 +142,9 @@ pub fn run_wizard() -> Result<Config> {
         provider_timeout: crate::config::schema::ProviderTimeoutConfig::default(),
         skills: crate::config::schema::SkillsConfig::default(),
         routing: crate::config::schema::RoutingConfig::default(),
+        self_modification: crate::config::schema::SelfModificationConfig::default(),
+        self_replication: crate::config::schema::SelfReplicationConfig::default(),
+        gradient_free_optimizer: crate::config::schema::GradientFreeOptimizerConfig::default(),
     };
 
     println!(
@@ -356,6 +364,9 @@ pub fn run_quick_setup(
         provider_timeout: crate::config::schema::ProviderTimeoutConfig::default(),
         skills: crate::config::schema::SkillsConfig::default(),
         routing: crate::config::schema::RoutingConfig::default(),
+        self_modification: crate::config::schema::SelfModificationConfig::default(),
+        self_replication: crate::config::schema::SelfReplicationConfig::default(),
+        gradient_free_optimizer: crate::config::schema::GradientFreeOptimizerConfig::default(),
     };
 
     config.save()?;

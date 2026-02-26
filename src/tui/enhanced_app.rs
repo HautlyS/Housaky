@@ -1,9 +1,12 @@
+use crate::agent::Agent;
 use crate::config::Config;
-use crate::housaky::goal_engine::GoalEngine;
+use crate::housaky::goal_engine::{Goal, GoalEngine};
+use crate::housaky::knowledge_graph::KnowledgeGraphEngine;
 use crate::housaky::meta_cognition::MetaCognitionEngine;
 use crate::housaky::reasoning_engine::{ReasoningChain, ReasoningEngine};
 use crate::providers::{create_provider, ChatMessage};
 use crate::tui::chat::{format_message_content, Message};
+use crate::tui::command::CommandState;
 use crate::tui::command_palette::{CommandAction, CommandPalette};
 use crate::tui::state_panel::StatePanel;
 use anyhow::Result;
@@ -18,6 +21,7 @@ use ratatui::{
     Frame,
 };
 use std::sync::Arc;
+use std::time::Instant;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum InputMode {
@@ -137,6 +141,16 @@ impl EnhancedChatState {
         id
     }
 
+    pub fn add_system_message(&mut self, content: String) -> usize {
+        let id = self.next_id;
+        self.messages.push(Message::system(content, id));
+        self.next_id += 1;
+        if self.auto_scroll {
+            self.scroll_to_bottom();
+        }
+        id
+    }
+
     pub fn scroll_up(&mut self) {
         if self.scroll_offset > 0 {
             self.scroll_offset -= 1;
@@ -181,10 +195,21 @@ pub struct EnhancedApp {
     pub active_panel: Panel,
     pub view_mode: ViewMode,
     pub state_panel: StatePanel,
+    pub command_state: CommandState,
+    pub agent: Option<Agent>,
+    pub startup_error: Option<String>,
     pub goal_engine: Arc<GoalEngine>,
+    pub knowledge_graph: Arc<KnowledgeGraphEngine>,
     pub reasoning_engine: Arc<ReasoningEngine>,
     pub meta_cognition: Arc<MetaCognitionEngine>,
     pub current_reasoning: Option<ReasoningChain>,
+    pub active_goals: Vec<Goal>,
+    pub active_skill_names: Vec<String>,
+    pub integrated_tool_count: usize,
+    pub request_count: u64,
+    pub error_count: u64,
+    pub started_at: Instant,
+    pub last_state_sync: Instant,
     pub notification: Option<(String, std::time::Instant)>,
     pub help_visible: bool,
 }
@@ -192,6 +217,7 @@ pub struct EnhancedApp {
 impl EnhancedApp {
     pub fn new(config: Config, provider_name: String, model: String) -> Self {
         let workspace_dir = config.workspace_dir.clone();
+        let now = Instant::now();
 
         Self {
             input_mode: InputMode::Normal,
@@ -203,10 +229,21 @@ impl EnhancedApp {
             active_panel: Panel::Chat,
             view_mode: ViewMode::Split,
             state_panel: StatePanel::new(),
+            command_state: CommandState::new(),
+            agent: None,
+            startup_error: None,
             goal_engine: Arc::new(GoalEngine::new(&workspace_dir)),
+            knowledge_graph: Arc::new(KnowledgeGraphEngine::new(&workspace_dir)),
             reasoning_engine: Arc::new(ReasoningEngine::new()),
             meta_cognition: Arc::new(MetaCognitionEngine::new()),
             current_reasoning: None,
+            active_goals: Vec::new(),
+            active_skill_names: Vec::new(),
+            integrated_tool_count: 0,
+            request_count: 0,
+            error_count: 0,
+            started_at: now,
+            last_state_sync: now,
             notification: None,
             help_visible: false,
         }
@@ -445,55 +482,52 @@ impl EnhancedApp {
                 });
             }
             CommandAction::ListKeys => {
-                let kvm = crate::key_management::get_global_kvm_manager();
+                let km = crate::keys_manager::manager::get_global_keys_manager();
                 let rt = tokio::runtime::Runtime::new()?;
                 rt.block_on(async {
-                    crate::key_management::load_kvm_from_file().await;
-                    let store = kvm.store.read().await;
-                    if store.providers.is_empty() {
-                        self.show_notification("No API keys configured. Use CLI: housaky kvm add-provider");
+                    let _ = km.load().await;
+                    let providers = km.get_providers().await;
+                    if providers.is_empty() {
+                        self.show_notification("No API keys configured. Use CLI: housaky keys manager add-provider");
                     } else {
                         let mut msg = String::from("API Keys:\n");
-                        for (name, provider) in &store.providers {
+                        for provider in &providers {
                             let enabled = provider.keys.iter().filter(|k| k.enabled).count();
-                            msg.push_str(&format!("  {}: {} keys ({} enabled)\n", name, provider.keys.len(), enabled));
+                            msg.push_str(&format!("  {}: {} keys ({} enabled)\n", provider.name, provider.keys.len(), enabled));
                         }
                         self.show_notification(&msg);
                     }
                 });
             }
             CommandAction::AddKey(_provider) => {
-                self.show_notification("Use CLI to add keys: housaky kvm add-provider <name> -k <keys>");
+                self.show_notification("Use CLI to add keys: housaky keys manager add-provider <name> -k <keys>");
             }
             CommandAction::RotateKey => {
-                let kvm = crate::key_management::get_global_kvm_manager();
+                let km = crate::keys_manager::manager::get_global_keys_manager();
                 let rt = tokio::runtime::Runtime::new()?;
                 rt.block_on(async {
-                    crate::key_management::load_kvm_from_file().await;
-                    let store = kvm.store.read().await;
-                    let names: Vec<_> = store.providers.keys().cloned().collect();
-                    drop(store);
-                    for name in names {
-                        if let Some(key) = kvm.rotate_key(&name).await {
-                            self.show_notification(&format!("Rotated key for {}: ...{}", name, &key.key[key.key.len().saturating_sub(4)..]));
-                            let _ = kvm.save().await;
+                    let _ = km.load().await;
+                    let providers = km.get_providers().await;
+                    for provider in providers {
+                        if let Ok(Some(key)) = km.rotate_key(&provider.name).await {
+                            self.show_notification(&format!("Rotated key for {}: ...{}", provider.name, &key.key[key.key.len().saturating_sub(4)..]));
                             break;
                         }
                     }
                 });
             }
             CommandAction::ShowKeyStats => {
-                let kvm = crate::key_management::get_global_kvm_manager();
+                let km = crate::keys_manager::manager::get_global_keys_manager();
                 let rt = tokio::runtime::Runtime::new()?;
                 rt.block_on(async {
-                    crate::key_management::load_kvm_from_file().await;
-                    let store = kvm.store.read().await;
-                    if store.providers.is_empty() {
+                    let _ = km.load().await;
+                    let providers = km.get_providers().await;
+                    if providers.is_empty() {
                         self.show_notification("No API keys configured");
                     } else {
                         let mut msg = String::from("Key Statistics:\n");
-                        for (name, provider) in &store.providers {
-                            msg.push_str(&format!("\n[{}]\n", name));
+                        for provider in &providers {
+                            msg.push_str(&format!("\n[{}]\n", provider.name));
                             for key in &provider.keys {
                                 let usage = &key.usage;
                                 msg.push_str(&format!("  ...{}: {} reqs, {} failed, {} rate limited\n",

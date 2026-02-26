@@ -4,108 +4,6 @@ use anyhow::Result;
 use clap::{Args, Subcommand};
 use std::collections::HashMap;
 
-async fn migrate_from_kvm(
-    manager: &KeysManager,
-    _config: &mut Config,
-    args: KeysMigrateFromKvmArgs,
-) -> Result<()> {
-    use crate::key_management::{get_kvm_storage_path, KvmKeyStore};
-
-    let kvm_path = args
-        .kvm_path
-        .map(std::path::PathBuf::from)
-        .unwrap_or_else(get_kvm_storage_path);
-
-    if !kvm_path.exists() {
-        anyhow::bail!(
-            "Legacy KVM keys file not found at {}",
-            kvm_path.display()
-        );
-    }
-
-    let content = std::fs::read_to_string(&kvm_path)?;
-    let legacy: KvmKeyStore = serde_json::from_str(&content)?;
-
-    let _ = manager.load().await;
-
-    // Merge legacy providers into keys.json.
-    let mut store = manager.store.write().await;
-
-    for (name, lp) in legacy.providers {
-        if store.providers.contains_key(&name) && !args.force {
-            tracing::warn!(
-                provider = name.as_str(),
-                "Provider already exists in keys.json; skipping (use --force to overwrite)"
-            );
-            continue;
-        }
-
-        // Pick template if known.
-        let template = if manager.provider_templates.contains_key(name.as_str()) {
-            Some(name.clone())
-        } else {
-            None
-        };
-
-        let provider = crate::keys_manager::manager::ProviderEntry {
-            name: name.clone(),
-            template,
-            base_url: lp.base_url.clone(),
-            auth_method: lp.auth_method.clone(),
-            keys: lp
-                .keys
-                .into_iter()
-                .map(|k| {
-                    let mut entry = crate::keys_manager::manager::KeyEntry::new(
-                        k.key,
-                        if k.metadata.name.trim().is_empty() {
-                            "migrated".to_string()
-                        } else {
-                            k.metadata.name
-                        },
-                    );
-                    // Preserve legacy id + enabled + priority + metadata.
-                    entry.id = k.id;
-                    entry.enabled = k.enabled;
-                    entry.priority = k.priority;
-                    entry.description = k.metadata.description;
-                    entry.tags = k.metadata.tags;
-                    entry.created_at = k.metadata.created_at;
-                    entry.last_used_at = k.metadata.last_used;
-                    entry.expires_at = k.metadata.expires_at;
-                    // Keep legacy usage stats.
-                    entry.usage.total_requests = k.usage.total_requests;
-                    entry.usage.successful_requests = k.usage.successful_requests;
-                    entry.usage.failed_requests = k.usage.failed_requests;
-                    entry.usage.rate_limited_count = k.usage.rate_limited_count;
-                    entry.usage.last_request_at = k.usage.last_request_at;
-                    entry
-                })
-                .collect(),
-            models: lp.models.clone(),
-            default_model: lp.default_model.clone().or_else(|| lp.models.first().cloned()),
-            // Map legacy to primary by default.
-            priority: crate::keys_manager::manager::ProviderPriority::Primary,
-            enabled: true,
-            headers: lp.headers.clone(),
-            rate_limit: None,
-            state: crate::keys_manager::manager::ProviderState::default(),
-            metadata: crate::keys_manager::manager::ProviderMetadata::default(),
-        };
-
-        store.providers.insert(name, provider);
-    }
-
-    drop(store);
-    manager.save().await?;
-
-    println!(
-        "Migrated legacy KVM keys from {} into keys.json",
-        kvm_path.display()
-    );
-
-    Ok(())
-}
 
 #[derive(Debug, Subcommand, Clone)]
 pub enum KeysManagerCommands {
@@ -129,6 +27,9 @@ pub enum KeysManagerCommands {
 
     /// Remove a key from an existing provider.
     RemoveKey(KeysRemoveKeyArgs),
+
+    /// Rotate to next key for a provider (or all providers).
+    Rotate(KeysRotateArgs),
 
     /// Enable a key by ID.
     EnableKey(KeysToggleKeyArgs),
@@ -154,8 +55,6 @@ pub enum KeysManagerCommands {
     /// Import keys.json from a JSON string or file.
     Import(KeysImportArgs),
 
-    /// Migrate legacy kvm_keys.json into keys.json.
-    MigrateFromKvm(KeysMigrateFromKvmArgs),
 
     /// Sync the legacy config.toml api_key/default_provider/default_model into keys.json
     /// without overwriting an existing api_key in config.toml.
@@ -203,6 +102,12 @@ pub struct KeysAddKeyArgs {
 pub struct KeysRemoveKeyArgs {
     pub provider: String,
     pub key_id: String,
+}
+
+#[derive(Debug, Args, Clone)]
+pub struct KeysRotateArgs {
+    /// Provider name. If omitted, rotates all providers.
+    pub provider: Option<String>,
 }
 
 #[derive(Debug, Args, Clone)]
@@ -259,16 +164,6 @@ pub struct KeysImportArgs {
     pub json: Option<String>,
 }
 
-#[derive(Debug, Args, Clone)]
-pub struct KeysMigrateFromKvmArgs {
-    /// Path to legacy kvm_keys.json. If omitted, uses the default legacy location.
-    #[arg(long)]
-    pub kvm_path: Option<String>,
-
-    /// If true, overwrite existing providers/keys.json entries.
-    #[arg(long)]
-    pub force: bool,
-}
 
 pub async fn handle_keys_manager_command(
     config: &mut Config,
@@ -342,6 +237,42 @@ pub async fn handle_keys_manager_command(
             println!("Removed key {} from {}", args.key_id, args.provider);
             Ok(())
         }
+        KeysManagerCommands::Rotate(args) => {
+            let _ = manager.load().await;
+            if let Some(provider_name) = args.provider {
+                match manager.rotate_key(&provider_name).await {
+                    Ok(Some(key)) => {
+                        let key_suffix = &key.key[key.key.len().saturating_sub(4)..];
+                        println!("Rotated key for {}: ...{}", provider_name, key_suffix);
+                        Ok(())
+                    }
+                    Ok(None) => {
+                        println!("No keys available for provider: {}", provider_name);
+                        Ok(())
+                    }
+                    Err(e) => {
+                        println!("Error rotating key: {}", e);
+                        Err(anyhow::anyhow!(e))
+                    }
+                }
+            } else {
+                match manager.rotate_all_keys().await {
+                    Ok(results) => {
+                        for (name, key) in results {
+                            if let Some(k) = key {
+                                let key_suffix = &k.key[k.key.len().saturating_sub(4)..];
+                                println!("Rotated key for {}: ...{}", name, key_suffix);
+                            }
+                        }
+                        Ok(())
+                    }
+                    Err(e) => {
+                        println!("Error rotating keys: {}", e);
+                        Err(anyhow::anyhow!(e))
+                    }
+                }
+            }
+        }
         KeysManagerCommands::EnableKey(args) => {
             manager
                 .set_key_enabled(&args.provider, &args.key_id, true)
@@ -411,9 +342,7 @@ pub async fn handle_keys_manager_command(
             println!("Imported keys.json store");
             Ok(())
         }
-        KeysManagerCommands::MigrateFromKvm(args) => {
-            migrate_from_kvm(manager, config, args).await
-        }
+
         KeysManagerCommands::SyncFromConfig => {
             let _ = manager.load().await;
 

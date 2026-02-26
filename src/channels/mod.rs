@@ -10,6 +10,7 @@ pub mod slack;
 pub mod telegram;
 pub mod traits;
 pub mod whatsapp;
+pub mod voice;
 
 pub mod agi_processor;
 
@@ -26,6 +27,9 @@ pub use slack::SlackChannel;
 pub use telegram::TelegramChannel;
 pub use traits::Channel;
 pub use whatsapp::WhatsAppChannel;
+pub use voice::voice_channel::VoiceChannel;
+pub use voice::VoiceEngine;
+pub use voice::VoiceConfig;
 
 use crate::agent::loop_::{build_tool_instructions, run_tool_call_loop};
 use crate::config::Config;
@@ -1079,6 +1083,7 @@ pub async fn start_channels(config: Config) -> Result<()> {
         &provider_name,
         config.api_key.as_deref(),
         &config.reliability,
+        None,
     )?);
 
     // Warm up the provider connection pool (TLS handshake, DNS, HTTP/2 setup)

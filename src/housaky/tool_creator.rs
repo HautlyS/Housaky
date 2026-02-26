@@ -941,7 +941,12 @@ if __name__ == "__main__":
 
         for example in &tool.spec.examples {
             let test_result = self
-                .execute_in_sandbox(&tool.code, &example.input, sandbox_id.as_deref())
+                .execute_in_sandbox(
+                    tool.spec.kind.clone(),
+                    &tool.code,
+                    &example.input,
+                    sandbox_id.as_deref(),
+                )
                 .await?;
 
             let passed = test_result.passed;
@@ -972,6 +977,7 @@ if __name__ == "__main__":
 
     async fn execute_in_sandbox(
         &self,
+        kind: ToolKind,
         code: &str,
         input: &serde_json::Value,
         sandbox_id: Option<&str>,
@@ -982,7 +988,18 @@ if __name__ == "__main__":
         info!("Executing in sandbox: {:?}", sandbox_id);
 
         let temp_dir = tempfile::tempdir()?;
-        let tool_path = temp_dir.path().join("tool.py");
+
+        let (tool_filename, runner, runner_args): (&str, &str, Vec<&str>) = match kind {
+            ToolKind::Shell => ("tool.sh", "bash", vec![]),
+            ToolKind::Python => ("tool.py", "python3", vec![]),
+            ToolKind::HTTP => ("tool.py", "python3", vec![]),
+            ToolKind::JavaScript => ("tool.js", "node", vec![]),
+            ToolKind::Rust => ("tool.sh", "bash", vec![]),
+            ToolKind::WASM => ("tool.sh", "bash", vec![]),
+            ToolKind::Composite => ("tool.py", "python3", vec![]),
+        };
+
+        let tool_path = temp_dir.path().join(tool_filename);
         tokio::fs::write(&tool_path, code).await?;
 
         let input_str = serde_json::to_string(input)?;
@@ -990,7 +1007,8 @@ if __name__ == "__main__":
         let result = tokio::time::timeout(
             std::time::Duration::from_millis(self.test_timeout_ms),
             async {
-                let mut child = tokio::process::Command::new("python3")
+                let mut child = tokio::process::Command::new(runner)
+                    .args(&runner_args)
                     .arg(&tool_path)
                     .stdin(std::process::Stdio::piped())
                     .stdout(std::process::Stdio::piped())
@@ -1058,7 +1076,17 @@ if __name__ == "__main__":
 
         let spec_json = serde_json::to_string_pretty(&tool.spec)?;
         tokio::fs::write(tool_path.join("spec.json"), spec_json).await?;
-        tokio::fs::write(tool_path.join("tool.py"), &tool.code).await?;
+
+        let code_filename = match tool.spec.kind {
+            ToolKind::Shell => "tool.sh",
+            ToolKind::Python => "tool.py",
+            ToolKind::HTTP => "tool.py",
+            ToolKind::JavaScript => "tool.js",
+            ToolKind::Rust => "tool.rs",
+            ToolKind::WASM => "tool.wasm",
+            ToolKind::Composite => "tool.py",
+        };
+        tokio::fs::write(tool_path.join(code_filename), &tool.code).await?;
 
         if let Some(ref test_code) = tool.test_code {
             tokio::fs::write(tool_path.join("test.py"), test_code).await?;

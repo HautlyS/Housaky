@@ -16,6 +16,25 @@ use std::io::Write as IoWrite;
 use std::sync::Arc;
 use std::time::Instant;
 
+fn sanitize_tool_name(raw: &str) -> String {
+    let mut out = String::with_capacity(raw.len());
+    for ch in raw.chars() {
+        if ch.is_ascii_alphanumeric() || ch == '_' || ch == '-' {
+            out.push(ch);
+        } else if ch.is_whitespace() || ch == '.' || ch == '/' || ch == ':' {
+            out.push('_');
+        } else {
+            out.push('_');
+        }
+    }
+    let trimmed = out.trim_matches('_');
+    if trimmed.is_empty() {
+        "skill_tool".to_string()
+    } else {
+        trimmed.to_string()
+    }
+}
+
 pub struct Agent {
     provider: Box<dyn Provider>,
     tools: Vec<Box<dyn Tool>>,
@@ -225,9 +244,11 @@ impl Agent {
             None
         };
 
-        let tools = tools::all_tools_with_runtime(
+        let skills = crate::skills::load_active_skills(&config.workspace_dir, &config);
+
+        let mut tools = tools::all_tools_with_runtime(
             &security,
-            runtime,
+            runtime.clone(),
             memory.clone(),
             composio_key,
             composio_entity_id,
@@ -238,6 +259,77 @@ impl Agent {
             config.api_key.as_deref(),
             config,
         );
+
+        let mut existing_names: std::collections::HashSet<String> = tools
+            .iter()
+            .map(|t| t.name().to_string())
+            .collect();
+
+        for t in crate::tools::load_active_generated_tools(security.clone(), &config.workspace_dir) {
+            let tool_name = sanitize_tool_name(t.name());
+            if existing_names.contains(&tool_name) || tool_name != t.name() {
+                continue;
+            }
+            existing_names.insert(tool_name);
+            tools.push(t);
+        }
+
+        for skill in &skills {
+            for skill_tool in &skill.tools {
+                let base_name =
+                    sanitize_tool_name(&format!("skill_{}_{}", skill.name, skill_tool.name));
+                let mut tool_name = base_name.clone();
+                let mut suffix = 2u32;
+                while existing_names.contains(&tool_name) {
+                    tool_name = format!("{base_name}_{suffix}");
+                    suffix += 1;
+                }
+                existing_names.insert(tool_name.clone());
+                let tool_desc = if skill_tool.description.trim().is_empty() {
+                    format!("Skill tool: {}", skill_tool.name)
+                } else {
+                    skill_tool.description.clone()
+                };
+
+                match skill_tool.kind.as_str() {
+                    "shell" => {
+                        tools.push(Box::new(crate::tools::SkillToolTool::new(
+                            tool_name,
+                            tool_desc,
+                            skill_tool.command.clone(),
+                            skill_tool.args.clone(),
+                            security.clone(),
+                            runtime.clone(),
+                        )));
+                    }
+                    "script" => {
+                        tools.push(Box::new(crate::tools::SkillScriptTool::new(
+                            tool_name,
+                            tool_desc,
+                            skill_tool.command.clone(),
+                            skill_tool.args.clone(),
+                            security.clone(),
+                            runtime.clone(),
+                        )));
+                    }
+                    "http" => {
+                        tools.push(Box::new(crate::tools::SkillHttpTool::new(
+                            tool_name,
+                            tool_desc,
+                            skill_tool.command.clone(),
+                            skill_tool.args.clone(),
+                            security.clone(),
+                            config.http_request.allowed_domains.clone(),
+                            config.http_request.max_response_size,
+                            config.http_request.timeout_secs,
+                        )));
+                    }
+                    _ => {
+                        continue;
+                    }
+                }
+            }
+        }
 
         let provider_name = config.default_provider.as_deref().unwrap_or("openrouter");
 
@@ -277,7 +369,7 @@ impl Agent {
             .temperature(config.default_temperature)
             .workspace_dir(config.workspace_dir.clone())
             .identity_config(config.identity.clone())
-            .skills(crate::skills::load_active_skills(&config.workspace_dir, &config))
+            .skills(skills)
             .auto_save(config.memory.auto_save)
             .build()
     }

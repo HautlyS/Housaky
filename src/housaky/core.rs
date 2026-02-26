@@ -2,6 +2,7 @@
 
 use crate::config::Config;
 use crate::housaky::agent::Agent;
+use crate::housaky::agi_integration;
 use crate::housaky::cognitive::cognitive_loop::{CognitiveLoop, CognitiveResponse};
 use crate::housaky::goal_engine::{Goal, GoalEngine, GoalPriority, GoalStatus};
 use crate::housaky::inner_monologue::InnerMonologue;
@@ -10,6 +11,9 @@ use crate::housaky::memory::consolidation::MemoryConsolidator;
 use crate::housaky::memory::hierarchical::{HierarchicalMemory, HierarchicalMemoryConfig};
 use crate::housaky::meta_cognition::MetaCognitionEngine;
 use crate::housaky::reasoning_pipeline::{ReasoningPipeline, ReasoningResult};
+use crate::housaky::self_improvement_loop::ImprovementExperiment;
+use crate::housaky::singularity::{SingularityEngine, SingularityPhaseStatus};
+use crate::housaky::capability_growth_tracker::CapabilityGrowthTracker;
 use crate::housaky::streaming::streaming::StreamingManager;
 use crate::housaky::tool_creator::ToolCreator;
 use crate::housaky::working_memory::{MemoryImportance, WorkingMemoryEngine};
@@ -22,7 +26,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::info;
+use tracing::{info, warn};
 
 pub struct HousakyCore {
     pub agent: Arc<Agent>,
@@ -37,6 +41,9 @@ pub struct HousakyCore {
     pub hierarchical_memory: Arc<HierarchicalMemory>,
     pub memory_consolidator: Arc<MemoryConsolidator>,
     pub streaming_manager: Arc<StreamingManager>,
+    pub agi_hub: Arc<agi_integration::AGIIntegrationHub>,
+    pub singularity_engine: Arc<RwLock<SingularityEngine>>,
+    pub growth_tracker: Arc<CapabilityGrowthTracker>,
     state: Arc<RwLock<HousakyCoreState>>,
     config: HousakyCoreConfig,
     workspace_dir: PathBuf,
@@ -158,6 +165,13 @@ impl HousakyCore {
         ));
         let streaming_manager = Arc::new(StreamingManager::new());
 
+        let agi_hub = Arc::new(agi_integration::AGIIntegrationHub::new(&workspace_dir));
+
+        let growth_tracker = Arc::new(CapabilityGrowthTracker::new());
+        let singularity_engine = Arc::new(RwLock::new(
+            SingularityEngine::new(growth_tracker.clone()),
+        ));
+
         let core_config = HousakyCoreConfig::default();
 
         let state = Arc::new(RwLock::new(HousakyCoreState {
@@ -190,6 +204,9 @@ impl HousakyCore {
             hierarchical_memory,
             memory_consolidator,
             streaming_manager,
+            agi_hub,
+            singularity_engine,
+            growth_tracker,
             state,
             config: core_config,
             workspace_dir,
@@ -219,12 +236,76 @@ impl HousakyCore {
             return Err(anyhow::anyhow!("Failed to initialize cognitive loop: {}", e));
         }
 
+        if let Err(e) = self.agi_hub.initialize().await {
+            warn!("Failed to initialize AGI hub: {e}");
+        }
+
         if let Err(e) = self.initialize_default_goals().await {
             return Err(anyhow::anyhow!("Failed to initialize default goals: {}", e));
         }
 
+        // Phase 6 — discover and register compute substrates
+        self.singularity_engine.read().await.init_substrates().await;
+
         info!("Housaky AGI Core initialized successfully");
         Ok(())
+    }
+
+    async fn recent_self_modification_insights(&self, limit: usize) -> Vec<String> {
+        let path = self
+            .workspace_dir
+            .join(".housaky")
+            .join("improvement_experiments.json");
+
+        if !path.exists() {
+            return Vec::new();
+        }
+
+        let content = match tokio::fs::read_to_string(&path).await {
+            Ok(content) => content,
+            Err(e) => {
+                warn!(
+                    "Failed to read improvement experiments for AGI context: {}",
+                    e
+                );
+                return Vec::new();
+            }
+        };
+
+        let experiments: Vec<ImprovementExperiment> = match serde_json::from_str(&content) {
+            Ok(experiments) => experiments,
+            Err(e) => {
+                warn!(
+                    "Failed to parse improvement experiments for AGI context: {}",
+                    e
+                );
+                return Vec::new();
+            }
+        };
+
+        experiments
+            .iter()
+            .rev()
+            .take(limit)
+            .map(|experiment| {
+                let outcome = if experiment.success {
+                    "success"
+                } else {
+                    "failure"
+                };
+
+                format!(
+                    "self_mod:{}:{}:{}:{}",
+                    experiment.target_component,
+                    outcome,
+                    experiment.expected_effect,
+                    experiment
+                        .goal_achievement_rate_delta
+                        .map(|delta| format!("goal_delta={:+.4}", delta))
+                        .unwrap_or_else(|| "goal_delta=n/a".to_string())
+                )
+            })
+            .collect()
     }
 
     async fn initialize_default_goals(&self) -> Result<()> {
@@ -930,10 +1011,97 @@ impl HousakyCore {
         Ok(subtasks)
     }
 
+    pub async fn run_agi_hub_cycle(
+        &self,
+        provider: Option<Arc<dyn Provider>>,
+        model: Option<String>,
+        available_tools: Vec<String>,
+        recent_failures: Vec<agi_integration::FailureRecord>,
+    ) -> Result<()> {
+        info!("Running AGI Hub cycle...");
+
+        let active_goals = self
+            .goal_engine
+            .get_active_goals()
+            .await
+            .into_iter()
+            .take(10)
+            .collect::<Vec<_>>();
+
+        let mut previous_insights = self.inner_monologue.get_recent(8).await;
+        let mut knowledge_context = self
+            .working_memory
+            .get_recent(8)
+            .await
+            .into_iter()
+            .map(|item| item.content)
+            .collect::<Vec<_>>();
+
+        let experiment_insights = self.recent_self_modification_insights(6).await;
+        previous_insights.extend(experiment_insights.clone());
+        knowledge_context.extend(experiment_insights);
+
+        // Phase 6 — capture data for singularity tick before input is moved
+        let knowledge_gaps: Vec<String> = knowledge_context.iter().take(4).cloned().collect();
+        let seed_concepts: Vec<String> = previous_insights.iter().take(4).cloned().collect();
+
+        let input = agi_integration::AGICycleInput {
+            user_query: "Periodic heartbeat cycle".to_string(),
+            context: agi_integration::AGICycleContext {
+                active_goals,
+                recent_failures,
+                previous_insights,
+                knowledge_context,
+            },
+            provider,
+            model,
+            available_tools,
+        };
+
+        let output = self.agi_hub.run_agi_cycle(input).await?;
+
+        info!(
+            "AGI Hub cycle complete: {} actions, {} goals, {} tools, singularity score: {:.3}",
+            output.actions_taken.len(),
+            output.goals_created.len(),
+            output.tools_created.len(),
+            output.singularity_progress.score
+        );
+
+        // Phase 6 — run singularity engine tick
+        let cycle = output.singularity_progress.metrics
+            .get("cycles_completed")
+            .copied()
+            .unwrap_or(0.0) as u64;
+        let alignment_intact = output.singularity_progress.score > 0.0;
+        let report = self
+            .singularity_engine
+            .write()
+            .await
+            .tick(cycle, alignment_intact, &knowledge_gaps, &seed_concepts)
+            .await;
+
+        if report.phase_status != SingularityPhaseStatus::Active {
+            warn!(
+                "Phase 6 status: {:?} — {} open-ended goal(s) generated",
+                report.phase_status, report.open_ended_goals_generated
+            );
+        } else {
+            info!(
+                "Phase 6 tick: growth_rate={:.6}, acceleration={:.6}, goals={}",
+                report.explosion_stats.current_growth_rate,
+                report.explosion_stats.current_acceleration,
+                report.open_ended_goals_generated
+            );
+        }
+
+        Ok(())
+    }
+
     pub async fn shutdown(&self) -> Result<()> {
         info!("Shutting down Housaky AGI Core...");
 
-        self.goal_engine.load_goals().await?;
+        self.goal_engine.save_goals().await?;
         self.inner_monologue.save().await?;
         self.tool_creator.save_tools().await?;
 

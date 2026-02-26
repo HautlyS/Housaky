@@ -338,7 +338,9 @@ impl Memory for LucidMemory {
                 Ok(Self::merge_results(local_results, lucid_results, limit))
             }
             Ok(_) => {
-                self.clear_failure();
+                // Lucid succeeded but didn't return usable context. Treat this similarly to a failure
+                // to avoid repeatedly spawning lucid when it's misconfigured or returning junk.
+                self.mark_failure_now();
                 Ok(local_results)
             }
             Err(error) => {

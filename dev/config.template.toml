@@ -10,3 +10,20 @@ default_temperature = 0.7
 port = 3000
 host = "[::]"
 allow_public_bind = true
+
+# Quantum Computing Configuration
+[quantum]
+enabled = false
+backend = "braket"  # "simulator", "braket"
+# Amazon Braket device ARN (choose one):
+#   - Simulator: arn:aws:braket:::device/quantum-simulator/amazon/sv1
+#   - IonQ: arn:aws:braket:us-east-1::device/qpu/ionq/Aria-1
+#   - Rigetti: arn:aws:braket:us-west-1::device/qpu/rigetti/Aspen-M-1
+#   - QuEra: arn:aws:braket:us-east-1::device/qpu/quera/Aquila
+braket_device_arn = "arn:aws:braket:::device/quantum-simulator/amazon/sv1"
+braket_s3_bucket = "amazon-braket-housaky-541739678328"
+braket_s3_prefix = "housaky-results"
+max_qubits = 34
+shots = 1024
+error_mitigation = true
+hybrid_threshold = 1000

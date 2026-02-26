@@ -1,6 +1,6 @@
 use super::traits::ChatMessage;
 use super::Provider;
-use crate::key_management::KvmKeyManager;
+use crate::keys_manager::manager::KeysManager;
 use async_trait::async_trait;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -81,8 +81,8 @@ pub struct ReliableProvider {
     key_index: AtomicUsize,
     /// Per-model fallback chains: model_name → [fallback_model_1, fallback_model_2, ...]
     model_fallbacks: HashMap<String, Vec<String>>,
-    /// KVM key manager for advanced key rotation
-    kvm_manager: Option<Arc<KvmKeyManager>>,
+    /// Keys manager for key rotation
+    keys_manager: Option<Arc<KeysManager>>,
     current_provider_name: String,
 }
 
@@ -104,14 +104,14 @@ impl ReliableProvider {
             api_keys: Vec::new(),
             key_index: AtomicUsize::new(0),
             model_fallbacks: HashMap::new(),
-            kvm_manager: None,
+            keys_manager: None,
             current_provider_name: provider_name,
         }
     }
 
-    /// Set the KVM key manager for advanced key rotation
-    pub fn with_kvm_manager(mut self, manager: Arc<KvmKeyManager>) -> Self {
-        self.kvm_manager = Some(manager);
+    /// Set the keys manager for key rotation
+    pub fn with_keys_manager(mut self, manager: Arc<KeysManager>) -> Self {
+        self.keys_manager = Some(manager);
         self
     }
 
@@ -138,15 +138,15 @@ impl ReliableProvider {
 
     /// Advance to the next API key and return it, or None if no extra keys configured.
     fn rotate_key(&self) -> Option<String> {
-        if let Some(ref kvm) = self.kvm_manager {
+        if let Some(ref keys_manager) = self.keys_manager {
             let rt = tokio::runtime::Handle::current();
             let provider_name = self.current_provider_name.clone();
             
             let key = rt.block_on(async {
-                kvm.rotate_key(&provider_name).await
+                keys_manager.rotate_key(&provider_name).await
             });
             
-            return key.map(|k| k.key);
+            return key.ok().flatten().map(|k| k.key);
         }
         
         if self.api_keys.is_empty() {
@@ -156,43 +156,43 @@ impl ReliableProvider {
         Some(self.api_keys[idx].clone())
     }
 
-    /// Get current key from KVM manager
+    /// Get current key from keys manager
     fn get_current_key(&self) -> Option<String> {
-        if let Some(ref kvm) = self.kvm_manager {
+        if let Some(ref keys_manager) = self.keys_manager {
             let rt = tokio::runtime::Handle::current();
             let provider_name = self.current_provider_name.clone();
             
             return rt.block_on(async {
-                kvm.get_next_key(&provider_name).await
+                keys_manager.get_next_key(&provider_name).await
             }).map(|k| k.key);
         }
         self.api_keys.get(self.key_index.load(Ordering::Relaxed)).cloned()
     }
 
-    /// Report key success to KVM manager
+    /// Report key success to keys manager
     fn report_key_success(&self, key_id: &str) {
-        if let Some(ref kvm) = self.kvm_manager {
-            let kvm = Arc::clone(kvm);
+        if let Some(ref keys_manager) = self.keys_manager {
+            let keys_manager = Arc::clone(keys_manager);
             let rt = tokio::runtime::Handle::current();
             let provider_name = self.current_provider_name.clone();
             let key_id = key_id.to_string();
             
             rt.spawn(async move {
-                kvm.report_key_success(&provider_name, &key_id).await;
+                keys_manager.report_success(&provider_name, &key_id).await;
             });
         }
     }
 
-    /// Report key failure to KVM manager
+    /// Report key failure to keys manager
     fn report_key_failure(&self, key_id: &str, is_rate_limit: bool) {
-        if let Some(ref kvm) = self.kvm_manager {
-            let kvm = Arc::clone(kvm);
+        if let Some(ref keys_manager) = self.keys_manager {
+            let keys_manager = Arc::clone(keys_manager);
             let rt = tokio::runtime::Handle::current();
             let provider_name = self.current_provider_name.clone();
             let key_id = key_id.to_string();
             
             rt.spawn(async move {
-                kvm.report_key_failure(&provider_name, &key_id, is_rate_limit).await;
+                keys_manager.report_failure(&provider_name, &key_id, is_rate_limit).await;
             });
         }
     }

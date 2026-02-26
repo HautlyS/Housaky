@@ -47,23 +47,31 @@ pub struct ReasoningResult {
     pub id: String,
     pub query: String,
     pub reasoning_type: ReasoningType,
-    pub steps: Vec<ReasoningStep>,
+    pub steps: Vec<PipelineStep>,
     pub conclusion: String,
     pub summary: String,
     pub confidence: f64,
     pub suggested_tools: Vec<ToolSuggestion>,
     pub insights: Vec<String>,
     pub alternatives_considered: Vec<String>,
-    pub self_corrections: Vec<SelfCorrection>,
+    pub self_corrections: Vec<PipelineSelfCorrection>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ReasoningStep {
+pub struct PipelineStep {
     pub step_number: usize,
     pub thought: String,
     pub action: Option<String>,
     pub observation: Option<String>,
     pub confidence: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PipelineSelfCorrection {
+    pub step: usize,
+    pub original: String,
+    pub corrected: String,
+    pub reason: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -74,13 +82,7 @@ pub struct ToolSuggestion {
     pub priority: u32,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SelfCorrection {
-    pub step: usize,
-    pub original: String,
-    pub corrected: String,
-    pub reason: String,
-}
+
 
 impl ReasoningPipeline {
     pub fn new() -> Self {
@@ -239,81 +241,22 @@ impl ReasoningPipeline {
     }
 
     fn get_system_prompt(&self, reasoning_type: &ReasoningType) -> String {
-        match reasoning_type {
-            ReasoningType::ChainOfThought => self.config.cot_system_prompt.clone(),
-            ReasoningType::ReAct => self.config.react_system_prompt.clone(),
-            ReasoningType::TreeOfThought => self.config.tot_system_prompt.clone(),
-            ReasoningType::Reflexion => self.build_reflexion_prompt(),
-            ReasoningType::SelfConsistency => self.build_self_consistency_prompt(),
-            ReasoningType::MultiStep => self.build_multi_step_prompt(),
-            ReasoningType::Comparative => self.build_comparative_prompt(),
-            ReasoningType::Diagnostic => self.build_diagnostic_prompt(),
-            ReasoningType::Creative => self.build_creative_prompt(),
-            ReasoningType::Strategic => self.build_strategic_prompt(),
-        }
+        self.engine.generate_system_prompt(reasoning_type)
     }
 
     fn build_user_prompt(&self, query: &str, reasoning_type: &ReasoningType) -> String {
-        match reasoning_type {
-            ReasoningType::ChainOfThought => {
-                format!(
-                    "Think through this step by step:\n\n{}\n\n\
-                     Show your reasoning at each step. End with a clear conclusion.",
-                    query
-                )
-            }
-            ReasoningType::TreeOfThought => {
-                format!(
-                    "Explore multiple approaches to solve:\n\n{}\n\n\
-                     Consider at least 3 different paths and select the best one.",
-                    query
-                )
-            }
-            _ => query.to_string(),
-        }
+        self.engine.generate_user_prompt(query, reasoning_type)
     }
 
     fn build_react_system_prompt(&self, tools: &[&str]) -> String {
-        format!(
-            r#"You are an advanced AI assistant with access to tools for reasoning and acting.
-
-## ReAct Framework
-
-Use this format for reasoning:
-- **Thought**: Analyze what you know and what you need to find out
-- **Action**: Use a tool to gather information
-- **Observation**: Process the tool result
-- Repeat until you have enough information
-- **Final Answer**: Provide your conclusion
-
-## Available Tools
-
-{}
-
-## Rules
-
-1. Always start with a Thought
-2. Each Action must use one of the available tools
-3. Process Observations before the next Thought
-4. Continue until you can provide a confident Final Answer
-5. If uncertain, reflect on what you've learned
-
-## Output Format
-
-```
-Thought 1: [your reasoning]
-Action 1: [tool_name with parameters]
-Observation 1: [tool result]
-...
-Final Answer: [your conclusion]
-```
-"#,
-            tools
-                .iter()
-                .map(|t| format!("- {}", t))
-                .collect::<Vec<_>>()
-                .join("\n")
-        )
+        let base = self.engine.generate_system_prompt(&ReasoningType::ReAct);
+        let tool_list = tools
+            .iter()
+            .map(|t| format!("- {}", t))
+            .collect::<Vec<_>>()
+            .join("\n");
+        
+        format!("{}\n\n## Available Tools\n\n{}\n", base, tool_list)
     }
 
     fn build_react_user_prompt(&self, query: &str, context: &TurnContext) -> String {
@@ -403,7 +346,7 @@ Final Answer: [your conclusion]
             if line.starts_with("Thought") || line.starts_with("**Thought") {
                 found_react_format = true;
                 if !current_thought.is_empty() {
-                    steps.push(ReasoningStep {
+                    steps.push(PipelineStep {
                         step_number,
                         thought: current_thought.clone(),
                         action: if current_action.is_empty() {
@@ -444,7 +387,7 @@ Final Answer: [your conclusion]
         }
 
         if !current_thought.is_empty() {
-            steps.push(ReasoningStep {
+            steps.push(PipelineStep {
                 step_number,
                 thought: current_thought,
                 action: if current_action.is_empty() {
@@ -477,7 +420,7 @@ Final Answer: [your conclusion]
             };
 
             if steps.is_empty() {
-                steps.push(ReasoningStep {
+                steps.push(PipelineStep {
                     step_number: 1,
                     thought: conclusion.clone(),
                     action: None,
@@ -535,7 +478,7 @@ Final Answer: [your conclusion]
         }
 
         for (i, approach) in approaches.iter().enumerate() {
-            steps.push(ReasoningStep {
+            steps.push(PipelineStep {
                 step_number: i + 1,
                 thought: format!(
                     "Approach {}: {}",
@@ -549,7 +492,7 @@ Final Answer: [your conclusion]
         }
 
         if !selected_approach.is_empty() {
-            steps.push(ReasoningStep {
+            steps.push(PipelineStep {
                 step_number: steps.len() + 1,
                 thought: format!("Selected: {} because {}", selected_approach, reasoning),
                 action: None,
@@ -573,7 +516,7 @@ Final Answer: [your conclusion]
         })
     }
 
-    fn extract_steps(&self, response: &str) -> Vec<ReasoningStep> {
+    fn extract_steps(&self, response: &str) -> Vec<PipelineStep> {
         let mut steps = Vec::new();
         let mut step_number = 0;
 
@@ -583,7 +526,7 @@ Final Answer: [your conclusion]
             if line.starts_with("Step") || line.starts_with("**Step") || line.starts_with("- Step")
             {
                 step_number += 1;
-                steps.push(ReasoningStep {
+                steps.push(PipelineStep {
                     step_number,
                     thought: self.extract_after_colon(line),
                     action: None,
@@ -592,7 +535,7 @@ Final Answer: [your conclusion]
                 });
             } else if line.starts_with("- ") || line.starts_with("* ") {
                 step_number += 1;
-                steps.push(ReasoningStep {
+                steps.push(PipelineStep {
                     step_number,
                     thought: line[2..].to_string(),
                     action: None,
@@ -742,7 +685,7 @@ Final Answer: [your conclusion]
         insights
     }
 
-    fn calculate_confidence(&self, steps: &[ReasoningStep], conclusion: &str) -> f64 {
+    fn calculate_confidence(&self, steps: &[PipelineStep], conclusion: &str) -> f64 {
         if steps.is_empty() {
             return 0.3;
         }
@@ -762,116 +705,6 @@ Final Answer: [your conclusion]
         } else {
             line.to_string()
         }
-    }
-
-    fn build_reflexion_prompt(&self) -> String {
-        r#"You are a reflective AI that improves through self-evaluation.
-
-## Reflexion Framework
-
-1. **Initial Attempt**: Propose a solution
-2. **Critique**: Identify potential issues
-3. **Reflect**: Consider what went wrong and how to improve
-4. **Refine**: Propose an improved solution
-
-Always question your assumptions and look for weaknesses in your reasoning.
-"#
-        .to_string()
-    }
-
-    fn build_self_consistency_prompt(&self) -> String {
-        r#"You are an AI that values consistency in reasoning.
-
-## Self-Consistency Framework
-
-1. Generate multiple reasoning paths for the same question
-2. Compare the conclusions
-3. Identify the most consistent answer
-4. Explain why this answer is most reliable
-
-Consistency indicates robustness in your reasoning.
-"#
-        .to_string()
-    }
-
-    fn build_multi_step_prompt(&self) -> String {
-        r#"You are an AI that breaks complex problems into steps.
-
-## Multi-Step Framework
-
-1. Identify the goal
-2. List necessary steps
-3. Execute each step in order
-4. Verify progress after each step
-5. Adjust plan if needed
-
-Show clear progress markers between steps.
-"#
-        .to_string()
-    }
-
-    fn build_comparative_prompt(&self) -> String {
-        r#"You are an AI skilled in comparative analysis.
-
-## Comparative Framework
-
-1. Identify the items to compare
-2. List relevant criteria
-3. Evaluate each item against criteria
-4. Summarize differences and similarities
-5. Provide a conclusion or recommendation
-
-Be objective and balanced in your comparison.
-"#
-        .to_string()
-    }
-
-    fn build_diagnostic_prompt(&self) -> String {
-        r#"You are an AI diagnostician.
-
-## Diagnostic Framework
-
-1. Observe symptoms or issues
-2. List possible causes
-3. Evaluate likelihood of each cause
-4. Recommend tests or investigations
-5. Identify the most probable root cause
-
-Think like a doctor diagnosing an illness.
-"#
-        .to_string()
-    }
-
-    fn build_creative_prompt(&self) -> String {
-        r#"You are a creative AI that thinks outside the box.
-
-## Creative Framework
-
-1. Understand the challenge
-2. Brainstorm unconventional approaches
-3. Combine ideas in novel ways
-4. Evaluate feasibility
-5. Present the most creative viable solution
-
-Don't be afraid to suggest unusual solutions.
-"#
-        .to_string()
-    }
-
-    fn build_strategic_prompt(&self) -> String {
-        r#"You are a strategic AI planner.
-
-## Strategic Framework
-
-1. Define objectives
-2. Analyze current situation
-3. Identify resources and constraints
-4. Develop multiple strategies
-5. Recommend the optimal path forward
-
-Consider short-term and long-term implications.
-"#
-        .to_string()
     }
 
     pub async fn get_history(&self) -> Vec<ReasoningResult> {

@@ -112,6 +112,7 @@ pub struct GoalEngine {
     failed: Arc<RwLock<Vec<String>>>,
     workspace_dir: PathBuf,
     max_active_goals: usize,
+    learning_value_weight: Arc<RwLock<f64>>,
     auto_decompose: bool,
 }
 
@@ -124,8 +125,25 @@ impl GoalEngine {
             failed: Arc::new(RwLock::new(Vec::new())),
             workspace_dir: workspace_dir.clone(),
             max_active_goals: 10,
+            learning_value_weight: Arc::new(RwLock::new(0.5)),
             auto_decompose: true,
         }
+    }
+
+    pub async fn set_learning_value_weight(&self, weight: f64) -> Result<()> {
+        if !(0.0..=1.0).contains(&weight) {
+            return Err(anyhow::anyhow!(
+                "learning_value_weight out of range: {} (expected 0.0..=1.0)",
+                weight
+            ));
+        }
+
+        *self.learning_value_weight.write().await = weight;
+        Ok(())
+    }
+
+    pub async fn get_learning_value_weight(&self) -> f64 {
+        *self.learning_value_weight.read().await
     }
 
     pub async fn add_goal(&self, mut goal: Goal) -> Result<String> {
@@ -473,40 +491,66 @@ impl GoalEngine {
         }
 
         let goals_vec: Vec<Goal> = serde_json::from_str(&std::fs::read_to_string(&path)?)?;
-        
-        let mut goals = self.goals.write().await;
-        let mut queue = self.queue.write().await;
+
+        let mut new_goals = HashMap::new();
+        let mut new_queue = VecDeque::new();
+        let mut new_completed = Vec::new();
+        let mut new_failed = Vec::new();
 
         for goal in goals_vec {
-            if goal.status == GoalStatus::Pending {
-                queue.push_back(goal.id.clone());
+            let goal_id = goal.id.clone();
+
+            match goal.status {
+                GoalStatus::Pending | GoalStatus::InProgress => {
+                    new_queue.push_back(goal_id.clone());
+                }
+                GoalStatus::Completed => {
+                    new_completed.push(goal_id.clone());
+                }
+                GoalStatus::Failed => {
+                    new_failed.push(goal_id.clone());
+                }
+                GoalStatus::Deferred => {}
+                GoalStatus::Cancelled => {
+                    new_failed.push(goal_id.clone());
+                }
             }
-            goals.insert(goal.id.clone(), goal);
+
+            new_goals.insert(goal_id, goal);
         }
 
-        info!("Loaded {} goals from disk", goals.len());
+        *self.goals.write().await = new_goals;
+        *self.queue.write().await = new_queue;
+        *self.completed.write().await = new_completed;
+        *self.failed.write().await = new_failed;
+
+        let loaded_count = self.goals.read().await.len();
+
+        info!("Loaded {} goals from disk", loaded_count);
         Ok(())
     }
 
     pub async fn prioritize(&self) -> Vec<Goal> {
+        let learning_weight = *self.learning_value_weight.read().await;
         let goals = self.goals.read().await;
         let mut pending: Vec<_> = goals
             .values()
             .filter(|g| g.status == GoalStatus::Pending)
             .cloned()
             .collect();
+        let complexity_weight = 1.0 - learning_weight;
 
         pending.sort_by(|a, b| {
             b.priority
                 .cmp(&a.priority)
                 .then_with(|| {
-                    b.learning_value
-                        .partial_cmp(&a.learning_value)
-                        .unwrap_or(std::cmp::Ordering::Equal)
-                })
-                .then_with(|| {
-                    a.estimated_complexity
-                        .partial_cmp(&b.estimated_complexity)
+                    let a_score =
+                        (a.learning_value * learning_weight) - (a.estimated_complexity * complexity_weight);
+                    let b_score =
+                        (b.learning_value * learning_weight) - (b.estimated_complexity * complexity_weight);
+
+                    b_score
+                        .partial_cmp(&a_score)
                         .unwrap_or(std::cmp::Ordering::Equal)
                 })
         });

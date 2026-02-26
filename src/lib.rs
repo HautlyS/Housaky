@@ -40,6 +40,7 @@
 
 pub mod agent;
 pub mod channels;
+pub mod quantum;
 pub mod commands;
 pub mod config;
 pub mod config_editor;
@@ -56,7 +57,6 @@ pub mod hooks;
 pub mod housaky;
 pub mod identity;
 pub mod integrations;
-pub mod key_management;
 pub mod keys_manager;
 pub mod memory;
 pub mod migration;
@@ -74,7 +74,6 @@ pub mod tools;
 pub mod tui;
 pub mod tunnel;
 pub mod util;
-pub mod vkm_client;
 
 pub use commands::ChannelCommands;
 pub use commands::CronCommands;

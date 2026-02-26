@@ -404,6 +404,38 @@ pub fn skills_to_prompt(skills: &[Skill]) -> String {
     prompt
 }
 
+/// Auto-install and enable Claude skills based on user message keyword matches.
+/// Returns the active skills after any installs/enables.
+pub fn ensure_skills_for_message(
+    workspace_dir: &Path,
+    config: &mut crate::config::Config,
+    message: &str,
+) -> anyhow::Result<Vec<Skill>> {
+    let lower = message.to_ascii_lowercase();
+    // List Claude plugins (by name) and install any that appear in the message text.
+    let market = crate::skills::marketplace::list_claude_official_plugins(workspace_dir, config)?;
+    for item in market {
+        let name_l = item.name.to_ascii_lowercase();
+        if lower.contains(&name_l) {
+            let target_dir = skills_dir(workspace_dir).join(&item.name);
+            if !target_dir.exists() {
+                if let Ok(installed) = crate::skills::marketplace::install_claude_plugin(workspace_dir, &item.name) {
+                    for s in installed {
+                        config.skills.enabled.insert(s.clone(), true);
+                    }
+                    let _ = config.save();
+                }
+            } else {
+                // Already present; just ensure enabled
+                config.skills.enabled.insert(item.name.clone(), true);
+                let _ = config.save();
+            }
+        }
+    }
+    let skills = load_active_skills(workspace_dir, config);
+    Ok(skills)
+}
+
 /// Get the skills directory path
 pub fn skills_dir(workspace_dir: &Path) -> PathBuf {
     workspace_dir.join("skills")
@@ -481,27 +513,46 @@ pub fn handle_command(command: crate::SkillCommands, workspace_dir: &Path) -> Re
             let repo_root = std::env::current_dir().unwrap_or_else(|_| workspace_dir.to_path_buf());
             let src = repo_root.join("openclaw").join("skills").join(&name);
             let src_md = src.join("SKILL.md");
-            if !src_md.exists() {
-                anyhow::bail!("Skill '{name}' not found in vendored openclaw/skills. Try `housaky skills ui` or `housaky skills install <url>`.");
+
+            let mut installed_names: Vec<String> = Vec::new();
+            if src_md.exists() {
+                let dest_dir = workspace_dir.join("skills").join(&name);
+                std::fs::create_dir_all(&dest_dir)?;
+                std::fs::copy(&src_md, dest_dir.join("SKILL.md"))?;
+                installed_names.push(name.clone());
+            } else {
+                // Fallback to Claude official market by plugin/skill name.
+                match crate::skills::marketplace::install_claude_plugin(workspace_dir, &name) {
+                    Ok(mut names) => {
+                        if names.is_empty() {
+                            anyhow::bail!("Claude plugin installed no skills: {name}");
+                        }
+                        installed_names.append(&mut names);
+                    }
+                    Err(e) => {
+                        anyhow::bail!(
+                            "Skill '{name}' not found in vendored openclaw/skills and Claude market fallback failed: {e}. Try `housaky skills ui` or `housaky skills install <url>`."
+                        );
+                    }
+                }
             }
-            let dest_dir = workspace_dir.join("skills").join(&name);
-            std::fs::create_dir_all(&dest_dir)?;
-            std::fs::copy(&src_md, dest_dir.join("SKILL.md"))?;
 
             let mut config = crate::Config::load_or_init()?;
             let mut should_enable = enable;
             if !should_enable {
                 should_enable = dialoguer::Confirm::new()
-                    .with_prompt(format!("Enable skill '{name}' now?"))
+                    .with_prompt(format!("Enable skill(s) '{}' now?", installed_names.join(", ")))
                     .default(true)
                     .interact()?;
             }
             if should_enable {
-                config.skills.enabled.insert(name.clone(), true);
+                for n in &installed_names {
+                    config.skills.enabled.insert(n.clone(), true);
+                }
                 config.save()?;
-                println!("✓ Enabled skill: {name}");
+                println!("✓ Enabled skills: {}", installed_names.join(", "));
             } else {
-                println!("Installed skill: {name} (not enabled)");
+                println!("Installed skills: {} (not enabled)", installed_names.join(", "));
             }
             Ok(())
         }

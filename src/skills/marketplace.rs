@@ -4,6 +4,8 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use super::Skill;
+use std::fs;
+use walkdir::WalkDir;
 
 const CLAUDE_OFFICIAL_MARKETPLACE_URL: &str =
     "https://raw.githubusercontent.com/anthropics/claude-plugins-official/main/marketplace.json";
@@ -30,6 +32,141 @@ pub enum MarketSource {
         plugin_name: String,
         plugin_path: String,
     },
+}
+
+impl MarketSource {
+    pub fn is_claude(&self) -> bool {
+        matches!(self, MarketSource::ClaudeOfficialPlugin { .. })
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct MinimalSkillToml {
+    skill: MinimalSkillMeta,
+}
+
+#[derive(Debug, Deserialize)]
+struct MinimalSkillMeta {
+    name: String,
+    #[allow(dead_code)]
+    description: Option<String>,
+    #[allow(dead_code)]
+    version: Option<String>,
+}
+
+fn sanitize_name(name: &str) -> String {
+    let mut out = String::new();
+    for c in name.chars() {
+        if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
+            out.push(c);
+        } else if c.is_ascii_whitespace() || c == '/' || c == '\\' {
+            out.push('-');
+        }
+    }
+    if out.is_empty() { "skill".into() } else { out }
+}
+
+fn find_marketplace_entry<'a>(index: &'a ClaudeMarketplaceIndex, plugin_name: &str) -> Option<&'a ClaudeMarketplacePlugin> {
+    index.plugins.iter().find(|p| p.name.eq_ignore_ascii_case(plugin_name))
+}
+
+fn load_marketplace_index(workspace_dir: &Path) -> Result<(ClaudeMarketplaceIndex, PathBuf)> {
+    let cache_dir = ensure_market_cache_dir(workspace_dir)?;
+    let repo_dir = ensure_claude_official_repo(&cache_dir)?;
+    let marketplace_path = repo_dir.join("marketplace.json");
+    let content = if marketplace_path.exists() {
+        fs::read_to_string(&marketplace_path)?
+    } else {
+        let resp = reqwest::blocking::get(CLAUDE_OFFICIAL_MARKETPLACE_URL)
+            .with_context(|| "Failed to fetch Claude official marketplace index")?;
+        resp.text().with_context(|| "Failed to read marketplace response")?
+    };
+    let index: ClaudeMarketplaceIndex = serde_json::from_str(&content)
+        .with_context(|| "Failed to parse Claude marketplace.json")?;
+    Ok((index, repo_dir))
+}
+
+fn install_skill_md(content: &str, workspace_dir: &Path) -> Result<String> {
+    let skill = crate::skills::claude::claude_skill_md_to_housaky_skill(content)?;
+    let safe = sanitize_name(&skill.name);
+    let dir = workspace_dir.join("skills").join(&safe);
+    fs::create_dir_all(&dir)?;
+    // Write TOML manifest for fast loading
+    let toml = crate::skills::claude::claude_skill_md_to_skill_toml(content)?;
+    fs::write(dir.join("SKILL.toml"), toml)?;
+    // Store original for reference
+    fs::write(dir.join("SKILL.md"), content)?;
+    Ok(safe)
+}
+
+fn install_skill_toml(path: &Path, workspace_dir: &Path) -> Result<String> {
+    let raw = fs::read_to_string(path)?;
+    let parsed: MinimalSkillToml = toml::from_str(&raw)
+        .with_context(|| format!("Invalid TOML at {}", path.display()))?;
+    let safe = sanitize_name(&parsed.skill.name);
+    let dir = workspace_dir.join("skills").join(&safe);
+    fs::create_dir_all(&dir)?;
+    fs::write(dir.join("SKILL.toml"), raw)?;
+    Ok(safe)
+}
+
+/// Install a Claude official plugin by name. Returns installed skill names.
+pub fn install_claude_plugin(workspace_dir: &Path, plugin_name: &str) -> Result<Vec<String>> {
+    let (index, repo_dir) = load_marketplace_index(workspace_dir)?;
+    let Some(entry) = find_marketplace_entry(&index, plugin_name) else {
+        return Err(anyhow!("Claude plugin not found: {}", plugin_name));
+    };
+    let Some(rel_path) = entry.source.path.as_ref() else {
+        return Err(anyhow!("Claude plugin has no path: {}", plugin_name));
+    };
+    let plugin_dir = repo_dir.join(rel_path);
+    if !plugin_dir.exists() {
+        return Err(anyhow!("Claude plugin path missing: {}", plugin_dir.display()));
+    }
+
+    let mut installed = Vec::new();
+    for entry in WalkDir::new(&plugin_dir).max_depth(4).into_iter().filter_map(|e| e.ok()) {
+        let p = entry.path();
+        if p.is_file() {
+            let fname = p.file_name().and_then(|s| s.to_str()).unwrap_or("");
+            if fname.eq_ignore_ascii_case("SKILL.md") {
+                let content = fs::read_to_string(p)?;
+                let name = install_skill_md(&content, workspace_dir)?;
+                if !installed.contains(&name) {
+                    installed.push(name);
+                }
+            } else if fname.eq_ignore_ascii_case("SKILL.toml") {
+                let name = install_skill_toml(p, workspace_dir)?;
+                if !installed.contains(&name) {
+                    installed.push(name);
+                }
+            }
+        }
+    }
+
+    if installed.is_empty() {
+        // Fallback: if plugin dir itself is a single skill directory, try reading any *.md at root
+        for entry in fs::read_dir(&plugin_dir)? {
+            let e = entry?;
+            let p = e.path();
+            if p.is_file() {
+                let ext = p.extension().and_then(|s| s.to_str()).unwrap_or("");
+                if ext.eq_ignore_ascii_case("md") && p.file_name().and_then(|s| s.to_str()).map(|n| n.to_ascii_lowercase()) != Some("readme.md".into()) {
+                    let content = fs::read_to_string(&p)?;
+                    let name = install_skill_md(&content, workspace_dir)?;
+                    if !installed.contains(&name) {
+                        installed.push(name);
+                    }
+                }
+            }
+        }
+    }
+
+    if installed.is_empty() {
+        return Err(anyhow!("No skills found to install in Claude plugin: {}", plugin_name));
+    }
+
+    Ok(installed)
 }
 
 #[derive(Debug, Deserialize)]

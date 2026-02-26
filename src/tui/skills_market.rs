@@ -92,11 +92,36 @@ impl SkillsMarketApp {
         let next = !current;
         self.config.skills.enabled.insert(name.clone(), next);
 
-        // If enabling a vendored OpenClaw skill, copy it into workspace skills for stable path.
+        // If enabling, perform installation depending on source.
         if next {
             if let Some(item) = self.items.get(self.selected) {
-                if let MarketSource::OpenClawVendored { skill_dir, .. } = &item.source {
-                    ensure_skill_copied_into_workspace(skill_dir, &self.config.workspace_dir, &name)?;
+                match &item.source {
+                    MarketSource::OpenClawVendored { skill_dir, .. } => {
+                        ensure_skill_copied_into_workspace(
+                            skill_dir,
+                            &self.config.workspace_dir,
+                            &name,
+                        )?;
+                        self.status = format!("Installed (vendored) and enabled: {}", name);
+                    }
+                    MarketSource::ClaudeOfficialPlugin { .. } => {
+                        match crate::skills::marketplace::install_claude_plugin(
+                            &self.config.workspace_dir,
+                            &name,
+                        ) {
+                            Ok(installed) => {
+                                for s in installed {
+                                    self.config.skills.enabled.insert(s.clone(), true);
+                                }
+                                self.status = format!("Installed (Claude) and enabled: {}", name);
+                            }
+                            Err(e) => {
+                                // Rollback enable on failure
+                                self.config.skills.enabled.insert(name.clone(), false);
+                                self.status = format!("Claude install failed for {}: {}", name, e);
+                            }
+                        }
+                    }
                 }
             }
         }

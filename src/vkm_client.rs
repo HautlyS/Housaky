@@ -30,9 +30,12 @@ pub struct VkmClient {
 
 impl VkmClient {
     pub fn new() -> Self {
-        Self {
-            cli_path: "/home/ubuntu/VKM/vkm/bin/vkm".to_string(),
-        }
+        let cli_path = std::env::var("HOUSAKY_VKM_CLI_PATH")
+            .ok()
+            .filter(|path| !path.trim().is_empty())
+            .unwrap_or_else(|| "/home/ubuntu/VKM/vkm/bin/vkm".to_string());
+
+        Self { cli_path }
     }
 
     pub fn with_path(cli_path: &str) -> Self {

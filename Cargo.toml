@@ -131,6 +131,12 @@ pdf-extract = { version = "0.10", optional = true }
 # Regex for text processing
 regex = "1.10"
 
+# Rust AST parsing for self-modification
+syn = { version = "2.0", features = ["full", "parsing", "extra-traits", "visit-mut"] }
+quote = "1.0"
+proc-macro2 = "1.0"
+walkdir = "2.5"
+
 # HTML scraping
 scraper = "0.22"
 
@@ -155,6 +161,11 @@ tokio-stream = "0.1"
 # MD5 hashing
 md-5 = "0.10"
 
+# AWS SDK for Amazon Braket quantum computing
+aws-config = { version = "1", default-features = false, features = ["behavior-version-latest", "rustls", "rt-tokio", "credentials-process"] }
+aws-sdk-braket = "1"
+aws-smithy-runtime = { version = "1", features = ["rt-tokio"] }
+
 # Raspberry Pi GPIO (Linux/RPi only) — target-specific to avoid compile failure on macOS
 [target.'cfg(target_os = "linux")'.dependencies]
 rppal = { version = "0.14", optional = true }
@@ -165,7 +176,6 @@ rppal = { version = "0.14", optional = true }
 # additional opt-in feature (`run-unstable-tests`) to compile.
 unstable-key-tests = []
 # NOTE: run-unstable-tests is intentionally NOT a Cargo feature.
-# The integration tests in tests/key_management_test.rs use `cfg(feature = "run-unstable-tests")`
 # as a hard opt-in gate that is never enabled by `--all-features`.
 # To run them, use: RUSTFLAGS='--cfg feature="run-unstable-tests"' cargo test --features unstable-key-tests
 
