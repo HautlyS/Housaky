@@ -1,6 +1,8 @@
 #![allow(clippy::format_push_string, clippy::cast_possible_truncation, clippy::cast_sign_loss)]
 
 use crate::housaky::core::TurnContext;
+use crate::housaky::memory::emotional_tags::EmotionalTag;
+use crate::housaky::meta_cognition::EmotionalState;
 use crate::housaky::reasoning_engine::{ReasoningEngine, ReasoningType};
 use crate::providers::Provider;
 use anyhow::Result;
@@ -704,6 +706,94 @@ impl ReasoningPipeline {
             line[pos + 1..].trim().to_string()
         } else {
             line.to_string()
+        }
+    }
+
+    /// Tier 1-D — Emotionally-regulated reasoning.
+    ///
+    /// Converts the metacognitive `EmotionalState` into a PAD-space `EmotionalTag`,
+    /// then delegates to `ReasoningEngine::select_strategy_from_emotion` to choose
+    /// the most appropriate reasoning type before calling `reason()`.
+    pub async fn reason_with_emotional_state(
+        &self,
+        provider: &dyn Provider,
+        model: &str,
+        query: &str,
+        emotional_state: &EmotionalState,
+    ) -> Result<ReasoningResult> {
+        let tag = Self::emotional_state_to_tag(emotional_state);
+        let strategy = ReasoningEngine::select_strategy_from_emotion(&tag);
+
+        info!(
+            "Emotional regulation: state={:?} → strategy={:?}",
+            emotional_state, strategy
+        );
+
+        self.reason(provider, model, query, strategy).await
+    }
+
+    /// Map a discrete `EmotionalState` to a continuous PAD-space `EmotionalTag`.
+    ///
+    /// PAD dimensions: valence ∈ [-1,1], arousal ∈ [0,1], dominance ∈ [0,1],
+    /// plus curiosity and surprise auxiliary axes.
+    pub fn emotional_state_to_tag(state: &EmotionalState) -> EmotionalTag {
+        match state {
+            EmotionalState::Confident => EmotionalTag {
+                valence: 0.6,
+                arousal: 0.5,
+                dominance: 0.8,
+                curiosity: 0.3,
+                surprise: 0.1,
+            },
+            EmotionalState::Curious => EmotionalTag {
+                valence: 0.3,
+                arousal: 0.6,
+                dominance: 0.5,
+                curiosity: 0.85,
+                surprise: 0.2,
+            },
+            EmotionalState::Uncertain => EmotionalTag {
+                valence: -0.1,
+                arousal: 0.4,
+                dominance: 0.25,
+                curiosity: 0.4,
+                surprise: 0.2,
+            },
+            EmotionalState::Frustrated => EmotionalTag {
+                valence: -0.6,
+                arousal: 0.75,
+                dominance: 0.3,
+                curiosity: 0.1,
+                surprise: 0.1,
+            },
+            EmotionalState::Satisfied => EmotionalTag {
+                valence: 0.7,
+                arousal: 0.3,
+                dominance: 0.65,
+                curiosity: 0.2,
+                surprise: 0.05,
+            },
+            EmotionalState::Neutral => EmotionalTag {
+                valence: 0.0,
+                arousal: 0.3,
+                dominance: 0.5,
+                curiosity: 0.3,
+                surprise: 0.0,
+            },
+            EmotionalState::Excited => EmotionalTag {
+                valence: 0.7,
+                arousal: 0.85,
+                dominance: 0.6,
+                curiosity: 0.5,
+                surprise: 0.3,
+            },
+            EmotionalState::Cautious => EmotionalTag {
+                valence: -0.1,
+                arousal: 0.35,
+                dominance: 0.35,
+                curiosity: 0.2,
+                surprise: 0.1,
+            },
         }
     }
 

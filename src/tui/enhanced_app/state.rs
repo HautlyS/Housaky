@@ -38,7 +38,8 @@ pub enum MainTab {
     Tools = 2,
     Goals = 3,
     Metrics = 4,
-    Config = 5,
+    Logs = 5,
+    Config = 6,
 }
 
 impl MainTab {
@@ -48,6 +49,7 @@ impl MainTab {
         MainTab::Tools,
         MainTab::Goals,
         MainTab::Metrics,
+        MainTab::Logs,
         MainTab::Config,
     ];
 
@@ -58,6 +60,7 @@ impl MainTab {
             MainTab::Tools   => " Tools ",
             MainTab::Goals   => " Goals ",
             MainTab::Metrics => " Metrics ",
+            MainTab::Logs    => " Logs ",
             MainTab::Config  => " Config ",
         }
     }
@@ -73,7 +76,8 @@ impl MainTab {
             2 => MainTab::Tools,
             3 => MainTab::Goals,
             4 => MainTab::Metrics,
-            5 => MainTab::Config,
+            5 => MainTab::Logs,
+            6 => MainTab::Config,
             _ => MainTab::Chat,
         }
     }

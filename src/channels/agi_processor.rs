@@ -620,6 +620,7 @@ impl AGIChannelProcessor {
             learning_value: 1.0,
             tags: vec!["channel".to_string(), "user_created".to_string()],
             context: HashMap::new(),
+            temporal_constraints: Vec::new(),
         };
         
         match goal_engine.add_goal(goal).await {

@@ -1,5 +1,6 @@
 #![allow(clippy::format_push_string, clippy::self_only_used_in_recursion)]
 
+use crate::housaky::memory::emotional_tags::EmotionalTag;
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use rand;
@@ -119,6 +120,96 @@ impl ReasoningEngine {
             enable_self_correction: true,
             confidence_threshold: 0.7,
         }
+    }
+
+    /// Map a PAD emotional state to the most appropriate `ReasoningType`.
+    ///
+    /// Strategy selection rules (ordered by priority):
+    /// 1. High distress (negative valence + high arousal) → `Diagnostic` — focus on
+    ///    root-cause analysis when something is wrong.
+    /// 2. High curiosity → `TreeOfThought` — explore multiple branches when intrigued.
+    /// 3. High positive valence + high arousal → `Creative` — generative, expansive
+    ///    thinking when in an energised/excited state.
+    /// 4. High dominance + positive valence → `Strategic` — confident, goal-directed
+    ///    planning when feeling in control.
+    /// 5. Low arousal (calm) + positive valence → `ChainOfThought` — methodical
+    ///    step-by-step reasoning when relaxed and focused.
+    /// 6. Surprised state → `Reflexion` — pause and re-evaluate unexpected results.
+    /// 7. Default → `ReAct` — balanced observe-reason-act loop.
+    pub fn select_strategy_from_emotion(emotion: &EmotionalTag) -> ReasoningType {
+        // Distressed: negative valence + high arousal → systematic diagnosis
+        if emotion.valence < -0.3 && emotion.arousal > 0.6 {
+            return ReasoningType::Diagnostic;
+        }
+        // Highly curious → explore many branches
+        if emotion.curiosity > 0.6 {
+            return ReasoningType::TreeOfThought;
+        }
+        // Surprised → step back and reconsider
+        if emotion.surprise > 0.6 {
+            return ReasoningType::Reflexion;
+        }
+        // Excited (positive + high arousal) → creative generation
+        if emotion.valence > 0.4 && emotion.arousal > 0.6 {
+            return ReasoningType::Creative;
+        }
+        // Confident (high dominance + positive) → strategic planning
+        if emotion.dominance > 0.65 && emotion.valence > 0.2 {
+            return ReasoningType::Strategic;
+        }
+        // Calm and content → step-by-step chain of thought
+        if emotion.arousal < 0.4 && emotion.valence >= 0.0 {
+            return ReasoningType::ChainOfThought;
+        }
+        // Sad / low-energy → multi-step (careful, thorough)
+        if emotion.valence < -0.3 && emotion.arousal <= 0.6 {
+            return ReasoningType::MultiStep;
+        }
+        // Default balanced strategy
+        ReasoningType::ReAct
+    }
+
+    /// Compute an emotion-adjusted confidence threshold.
+    ///
+    /// - Distressed or uncertain states raise the threshold (more cautious).
+    /// - Confident/dominant states lower it slightly (more decisive).
+    /// - Calm states use the baseline.
+    pub fn emotion_adjusted_threshold(base: f64, emotion: &EmotionalTag) -> f64 {
+        let delta = if emotion.valence < -0.3 || emotion.dominance < 0.3 {
+            // Anxious / uncertain — be more conservative
+            0.1
+        } else if emotion.dominance > 0.7 && emotion.valence > 0.3 {
+            // Confident — can act on lower certainty
+            -0.05
+        } else {
+            0.0
+        };
+        (base + delta).clamp(0.4, 0.95)
+    }
+
+    /// Start a reasoning chain with the strategy automatically selected from
+    /// the agent's current emotional state.  This is the primary entry point
+    /// for emotionally-regulated reasoning.
+    pub async fn start_reasoning_with_emotion(
+        &self,
+        query: &str,
+        emotion: &EmotionalTag,
+    ) -> Result<(String, ReasoningType, f64)> {
+        let strategy = Self::select_strategy_from_emotion(emotion);
+        let threshold = Self::emotion_adjusted_threshold(self.confidence_threshold, emotion);
+
+        info!(
+            "Emotional regulation: state='{}' (v={:.2},a={:.2},d={:.2}) → strategy={:?}, threshold={:.2}",
+            emotion.label(),
+            emotion.valence,
+            emotion.arousal,
+            emotion.dominance,
+            strategy,
+            threshold,
+        );
+
+        let chain_id = self.start_reasoning(query, strategy.clone()).await?;
+        Ok((chain_id, strategy, threshold))
     }
 
     pub async fn set_max_steps(&self, max_steps: usize) -> Result<()> {

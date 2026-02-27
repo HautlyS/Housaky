@@ -4,11 +4,14 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::Modifier,
     text::{Line, Span},
-    widgets::{Block, Borders, Gauge, Paragraph, Tabs},
+    widgets::{Block, Borders, Gauge, Paragraph, Tabs, Wrap},
     Frame,
 };
+use std::sync::Arc;
 
 use crate::config::Config;
+use crate::housaky::core::HousakyCore;
+use crate::housaky::heartbeat::HousakyHeartbeat;
 use crate::providers::{create_provider_with_keys_manager, ChatMessage};
 
 use super::chat_pane::ChatPane;
@@ -32,6 +35,10 @@ pub struct EnhancedApp {
     provider_name:  String,
     model_name:     String,
 
+    // AGI core reference (live metrics, goals, thoughts)
+    core:           Option<Arc<HousakyCore>>,
+    heartbeat:      Option<Arc<HousakyHeartbeat>>,
+
     // Core state
     state:          AppState,
 
@@ -45,6 +52,10 @@ pub struct EnhancedApp {
     help:           HelpOverlay,
     palette:        CommandPalette,
     notifs:         Notifications,
+
+    // Logs tab
+    log_entries:    Vec<String>,
+    logs_scroll:    usize,
 }
 
 impl EnhancedApp {
@@ -69,6 +80,8 @@ impl EnhancedApp {
             config,
             provider_name,
             model_name,
+            core: None,
+            heartbeat: None,
             state,
             chat:       ChatPane::new(),
             input:      InputBar::new(),
@@ -79,7 +92,16 @@ impl EnhancedApp {
             help:       HelpOverlay::new(),
             palette:    CommandPalette::new(),
             notifs:     Notifications::new(),
+            log_entries: Vec::new(),
+            logs_scroll: 0,
         }
+    }
+
+    /// Attach a live heartbeat (and its AGI core) for real-time dashboard data.
+    pub fn with_heartbeat(mut self, heartbeat: Arc<HousakyHeartbeat>) -> Self {
+        self.core = Some(Arc::clone(heartbeat.core()));
+        self.heartbeat = Some(heartbeat);
+        self
     }
 
     // ── Public interface (called by tui/mod.rs loop) ──────────────────────────
@@ -92,6 +114,33 @@ impl EnhancedApp {
         self.state.tick();
         self.notifs.tick();
         self.skills.tick();
+
+        // Sync sidebar activity into the logs tab (avoid duplicates by
+        // only appending new entries since last sync).
+        let already_logged = self.log_entries.len();
+        let total_activity = self.sidebar.activity.len();
+        if total_activity > already_logged {
+            for a in &self.sidebar.activity[already_logged..] {
+                self.log_entries.push(format!(
+                    "[{}] {} {}",
+                    a.time,
+                    a.kind.icon(),
+                    a.message,
+                ));
+            }
+        }
+
+        // Cap log buffer to avoid unbounded growth.
+        const MAX_LOG_ENTRIES: usize = 2000;
+        if self.log_entries.len() > MAX_LOG_ENTRIES {
+            let excess = self.log_entries.len() - MAX_LOG_ENTRIES;
+            self.log_entries.drain(..excess);
+        }
+    }
+
+    /// Append a line to the logs tab programmatically.
+    pub fn push_log(&mut self, entry: String) {
+        self.log_entries.push(entry);
     }
 
     pub fn handle_key(&mut self, key: KeyEvent) -> Result<()> {
@@ -130,6 +179,7 @@ impl EnhancedApp {
             MainTab::Tools   => self.handle_tools_key(key),
             MainTab::Goals   => self.handle_goals_key(key),
             MainTab::Metrics => self.handle_metrics_key(key),
+            MainTab::Logs    => self.handle_logs_key(key),
             MainTab::Config  => self.handle_config_key(key),
         }
     }
@@ -215,6 +265,7 @@ impl EnhancedApp {
             MainTab::Tools   => self.tools.draw(f, bz.main, &self.state.tool_log),
             MainTab::Goals   => self.draw_goals_tab(f, bz.main),
             MainTab::Metrics => self.draw_metrics_tab(f, bz.main),
+            MainTab::Logs    => self.draw_logs_tab(f, bz.main),
             MainTab::Config  => self.cfg_editor.draw(f, bz.main),
         }
 
@@ -398,6 +449,129 @@ impl EnhancedApp {
             ])
         }).collect();
         f.render_widget(Paragraph::new(activity_lines), right_layout[4]);
+    }
+
+    // ── Logs tab ───────────────────────────────────────────────────────────────
+
+    fn draw_logs_tab(&self, f: &mut Frame, area: Rect) {
+        let cols = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Percentage(60), Constraint::Percentage(40)])
+            .split(area);
+
+        // Left: AGI activity log
+        let log_block = Block::default()
+            .borders(Borders::ALL)
+            .border_style(style_border())
+            .title(Span::styled(
+                format!(" 📋 AGI Logs ({}) ", self.log_entries.len()),
+                ratatui::style::Style::default().fg(Palette::CYAN).add_modifier(Modifier::BOLD),
+            ));
+        let log_inner = log_block.inner(cols[0]);
+        f.render_widget(log_block, cols[0]);
+
+        if self.log_entries.is_empty() {
+            f.render_widget(
+                Paragraph::new(vec![
+                    Line::from(""),
+                    Line::from(Span::styled("  No log entries yet.", style_muted())),
+                    Line::from(""),
+                    Line::from(Span::styled(
+                        "  Logs appear here when the AGI heartbeat is active.",
+                        style_dim(),
+                    )),
+                    Line::from(Span::styled(
+                        "  Start with: housaky agi --tui",
+                        style_dim(),
+                    )),
+                ]),
+                log_inner,
+            );
+        } else {
+            let visible_height = log_inner.height as usize;
+            let total = self.log_entries.len();
+            let start = if total > visible_height + self.logs_scroll {
+                total - visible_height - self.logs_scroll
+            } else {
+                0
+            };
+            let end = (start + visible_height).min(total);
+
+            let lines: Vec<Line> = self.log_entries[start..end]
+                .iter()
+                .map(|entry| {
+                    let (icon, color) = if entry.contains("ERROR") || entry.contains("error") {
+                        ("✗", Palette::ERROR)
+                    } else if entry.contains("WARN") || entry.contains("warn") {
+                        ("⚠", Palette::WARNING)
+                    } else if entry.contains("Thought:") || entry.contains("thought") {
+                        ("💭", Palette::THOUGHT)
+                    } else if entry.contains("Goal") || entry.contains("goal") {
+                        ("🎯", Palette::GOAL)
+                    } else if entry.contains("Improvement") || entry.contains("improve") {
+                        ("⚡", Palette::SKILL)
+                    } else {
+                        ("·", Palette::TEXT_DIM)
+                    };
+                    Line::from(vec![
+                        Span::styled(format!(" {} ", icon), ratatui::style::Style::default().fg(color)),
+                        Span::styled(entry.clone(), ratatui::style::Style::default().fg(Palette::TEXT)),
+                    ])
+                })
+                .collect();
+
+            f.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), log_inner);
+        }
+
+        // Right: AGI state summary (pulled from core if available)
+        let state_block = Block::default()
+            .borders(Borders::ALL)
+            .border_style(style_border())
+            .title(Span::styled(" 🧠 AGI State ", style_title()));
+        let state_inner = state_block.inner(cols[1]);
+        f.render_widget(state_block, cols[1]);
+
+        let mut state_lines: Vec<Line> = Vec::new();
+        state_lines.push(Line::from(""));
+
+        if self.core.is_some() {
+            let m = &self.state.metrics;
+            state_lines.push(row("  Status", "● Active".to_string(), Palette::SUCCESS));
+            state_lines.push(row("  Uptime", m.format_uptime(), Palette::TEXT));
+            state_lines.push(row("  Messages", m.total_messages.to_string(), Palette::CYAN));
+            state_lines.push(row("  Requests", m.total_requests.to_string(), Palette::TEXT));
+            state_lines.push(row("  Errors", m.total_errors.to_string(),
+                if m.total_errors > 0 { Palette::ERROR } else { Palette::SUCCESS }));
+            state_lines.push(Line::from(""));
+            state_lines.push(Line::from(Span::styled("  ── Thoughts ──", style_muted())));
+
+            if self.sidebar.thoughts.is_empty() {
+                state_lines.push(Line::from(Span::styled("  (none yet)", style_dim())));
+            } else {
+                for t in self.sidebar.thoughts.iter().rev().take(6) {
+                    state_lines.push(Line::from(vec![
+                        Span::styled("  💭 ", ratatui::style::Style::default().fg(Palette::THOUGHT)),
+                        Span::styled(
+                            truncate_str(t, 38),
+                            ratatui::style::Style::default().fg(Palette::TEXT_DIM),
+                        ),
+                    ]));
+                }
+            }
+        } else {
+            state_lines.push(Line::from(Span::styled("  Status: ○ Disconnected", style_dim())));
+            state_lines.push(Line::from(""));
+            state_lines.push(Line::from(Span::styled(
+                "  No AGI core connected.",
+                style_muted(),
+            )));
+            state_lines.push(Line::from(Span::styled(
+                "  Launch with: housaky agi --tui",
+                style_dim(),
+            )));
+        }
+
+        f.render_widget(Paragraph::new(state_lines), state_inner);
     }
 
     // ── Input row ─────────────────────────────────────────────────────────────
@@ -642,7 +816,8 @@ impl EnhancedApp {
             (KeyModifiers::NONE, KeyCode::Char('3')) => { self.state.active_tab = MainTab::Tools; }
             (KeyModifiers::NONE, KeyCode::Char('4')) => { self.state.active_tab = MainTab::Goals; }
             (KeyModifiers::NONE, KeyCode::Char('5')) => { self.state.active_tab = MainTab::Metrics; }
-            (KeyModifiers::NONE, KeyCode::Char('6')) => { self.state.active_tab = MainTab::Config; }
+            (KeyModifiers::NONE, KeyCode::Char('6')) => { self.state.active_tab = MainTab::Logs; }
+            (KeyModifiers::NONE, KeyCode::Char('7')) => { self.state.active_tab = MainTab::Config; }
 
             // Quit
             (KeyModifiers::NONE, KeyCode::Char('q')) => {
@@ -720,6 +895,8 @@ impl EnhancedApp {
             (KeyModifiers::NONE, KeyCode::Char('3'))       => { self.state.active_tab = MainTab::Tools; }
             (KeyModifiers::NONE, KeyCode::Char('4'))       => { self.state.active_tab = MainTab::Goals; }
             (KeyModifiers::NONE, KeyCode::Char('5'))       => { self.state.active_tab = MainTab::Metrics; }
+            (KeyModifiers::NONE, KeyCode::Char('6'))       => { self.state.active_tab = MainTab::Logs; }
+            (KeyModifiers::NONE, KeyCode::Char('7'))       => { self.state.active_tab = MainTab::Config; }
             (KeyModifiers::NONE, KeyCode::Char('?'))
             | (KeyModifiers::NONE, KeyCode::F(1))          => { self.help.toggle(); }
             _ => {}
@@ -756,7 +933,8 @@ impl EnhancedApp {
             (KeyModifiers::NONE, KeyCode::Char('3'))       => { self.state.active_tab = MainTab::Tools; }
             (KeyModifiers::NONE, KeyCode::Char('4'))       => { self.state.active_tab = MainTab::Goals; }
             (KeyModifiers::NONE, KeyCode::Char('5'))       => { self.state.active_tab = MainTab::Metrics; }
-            (KeyModifiers::NONE, KeyCode::Char('6'))       => { self.state.active_tab = MainTab::Config; }
+            (KeyModifiers::NONE, KeyCode::Char('6'))       => { self.state.active_tab = MainTab::Logs; }
+            (KeyModifiers::NONE, KeyCode::Char('7'))       => { self.state.active_tab = MainTab::Config; }
             (KeyModifiers::NONE, KeyCode::Char('?'))
             | (KeyModifiers::NONE, KeyCode::F(1))         => { self.help.toggle(); }
             _ => {}
@@ -776,7 +954,8 @@ impl EnhancedApp {
             (KeyModifiers::NONE, KeyCode::Char('3'))       => { self.state.active_tab = MainTab::Tools; }
             (KeyModifiers::NONE, KeyCode::Char('4'))       => { self.state.active_tab = MainTab::Goals; }
             (KeyModifiers::NONE, KeyCode::Char('5'))       => { self.state.active_tab = MainTab::Metrics; }
-            (KeyModifiers::NONE, KeyCode::Char('6'))       => { self.state.active_tab = MainTab::Config; }
+            (KeyModifiers::NONE, KeyCode::Char('6'))       => { self.state.active_tab = MainTab::Logs; }
+            (KeyModifiers::NONE, KeyCode::Char('7'))       => { self.state.active_tab = MainTab::Config; }
             (KeyModifiers::NONE, KeyCode::Char('?'))
             | (KeyModifiers::NONE, KeyCode::F(1))          => { self.help.toggle(); }
             _ => {}
@@ -796,7 +975,42 @@ impl EnhancedApp {
             (KeyModifiers::NONE, KeyCode::Char('3'))       => { self.state.active_tab = MainTab::Tools; }
             (KeyModifiers::NONE, KeyCode::Char('4'))       => { self.state.active_tab = MainTab::Goals; }
             (KeyModifiers::NONE, KeyCode::Char('5'))       => { self.state.active_tab = MainTab::Metrics; }
-            (KeyModifiers::NONE, KeyCode::Char('6'))       => { self.state.active_tab = MainTab::Config; }
+            (KeyModifiers::NONE, KeyCode::Char('6'))       => { self.state.active_tab = MainTab::Logs; }
+            (KeyModifiers::NONE, KeyCode::Char('7'))       => { self.state.active_tab = MainTab::Config; }
+            (KeyModifiers::NONE, KeyCode::Char('?'))
+            | (KeyModifiers::NONE, KeyCode::F(1))          => { self.help.toggle(); }
+            _ => {}
+        }
+        Ok(())
+    }
+
+    fn handle_logs_key(&mut self, key: KeyEvent) -> Result<()> {
+        match (key.modifiers, key.code) {
+            (_, KeyCode::Char('q')) | (KeyModifiers::NONE, KeyCode::Esc) => {
+                self.state.active_tab = MainTab::Chat;
+            }
+            (KeyModifiers::NONE, KeyCode::Tab)             => { self.state.active_tab = self.state.active_tab.next(); }
+            (KeyModifiers::SHIFT, KeyCode::BackTab)        => { self.state.active_tab = self.state.active_tab.prev(); }
+            (KeyModifiers::NONE, KeyCode::Up)              => { self.logs_scroll = self.logs_scroll.saturating_add(1); }
+            (KeyModifiers::NONE, KeyCode::Down)            => { self.logs_scroll = self.logs_scroll.saturating_sub(1); }
+            (KeyModifiers::NONE, KeyCode::PageUp)          => { self.logs_scroll = self.logs_scroll.saturating_add(10); }
+            (KeyModifiers::NONE, KeyCode::PageDown)        => { self.logs_scroll = self.logs_scroll.saturating_sub(10); }
+            (KeyModifiers::NONE, KeyCode::Home)            => {
+                self.logs_scroll = self.log_entries.len();
+            }
+            (KeyModifiers::NONE, KeyCode::End)             => { self.logs_scroll = 0; }
+            (_, KeyCode::Char('c'))                        => {
+                self.log_entries.clear();
+                self.logs_scroll = 0;
+                self.notifs.info("Logs cleared");
+            }
+            (KeyModifiers::NONE, KeyCode::Char('1'))       => { self.state.active_tab = MainTab::Chat; }
+            (KeyModifiers::NONE, KeyCode::Char('2'))       => { self.state.active_tab = MainTab::Skills; }
+            (KeyModifiers::NONE, KeyCode::Char('3'))       => { self.state.active_tab = MainTab::Tools; }
+            (KeyModifiers::NONE, KeyCode::Char('4'))       => { self.state.active_tab = MainTab::Goals; }
+            (KeyModifiers::NONE, KeyCode::Char('5'))       => { self.state.active_tab = MainTab::Metrics; }
+            (KeyModifiers::NONE, KeyCode::Char('6'))       => { self.state.active_tab = MainTab::Logs; }
+            (KeyModifiers::NONE, KeyCode::Char('7'))       => { self.state.active_tab = MainTab::Config; }
             (KeyModifiers::NONE, KeyCode::Char('?'))
             | (KeyModifiers::NONE, KeyCode::F(1))          => { self.help.toggle(); }
             _ => {}
@@ -873,7 +1087,8 @@ impl EnhancedApp {
             (KeyModifiers::NONE, KeyCode::Char('3')) => { self.state.active_tab = MainTab::Tools; }
             (KeyModifiers::NONE, KeyCode::Char('4')) => { self.state.active_tab = MainTab::Goals; }
             (KeyModifiers::NONE, KeyCode::Char('5')) => { self.state.active_tab = MainTab::Metrics; }
-            (KeyModifiers::NONE, KeyCode::Char('6')) => { self.state.active_tab = MainTab::Config; }
+            (KeyModifiers::NONE, KeyCode::Char('6')) => { self.state.active_tab = MainTab::Logs; }
+            (KeyModifiers::NONE, KeyCode::Char('7')) => { self.state.active_tab = MainTab::Config; }
 
             // Back to chat
             (_, KeyCode::Char('q')) | (KeyModifiers::NONE, KeyCode::Esc) => {
@@ -931,6 +1146,7 @@ impl EnhancedApp {
                 self.sidebar.push_activity(ActivityKind::Thought, "Self-reflection triggered");
                 self.notifs.info("Reflection cycle started");
             }
+            "logs"    => { self.state.active_tab = MainTab::Logs; }
             "help"    => { self.help.show(); }
             "quit" | "exit" => { self.state.should_quit = true; }
             other => {
@@ -943,14 +1159,42 @@ impl EnhancedApp {
 
     // ── Message sending ───────────────────────────────────────────────────────
 
+    /// Pure async helper: creates the provider, builds the chat history, and
+    /// calls `chat_with_history`. Returns the assistant response text on
+    /// success. This method has **no** side-effects on the UI state, making
+    /// it easier to test in isolation.
+    fn send_message_async(
+        provider_name: &str,
+        model_name: &str,
+        chat_messages: Vec<ChatMessage>,
+    ) -> Result<String> {
+        let provider = create_provider_with_keys_manager(provider_name, Some(model_name))?;
+
+        let result = match tokio::runtime::Handle::try_current() {
+            Ok(handle) => {
+                tokio::task::block_in_place(|| {
+                    handle.block_on(async {
+                        provider.chat_with_history(&chat_messages, model_name, 0.7).await
+                    })
+                })
+            }
+            Err(_) => {
+                let rt = tokio::runtime::Runtime::new()?;
+                rt.block_on(async {
+                    provider.chat_with_history(&chat_messages, model_name, 0.7).await
+                })
+            }
+        };
+
+        result.map_err(Into::into)
+    }
+
     fn send_message(&mut self, text: String) -> Result<()> {
         self.chat.push_user(text.clone());
         self.state.stream_status = StreamStatus::Thinking;
         self.state.metrics.total_messages += 1;
         self.state.metrics.total_requests += 1;
         self.sidebar.push_activity(ActivityKind::Thought, format!("User: {}", truncate_str(&text, 40)));
-
-        let provider = create_provider_with_keys_manager(&self.provider_name, Some(&self.model_name))?;
 
         let chat_messages: Vec<ChatMessage> = self.chat.messages.iter()
             .map(|m| ChatMessage {
@@ -959,25 +1203,13 @@ impl EnhancedApp {
             })
             .collect();
 
-        let model = self.model_name.clone();
-
         let start = std::time::Instant::now();
 
-        let result = match tokio::runtime::Handle::try_current() {
-            Ok(handle) => {
-                tokio::task::block_in_place(|| {
-                    handle.block_on(async {
-                        provider.chat_with_history(&chat_messages, &model, 0.7).await
-                    })
-                })
-            }
-            Err(_) => {
-                let rt = tokio::runtime::Runtime::new()?;
-                rt.block_on(async {
-                    provider.chat_with_history(&chat_messages, &model, 0.7).await
-                })
-            }
-        };
+        let result = Self::send_message_async(
+            &self.provider_name,
+            &self.model_name,
+            chat_messages,
+        );
 
         let elapsed = start.elapsed().as_millis() as u64;
         self.state.metrics.last_latency_ms = elapsed;
@@ -1045,5 +1277,12 @@ fn row(label: &'static str, value: String, color: ratatui::style::Color) -> Line
 }
 
 fn truncate_str(s: &str, max: usize) -> &str {
-    if s.len() <= max { s } else { &s[..max] }
+    if s.len() <= max {
+        return s;
+    }
+    // Find the byte offset of the `max`-th char to avoid splitting a multi-byte codepoint.
+    match s.char_indices().nth(max) {
+        Some((byte_idx, _)) => &s[..byte_idx],
+        None => s, // fewer than `max` chars
+    }
 }

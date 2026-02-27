@@ -6,6 +6,7 @@ pub mod thought_panel;
 pub use agi_dashboard::AGIDashboard;
 
 use crate::config::Config;
+use crate::housaky::heartbeat::HousakyHeartbeat;
 use anyhow::Result;
 use crossterm::{
     event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyModifiers},
@@ -14,9 +15,15 @@ use crossterm::{
 };
 use ratatui::backend::CrosstermBackend;
 use std::io;
+use std::sync::Arc;
 use std::time::Duration;
 
-pub fn run_agi_tui(config: Config, provider: Option<String>, model: Option<String>) -> Result<()> {
+pub fn run_agi_tui(
+    config: Config,
+    provider: Option<String>,
+    model: Option<String>,
+    heartbeat: Option<Arc<HousakyHeartbeat>>,
+) -> Result<()> {
     enable_raw_mode()?;
     let mut stdout = io::stdout();
     execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
@@ -31,6 +38,9 @@ pub fn run_agi_tui(config: Config, provider: Option<String>, model: Option<Strin
         .unwrap_or_else(|| "auto".to_string());
 
     let mut dashboard = AGIDashboard::new(config, provider_name, model_name);
+    if let Some(hb) = heartbeat {
+        dashboard = dashboard.with_heartbeat(hb);
+    }
     let res = run_dashboard(&mut terminal, &mut dashboard);
 
     disable_raw_mode()?;

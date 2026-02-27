@@ -71,6 +71,7 @@ pub mod learning;
 pub mod swarm;
 pub mod neuromorphic;
 pub mod federation;
+pub mod quantum;
 
 // Phase 3 — Consciousness Substrate & Self-Awareness
 pub mod consciousness;
@@ -316,7 +317,7 @@ pub async fn handle_command(command: HousakyCommands, config: &Config) -> Result
 
         HousakyCommands::Dashboard { provider, model } => {
             println!("📊 Launching AGI Dashboard...");
-            crate::tui::run_agi_tui(config.clone(), provider, model)?;
+            crate::tui::run_agi_tui(config.clone(), provider, model, None)?;
         }
 
         HousakyCommands::Thoughts { count } => {

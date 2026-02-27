@@ -60,6 +60,86 @@ impl AstEngine {
                 };
                 visitor.visit_file_mut(&mut ast);
             }
+            // DGM §8.3 — structural mutations
+            MutationOp::AddFunction { function_source } => {
+                match syn::parse_str::<syn::Item>(function_source) {
+                    Ok(item) => {
+                        ast.items.push(item);
+                        info!("AddFunction: appended new function to file");
+                    }
+                    Err(e) => {
+                        anyhow::bail!("AddFunction: failed to parse function source: {e}");
+                    }
+                }
+            }
+            MutationOp::ReplaceImplementation { new_body } => {
+                let mut visitor = ReplaceImplVisitor {
+                    target_fn: target.function_name.clone(),
+                    new_body: new_body.clone(),
+                    applied: false,
+                };
+                visitor.visit_file_mut(&mut ast);
+                if !visitor.applied {
+                    warn!(
+                        "ReplaceImplementation: function '{}' not found",
+                        target.function_name
+                    );
+                }
+            }
+            MutationOp::RemoveDeadCode => {
+                let before_count = ast.items.len();
+                // Simple heuristic: remove functions prefixed with `_unused_` or
+                // functions that have a `#[allow(dead_code)]` attribute and are private.
+                ast.items.retain(|item| {
+                    if let syn::Item::Fn(f) = item {
+                        let name = f.sig.ident.to_string();
+                        if name.starts_with("_unused_") {
+                            info!("RemoveDeadCode: removing '{}'", name);
+                            return false;
+                        }
+                    }
+                    true
+                });
+                info!(
+                    "RemoveDeadCode: removed {} items",
+                    before_count - ast.items.len()
+                );
+            }
+            MutationOp::RefactorExtract {
+                new_fn_name,
+                extracted_lines,
+            } => {
+                // Parse the extracted lines as a function body, create a new fn,
+                // and append it to the file.
+                let fn_source = format!(
+                    "fn {}() {{ {} }}",
+                    new_fn_name, extracted_lines
+                );
+                match syn::parse_str::<syn::Item>(&fn_source) {
+                    Ok(item) => {
+                        ast.items.push(item);
+                        info!(
+                            "RefactorExtract: created helper function '{}'",
+                            new_fn_name
+                        );
+                    }
+                    Err(e) => {
+                        warn!("RefactorExtract: failed to parse: {e}");
+                    }
+                }
+            }
+            MutationOp::ReplaceSource { new_source } => {
+                // Validate that the replacement source parses as valid Rust.
+                match syn::parse_file(new_source) {
+                    Ok(new_ast) => {
+                        ast = new_ast;
+                        info!("ReplaceSource: replaced entire file content");
+                    }
+                    Err(e) => {
+                        anyhow::bail!("ReplaceSource: new source does not parse: {e}");
+                    }
+                }
+            }
         }
 
         let new_src = Self::unparse(&ast);
@@ -147,6 +227,26 @@ impl VisitMut for AddEarlyReturnVisitor {
                     if #cond_expr { return Default::default(); }
                 };
                 item.block.stmts.insert(0, guard);
+                self.applied = true;
+            }
+        }
+        syn::visit_mut::visit_item_fn_mut(self, item);
+    }
+}
+
+struct ReplaceImplVisitor {
+    target_fn: String,
+    new_body: String,
+    applied: bool,
+}
+
+impl VisitMut for ReplaceImplVisitor {
+    fn visit_item_fn_mut(&mut self, item: &mut ItemFn) {
+        if item.sig.ident == self.target_fn {
+            // Parse the new body as a block and replace the function's block.
+            let block_src = format!("{{ {} }}", self.new_body);
+            if let Ok(new_block) = syn::parse_str::<syn::Block>(&block_src) {
+                *item.block = new_block;
                 self.applied = true;
             }
         }

@@ -934,10 +934,17 @@ async fn main() -> Result<()> {
                 }
 
                 Commands::Tui { provider, model } => {
-                    tokio::task::spawn_blocking(move || tui::run_chat_tui(config, provider, model))
-                        .await
-                        .map_err(|e| anyhow::anyhow!("TUI task failed: {e}"))?
-                        .map_err(|e| anyhow::anyhow!("TUI error: {e}"))?;
+                    // The TUI must run on a plain OS thread so its internal
+                    // tokio::Runtime::new() + block_on calls (used for async
+                    // provider requests) work correctly.  spawn_blocking threads
+                    // still live inside the outer runtime and cause a panic when
+                    // a nested Runtime is created there.
+                    let (tx, rx) = std::sync::mpsc::channel::<Result<()>>();
+                    std::thread::spawn(move || {
+                        tx.send(tui::run_chat_tui(config, provider, model)).ok();
+                    });
+                    rx.recv()
+                        .map_err(|e| anyhow::anyhow!("TUI thread failed: {e}"))??;
                     Ok(())
                 }
 
@@ -1056,6 +1063,221 @@ async fn main() -> Result<()> {
                             println!("  Max shots   : {}", info.max_shots);
                             println!("  Online      : {}", info.online);
                             println!("  Gates       : {}", info.supported_gates.join(", "));
+                            if let Some(ref cat) = backend.device_catalog {
+                                println!("  Provider    : {}", cat.provider);
+                                println!("  Cost/task   : ${:.4}", cat.cost_per_task_usd);
+                                println!("  Cost/shot   : ${:.6}", cat.cost_per_shot_usd);
+                            }
+                            Ok(())
+                        }
+
+                        QuantumCommands::Devices => {
+                            use housaky::quantum::BraketDeviceCatalog;
+                            println!("Known Amazon Braket Devices:\n");
+                            println!("{:<22} {:<10} {:<6} {:<10} {:<10} {}", "Name", "Provider", "Qubits", "Type", "$/task", "ARN");
+                            println!("{}", "─".repeat(100));
+                            for d in BraketDeviceCatalog::all_devices() {
+                                let dtype = format!("{:?}", d.device_type);
+                                println!(
+                                    "{:<22} {:<10} {:<6} {:<10} ${:<9.4} {}",
+                                    d.name, d.provider, d.max_qubits, dtype, d.cost_per_task_usd, d.arn
+                                );
+                            }
+                            Ok(())
+                        }
+
+                        QuantumCommands::EstimateCost { device, shots, circuits } => {
+                            use housaky::quantum::BraketDeviceCatalog;
+                            if let Some(cat) = BraketDeviceCatalog::find_by_arn(&device) {
+                                let per_task = cat.estimate_cost(shots);
+                                let total = per_task * circuits as f64;
+                                println!("Cost Estimate for {}:", cat.name);
+                                println!("  Shots/task  : {shots}");
+                                println!("  Circuits    : {circuits}");
+                                println!("  Cost/task   : ${per_task:.4}");
+                                println!("  Total cost  : ${total:.4}");
+                            } else {
+                                println!("Unknown device: {device}");
+                                println!("Run `housaky quantum devices` to list known devices.");
+                            }
+                            Ok(())
+                        }
+
+                        QuantumCommands::Transpile { device, opt_level } => {
+                            use housaky::quantum::transpiler::{CircuitTranspiler, TranspilerConfig};
+                            println!("Transpiling Bell circuit for target device...");
+                            println!("  Target : {device}");
+                            println!("  Opt    : level {opt_level}\n");
+
+                            let transpiler = CircuitTranspiler::new(TranspilerConfig {
+                                optimization_level: opt_level,
+                                target_device: Some(device),
+                                ..Default::default()
+                            });
+
+                            let circuit = bell_circuit();
+                            let (_result, report) = transpiler.transpile(&circuit)?;
+
+                            println!("Transpilation Report:");
+                            println!("  Target device    : {}", report.target_device);
+                            println!("  Native gates     : {}", report.native_gate_set.join(", "));
+                            println!("  Original gates   : {}", report.original_gates);
+                            println!("  Transpiled gates : {}", report.transpiled_gates);
+                            println!("  Original depth   : {}", report.original_depth);
+                            println!("  Transpiled depth : {}", report.transpiled_depth);
+                            println!("  Gates removed    : {}", report.gates_removed);
+                            println!("  Gates decomposed : {}", report.gates_decomposed);
+                            println!("  Rotations merged : {}", report.rotations_merged);
+                            println!("\nPasses applied:");
+                            for pass in &report.passes_applied {
+                                println!("  • {pass}");
+                            }
+                            if report.passes_applied.is_empty() {
+                                println!("  (none — circuit already native)");
+                            }
+                            Ok(())
+                        }
+
+                        QuantumCommands::Tomography { shots, qubits } => {
+                            use housaky::quantum::tomography::{StateTomographer, TomographyConfig};
+                            println!("Running quantum state tomography...");
+                            println!("  Qubits          : {qubits}");
+                            println!("  Shots per basis : {shots}\n");
+
+                            let backend = std::sync::Arc::new(SimulatorBackend::new(qubits, shots));
+                            let tomographer = StateTomographer::new(
+                                backend,
+                                TomographyConfig {
+                                    shots_per_basis: shots,
+                                    max_qubits: qubits,
+                                    ..Default::default()
+                                },
+                            );
+
+                            let mut circuit = QuantumCircuit::new(qubits);
+                            circuit.add_gate(Gate::h(0));
+                            if qubits >= 2 {
+                                circuit.add_gate(Gate::cnot(0, 1));
+                            }
+
+                            let result = tomographer.tomograph(&circuit).await?;
+                            println!("Tomography Results:");
+                            println!("  Qubits measured   : {}", result.n_qubits);
+                            println!("  Bases measured    : {}", result.bases_measured.join(", "));
+                            println!("  Total shots       : {}", result.total_shots);
+                            println!("  Purity            : {:.6}", result.purity);
+                            println!("  Trace             : {:.6}", result.trace);
+                            println!("  Von Neumann entropy : {:.6}", result.von_neumann_entropy);
+                            println!("  Valid state       : {}", result.is_valid_state);
+                            println!("  Runtime           : {} ms", result.runtime_ms);
+                            Ok(())
+                        }
+
+                        QuantumCommands::AgiBridge { goals } => {
+                            use housaky::quantum::agi_bridge::{AgiBridgeConfig, QuantumAgiBridge};
+                            println!("Running Quantum AGI Bridge demo...\n");
+
+                            let bridge = QuantumAgiBridge::new(AgiBridgeConfig {
+                                quantum_threshold: 2,
+                                max_qubits: 8,
+                                ..Default::default()
+                            });
+
+                            // Demo: Goal scheduling
+                            let goal_ids: Vec<String> = (0..goals).map(|i| format!("goal_{i}")).collect();
+                            let mut priorities = std::collections::HashMap::new();
+                            for (i, id) in goal_ids.iter().enumerate() {
+                                priorities.insert(id.clone(), 1.0 - (i as f64 / goals as f64));
+                            }
+                            let deps = if goals >= 3 {
+                                vec![(goal_ids[2].clone(), goal_ids[0].clone())]
+                            } else {
+                                vec![]
+                            };
+
+                            let sched = bridge.schedule_goals(&goal_ids, &priorities, &deps).await?;
+                            println!("Goal Scheduling:");
+                            println!("  Strategy  : {}", sched.strategy);
+                            println!("  Objective : {:.4}", sched.objective_value);
+                            println!("  Advantage : {:.2}x", sched.quantum_advantage);
+                            println!("  Schedule  : {}", sched.schedule.join(" → "));
+                            println!("  Runtime   : {} ms\n", sched.runtime_ms);
+
+                            // Demo: Memory graph optimization
+                            let nodes: Vec<String> = (0..goals).map(|i| format!("node_{i}")).collect();
+                            let edges: Vec<(String, String, f64)> = (0..goals.saturating_sub(1)).map(|i| {
+                                (nodes[i].clone(), nodes[i + 1].clone(), 0.5 + (i as f64 * 0.1))
+                            }).collect();
+
+                            let mem = bridge.optimize_memory_graph(&nodes, &edges).await?;
+                            println!("Memory Graph Optimization:");
+                            println!("  Strategy        : {}", mem.strategy);
+                            println!("  Energy          : {:.4}", mem.energy);
+                            println!("  Strengthen      : {} edges", mem.strengthen_edges.len());
+                            println!("  Prune           : {} edges", mem.prune_edges.len());
+                            println!("  Runtime         : {} ms\n", mem.runtime_ms);
+
+                            let metrics = bridge.metrics().await;
+                            println!("Bridge Metrics:");
+                            println!("  Quantum calls     : {}", metrics.total_quantum_calls);
+                            println!("  Classical fallback : {}", metrics.total_classical_fallbacks);
+                            println!("  Avg advantage     : {:.2}x", metrics.average_quantum_advantage);
+                            Ok(())
+                        }
+
+                        QuantumCommands::Tasks { device, bucket, max } => {
+                            println!("Listing recent Braket tasks for {device}...\n");
+                            let cfg = QuantumConfig {
+                                backend: "braket".to_string(),
+                                braket_device_arn: device,
+                                braket_s3_bucket: bucket,
+                                ..QuantumConfig::default()
+                            };
+                            let backend = AmazonBraketBackend::from_config(&cfg).await?;
+                            let tasks = backend.list_recent_tasks(max).await?;
+                            if tasks.is_empty() {
+                                println!("  No tasks found.");
+                            } else {
+                                println!("{:<50} {:<12} {:<8} {}", "Task ARN", "Status", "Shots", "Created");
+                                println!("{}", "─".repeat(100));
+                                for t in &tasks {
+                                    println!("{:<50} {:<12} {:<8} {}", t.task_arn, t.status, t.shots, t.created_at);
+                                }
+                            }
+                            Ok(())
+                        }
+
+                        QuantumCommands::Benchmark { sizes } => {
+                            use housaky::housaky::quantum::benchmarks::QuantumBenchmarkSuite;
+                            let problem_sizes: Vec<usize> = sizes.split(',')
+                                .filter_map(|s| s.trim().parse().ok())
+                                .collect();
+                            println!("Running quantum advantage benchmarks...");
+                            println!("  Problem sizes: {:?}\n", problem_sizes);
+
+                            let suite = QuantumBenchmarkSuite {
+                                solver: housaky::housaky::quantum::HybridSolver::new(),
+                                problem_sizes,
+                            };
+                            let report = suite.run_full_suite();
+
+                            println!("Benchmark Report:");
+                            println!("  Total problems   : {}", report.total_problems);
+                            println!("  Quantum advantage: {}/{}", report.quantum_advantaged, report.total_problems);
+                            println!("  Avg speedup      : {:.2}x", report.average_speedup);
+                            println!("  Avg quality      : {:.2}x", report.average_quality_improvement);
+                            println!("  Best domain      : {}", report.best_quantum_domain);
+                            println!("\nDetailed Results:");
+                            println!("{:<15} {:<6} {:<10} {:<10} {:<10} {}", "Type", "Size", "Classical", "Quantum", "Speedup", "Advantage");
+                            println!("{}", "─".repeat(70));
+                            for r in &report.results {
+                                println!(
+                                    "{:<15} {:<6} {:<10} {:<10} {:<10.2} {}",
+                                    r.problem_type, r.problem_size,
+                                    format!("{}ms", r.classical_ms), format!("{}ms", r.quantum_ms),
+                                    r.speedup_ratio, if r.quantum_advantage { "✓" } else { "✗" }
+                                );
+                            }
                             Ok(())
                         }
                     }

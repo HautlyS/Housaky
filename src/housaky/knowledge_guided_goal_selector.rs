@@ -247,6 +247,7 @@ impl KnowledgeGuidedGoalSelector {
                 learning_value: 0.8,
                 tags: vec!["knowledge_gap".to_string(), gap.clone()],
                 context: HashMap::new(),
+                temporal_constraints: Vec::new(),
             };
             suggested.push(goal);
         }
@@ -283,6 +284,7 @@ impl KnowledgeGuidedGoalSelector {
                     learning_value: 1.0,
                     tags: vec!["capability_improvement".to_string()],
                     context: HashMap::new(),
+                    temporal_constraints: Vec::new(),
                 });
             }
         }

@@ -402,6 +402,62 @@ pub enum QuantumCommands {
         #[arg(long, default_value = "amazon-braket-housaky-541739678328")]
         bucket: String,
     },
+    /// List all known Braket devices (simulators + QPUs) with cost estimates
+    Devices,
+    /// Estimate cost for a quantum task
+    EstimateCost {
+        /// Device ARN
+        #[arg(long, default_value = "arn:aws:braket:::device/quantum-simulator/amazon/sv1")]
+        device: String,
+        /// Number of shots
+        #[arg(short, long, default_value = "1000")]
+        shots: u64,
+        /// Number of circuits in batch
+        #[arg(short, long, default_value = "1")]
+        circuits: usize,
+    },
+    /// Transpile a Bell circuit for a target device and show the optimization report
+    Transpile {
+        /// Target device ARN
+        #[arg(long, default_value = "arn:aws:braket:eu-north-1::device/qpu/iqm/Garnet")]
+        device: String,
+        /// Optimization level (0-3)
+        #[arg(short, long, default_value = "2")]
+        opt_level: u8,
+    },
+    /// Run quantum state tomography on a Bell state (local simulator)
+    Tomography {
+        /// Number of shots per basis
+        #[arg(short, long, default_value = "4096")]
+        shots: u64,
+        /// Number of qubits
+        #[arg(short, long, default_value = "2")]
+        qubits: usize,
+    },
+    /// Run the quantum AGI bridge demo (goal scheduling + memory optimization)
+    AgiBridge {
+        /// Number of goals to schedule
+        #[arg(short, long, default_value = "6")]
+        goals: usize,
+    },
+    /// List recent Braket tasks for a device
+    Tasks {
+        /// Device ARN
+        #[arg(long, default_value = "arn:aws:braket:::device/quantum-simulator/amazon/sv1")]
+        device: String,
+        /// S3 bucket
+        #[arg(long, default_value = "amazon-braket-housaky-541739678328")]
+        bucket: String,
+        /// Max results
+        #[arg(short, long, default_value = "10")]
+        max: i32,
+    },
+    /// Run quantum advantage benchmarks (local simulator)
+    Benchmark {
+        /// Problem sizes to test
+        #[arg(short, long, default_value = "4,8,12")]
+        sizes: String,
+    },
 }
 
 /// GSD Orchestration Commands - Inspired by get-shit-done system

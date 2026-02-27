@@ -23,6 +23,7 @@ pub use command::{Command, CommandState, CommandSuggestion};
 pub use enhanced_app::EnhancedApp;
 
 use crate::config::Config;
+use crate::housaky::heartbeat::HousakyHeartbeat;
 use anyhow::Result;
 use crossterm::{
     event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyModifiers},
@@ -31,10 +32,16 @@ use crossterm::{
 };
 use ratatui::backend::CrosstermBackend;
 use std::io;
+use std::sync::Arc;
 use std::time::Duration;
 
-pub fn run_agi_tui(config: Config, provider: Option<String>, model: Option<String>) -> Result<()> {
-    agi::run_agi_tui(config, provider, model)
+pub fn run_agi_tui(
+    config: Config,
+    provider: Option<String>,
+    model: Option<String>,
+    heartbeat: Option<Arc<HousakyHeartbeat>>,
+) -> Result<()> {
+    agi::run_agi_tui(config, provider, model, heartbeat)
 }
 
 pub fn run_chat_tui(config: Config, provider: Option<String>, model: Option<String>) -> Result<()> {

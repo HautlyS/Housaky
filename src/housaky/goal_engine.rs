@@ -66,6 +66,26 @@ pub struct Goal {
     pub learning_value: f64,
     pub tags: Vec<String>,
     pub context: HashMap<String, String>,
+    /// §4.3 — Temporal constraints for time-aware planning.
+    #[serde(default)]
+    pub temporal_constraints: Vec<TemporalConstraint>,
+}
+
+/// §4.3 — Temporal constraint types for time-aware goal planning.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum TemporalConstraint {
+    /// Goal must not start before this time.
+    NotBefore(DateTime<Utc>),
+    /// Goal must be completed before this time (hard deadline).
+    MustCompleteBefore(DateTime<Utc>),
+    /// Goal must start after another goal completes.
+    AfterGoal(String),
+    /// Goal must start before another goal starts.
+    BeforeGoal(String),
+    /// Goal recurs on a schedule (interval in seconds).
+    Recurring { interval_secs: u64, last_run: Option<DateTime<Utc>> },
+    /// Goal should wait for an external condition (described as a string).
+    WaitForCondition(String),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -175,6 +195,47 @@ impl GoalEngine {
         Ok(id)
     }
 
+    /// §3.1 — Add a goal with LLM-driven semantic decomposition when a provider
+    /// is available.  Falls back to heuristic decomposition on any error.
+    pub async fn add_goal_with_llm(
+        &self,
+        mut goal: Goal,
+        provider: &dyn crate::providers::Provider,
+        model: &str,
+    ) -> Result<String> {
+        goal.id = format!("goal_{}", uuid::Uuid::new_v4());
+        goal.created_at = Utc::now();
+        goal.updated_at = Utc::now();
+
+        let id = goal.id.clone();
+
+        if goal.subtask_ids.is_empty() && self.auto_decompose && self.should_decompose(&goal) {
+            let decomposition = match self.decompose_goal_with_llm(&goal, provider, model).await {
+                Ok(d) => d,
+                Err(e) => {
+                    warn!("LLM decomposition failed ({e}), falling back to heuristic");
+                    self.decompose_goal(&goal).await?
+                }
+            };
+            for subtask in decomposition.subtasks {
+                let subtask_id = Box::pin(self.add_goal(subtask)).await?;
+                goal.subtask_ids.push(subtask_id);
+            }
+        }
+
+        self.goals.write().await.insert(id.clone(), goal);
+        self.queue.write().await.push_back(id.clone());
+        self.save_goals().await?;
+
+        info!(
+            "Added goal (LLM-decomposed): {} (priority: {:?})",
+            id,
+            self.goals.read().await.get(&id).map(|g| g.priority.clone())
+        );
+
+        Ok(id)
+    }
+
     fn should_decompose(&self, goal: &Goal) -> bool {
         if goal.parent_id.is_some() {
             return false;
@@ -200,6 +261,144 @@ impl GoalEngine {
                 "Auto-decomposed based on complexity {:.1}",
                 goal.estimated_complexity
             ),
+        })
+    }
+
+    /// LLM-driven goal decomposition — produces semantically-grounded subtasks
+    /// by asking the provider to break the goal into concrete steps.
+    /// Falls back to `decompose_goal` (string-split heuristic) on any error.
+    pub async fn decompose_goal_with_llm(
+        &self,
+        goal: &Goal,
+        provider: &dyn crate::providers::Provider,
+        model: &str,
+    ) -> Result<GoalDecomposition> {
+        use crate::providers::ChatMessage;
+
+        let prompt = format!(
+            "Break down the following goal into 3-5 concrete, actionable subtasks.\n\
+             Goal: {title}\n\
+             Description: {description}\n\
+             Priority: {priority:?}\n\
+             Estimated complexity: {complexity:.1}\n\n\
+             Respond with EXACTLY this JSON (no markdown):\n\
+             {{\"strategy\":\"Sequential|Parallel|Hierarchical\",\
+             \"reasoning\":\"<why this strategy>\",\
+             \"subtasks\":[{{\"title\":\"<subtask title>\",\"description\":\"<what to do>\",\
+             \"estimated_complexity\":<1-10>}}]}}",
+            title = goal.title,
+            description = goal.description,
+            priority = goal.priority,
+            complexity = goal.estimated_complexity
+        );
+
+        let messages = vec![
+            ChatMessage::system(
+                "You are a precise task-decomposition assistant. Respond only with valid JSON.",
+            ),
+            ChatMessage::user(&prompt),
+        ];
+
+        let raw = provider
+            .chat_with_history(&messages, model, 0.2)
+            .await
+            .map_err(|e| anyhow::anyhow!("LLM decomposition request failed: {e}"))?;
+
+        let trimmed = raw.trim();
+        let json_str = if let (Some(s), Some(e)) = (trimmed.find('{'), trimmed.rfind('}')) {
+            &trimmed[s..=e]
+        } else {
+            trimmed
+        };
+
+        let value: serde_json::Value = serde_json::from_str(json_str)
+            .map_err(|e| anyhow::anyhow!("Failed to parse LLM decomposition JSON: {e}"))?;
+
+        let strategy_str = value["strategy"].as_str().unwrap_or("Hierarchical");
+        let reasoning = value["reasoning"]
+            .as_str()
+            .unwrap_or("LLM-driven decomposition")
+            .to_string();
+
+        let strategy = match strategy_str {
+            "Sequential" => DecompositionStrategy::Sequential,
+            "Parallel" => DecompositionStrategy::Parallel,
+            "Iterative" => DecompositionStrategy::Iterative,
+            "Recursive" => DecompositionStrategy::Recursive,
+            "Conditional" => DecompositionStrategy::Conditional,
+            _ => DecompositionStrategy::Hierarchical,
+        };
+
+        let subtasks_json = value["subtasks"]
+            .as_array()
+            .ok_or_else(|| anyhow::anyhow!("LLM response missing 'subtasks' array"))?;
+
+        let subtasks: Vec<Goal> = subtasks_json
+            .iter()
+            .enumerate()
+            .map(|(i, item)| {
+                let title = item["title"]
+                    .as_str()
+                    .unwrap_or(&format!("Subtask {}", i + 1))
+                    .to_string();
+                let description = item["description"]
+                    .as_str()
+                    .unwrap_or(&title)
+                    .to_string();
+                let complexity = item["estimated_complexity"]
+                    .as_f64()
+                    .unwrap_or(goal.estimated_complexity / subtasks_json.len() as f64);
+                Goal {
+                    id: String::new(),
+                    title,
+                    description,
+                    priority: goal.priority.clone(),
+                    status: GoalStatus::Pending,
+                    category: goal.category.clone(),
+                    progress: 0.0,
+                    created_at: Utc::now(),
+                    updated_at: Utc::now(),
+                    deadline: goal.deadline,
+                    parent_id: Some(goal.id.clone()),
+                    subtask_ids: Vec::new(),
+                    dependencies: if strategy == DecompositionStrategy::Sequential && i > 0 {
+                        vec![format!("__subtask_idx_{}", i - 1)]
+                    } else {
+                        Vec::new()
+                    },
+                    blockers: Vec::new(),
+                    metrics: HashMap::new(),
+                    checkpoints: Vec::new(),
+                    attempts: 0,
+                    max_attempts: goal.max_attempts,
+                    estimated_complexity: complexity,
+                    actual_complexity: None,
+                    learning_value: goal.learning_value / subtasks_json.len() as f64,
+                    tags: goal.tags.clone(),
+                    context: goal.context.clone(),
+                    temporal_constraints: Vec::new(),
+                }
+            })
+            .collect();
+
+        if subtasks.is_empty() {
+            warn!("LLM returned empty subtasks; falling back to heuristic decomposition");
+            return Box::pin(self.decompose_goal(goal)).await;
+        }
+
+        info!(
+            "LLM decomposed '{}' into {} subtasks (strategy={:?})",
+            goal.title,
+            subtasks.len(),
+            strategy
+        );
+
+        Ok(GoalDecomposition {
+            parent_id: goal.id.clone(),
+            strategy,
+            subtasks,
+            created_at: Utc::now(),
+            reasoning,
         })
     }
 
@@ -275,6 +474,7 @@ impl GoalEngine {
                 learning_value: goal.learning_value / (parts.len() as f64),
                 tags: goal.tags.clone(),
                 context: goal.context.clone(),
+                temporal_constraints: Vec::new(),
             };
             subtasks.push(subtask);
         }
@@ -304,6 +504,7 @@ impl GoalEngine {
                 learning_value: 1.0,
                 tags: vec!["planning".to_string()],
                 context: HashMap::new(),
+                temporal_constraints: Vec::new(),
             });
         }
 
@@ -324,6 +525,97 @@ impl GoalEngine {
         }
 
         None
+    }
+
+    /// §4.3 — Temporal-aware goal selection: checks temporal constraints before
+    /// scheduling.  Goals with `NotBefore` in the future are skipped; goals with
+    /// `AfterGoal` constraints wait for the referenced goal to complete.
+    pub async fn get_next_goal_temporal(&self) -> Option<Goal> {
+        let mut queue = self.queue.write().await;
+        let goals = self.goals.read().await;
+        let now = Utc::now();
+
+        let mut skipped = Vec::new();
+        let mut result = None;
+
+        while let Some(id) = queue.pop_front() {
+            if let Some(goal) = goals.get(&id) {
+                if goal.status != GoalStatus::Pending || !self.dependencies_satisfied(goal, &goals) {
+                    continue;
+                }
+                if self.temporal_constraints_met(goal, &goals, &now) {
+                    result = Some(goal.clone());
+                    break;
+                } else {
+                    // Push back — not ready yet.
+                    skipped.push(id);
+                }
+            }
+        }
+
+        for id in skipped {
+            queue.push_back(id);
+        }
+
+        result
+    }
+
+    /// Check whether all temporal constraints on a goal are satisfied.
+    fn temporal_constraints_met(
+        &self,
+        goal: &Goal,
+        goals: &HashMap<String, Goal>,
+        now: &DateTime<Utc>,
+    ) -> bool {
+        for tc in &goal.temporal_constraints {
+            match tc {
+                TemporalConstraint::NotBefore(t) => {
+                    if now < t { return false; }
+                }
+                TemporalConstraint::MustCompleteBefore(t) => {
+                    // If the deadline has passed and goal isn't done, still allow
+                    // scheduling (so it can be attempted), but log a warning.
+                    if now > t {
+                        warn!("Goal '{}' past MustCompleteBefore deadline", goal.id);
+                    }
+                }
+                TemporalConstraint::AfterGoal(dep_id) => {
+                    if let Some(dep) = goals.get(dep_id) {
+                        if dep.status != GoalStatus::Completed { return false; }
+                    }
+                }
+                TemporalConstraint::BeforeGoal(_) => {
+                    // This is an ordering hint for the planner, not a blocking constraint.
+                }
+                TemporalConstraint::Recurring { interval_secs, last_run } => {
+                    if let Some(last) = last_run {
+                        let elapsed = (*now - *last).num_seconds() as u64;
+                        if elapsed < *interval_secs { return false; }
+                    }
+                }
+                TemporalConstraint::WaitForCondition(_) => {
+                    // External conditions are checked by the caller, not here.
+                }
+            }
+        }
+        true
+    }
+
+    /// §4.3 — Find recurring goals whose interval has elapsed.
+    pub async fn get_recurring_goals(&self) -> Vec<Goal> {
+        let goals = self.goals.read().await;
+        let now = Utc::now();
+        goals
+            .values()
+            .filter(|g| {
+                g.temporal_constraints.iter().any(|tc| {
+                    matches!(tc, TemporalConstraint::Recurring { interval_secs, last_run } if {
+                        last_run.map_or(true, |lr| (now - lr).num_seconds() as u64 >= *interval_secs)
+                    })
+                })
+            })
+            .cloned()
+            .collect()
     }
 
     fn dependencies_satisfied(&self, goal: &Goal, goals: &HashMap<String, Goal>) -> bool {
@@ -533,6 +825,7 @@ impl GoalEngine {
     pub async fn prioritize(&self) -> Vec<Goal> {
         let learning_weight = *self.learning_value_weight.read().await;
         let goals = self.goals.read().await;
+        let now = Utc::now();
         let mut pending: Vec<_> = goals
             .values()
             .filter(|g| g.status == GoalStatus::Pending)
@@ -541,13 +834,48 @@ impl GoalEngine {
         let complexity_weight = 1.0 - learning_weight;
 
         pending.sort_by(|a, b| {
+            // Deadline urgency: overdue = 1.0, within 24 h = 0.8, within 7 d = 0.4, none = 0.0
+            let urgency = |g: &Goal| -> f64 {
+                match g.deadline {
+                    None => 0.0,
+                    Some(dl) => {
+                        let hours_left = (dl - now).num_hours() as f64;
+                        if hours_left <= 0.0 {
+                            1.0 // overdue — maximum urgency
+                        } else if hours_left <= 24.0 {
+                            0.8
+                        } else if hours_left <= 168.0 {
+                            0.4
+                        } else {
+                            0.1
+                        }
+                    }
+                }
+            };
+
+            let a_urgency = urgency(a);
+            let b_urgency = urgency(b);
+
+            // If either goal is overdue/urgent, urgency dominates priority ordering.
+            let urgency_cmp = b_urgency
+                .partial_cmp(&a_urgency)
+                .unwrap_or(std::cmp::Ordering::Equal);
+
+            if urgency_cmp != std::cmp::Ordering::Equal
+                && (a_urgency > 0.3 || b_urgency > 0.3)
+            {
+                return urgency_cmp;
+            }
+
             b.priority
                 .cmp(&a.priority)
                 .then_with(|| {
-                    let a_score =
-                        (a.learning_value * learning_weight) - (a.estimated_complexity * complexity_weight);
-                    let b_score =
-                        (b.learning_value * learning_weight) - (b.estimated_complexity * complexity_weight);
+                    let a_score = (a.learning_value * learning_weight)
+                        - (a.estimated_complexity * complexity_weight)
+                        + a_urgency * 0.5;
+                    let b_score = (b.learning_value * learning_weight)
+                        - (b.estimated_complexity * complexity_weight)
+                        + b_urgency * 0.5;
 
                     b_score
                         .partial_cmp(&a_score)
@@ -556,6 +884,20 @@ impl GoalEngine {
         });
 
         pending
+    }
+
+    /// Return goals that are overdue (deadline passed, not yet completed).
+    pub async fn get_overdue_goals(&self) -> Vec<Goal> {
+        let now = Utc::now();
+        let goals = self.goals.read().await;
+        goals
+            .values()
+            .filter(|g| {
+                matches!(g.status, GoalStatus::Pending | GoalStatus::InProgress)
+                    && g.deadline.map(|d| d < now).unwrap_or(false)
+            })
+            .cloned()
+            .collect()
     }
 
     pub async fn add_checkpoint(&self, goal_id: &str, description: &str) -> Result<String> {
@@ -648,6 +990,7 @@ impl Default for Goal {
             learning_value: 1.0,
             tags: Vec::new(),
             context: HashMap::new(),
+            temporal_constraints: Vec::new(),
         }
     }
 }

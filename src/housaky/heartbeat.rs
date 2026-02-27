@@ -30,122 +30,115 @@ pub struct HousakyHeartbeat {
     model: String,
 }
 
+/// Shared components produced by `create_heartbeat_components`.
+struct HeartbeatComponents {
+    skill_registry: Arc<SkillRegistry>,
+    kowalski_bridge: Option<Arc<KowalskiBridge>>,
+    self_improvement: Arc<SelfImprovementEngine>,
+    recursive_improvement_loop: Arc<SelfImprovementLoop>,
+    memory_consolidator: Arc<MemoryConsolidator>,
+}
+
+/// Build the common sub-systems shared by every `HousakyHeartbeat` constructor.
+fn create_heartbeat_components(
+    agent: &Arc<Agent>,
+    core: &Arc<HousakyCore>,
+    model: &str,
+) -> HeartbeatComponents {
+    let skill_registry = Arc::new(SkillRegistry::new(&agent.workspace_dir));
+
+    let kowalski_bridge = if agent.config.kowalski_integration.enabled {
+        Some(Arc::new(KowalskiBridge::new(
+            &agent.config.kowalski_integration,
+        )))
+    } else {
+        None
+    };
+
+    let memory_consolidator = core.memory_consolidator.clone();
+
+    let self_improvement_provider = create_provider(
+        &agent.config.provider.name,
+        agent.config.provider.api_key.as_deref(),
+    )
+    .ok();
+    let self_improvement = if let Some(p) = self_improvement_provider {
+        Arc::new(SelfImprovementEngine::with_provider(
+            agent.clone(),
+            p,
+            model.to_string(),
+        ))
+    } else {
+        Arc::new(SelfImprovementEngine::new(agent.clone()))
+    };
+
+    let recursive_improvement_loop = Arc::new(SelfImprovementLoop::new(
+        &agent.workspace_dir,
+        core.goal_engine.clone(),
+        core.meta_cognition.clone(),
+    ));
+
+    HeartbeatComponents {
+        skill_registry,
+        kowalski_bridge,
+        self_improvement,
+        recursive_improvement_loop,
+        memory_consolidator,
+    }
+}
+
 impl HousakyHeartbeat {
     pub fn new(agent: Arc<Agent>) -> Self {
-        let skill_registry = Arc::new(SkillRegistry::new(&agent.workspace_dir));
-
-        let kowalski_bridge = if agent.config.kowalski_integration.enabled {
-            Some(Arc::new(KowalskiBridge::new(
-                &agent.config.kowalski_integration,
-            )))
-        } else {
-            None
-        };
-
-        let core = Arc::new(HousakyCore::new(&Config::default()).unwrap_or_else(|e| {
-            // Avoid panic: bubble up via a logged error and a second attempt is not meaningful here.
+        let full_config = Config::load_or_init().unwrap_or_default();
+        let core = Arc::new(HousakyCore::new(&full_config).unwrap_or_else(|e| {
             error!("Failed to create core during heartbeat init: {}", e);
-            // NOTE: This unwrap will still abort if core creation is impossible, but with a clearer message.
-            // Callers that need fallible init should use `with_core(...)`.
             panic!("Failed to create core during heartbeat init")
         }));
 
-        let memory_consolidator = core.memory_consolidator.clone();
-
+        let model = agent.config.provider.model.clone();
         let provider = create_provider(
             &agent.config.provider.name,
             agent.config.provider.api_key.as_deref(),
         )
         .ok()
         .map(Arc::from);
-        let model = agent.config.provider.model.clone();
 
-        let self_improvement_provider = create_provider(
-            &agent.config.provider.name,
-            agent.config.provider.api_key.as_deref(),
-        )
-        .ok();
-        let self_improvement = if let Some(p) = self_improvement_provider {
-            Arc::new(SelfImprovementEngine::with_provider(
-                agent.clone(),
-                p,
-                model.clone(),
-            ))
-        } else {
-            Arc::new(SelfImprovementEngine::new(agent.clone()))
-        };
-
-        let recursive_improvement_loop = Arc::new(SelfImprovementLoop::new(
-            &agent.workspace_dir,
-            core.goal_engine.clone(),
-            core.meta_cognition.clone(),
-        ));
+        let c = create_heartbeat_components(&agent, &core, &model);
 
         Self {
             agent,
             core,
-            skill_registry,
-            kowalski_bridge,
-            self_improvement,
-            recursive_improvement_loop,
-            memory_consolidator,
+            skill_registry: c.skill_registry,
+            kowalski_bridge: c.kowalski_bridge,
+            self_improvement: c.self_improvement,
+            recursive_improvement_loop: c.recursive_improvement_loop,
+            memory_consolidator: c.memory_consolidator,
             interval_seconds: 120,
-            config: Config::default(),
+            config: full_config,
             provider,
             model,
         }
     }
 
     pub fn with_core(agent: Arc<Agent>, core: Arc<HousakyCore>, config: &Config) -> Self {
-        let skill_registry = Arc::new(SkillRegistry::new(&agent.workspace_dir));
-
-        let kowalski_bridge = if agent.config.kowalski_integration.enabled {
-            Some(Arc::new(KowalskiBridge::new(
-                &agent.config.kowalski_integration,
-            )))
-        } else {
-            None
-        };
-
-        let memory_consolidator = core.memory_consolidator.clone();
-
+        let model = agent.config.provider.model.clone();
         let provider = create_provider(
             &agent.config.provider.name,
             agent.config.provider.api_key.as_deref(),
         )
         .ok()
         .map(Arc::from);
-        let model = agent.config.provider.model.clone();
 
-        let self_improvement_provider = create_provider(
-            &agent.config.provider.name,
-            agent.config.provider.api_key.as_deref(),
-        )
-        .ok();
-        let self_improvement = if let Some(p) = self_improvement_provider {
-            Arc::new(SelfImprovementEngine::with_provider(
-                agent.clone(),
-                p,
-                model.clone(),
-            ))
-        } else {
-            Arc::new(SelfImprovementEngine::new(agent.clone()))
-        };
-
-        let recursive_improvement_loop = Arc::new(SelfImprovementLoop::new(
-            &agent.workspace_dir,
-            core.goal_engine.clone(),
-            core.meta_cognition.clone(),
-        ));
+        let c = create_heartbeat_components(&agent, &core, &model);
 
         Self {
             agent,
             core,
-            skill_registry,
-            kowalski_bridge,
-            self_improvement,
-            recursive_improvement_loop,
-            memory_consolidator,
+            skill_registry: c.skill_registry,
+            kowalski_bridge: c.kowalski_bridge,
+            self_improvement: c.self_improvement,
+            recursive_improvement_loop: c.recursive_improvement_loop,
+            memory_consolidator: c.memory_consolidator,
             interval_seconds: 120,
             config: config.clone(),
             provider,
@@ -179,52 +172,37 @@ impl HousakyHeartbeat {
         model: String,
         config: Config,
     ) -> Self {
-        let skill_registry = Arc::new(SkillRegistry::new(&agent.workspace_dir));
-
-        let kowalski_bridge = if agent.config.kowalski_integration.enabled {
-            Some(Arc::new(KowalskiBridge::new(
-                &agent.config.kowalski_integration,
-            )))
-        } else {
-            None
-        };
-
-        let memory_consolidator = core.memory_consolidator.clone();
-
-        let self_improvement_provider = create_provider(
-            &agent.config.provider.name,
-            agent.config.provider.api_key.as_deref(),
-        )
-        .ok();
-        let self_improvement = if let Some(p) = self_improvement_provider {
-            Arc::new(SelfImprovementEngine::with_provider(
-                agent.clone(),
-                p,
-                model.clone(),
-            ))
-        } else {
-            Arc::new(SelfImprovementEngine::new(agent.clone()))
-        };
-
-        let recursive_improvement_loop = Arc::new(SelfImprovementLoop::new(
-            &agent.workspace_dir,
-            core.goal_engine.clone(),
-            core.meta_cognition.clone(),
-        ));
+        let c = create_heartbeat_components(&agent, &core, &model);
 
         Self {
             agent,
             core,
-            skill_registry,
-            kowalski_bridge,
-            self_improvement,
-            recursive_improvement_loop,
-            memory_consolidator,
+            skill_registry: c.skill_registry,
+            kowalski_bridge: c.kowalski_bridge,
+            self_improvement: c.self_improvement,
+            recursive_improvement_loop: c.recursive_improvement_loop,
+            memory_consolidator: c.memory_consolidator,
             interval_seconds: 120,
             config,
             provider: Some(Arc::from(provider)),
             model,
         }
+    }
+
+    pub fn core(&self) -> &Arc<HousakyCore> {
+        &self.core
+    }
+
+    pub fn provider(&self) -> Option<&Arc<dyn Provider>> {
+        self.provider.as_ref()
+    }
+
+    pub fn model(&self) -> &str {
+        &self.model
+    }
+
+    pub fn config(&self) -> &Config {
+        &self.config
     }
 
     pub async fn run(&self) -> Result<()> {
@@ -1143,29 +1121,96 @@ pub async fn run_agi_background(
 pub async fn run_agi_with_tui(
     config: Config,
     message: Option<String>,
-    provider: Option<String>,
-    model: Option<String>,
+    provider_override: Option<String>,
+    model_override: Option<String>,
     verbose: bool,
 ) -> Result<()> {
-    // Propagate verbose flag to the background thread via env so it can be
-    // read by any downstream component (e.g. cognitive loop output).
+    // Propagate verbose flag via env so it can be read by any downstream
+    // component (e.g. cognitive loop output).
     if verbose {
         std::env::set_var("HOUSAKY_VERBOSE", "1");
     }
 
-    let cfg = config.clone();
+    // ── Build AGI core, provider, and heartbeat in the main thread ───────
+    let provider_name = provider_override
+        .as_deref()
+        .or(config.default_provider.as_deref())
+        .unwrap_or("openrouter");
+    let model_name = model_override
+        .as_deref()
+        .or(config.default_model.as_deref())
+        .unwrap_or("arcee-ai/trinity-large-preview:free");
+
+    let provider: Box<dyn crate::providers::Provider> =
+        crate::providers::create_routed_provider(
+            provider_name,
+            config.api_key.as_deref(),
+            &config.reliability,
+            &config.model_routes,
+            &config.routing,
+            model_name,
+        )?;
+
+    let core = match crate::housaky::core::HousakyCore::new(&config) {
+        Ok(c) => Arc::new(c),
+        Err(e) => {
+            eprintln!("ERROR creating core: {:?}", e);
+            return Err(e.into());
+        }
+    };
+    if let Err(e) = core.initialize().await {
+        eprintln!("ERROR initializing core: {:?}", e);
+        return Err(e);
+    }
+
+    // Process initial message (if any) before starting the TUI.
+    if let Some(ref msg) = message {
+        info!("Processing initial message: {}", msg);
+        let response = core
+            .process_with_cognitive_loop(msg, provider.as_ref(), model_name, &[])
+            .await;
+        match response {
+            Ok(cog_response) => {
+                info!(
+                    "Message processed: confidence={:.2}, thoughts={}",
+                    cog_response.confidence,
+                    cog_response.thoughts.len()
+                );
+                if let Err(e) = core.inner_monologue.save().await {
+                    error!("Failed to save inner monologue after message: {}", e);
+                }
+            }
+            Err(e) => {
+                error!("Error processing message: {}", e);
+            }
+        }
+    }
+
+    let agent = Arc::new(crate::housaky::agent::Agent::new(&config)?);
+    let heartbeat = Arc::new(HousakyHeartbeat::with_core_provider(
+        agent,
+        core,
+        provider,
+        model_name.to_string(),
+        config.clone(),
+    ));
+
+    // Spawn heartbeat loop in a background thread (needs its own tokio
+    // runtime because the TUI event loop blocks the main thread).
+    let hb_bg = Arc::clone(&heartbeat);
     std::thread::spawn(move || {
         let rt = tokio::runtime::Runtime::new().unwrap();
         rt.block_on(async move {
-            if let Err(e) = run_agi_background(cfg, message, provider, model).await {
-                error!("AGI background error: {}", e);
+            if let Err(e) = hb_bg.run().await {
+                error!("AGI heartbeat error: {}", e);
             }
         });
     });
 
+    // Give the heartbeat a moment to initialise before launching the TUI.
     tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
 
-    crate::tui::run_agi_tui(config, None, None)?;
+    crate::tui::run_agi_tui(config, None, None, Some(heartbeat))?;
 
     Ok(())
 }

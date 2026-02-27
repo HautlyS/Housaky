@@ -1,6 +1,7 @@
 use crate::config::Config;
 use crate::housaky::core::{DashboardMetrics, HousakyCore};
 use crate::housaky::goal_engine::Goal;
+use crate::housaky::heartbeat::HousakyHeartbeat;
 use crate::providers::ChatMessage;
 use anyhow::Result;
 use crossterm::event::{KeyCode, KeyEvent};
@@ -16,6 +17,7 @@ use std::sync::Arc;
 pub struct AGIDashboard {
     config: Config,
     core: Option<Arc<HousakyCore>>,
+    heartbeat: Option<Arc<HousakyHeartbeat>>,
     provider_name: String,
     model_name: String,
     input: String,
@@ -38,6 +40,7 @@ impl AGIDashboard {
         Self {
             config,
             core: None,
+            heartbeat: None,
             provider_name,
             model_name,
             input: String::new(),
@@ -58,6 +61,12 @@ impl AGIDashboard {
 
     pub fn with_core(mut self, core: Arc<HousakyCore>) -> Self {
         self.core = Some(core);
+        self
+    }
+
+    pub fn with_heartbeat(mut self, heartbeat: Arc<HousakyHeartbeat>) -> Self {
+        self.core = Some(Arc::clone(heartbeat.core()));
+        self.heartbeat = Some(heartbeat);
         self
     }
 
@@ -122,9 +131,76 @@ impl AGIDashboard {
         self.messages.push(ChatMessage::user(&msg));
         self.status_message = "Processing...".to_string();
 
-        self.thoughts.push(format!("User: {}", msg));
+        // Try to get provider from heartbeat, then call the AGI core
+        let provider_arc = self.heartbeat.as_ref().and_then(|hb| hb.provider().cloned());
+        let model = self.heartbeat.as_ref().map(|hb| hb.model().to_string())
+            .unwrap_or_else(|| self.model_name.clone());
 
-        self.status_message = format!("Processed: {}", msg.chars().take(30).collect::<String>());
+        if let (Some(provider), Some(core)) = (provider_arc, self.core.as_ref()) {
+            let core = Arc::clone(core);
+            let msg_clone = msg.clone();
+
+            // Use a blocking spawn to call the async cognitive loop
+            let result = std::thread::scope(|_| {
+                let rt = tokio::runtime::Handle::try_current()
+                    .ok()
+                    .or_else(|| {
+                        // If no runtime is active, we can't proceed async
+                        None
+                    });
+
+                if let Some(handle) = rt {
+                    handle.block_on(async {
+                        let tools: Vec<&dyn crate::tools::Tool> = vec![];
+                        core.process_with_cognitive_loop(
+                            &msg_clone,
+                            provider.as_ref(),
+                            &model,
+                            &tools,
+                        ).await
+                    })
+                } else {
+                    Err(anyhow::anyhow!("No async runtime available"))
+                }
+            });
+
+            match result {
+                Ok(response) => {
+                    let content = if !response.content.is_empty() {
+                        response.content.clone()
+                    } else if let Some(thought) = response.thoughts.first() {
+                        thought.clone()
+                    } else {
+                        "I processed your message but have no response.".to_string()
+                    };
+
+                    self.messages.push(ChatMessage::assistant(&content));
+                    self.status_message = format!(
+                        "Done (confidence: {:.0}%)",
+                        response.confidence * 100.0
+                    );
+
+                    // Update thoughts from response
+                    for t in &response.thoughts {
+                        if !self.thoughts.contains(t) {
+                            self.thoughts.push(t.clone());
+                        }
+                    }
+                }
+                Err(e) => {
+                    let err_msg = format!("Error: {}", e);
+                    self.messages.push(ChatMessage::assistant(&err_msg));
+                    self.status_message = err_msg;
+                }
+            }
+        } else {
+            // Fallback: no provider/core connected
+            self.thoughts.push(format!("User: {}", msg));
+            self.messages.push(ChatMessage::assistant(
+                "AGI core not connected. Start with `housaky agi --tui` to enable full AGI processing.",
+            ));
+            self.status_message = "No AGI provider connected".to_string();
+        }
 
         Ok(())
     }

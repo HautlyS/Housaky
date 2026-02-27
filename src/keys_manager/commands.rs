@@ -200,7 +200,26 @@ pub async fn handle_keys_manager_command(
             println!("  Requests:  total={} ok={} failed={}", stats.total_requests, stats.successful_requests, stats.failed_requests);
             Ok(())
         }
-        KeysManagerCommands::Tui => crate::keys_manager::tui::run_keys_tui(manager).await,
+        KeysManagerCommands::Tui => {
+            // run_keys_tui runs blocking crossterm I/O (event::poll, enable_raw_mode, etc.).
+            // Awaiting it directly inside the outer tokio runtime stalls the executor.
+            // Spawn a dedicated OS thread with its own single-threaded tokio runtime.
+            let (tx, rx) = std::sync::mpsc::channel::<anyhow::Result<()>>();
+            std::thread::spawn(move || {
+                let rt = tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                    .expect("failed to build keys-tui runtime");
+                rt.block_on(async move {
+                    let inner_manager = crate::keys_manager::manager::KeysManager::new();
+                    let _ = inner_manager.load().await;
+                    tx.send(crate::keys_manager::tui::run_keys_tui(&inner_manager).await).ok();
+                });
+            });
+            rx.recv()
+                .map_err(|e| anyhow::anyhow!("Keys TUI thread error: {e}"))??;
+            Ok(())
+        }
         KeysManagerCommands::AddProvider(args) => {
             let priority = ProviderPriority::from_str(&args.priority)
                 .ok_or_else(|| anyhow::anyhow!("Invalid priority: {}", args.priority))?;

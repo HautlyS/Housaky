@@ -157,7 +157,23 @@ impl WorldModel {
                     *self.causal_graph.write().await = graph;
                 }
 
-                info!("Loaded world model from storage");
+                let tm_path = path.join("transition_model.json");
+                if tm_path.exists() {
+                    let json = tokio::fs::read_to_string(&tm_path).await?;
+                    if let Ok(tm) = serde_json::from_str::<TransitionModel>(&json) {
+                        *self.transition_model.write().await = tm;
+                    }
+                }
+
+                let rm_path = path.join("reward_model.json");
+                if rm_path.exists() {
+                    let json = tokio::fs::read_to_string(&rm_path).await?;
+                    if let Ok(rm) = serde_json::from_str::<RewardModel>(&json) {
+                        *self.reward_model.write().await = rm;
+                    }
+                }
+
+                info!("Loaded world model (state + causal + transition + reward) from storage");
             }
         }
         Ok(())
@@ -172,6 +188,16 @@ impl WorldModel {
 
             let causal = self.causal_graph.read().await;
             write_msgpack_file(&path.join("causal_graph.msgpack"), &*causal).await?;
+
+            // §2.5 — persist transition + reward models so learned patterns
+            // survive restarts (previously only saved by save_transition_model).
+            let tm = self.transition_model.read().await;
+            let tm_json = serde_json::to_vec_pretty(&*tm)?;
+            tokio::fs::write(path.join("transition_model.json"), tm_json).await?;
+
+            let rm = self.reward_model.read().await;
+            let rm_json = serde_json::to_vec_pretty(&*rm)?;
+            tokio::fs::write(path.join("reward_model.json"), rm_json).await?;
         }
         Ok(())
     }
@@ -299,6 +325,28 @@ impl WorldModel {
 
         let mut current = self.current_state.write().await;
         *current = result.actual_state.clone();
+        drop(current);
+
+        // Persist after every real interaction so transition + reward models
+        // survive restarts (§2.5 — world model persistence).
+        if let Err(e) = self.save().await {
+            tracing::warn!("WorldModel: failed to persist after learn(): {e}");
+        }
+    }
+
+    /// Persist only the transition model (serialised as JSON) alongside the
+    /// state and causal graph that `save()` already handles.
+    pub async fn save_transition_model(&self) -> Result<()> {
+        if let Some(ref path) = self.storage_path {
+            tokio::fs::create_dir_all(path).await?;
+            let tm = self.transition_model.read().await;
+            let json = serde_json::to_vec_pretty(&*tm)?;
+            tokio::fs::write(path.join("transition_model.json"), json).await?;
+            let rm = self.reward_model.read().await;
+            let json = serde_json::to_vec_pretty(&*rm)?;
+            tokio::fs::write(path.join("reward_model.json"), json).await?;
+        }
+        Ok(())
     }
 
     pub async fn get_causal_relationships(&self, entity: &str) -> Vec<CausalRelationship> {
@@ -375,32 +423,48 @@ impl TransitionModel {
 
     pub fn update(&mut self, action: &Action, expected: &Option<WorldState>, actual: &WorldState) {
         let action_type = action.action_type.clone();
-        let observation_count;
-        let old_confidence;
 
-        {
-            let pattern = self
-                .patterns
-                .entry(action_type.clone())
-                .or_insert(TransitionPattern {
-                    action_type: action_type.clone(),
-                    preconditions: vec![],
-                    effect_distribution: HashMap::new(),
-                    confidence: 0.5,
-                    observation_count: 0,
-                });
+        // Compute match rate before mutably borrowing self.patterns so we
+        // avoid the simultaneous mutable + immutable borrow conflict.
+        let match_rate = expected
+            .as_ref()
+            .map(|exp| self.calculate_state_match(exp, actual));
 
-            pattern.observation_count += 1;
-            observation_count = pattern.observation_count;
-            old_confidence = pattern.confidence;
+        let pattern = self
+            .patterns
+            .entry(action_type)
+            .or_insert(TransitionPattern {
+                action_type: action.action_type.clone(),
+                preconditions: vec![],
+                effect_distribution: HashMap::new(),
+                confidence: 0.5,
+                observation_count: 0,
+            });
+
+        pattern.observation_count += 1;
+        let n = pattern.observation_count;
+        let old_confidence = pattern.confidence;
+
+        // §2.5 — learn effect distributions from actual observed context changes.
+        for (key, val) in &actual.context {
+            let effect_key = format!("{}={}", key, val.chars().take(32).collect::<String>());
+            let count = pattern.effect_distribution.get(&effect_key).copied().unwrap_or(0.0);
+            pattern.effect_distribution.insert(effect_key, count + 1.0);
         }
 
-        if let Some(exp) = expected {
-            let match_rate = self.calculate_state_match(exp, actual);
-            if let Some(pattern) = self.patterns.get_mut(&action_type) {
-                pattern.confidence = (old_confidence * (observation_count - 1) as f64 + match_rate)
-                    / observation_count as f64;
+        // Learn preconditions: track which resource keys were nonzero when this
+        // action was taken, incrementally building a precondition model.
+        for (key, &val) in &actual.resources {
+            if val > 0.0 && !pattern.preconditions.contains(key) {
+                pattern.preconditions.push(key.clone());
             }
+        }
+
+        // Update confidence via running average against expected state.
+        if let Some(rate) = match_rate {
+            pattern.confidence = (old_confidence * (n - 1) as f64 + rate) / n as f64;
+        } else {
+            pattern.confidence = (old_confidence * (n - 1) as f64 + 0.5) / n as f64;
         }
     }
 
@@ -468,13 +532,31 @@ impl RewardModel {
         reward
     }
 
-    pub fn update(&mut self, _state: &WorldState, success: bool) {
+    pub fn update(&mut self, state: &WorldState, success: bool) {
+        // §2.5 — learn real reward signals from actual action outcomes.
+        // Use exponential moving average (α=0.05) so recent results weigh more
+        // but old patterns are not immediately forgotten.
+        let alpha = 0.05_f64;
+        let observed_reward = if success { 1.0 } else { -0.5 };
+
+        // Update the global success/error baselines.
         if success {
             if let Some(r) = self.reward_signals.get_mut("success") {
-                *r = (*r * 0.99 + 1.0 * 0.01).max(0.1);
+                *r = *r * (1.0 - alpha) + observed_reward * alpha;
             }
         } else if let Some(r) = self.reward_signals.get_mut("error") {
-            *r = (*r * 0.99 + 1.0 * 0.01).min(-0.1);
+            *r = *r * (1.0 - alpha) + observed_reward * alpha;
+        }
+
+        // Learn per-context reward signals: for every context key present in the
+        // state, update a running reward estimate keyed by "ctx:<key>=<value>".
+        // This allows the reward model to predict reward based on context features
+        // rather than just keyword matching.
+        for (key, val) in &state.context {
+            let ctx_key = format!("ctx:{}={}", key, val.chars().take(32).collect::<String>());
+            let current = self.reward_signals.get(&ctx_key).copied().unwrap_or(0.0);
+            self.reward_signals
+                .insert(ctx_key, current * (1.0 - alpha) + observed_reward * alpha);
         }
     }
 }

@@ -117,18 +117,37 @@ impl CuriosityEngine {
             + (info_gain * self.information_gain_weight)
     }
 
+    /// §4.6 — Information-theoretic novelty: measures how much the topic
+    /// reduces uncertainty in the knowledge base.  Uses a TF-IDF-inspired
+    /// inverse frequency: topics that appear less often in existing knowledge
+    /// are more novel.  Falls back to 1.0 (maximum novelty) when no knowledge
+    /// exists.
     fn calculate_novelty(&self, topic: &str, existing_knowledge: &[String]) -> f64 {
         if existing_knowledge.is_empty() {
             return 1.0;
         }
 
-        let topic_lower = topic.to_lowercase();
-        let known_count = existing_knowledge
-            .iter()
-            .filter(|k| k.to_lowercase().contains(&topic_lower))
-            .count();
+        let topic_words: Vec<&str> = topic.split_whitespace().collect();
+        if topic_words.is_empty() {
+            return 1.0;
+        }
 
-        1.0 - (known_count as f64 / existing_knowledge.len() as f64)
+        // Compute inverse document frequency per topic word.
+        let n = existing_knowledge.len() as f64;
+        let mut idf_sum = 0.0_f64;
+        for word in &topic_words {
+            let word_lower = word.to_lowercase();
+            let doc_freq = existing_knowledge
+                .iter()
+                .filter(|k| k.to_lowercase().contains(&word_lower))
+                .count() as f64;
+            // IDF: log(N / (1 + df)) — smoothed to avoid division by zero.
+            idf_sum += (n / (1.0 + doc_freq)).ln().max(0.0);
+        }
+        // Normalize to [0, 1] using a soft ceiling.
+        let avg_idf = idf_sum / topic_words.len() as f64;
+        // Sigmoid mapping: high IDF → high novelty.
+        1.0 / (1.0 + (-avg_idf + 1.0).exp())
     }
 
     fn calculate_relevance(&self, topic: &str, goals: &[String]) -> f64 {
@@ -145,35 +164,66 @@ impl CuriosityEngine {
         relevant_goals as f64 / goals.len() as f64
     }
 
+    /// §4.6 — Prediction-error surprise: measures how unexpected this topic is
+    /// given the recent event stream.  High surprise when a topic shares NO
+    /// words with recent events (completely unexpected).  Uses Jaccard distance
+    /// between the topic's word set and the recent-event word set.
     fn calculate_surprise(&self, topic: &str, recent_events: &[String]) -> f64 {
         if recent_events.is_empty() {
             return 0.0;
         }
 
-        let topic_lower = topic.to_lowercase();
-        let unexpected = recent_events
-            .iter()
-            .filter(|e| {
-                let event_lower = e.to_lowercase();
-                !event_lower.contains(&topic_lower) && !topic_lower.contains(&event_lower)
-            })
-            .count();
+        let topic_words: std::collections::HashSet<String> = topic
+            .to_lowercase()
+            .split_whitespace()
+            .map(|w| w.to_string())
+            .collect();
+        if topic_words.is_empty() {
+            return 0.0;
+        }
 
-        unexpected as f64 / recent_events.len() as f64
+        let event_words: std::collections::HashSet<String> = recent_events
+            .iter()
+            .flat_map(|e| e.to_lowercase().split_whitespace().map(String::from).collect::<Vec<_>>())
+            .collect();
+
+        let intersection = topic_words.intersection(&event_words).count() as f64;
+        let union = topic_words.union(&event_words).count().max(1) as f64;
+        // Jaccard distance: 1 - (intersection / union).  High distance = high surprise.
+        1.0 - (intersection / union)
     }
 
+    /// §4.6 — Information gain estimate: measures how much resolving this
+    /// topic would reduce overall uncertainty.  Uses an entropy-reduction
+    /// heuristic: if the topic overlaps many uncertain topics, resolving it
+    /// would eliminate a large fraction of total uncertainty.
     fn estimate_information_gain(&self, topic: &str, uncertain_topics: &[String]) -> f64 {
         if uncertain_topics.is_empty() {
             return 0.5;
         }
 
-        let topic_lower = topic.to_lowercase();
-        let uncertain_count = uncertain_topics
-            .iter()
-            .filter(|u| u.to_lowercase().contains(&topic_lower))
-            .count();
+        let topic_words: std::collections::HashSet<String> = topic
+            .to_lowercase()
+            .split_whitespace()
+            .map(|w| w.to_string())
+            .collect();
 
-        uncertain_count as f64 / uncertain_topics.len() as f64
+        // For each uncertain topic, compute word overlap with our topic.
+        let total = uncertain_topics.len() as f64;
+        let mut overlap_score = 0.0_f64;
+        for ut in uncertain_topics {
+            let ut_words: std::collections::HashSet<String> = ut
+                .to_lowercase()
+                .split_whitespace()
+                .map(|w| w.to_string())
+                .collect();
+            let common = topic_words.intersection(&ut_words).count() as f64;
+            let ut_len = ut_words.len().max(1) as f64;
+            overlap_score += common / ut_len; // fraction of uncertain topic explained
+        }
+
+        // Normalize: what fraction of total uncertainty would be addressed.
+        (overlap_score / total).min(1.0)
     }
 
     pub fn rank_topics(&self, topics: &[String], context: &CuriosityContext) -> Vec<ScoredTopic> {
@@ -399,6 +449,7 @@ impl InformationGapEngine {
             learning_value: gap.importance,
             tags: vec![gap.topic.clone()],
             context: HashMap::new(),
+            temporal_constraints: Vec::new(),
         };
 
         Ok(goal)

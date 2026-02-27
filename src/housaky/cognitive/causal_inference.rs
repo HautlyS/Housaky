@@ -725,6 +725,112 @@ impl CausalInferenceEngine {
         Ok(())
     }
 
+    /// §4.10 — Learn from intervention results: update edge strengths in the
+    /// causal graph based on actual vs predicted outcomes.  This closes the
+    /// causal learning loop — interventions validate and refine the model.
+    pub async fn learn_from_interventions(&self) -> usize {
+        let log = self.intervention_log.read().await;
+        let mut graph = self.causal_graph.write().await;
+        let mut updates = 0;
+
+        for intervention in log.iter().filter(|i| i.actual_effects.is_some()) {
+            let actual = intervention.actual_effects.as_ref().unwrap();
+            let variable = &intervention.variable;
+
+            for (effect_var, &actual_val) in actual {
+                if let Some(predicted_val) = intervention.predicted_effects.get(effect_var) {
+                    // Find the edge and adjust strength based on prediction error.
+                    if let Some(edge) = graph.edges.iter_mut().find(|e| {
+                        e.cause == *variable && e.effect == *effect_var
+                    }) {
+                        let error = actual_val - predicted_val;
+                        // Exponential moving average update toward the actual effect ratio.
+                        let actual_strength = if intervention.forced_value.abs() > 1e-10 {
+                            actual_val / intervention.forced_value
+                        } else {
+                            actual_val
+                        };
+                        let alpha = 0.2; // learning rate
+                        edge.strength = edge.strength * (1.0 - alpha) + actual_strength * alpha;
+                        edge.strength = edge.strength.clamp(-1.0, 1.0);
+                        // Confidence increases when predictions are accurate.
+                        edge.confidence = (edge.confidence + (1.0 - error.abs().min(1.0))) / 2.0;
+                        updates += 1;
+                    }
+                }
+            }
+        }
+
+        if updates > 0 {
+            info!("Causal graph: updated {} edge strengths from intervention results", updates);
+        }
+        updates
+    }
+
+    /// §4.10 — Run causal discovery on buffered observations and merge new
+    /// relations into the graph.  Existing edges get their strength updated;
+    /// new edges are added if discovery confidence is high enough.
+    pub async fn auto_discover_and_update(&self, min_confidence: f64) -> usize {
+        let observations = self.observation_buffer.read().await.clone();
+        if observations.len() < 5 {
+            return 0;
+        }
+
+        let relations = self.discover_causes(&observations).await;
+        let mut graph = self.causal_graph.write().await;
+        let mut added = 0;
+
+        for rel in relations.iter().filter(|r| r.confidence >= min_confidence) {
+            // Check if edge already exists — update strength.
+            if let Some(edge) = graph.edges.iter_mut().find(|e| {
+                e.cause == rel.cause && e.effect == rel.effect
+            }) {
+                let alpha = 0.3;
+                edge.strength = edge.strength * (1.0 - alpha) + rel.estimated_strength * alpha;
+                edge.confidence = (edge.confidence + rel.confidence) / 2.0;
+                continue;
+            }
+
+            // Auto-create variables if needed.
+            for var_name in [&rel.cause, &rel.effect] {
+                if !graph.variables.contains_key(var_name.as_str()) {
+                    graph.add_variable(CausalVariable {
+                        name: var_name.clone(),
+                        domain: VariableDomain::Continuous {
+                            min: f64::NEG_INFINITY,
+                            max: f64::INFINITY,
+                        },
+                        observed_value: None,
+                        description: format!("Discovered variable: {}", var_name),
+                        created_at: Utc::now(),
+                    });
+                }
+            }
+
+            // Add new edge — but only if it won't create a cycle.
+            graph.add_edge(CausalEdge {
+                cause: rel.cause.clone(),
+                effect: rel.effect.clone(),
+                strength: rel.estimated_strength,
+                confidence: rel.confidence,
+                mechanism: format!("Discovered via {:?} from {} observations", rel.method, rel.evidence_count),
+                discovered_at: Utc::now(),
+            });
+
+            if !graph.is_dag() {
+                // Remove the edge that created a cycle.
+                graph.edges.pop();
+            } else {
+                added += 1;
+            }
+        }
+
+        if added > 0 {
+            info!("Causal discovery: added {} new edges to the graph", added);
+        }
+        added
+    }
+
     /// Get summary statistics about the causal graph.
     pub async fn get_stats(&self) -> CausalGraphStats {
         let graph = self.causal_graph.read().await;

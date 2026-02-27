@@ -6,9 +6,10 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
+use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::debug;
+use tracing::{debug, info, warn};
 
 // ── Narrative Entry ───────────────────────────────────────────────────────────
 
@@ -70,6 +71,16 @@ pub struct LifeChapter {
 
 // ── Narrative Self ────────────────────────────────────────────────────────────
 
+/// §3.6 — Persistent autobiographical memory snapshot for serialisation.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct NarrativeSnapshot {
+    entries: VecDeque<NarrativeEntry>,
+    chapters: Vec<LifeChapter>,
+    identity_statement: String,
+    creation_timestamp: DateTime<Utc>,
+    agent_name: String,
+}
+
 pub struct NarrativeSelf {
     pub entries: Arc<RwLock<VecDeque<NarrativeEntry>>>,
     pub chapters: Arc<RwLock<Vec<LifeChapter>>>,
@@ -77,6 +88,8 @@ pub struct NarrativeSelf {
     pub creation_timestamp: DateTime<Utc>,
     pub agent_name: String,
     max_entries: usize,
+    /// §3.6 — Path for persisting the narrative to disk.
+    storage_path: Option<PathBuf>,
 }
 
 impl NarrativeSelf {
@@ -92,7 +105,55 @@ impl NarrativeSelf {
             creation_timestamp: Utc::now(),
             agent_name: name,
             max_entries: 10_000,
+            storage_path: None,
         }
+    }
+
+    /// §3.6 — Create with a workspace directory for persistent storage.
+    pub fn with_storage(agent_name: impl Into<String>, workspace_dir: &PathBuf) -> Self {
+        let mut ns = Self::new(agent_name);
+        ns.storage_path = Some(workspace_dir.join(".housaky").join("narrative_self.json"));
+        ns
+    }
+
+    /// §3.6 — Save the narrative to disk.
+    pub async fn save(&self) -> anyhow::Result<()> {
+        let path = match &self.storage_path {
+            Some(p) => p,
+            None => return Ok(()),
+        };
+        if let Some(parent) = path.parent() {
+            tokio::fs::create_dir_all(parent).await?;
+        }
+        let snapshot = NarrativeSnapshot {
+            entries: self.entries.read().await.clone(),
+            chapters: self.chapters.read().await.clone(),
+            identity_statement: self.identity_statement.read().await.clone(),
+            creation_timestamp: self.creation_timestamp,
+            agent_name: self.agent_name.clone(),
+        };
+        let json = serde_json::to_string_pretty(&snapshot)?;
+        tokio::fs::write(path, json).await?;
+        info!("Narrative self saved ({} entries, {} chapters)", snapshot.entries.len(), snapshot.chapters.len());
+        Ok(())
+    }
+
+    /// §3.6 — Load the narrative from disk, restoring autobiographical memory.
+    pub async fn load(&self) -> anyhow::Result<()> {
+        let path = match &self.storage_path {
+            Some(p) => p,
+            None => return Ok(()),
+        };
+        if !path.exists() {
+            return Ok(());
+        }
+        let json = tokio::fs::read_to_string(path).await?;
+        let snapshot: NarrativeSnapshot = serde_json::from_str(&json)?;
+        *self.entries.write().await = snapshot.entries;
+        *self.chapters.write().await = snapshot.chapters;
+        *self.identity_statement.write().await = snapshot.identity_statement;
+        info!("Narrative self loaded from disk");
+        Ok(())
     }
 
     /// Add an entry to the self-narrative.

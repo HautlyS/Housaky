@@ -555,6 +555,7 @@ impl AGIIntegrationHub {
                 learning_value: reasoning.confidence,
                 tags: vec!["from_reasoning".to_string()],
                 context: HashMap::new(),
+                temporal_constraints: Vec::new(),
             };
 
             let goal_id = self.goal_engine.add_goal(goal).await?;
@@ -585,6 +586,7 @@ impl AGIIntegrationHub {
                     learning_value: 0.5,
                     tags: vec!["insight_goal".to_string()],
                     context: HashMap::new(),
+                    temporal_constraints: Vec::new(),
                 };
 
                 let insight_goal_id = self.goal_engine.add_goal(insight_goal).await?;
@@ -766,6 +768,7 @@ impl AGIIntegrationHub {
                             learning_value: insight.confidence,
                             tags: vec!["improvement".to_string()],
                             context: HashMap::new(),
+                            temporal_constraints: Vec::new(),
                         };
 
                         self.goal_engine.add_goal(goal).await?;

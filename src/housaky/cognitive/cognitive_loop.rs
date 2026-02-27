@@ -33,6 +33,8 @@ pub struct CognitiveLoop {
     pub meta_cognition: Arc<MetaCognitionEngine>,
     pub knowledge_graph: Arc<KnowledgeGraphEngine>,
     pub inner_monologue: Arc<InnerMonologue>,
+    /// §3.5 — Optional GWT global workspace for conscious broadcast integration.
+    pub global_workspace: Option<Arc<crate::housaky::consciousness::global_workspace::GlobalWorkspace>>,
     pub config: CognitiveLoopConfig,
     state: Arc<RwLock<CognitiveState>>,
     workspace_dir: PathBuf,
@@ -120,6 +122,7 @@ impl CognitiveLoop {
             meta_cognition: Arc::new(MetaCognitionEngine::new()),
             knowledge_graph: Arc::new(KnowledgeGraphEngine::new(&workspace_dir)),
             inner_monologue: inner_monologue.unwrap_or_else(|| Arc::new(InnerMonologue::new(&workspace_dir))),
+            global_workspace: None,
             config: CognitiveLoopConfig::default(),
             state: Arc::new(RwLock::new(CognitiveState {
                 total_turns: 0,
@@ -135,6 +138,16 @@ impl CognitiveLoop {
             })),
             workspace_dir,
         })
+    }
+
+    /// §3.5 — Attach a GWT global workspace so conscious broadcast content is
+    /// injected into the cognitive loop's reasoning context.
+    pub fn with_global_workspace(
+        mut self,
+        gw: Arc<crate::housaky::consciousness::global_workspace::GlobalWorkspace>,
+    ) -> Self {
+        self.global_workspace = Some(gw);
+        self
     }
 
     pub async fn initialize(&self) -> Result<()> {
@@ -163,6 +176,38 @@ impl CognitiveLoop {
         );
 
         let perception = self.perceive(user_input, provider, model).await?;
+
+        // §3.5 — Run a GWT cycle: cognitive modules compete, winner is broadcast.
+        // Inject the winning broadcast's content into working memory so the
+        // reasoning pipeline has access to the most salient cognitive content.
+        if let Some(ref gw) = self.global_workspace {
+            if let Some(broadcast) = gw.run_cycle().await {
+                let broadcast_summary = format!(
+                    "[GWT broadcast] {} (phi={:.3}, salience={:.2})",
+                    broadcast.content.data,
+                    broadcast.phi_contribution,
+                    broadcast.content.salience,
+                );
+                let importance = if broadcast.content.salience > 0.7 {
+                    crate::housaky::working_memory::MemoryImportance::High
+                } else {
+                    crate::housaky::working_memory::MemoryImportance::Normal
+                };
+                let mut ctx = HashMap::new();
+                ctx.insert("source".to_string(), "gwt_broadcast".to_string());
+                ctx.insert("cycle".to_string(), broadcast.cycle_number.to_string());
+                let _ = self.working_memory.add(
+                    &broadcast_summary,
+                    importance,
+                    ctx,
+                ).await;
+                info!(
+                    "GWT cycle {}: broadcast '{}' injected into working memory",
+                    broadcast.cycle_number,
+                    broadcast.content.data.chars().take(60).collect::<String>()
+                );
+            }
+        }
 
         let uncertainty = if self.config.enable_uncertainty_detection {
             self.assess_uncertainty(user_input, provider, model).await?

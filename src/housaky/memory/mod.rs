@@ -1,3 +1,4 @@
+pub mod agent_memory;
 pub mod belief_tracker;
 pub mod consolidation;
 pub mod hierarchical;
@@ -13,6 +14,7 @@ pub mod schema;
 pub mod forgetting;
 
 pub use belief_tracker::{Belief, BeliefSource, BeliefTracker};
+pub use agent_memory::{AgentMemoryRecord, AgentMemoryStore, MemoryKind};
 pub use consolidation::{ExtractedPattern, MemoryConsolidator, PatternType};
 pub use hierarchical::HierarchicalMemory;
 pub use provenance::ProvenanceTracker;

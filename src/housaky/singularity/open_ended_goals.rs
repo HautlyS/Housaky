@@ -486,6 +486,7 @@ impl CandidateGoal {
             learning_value: self.novelty_score,
             tags: vec!["open_ended".to_string(), "phase6".to_string()],
             context,
+            temporal_constraints: Vec::new(),
         }
     }
 }

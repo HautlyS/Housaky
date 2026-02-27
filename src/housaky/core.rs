@@ -3,17 +3,20 @@
 use crate::config::Config;
 use crate::housaky::agent::Agent;
 use crate::housaky::agi_integration;
+use crate::housaky::alignment::ethics::{AGIAction as EthicalAction, EthicalReasoner, EthicalVerdict};
 use crate::housaky::cognitive::cognitive_loop::{CognitiveLoop, CognitiveResponse};
 use crate::housaky::goal_engine::{Goal, GoalEngine, GoalPriority, GoalStatus};
 use crate::housaky::inner_monologue::InnerMonologue;
 use crate::housaky::knowledge_graph::KnowledgeGraphEngine;
 use crate::housaky::memory::consolidation::MemoryConsolidator;
+use crate::housaky::memory::episodic::{EpisodicEventType, EpisodicMemory};
 use crate::housaky::memory::hierarchical::{HierarchicalMemory, HierarchicalMemoryConfig};
 use crate::housaky::meta_cognition::MetaCognitionEngine;
 use crate::housaky::reasoning_pipeline::{ReasoningPipeline, ReasoningResult};
 use crate::housaky::self_improvement_loop::ImprovementExperiment;
 use crate::housaky::singularity::{SingularityEngine, SingularityPhaseStatus};
 use crate::housaky::capability_growth_tracker::CapabilityGrowthTracker;
+use crate::housaky::cognitive::world_model::{Action, ActionResult, WorldModel};
 use crate::housaky::streaming::streaming::StreamingManager;
 use crate::housaky::tool_creator::ToolCreator;
 use crate::housaky::working_memory::{MemoryImportance, WorkingMemoryEngine};
@@ -44,6 +47,9 @@ pub struct HousakyCore {
     pub agi_hub: Arc<agi_integration::AGIIntegrationHub>,
     pub singularity_engine: Arc<RwLock<SingularityEngine>>,
     pub growth_tracker: Arc<CapabilityGrowthTracker>,
+    pub ethical_reasoner: Arc<EthicalReasoner>,
+    pub world_model: Arc<WorldModel>,
+    pub episodic_memory: Arc<EpisodicMemory>,
     state: Arc<RwLock<HousakyCoreState>>,
     config: HousakyCoreConfig,
     workspace_dir: PathBuf,
@@ -172,6 +178,11 @@ impl HousakyCore {
             SingularityEngine::new(growth_tracker.clone()),
         ));
 
+        let ethical_reasoner = Arc::new(EthicalReasoner::new());
+
+        let world_model = Arc::new(WorldModel::with_storage(&workspace_dir));
+        let episodic_memory = Arc::new(EpisodicMemory::new(10_000));
+
         let core_config = HousakyCoreConfig::default();
 
         let state = Arc::new(RwLock::new(HousakyCoreState {
@@ -207,6 +218,9 @@ impl HousakyCore {
             agi_hub,
             singularity_engine,
             growth_tracker,
+            ethical_reasoner,
+            world_model,
+            episodic_memory,
             state,
             config: core_config,
             workspace_dir,
@@ -240,12 +254,24 @@ impl HousakyCore {
             warn!("Failed to initialize AGI hub: {e}");
         }
 
+        self.ethical_reasoner.initialize_defaults().await;
+
         if let Err(e) = self.initialize_default_goals().await {
             return Err(anyhow::anyhow!("Failed to initialize default goals: {}", e));
         }
 
         // Phase 6 — discover and register compute substrates
         self.singularity_engine.read().await.init_substrates().await;
+
+        // Load persistent world model (§2.5 — world model persistence).
+        if let Err(e) = self.world_model.load().await {
+            warn!("Failed to load world model: {e}");
+        }
+
+        // Load persistent episodic memory (§2.3 — unified persistent memory).
+        if let Err(e) = self.episodic_memory.load(&self.workspace_dir).await {
+            warn!("Failed to load episodic memory: {e}");
+        }
 
         info!("Housaky AGI Core initialized successfully");
         Ok(())
@@ -361,7 +387,13 @@ impl HousakyCore {
 
     pub async fn prepare_context(&self, user_message: &str) -> Result<TurnContext> {
         let memories = self.working_memory.search(user_message, 5).await;
-        let relevant_memories: Vec<String> = memories.iter().map(|m| m.content.clone()).collect();
+        let mut relevant_memories: Vec<String> = memories.iter().map(|m| m.content.clone()).collect();
+
+        // §2.3 — Inject consolidated episodic context into working memory context.
+        let episodic_context = self.episodic_memory.summarize_for_context(4).await;
+        if !episodic_context.is_empty() {
+            relevant_memories.push(episodic_context);
+        }
 
         let active_goals = self.goal_engine.get_active_goals().await;
 
@@ -398,10 +430,32 @@ impl HousakyCore {
         });
 
         let tool_names: Vec<&str> = available_tools.iter().map(|t| t.name()).collect();
-        let reasoning = self
+
+        // Tier 1-D — query MetaCognition for current emotional state and route to
+        // the emotion-appropriate reasoning strategy.
+        let emotional_state = {
+            let reflections = self.meta_cognition.get_recent_reflections(1).await;
+            reflections
+                .into_iter()
+                .next()
+                .map(|r| r.mood)
+                .unwrap_or(crate::housaky::meta_cognition::EmotionalState::Neutral)
+        };
+
+        // Tier 1-D: try emotion-routed reasoning; fall back to ReAct on error.
+        let reasoning = match self
             .reasoning_pipeline
-            .reason_react(provider, model, user_message, &tool_names, &context)
-            .await?;
+            .reason_with_emotional_state(provider, model, user_message, &emotional_state)
+            .await
+        {
+            Ok(r) => r,
+            Err(e) => {
+                warn!("Emotion-routed reasoning failed ({e}), falling back to ReAct");
+                self.reasoning_pipeline
+                    .reason_react(provider, model, user_message, &tool_names, &context)
+                    .await?
+            }
+        };
 
         let action = self
             .derive_action_from_reasoning(&reasoning, top_goal.as_ref())
@@ -468,16 +522,17 @@ impl HousakyCore {
         top_goal: Option<&Goal>,
     ) -> Result<AGIAction> {
         if reasoning.suggested_tools.is_empty() {
-            return Ok(AGIAction::Respond {
+            let candidate = AGIAction::Respond {
                 content: reasoning.conclusion.clone(),
                 needs_clarification: reasoning.confidence < self.config.confidence_threshold,
-            });
+            };
+            return self.gate_action_through_alignment(candidate).await;
         }
 
         let tool = &reasoning.suggested_tools[0];
 
         if tool.name == "memory_store" || tool.name == "memory_recall" {
-            return Ok(AGIAction::Learn {
+            let candidate = AGIAction::Learn {
                 topic: tool
                     .arguments
                     .get("key")
@@ -485,14 +540,103 @@ impl HousakyCore {
                     .unwrap_or("unknown")
                     .to_string(),
                 source: "conversation".to_string(),
-            });
+            };
+            return self.gate_action_through_alignment(candidate).await;
         }
 
-        Ok(AGIAction::UseTool {
+        let candidate = AGIAction::UseTool {
             name: tool.name.clone(),
             arguments: tool.arguments.clone(),
             goal_id: top_goal.map(|g| g.id.clone()),
-        })
+        };
+        self.gate_action_through_alignment(candidate).await
+    }
+
+    /// Pre-action alignment gate: every `AGIAction` is evaluated by the `EthicalReasoner`
+    /// before execution. Blocked actions are replaced with a safe `Wait` response so
+    /// the caller always receives a valid action rather than a hard error.
+    async fn gate_action_through_alignment(&self, action: AGIAction) -> Result<AGIAction> {
+        let (action_type, description, target) = match &action {
+            AGIAction::UseTool { name, arguments, .. } => (
+                "use_tool".to_string(),
+                format!("Use tool '{}' with args: {}", name, arguments),
+                Some(name.clone()),
+            ),
+            AGIAction::Respond { content, .. } => (
+                "respond".to_string(),
+                content.chars().take(200).collect(),
+                None,
+            ),
+            AGIAction::CreateGoal { title, .. } => (
+                "create_goal".to_string(),
+                title.clone(),
+                None,
+            ),
+            AGIAction::Reflect { trigger } => (
+                "reflect".to_string(),
+                trigger.clone(),
+                None,
+            ),
+            AGIAction::Learn { topic, source } => (
+                "learn".to_string(),
+                format!("Learn about '{}' from '{}'" , topic, source),
+                None,
+            ),
+            AGIAction::Wait { reason } => (
+                "wait".to_string(),
+                reason.clone(),
+                None,
+            ),
+        };
+
+        let ethical_action = EthicalAction {
+            id: format!("action_{}", uuid::Uuid::new_v4()),
+            action_type,
+            description: description.clone(),
+            target,
+            parameters: HashMap::new(),
+            requested_by: "housaky_core".to_string(),
+            context: "agi_action_loop".to_string(),
+        };
+
+        let assessment = self.ethical_reasoner.evaluate_action(&ethical_action).await;
+
+        match assessment.overall_verdict {
+            EthicalVerdict::Blocked => {
+                warn!(
+                    "Action BLOCKED by alignment gate (risk={:.2}): {}",
+                    assessment.risk_score, description
+                );
+                Ok(AGIAction::Wait {
+                    reason: format!(
+                        "Action blocked by ethical review (risk={:.2}): {}",
+                        assessment.risk_score,
+                        assessment.explanation
+                    ),
+                })
+            }
+            EthicalVerdict::RequiresReview => {
+                warn!(
+                    "Action flagged for review (risk={:.2}): {}",
+                    assessment.risk_score, description
+                );
+                Ok(AGIAction::Wait {
+                    reason: format!(
+                        "Action requires ethical review before execution (risk={:.2}): {}",
+                        assessment.risk_score,
+                        assessment.explanation
+                    ),
+                })
+            }
+            EthicalVerdict::ApprovedWithCaution => {
+                info!(
+                    "Action approved with caution (risk={:.2}): {}",
+                    assessment.risk_score, description
+                );
+                Ok(action)
+            }
+            EthicalVerdict::Approved => Ok(action),
+        }
     }
 
     pub async fn record_action_result(
@@ -509,6 +653,73 @@ impl HousakyCore {
             state.failed_actions += 1;
         }
         drop(state);
+
+        // §2.5 — learn from every real action result so world model stays updated.
+        {
+            use std::collections::HashMap;
+            let current_state = self.world_model.get_current_state().await;
+            let action = Action {
+                id: format!("act_{}", uuid::Uuid::new_v4()),
+                action_type: if success { "success".to_string() } else { "failure".to_string() },
+                parameters: HashMap::new(),
+                preconditions: vec![],
+                expected_effects: vec![],
+                estimated_duration_ms: 0,
+                risk_level: if success { 0.1 } else { 0.5 },
+            };
+            let mut ctx = current_state.context.clone();
+            ctx.insert("success".to_string(), success.to_string());
+            ctx.insert("output".to_string(), output.chars().take(200).collect::<String>());
+            if let Some(gid) = goal_id {
+                ctx.insert("goal_id".to_string(), gid.to_string());
+            }
+            let actual_state = crate::housaky::cognitive::world_model::WorldState {
+                context: ctx,
+                ..current_state
+            };
+            let result = ActionResult {
+                action,
+                actual_state,
+                expected_state: None,
+                success,
+                duration_ms: 0,
+                error: if success { None } else { Some(output.chars().take(200).collect()) },
+                discovered_causality: None,
+            };
+            self.world_model.learn(&result).await;
+        }
+
+        // §2.3 — Record action outcome as an episodic event and save to disk.
+        {
+            let event_type = if success {
+                EpisodicEventType::ActionTaken
+            } else {
+                EpisodicEventType::ErrorEncountered
+            };
+            // Only record to an open episode; begin one if none is active.
+            let has_current = self.episodic_memory.current_episode.read().await.is_some();
+            if !has_current {
+                let goal_title = goal_id.map(|g| g.to_string());
+                self.episodic_memory
+                    .begin_episode(goal_title, "action")
+                    .await;
+            }
+            self.episodic_memory
+                .record_event_with_outcome(
+                    event_type,
+                    &format!("action: {}", output.chars().take(120).collect::<String>()),
+                    if success { "success" } else { "failure" },
+                    if success { 0.5 } else { 0.7 },
+                )
+                .await;
+            // Periodically save episodic memory (every 20 events avoids excessive I/O).
+            let total_episodes = self.episodic_memory.get_stats().await.total_events;
+            if total_episodes % 20 == 0 {
+                if let Err(e) = self.episodic_memory.save(&self.workspace_dir).await {
+                    warn!("Failed to save episodic memory: {e}");
+                }
+            }
+        }
 
         let importance = if success {
             MemoryImportance::Normal
@@ -544,6 +755,7 @@ impl HousakyCore {
 
             let mut state = self.state.write().await;
             state.total_reflections += 1;
+            drop(state);
         }
 
         Ok(())

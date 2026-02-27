@@ -161,9 +161,10 @@ tokio-stream = "0.1"
 # MD5 hashing
 md-5 = "0.10"
 
-# AWS SDK for Amazon Braket quantum computing
+# AWS SDK for Amazon Braket quantum computing + S3 result retrieval
 aws-config = { version = "1", default-features = false, features = ["behavior-version-latest", "rustls", "rt-tokio", "credentials-process", "credentials-login"] }
 aws-sdk-braket = "1"
+aws-sdk-s3 = "1"
 aws-smithy-runtime = { version = "1", features = ["rt-tokio"] }
 
 # Raspberry Pi GPIO (Linux/RPi only) — target-specific to avoid compile failure on macOS

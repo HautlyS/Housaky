@@ -6,6 +6,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::fmt::Write as _;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{debug, info};
@@ -359,6 +360,78 @@ impl EpisodicMemory {
             total_events,
             max_capacity: self.max_episodes,
         }
+    }
+}
+
+impl EpisodicMemory {
+    /// Persist all episodes to disk (msgpack + JSON fallback).
+    pub async fn save(&self, workspace_dir: &std::path::Path) -> anyhow::Result<()> {
+        let dir = workspace_dir.join(".housaky").join("episodic_memory");
+        tokio::fs::create_dir_all(&dir).await?;
+        let episodes = self.episodes.read().await;
+        let json = serde_json::to_string(&*episodes)?;
+        tokio::fs::write(dir.join("episodes.json"), json).await?;
+        Ok(())
+    }
+
+    /// Load episodes from disk, merging with any in-memory episodes.
+    pub async fn load(&self, workspace_dir: &std::path::Path) -> anyhow::Result<()> {
+        let path = workspace_dir
+            .join(".housaky")
+            .join("episodic_memory")
+            .join("episodes.json");
+        if !path.exists() {
+            return Ok(());
+        }
+        let content = tokio::fs::read_to_string(&path).await?;
+        let loaded: Vec<Episode> = serde_json::from_str(&content).unwrap_or_default();
+        let mut episodes = self.episodes.write().await;
+        // Prepend loaded episodes so in-memory (newer) ones are at the end.
+        let mut merged = loaded;
+        merged.extend(episodes.drain(..));
+        if merged.len() > self.max_episodes {
+            self.apply_forgetting(&mut merged);
+        }
+        *episodes = merged;
+        info!("EpisodicMemory: loaded {} episodes from disk", episodes.len());
+        Ok(())
+    }
+
+    /// Return a compact text summary of the N most important recent episodes
+    /// for injection into working memory context.
+    pub async fn summarize_for_context(&self, limit: usize) -> String {
+        let episodes = self.episodes.read().await;
+        let mut scored: Vec<&Episode> = episodes.iter().collect();
+        // Sort by recency-weighted importance
+        scored.sort_by(|a, b| {
+            b.importance
+                .partial_cmp(&a.importance)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        let top: Vec<_> = scored.into_iter().take(limit).collect();
+        if top.is_empty() {
+            return String::new();
+        }
+        let mut buf = String::from("Recent episodic context:\n");
+        for ep in top {
+            let goal = ep.context.goal.as_deref().unwrap_or("(no goal)");
+            let event_summary = ep
+                .events
+                .iter()
+                .take(3)
+                .map(|e| e.description.chars().take(60).collect::<String>())
+                .collect::<Vec<_>>()
+                .join("; ");
+            let _ = writeln!(
+                buf,
+                "- [{}] goal={} events=[{}] importance={:.2}",
+                ep.timestamp.format("%Y-%m-%d %H:%M"),
+                goal,
+                event_summary,
+                ep.importance
+            );
+        }
+        buf
     }
 }
 

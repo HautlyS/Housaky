@@ -13,6 +13,26 @@ pub enum MutationOp {
     AddLogging,
     AddEarlyReturn,
     InlineConstant { name: String, value: f64 },
+    /// DGM §8.3 — structural mutations: add a new function to a file.
+    AddFunction {
+        function_source: String,
+    },
+    /// Replace the body of an existing function with new implementation.
+    ReplaceImplementation {
+        new_body: String,
+    },
+    /// Remove dead code (functions that are never called).
+    RemoveDeadCode,
+    /// Refactor: extract a block of logic into a new helper function.
+    RefactorExtract {
+        new_fn_name: String,
+        extracted_lines: String,
+    },
+    /// LLM-driven whole-source replacement: the code_change payload IS the new
+    /// file content. The AST engine writes it directly after safety checks.
+    ReplaceSource {
+        new_source: String,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
