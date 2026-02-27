@@ -12,7 +12,10 @@ pub enum InputMode {
 
 impl InputMode {
     pub fn is_typing(&self) -> bool {
-        matches!(self, InputMode::Insert | InputMode::Command | InputMode::Search)
+        matches!(
+            self,
+            InputMode::Insert | InputMode::Command | InputMode::Search
+        )
     }
 }
 
@@ -55,13 +58,13 @@ impl MainTab {
 
     pub fn label(&self) -> &'static str {
         match self {
-            MainTab::Chat    => " Chat ",
-            MainTab::Skills  => " Skills ",
-            MainTab::Tools   => " Tools ",
-            MainTab::Goals   => " Goals ",
+            MainTab::Chat => " Chat ",
+            MainTab::Skills => " Skills ",
+            MainTab::Tools => " Tools ",
+            MainTab::Goals => " Goals ",
             MainTab::Metrics => " Metrics ",
-            MainTab::Logs    => " Logs ",
-            MainTab::Config  => " Config ",
+            MainTab::Logs => " Logs ",
+            MainTab::Config => " Config ",
         }
     }
 
@@ -96,24 +99,24 @@ impl MainTab {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ViewMode {
-    Full,          // Full-width chat, no sidebar
-    Split,         // Chat + sidebar (default)
-    Dashboard,     // Wide sidebar / metrics focus
+    Full,      // Full-width chat, no sidebar
+    Split,     // Chat + sidebar (default)
+    Dashboard, // Wide sidebar / metrics focus
 }
 
 impl ViewMode {
     pub fn cycle(&self) -> ViewMode {
         match self {
-            ViewMode::Full      => ViewMode::Split,
-            ViewMode::Split     => ViewMode::Dashboard,
+            ViewMode::Full => ViewMode::Split,
+            ViewMode::Split => ViewMode::Dashboard,
             ViewMode::Dashboard => ViewMode::Full,
         }
     }
 
     pub fn label(&self) -> &'static str {
         match self {
-            ViewMode::Full      => "FULL",
-            ViewMode::Split     => "SPLIT",
+            ViewMode::Full => "FULL",
+            ViewMode::Split => "SPLIT",
             ViewMode::Dashboard => "DASH",
         }
     }
@@ -214,9 +217,9 @@ pub enum ToolStatus {
 impl ToolStatus {
     pub fn icon(&self) -> &'static str {
         match self {
-            ToolStatus::Running   => "⟳",
-            ToolStatus::Success   => "✓",
-            ToolStatus::Failed    => "✗",
+            ToolStatus::Running => "⟳",
+            ToolStatus::Success => "✓",
+            ToolStatus::Failed => "✗",
             ToolStatus::Cancelled => "⊘",
         }
     }
@@ -225,46 +228,49 @@ impl ToolStatus {
 // ── Global app state ──────────────────────────────────────────────────────────
 
 pub struct AppState {
-    pub input_mode:        InputMode,
-    pub active_pane:       ActivePane,
-    pub active_tab:        MainTab,
-    pub view_mode:         ViewMode,
-    pub stream_status:     StreamStatus,
-    pub metrics:           SessionMetrics,
-    pub tool_log:          Vec<ToolEntry>,
-    pub next_tool_id:      usize,
-    pub spinner_frame:     usize,
-    pub last_tick:         Instant,
-    pub should_quit:       bool,
-    pub show_help:         bool,
+    pub input_mode: InputMode,
+    pub active_pane: ActivePane,
+    pub active_tab: MainTab,
+    pub view_mode: ViewMode,
+    pub stream_status: StreamStatus,
+    pub stream_content: String,
+    pub metrics: SessionMetrics,
+    pub tool_log: Vec<ToolEntry>,
+    pub next_tool_id: usize,
+    pub spinner_frame: usize,
+    pub last_tick: Instant,
+    pub should_quit: bool,
+    pub show_help: bool,
     pub show_command_palette: bool,
-    pub show_search:       bool,
-    pub sidebar_visible:   bool,
+    pub show_search: bool,
+    pub sidebar_visible: bool,
 }
 
 impl AppState {
     pub fn new() -> Self {
         Self {
-            input_mode:           InputMode::Insert,
-            active_pane:          ActivePane::Input,
-            active_tab:           MainTab::Chat,
-            view_mode:            ViewMode::Split,
-            stream_status:        StreamStatus::Idle,
-            metrics:              SessionMetrics::new(),
-            tool_log:             Vec::new(),
-            next_tool_id:         0,
-            spinner_frame:        0,
-            last_tick:            Instant::now(),
-            should_quit:          false,
-            show_help:            false,
+            input_mode: InputMode::Insert,
+            active_pane: ActivePane::Input,
+            active_tab: MainTab::Chat,
+            view_mode: ViewMode::Split,
+            stream_status: StreamStatus::Idle,
+            stream_content: String::new(),
+            metrics: SessionMetrics::new(),
+            tool_log: Vec::new(),
+            next_tool_id: 0,
+            spinner_frame: 0,
+            last_tick: Instant::now(),
+            should_quit: false,
+            show_help: false,
             show_command_palette: false,
-            show_search:          false,
-            sidebar_visible:      true,
+            show_search: false,
+            sidebar_visible: true,
         }
     }
 
     pub fn tick(&mut self) {
-        self.spinner_frame = (self.spinner_frame + 1) % crate::tui::enhanced_app::theme::SPINNER_FRAMES.len();
+        self.spinner_frame =
+            (self.spinner_frame + 1) % crate::tui::enhanced_app::theme::SPINNER_FRAMES.len();
         self.last_tick = Instant::now();
     }
 
@@ -288,9 +294,19 @@ impl AppState {
         id
     }
 
-    pub fn finish_tool(&mut self, id: usize, success: bool, output: Option<String>, duration_ms: u64) {
+    pub fn finish_tool(
+        &mut self,
+        id: usize,
+        success: bool,
+        output: Option<String>,
+        duration_ms: u64,
+    ) {
         if let Some(entry) = self.tool_log.iter_mut().find(|e| e.id == id) {
-            entry.status = if success { ToolStatus::Success } else { ToolStatus::Failed };
+            entry.status = if success {
+                ToolStatus::Success
+            } else {
+                ToolStatus::Failed
+            };
             entry.output_summary = output;
             entry.duration_ms = Some(duration_ms);
             self.metrics.tools_invoked += 1;

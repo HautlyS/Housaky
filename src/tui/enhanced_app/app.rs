@@ -13,6 +13,7 @@ use crate::config::Config;
 use crate::housaky::core::HousakyCore;
 use crate::housaky::heartbeat::HousakyHeartbeat;
 use crate::providers::{create_provider_with_keys_manager, ChatMessage};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use super::chat_pane::ChatPane;
 use super::command_palette::{CommandPalette, PaletteAction};
@@ -56,6 +57,11 @@ pub struct EnhancedApp {
     // Logs tab
     log_entries:    Vec<String>,
     logs_scroll:    usize,
+
+    // Streaming
+    streaming_active: Arc<AtomicBool>,
+    streaming_result: Arc<std::sync::Mutex<Option<Result<String, String>>>>,
+    streaming_chunks: Arc<std::sync::Mutex<Vec<String>>>,
 }
 
 impl EnhancedApp {
@@ -70,6 +76,7 @@ impl EnhancedApp {
             .map(|(name, &en)| (name.clone(), en))
             .collect();
         skills.load_from_paths(&skills_dir, &config_skills);
+        skills.load_marketplace_skills(&config.workspace_dir, &config);
 
         let mut state = AppState::new();
         state.metrics.skills_enabled = skills.skills.iter().filter(|s| s.enabled).count();
@@ -94,6 +101,9 @@ impl EnhancedApp {
             notifs:     Notifications::new(),
             log_entries: Vec::new(),
             logs_scroll: 0,
+            streaming_active: Arc::new(AtomicBool::new(false)),
+            streaming_result: Arc::new(std::sync::Mutex::new(None)),
+            streaming_chunks: Arc::new(std::sync::Mutex::new(Vec::new())),
         }
     }
 
@@ -114,6 +124,50 @@ impl EnhancedApp {
         self.state.tick();
         self.notifs.tick();
         self.skills.tick();
+
+        // Process streaming results
+        if self.streaming_active.load(Ordering::SeqCst) {
+            // Process any new chunks
+            if let Ok(chunks) = self.streaming_chunks.lock() {
+                for chunk in chunks.iter() {
+                    self.chat.append_stream_chunk(chunk);
+                    self.state.stream_content.push_str(chunk);
+                }
+            }
+
+            if let Ok(result_guard) = self.streaming_result.lock() {
+                if let Some(ref result) = *result_guard {
+                    match result {
+                        Ok(response) => {
+                            // Stream complete - finalize (finish_streaming already creates the message)
+                            self.chat.finish_streaming(None);
+                            let token_est = (response.len() / 4) as u32;
+                            self.state.metrics.total_tokens_out += u64::from(token_est);
+                            self.state.stream_status = StreamStatus::Done;
+                            self.sidebar.push_activity(
+                                ActivityKind::Thought,
+                                format!("AGI: {}", truncate_str(response, 40)),
+                            );
+                            self.state.metrics.total_messages += 1;
+                            self.state.stream_content.clear();
+                        }
+                        Err(e) => {
+                            let err_msg = format!("Error: {}", e);
+                            self.chat.push_system(err_msg.clone());
+                            self.state.stream_status = StreamStatus::Error(err_msg.clone());
+                            self.state.metrics.total_errors += 1;
+                            self.notifs.error(truncate_str(&err_msg, 48).to_string());
+                            self.state.stream_content.clear();
+                        }
+                    }
+                    // Clear chunks
+                    if let Ok(mut chunks) = self.streaming_chunks.lock() {
+                        chunks.clear();
+                    }
+                    self.streaming_active.store(false, Ordering::SeqCst);
+                }
+            }
+        }
 
         // Sync sidebar activity into the logs tab (avoid duplicates by
         // only appending new entries since last sync).
@@ -744,7 +798,8 @@ impl EnhancedApp {
             (KeyModifiers::NONE, KeyCode::Down) if self.state.input_mode.is_typing() => {
                 self.input.history_next();
             }
-            (KeyModifiers::NONE, KeyCode::Char(c)) if self.state.input_mode.is_typing() => {
+            (KeyModifiers::NONE, KeyCode::Char(c)) | (KeyModifiers::SHIFT, KeyCode::Char(c))
+                if self.state.input_mode.is_typing() => {
                 self.input.push_char(c);
             }
 
@@ -870,12 +925,41 @@ impl EnhancedApp {
             (_, KeyCode::Char('q')) | (KeyModifiers::NONE, KeyCode::Esc) => {
                 self.state.active_tab = MainTab::Chat;
             }
-            (_, KeyCode::Tab)                               => self.skills.tab_next(),
-            (KeyModifiers::SHIFT, KeyCode::BackTab)         => self.skills.tab_prev(),
+            (_, KeyCode::Tab)                               => { self.state.active_tab = self.state.active_tab.next(); }
+            (KeyModifiers::SHIFT, KeyCode::BackTab)        => { self.state.active_tab = self.state.active_tab.prev(); }
             (_, KeyCode::Up)   | (_, KeyCode::Char('k'))   => self.skills.select_prev(),
-            (_, KeyCode::Down) | (_, KeyCode::Char('j'))   => self.skills.select_next(),
+            (_, KeyCode::Down) | (_, KeyCode::Char('j'))   => self.skills.tab_next(),
             (_, KeyCode::Char(' ')) | (_, KeyCode::Enter)  => {
-                if let Some(enabled) = self.skills.toggle_selected() {
+                if let Some((name, source)) = self.skills.get_selected_skill_needs_install() {
+                    match source {
+                        crate::tui::enhanced_app::skills_panel::SkillSource::ClaudeOfficial => {
+                            self.notifs.info(format!("Installing {} from Claude Market...", name));
+                            match crate::skills::marketplace::install_claude_plugin(&self.config.workspace_dir, &name) {
+                                Ok(_) => {
+                                    self.skills.mark_selected_installed();
+                                    self.config.skills.enabled.insert(name.clone(), true);
+                                    self.notifs.success(format!("Installed: {}", name));
+                                }
+                                Err(e) => {
+                                    self.notifs.error(format!("Install failed: {}", e));
+                                }
+                            }
+                        }
+                        crate::tui::enhanced_app::skills_panel::SkillSource::OpenClaw => {
+                            self.notifs.info(format!("Installing {} from OpenClaw...", name));
+                            if let Err(e) = crate::skills::marketplace::install_openclaw_skill(&self.config.workspace_dir, &name) {
+                                self.notifs.error(format!("Install failed: {}", e));
+                            } else {
+                                self.skills.mark_selected_installed();
+                                self.config.skills.enabled.insert(name.clone(), true);
+                                self.notifs.success(format!("Installed: {}", name));
+                            }
+                        }
+                        _ => {
+                            self.notifs.error("Cannot install: unknown source");
+                        }
+                    }
+                } else if let Some(enabled) = self.skills.toggle_selected() {
                     self.state.metrics.skills_enabled = self.skills.skills.iter().filter(|s| s.enabled).count();
                     let kind = if enabled { "Enabled" } else { "Disabled" };
                     self.sidebar.push_activity(ActivityKind::Skill, format!("{}: skill", kind));
@@ -885,7 +969,8 @@ impl EnhancedApp {
                 let skills_dir = self.config.workspace_dir.join("skills");
                 let config_skills: Vec<(String, bool)> = self.config.skills.enabled.iter().map(|(name, &en)| (name.clone(), en)).collect();
                 self.skills.load_from_paths(&skills_dir, &config_skills);
-                self.notifs.info("Skills refreshed");
+                self.skills.load_marketplace_skills(&self.config.workspace_dir, &self.config);
+                self.notifs.info("Skills refreshed from local and marketplace");
             }
             (_, KeyCode::Char('/'))                        => self.skills.start_filter(),
             (_, KeyCode::PageUp)                           => self.skills.detail_scroll_up(),
@@ -1192,6 +1277,7 @@ impl EnhancedApp {
     fn send_message(&mut self, text: String) -> Result<()> {
         self.chat.push_user(text.clone());
         self.state.stream_status = StreamStatus::Thinking;
+        self.state.stream_content.clear();
         self.state.metrics.total_messages += 1;
         self.state.metrics.total_requests += 1;
         self.sidebar.push_activity(ActivityKind::Thought, format!("User: {}", truncate_str(&text, 40)));
@@ -1203,46 +1289,73 @@ impl EnhancedApp {
             })
             .collect();
 
-        let start = std::time::Instant::now();
-
-        let result = Self::send_message_async(
-            &self.provider_name,
-            &self.model_name,
-            chat_messages,
-        );
-
-        let elapsed = start.elapsed().as_millis() as u64;
-        self.state.metrics.last_latency_ms = elapsed;
-
-        match result {
-            Ok(response) => {
-                let token_est = (response.len() / 4) as u32;
-                self.state.metrics.total_tokens_out += u64::from(token_est);
-                self.state.metrics.total_tokens_in  += (text.len() / 4) as u64;
-
-                // Update rolling avg t/s
-                if elapsed > 0 {
-                    let tps = f64::from(token_est) / (elapsed as f64 / 1000.0);
-                    self.state.metrics.avg_tokens_per_sec =
-                        0.8 * self.state.metrics.avg_tokens_per_sec + 0.2 * tps;
-                }
-
-                self.chat.push_assistant(response.clone(), Some(token_est));
-                self.state.stream_status = StreamStatus::Done;
-                self.sidebar.push_activity(
-                    ActivityKind::Thought,
-                    format!("AGI: {}", truncate_str(&response, 40)),
-                );
-                self.state.metrics.total_messages += 1;
-            }
-            Err(e) => {
-                let err_msg = format!("Error: {}", e);
-                self.chat.push_system(err_msg.clone());
-                self.state.stream_status = StreamStatus::Error(err_msg.clone());
-                self.state.metrics.total_errors += 1;
-                self.notifs.error(truncate_str(&err_msg, 48).to_string());
-            }
+        // Start streaming mode
+        self.chat.start_streaming();
+        self.state.stream_status = StreamStatus::Streaming;
+        self.streaming_active.store(true, Ordering::SeqCst);
+        {
+            let mut result_guard = self.streaming_result.lock().unwrap();
+            *result_guard = None;
         }
+        {
+            let mut chunks = self.streaming_chunks.lock().unwrap();
+            chunks.clear();
+        }
+
+        // Clone what we need for the async task
+        let provider_name = self.provider_name.clone();
+        let model_name = self.model_name.clone();
+        let streaming_active = Arc::clone(&self.streaming_active);
+        let streaming_result = Arc::clone(&self.streaming_result);
+        let streaming_chunks = Arc::clone(&self.streaming_chunks);
+
+        // Spawn a tokio task to do the streaming chat
+        std::thread::spawn(move || {
+            let rt = tokio::runtime::Runtime::new().unwrap();
+            let start = std::time::Instant::now();
+
+            let result = rt.block_on(async {
+                let provider = create_provider_with_keys_manager(&provider_name, Some(&model_name))?;
+                provider.chat_with_history(&chat_messages, &model_name, 0.7).await
+            });
+
+            let elapsed = start.elapsed().as_millis() as u64;
+
+            match result {
+                Ok(response) => {
+                    // Simulate streaming by sending chunks incrementally
+                    let words: Vec<&str> = response.split_whitespace().collect();
+                    let chunk_size = (words.len() / 20).max(1);
+                    
+                    for chunk in words.chunks(chunk_size) {
+                        let chunk_text = chunk.join(" ") + " ";
+                        // Send chunk to UI
+                        if let Ok(mut chunks) = streaming_chunks.lock() {
+                            chunks.push(chunk_text);
+                        }
+                        std::thread::sleep(std::time::Duration::from_millis(20));
+                    }
+
+                    // Update metrics
+                    let token_est = (response.len() / 4) as u64;
+                    let _tokens_per_sec = if elapsed > 0 {
+                        token_est as f64 / (elapsed as f64 / 1000.0)
+                    } else {
+                        0.0
+                    };
+
+                    // Store final result for UI to pick up
+                    if let Ok(mut result_guard) = streaming_result.lock() {
+                        *result_guard = Some(Ok(response));
+                    }
+                }
+                Err(e) => {
+                    if let Ok(mut result_guard) = streaming_result.lock() {
+                        *result_guard = Some(Err(e.to_string()));
+                    }
+                }
+            }
+        });
 
         Ok(())
     }

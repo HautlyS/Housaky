@@ -63,11 +63,21 @@ fn sanitize_name(name: &str) -> String {
             out.push('-');
         }
     }
-    if out.is_empty() { "skill".into() } else { out }
+    if out.is_empty() {
+        "skill".into()
+    } else {
+        out
+    }
 }
 
-fn find_marketplace_entry<'a>(index: &'a ClaudeMarketplaceIndex, plugin_name: &str) -> Option<&'a ClaudeMarketplacePlugin> {
-    index.plugins.iter().find(|p| p.name.eq_ignore_ascii_case(plugin_name))
+fn find_marketplace_entry<'a>(
+    index: &'a ClaudeMarketplaceIndex,
+    plugin_name: &str,
+) -> Option<&'a ClaudeMarketplacePlugin> {
+    index
+        .plugins
+        .iter()
+        .find(|p| p.name.eq_ignore_ascii_case(plugin_name))
 }
 
 fn load_marketplace_index(workspace_dir: &Path) -> Result<(ClaudeMarketplaceIndex, PathBuf)> {
@@ -79,7 +89,8 @@ fn load_marketplace_index(workspace_dir: &Path) -> Result<(ClaudeMarketplaceInde
     } else {
         let resp = reqwest::blocking::get(CLAUDE_OFFICIAL_MARKETPLACE_URL)
             .with_context(|| "Failed to fetch Claude official marketplace index")?;
-        resp.text().with_context(|| "Failed to read marketplace response")?
+        resp.text()
+            .with_context(|| "Failed to read marketplace response")?
     };
     let index: ClaudeMarketplaceIndex = serde_json::from_str(&content)
         .with_context(|| "Failed to parse Claude marketplace.json")?;
@@ -101,8 +112,8 @@ fn install_skill_md(content: &str, workspace_dir: &Path) -> Result<String> {
 
 fn install_skill_toml(path: &Path, workspace_dir: &Path) -> Result<String> {
     let raw = fs::read_to_string(path)?;
-    let parsed: MinimalSkillToml = toml::from_str(&raw)
-        .with_context(|| format!("Invalid TOML at {}", path.display()))?;
+    let parsed: MinimalSkillToml =
+        toml::from_str(&raw).with_context(|| format!("Invalid TOML at {}", path.display()))?;
     let safe = sanitize_name(&parsed.skill.name);
     let dir = workspace_dir.join("skills").join(&safe);
     fs::create_dir_all(&dir)?;
@@ -121,11 +132,18 @@ pub fn install_claude_plugin(workspace_dir: &Path, plugin_name: &str) -> Result<
     };
     let plugin_dir = repo_dir.join(rel_path);
     if !plugin_dir.exists() {
-        return Err(anyhow!("Claude plugin path missing: {}", plugin_dir.display()));
+        return Err(anyhow!(
+            "Claude plugin path missing: {}",
+            plugin_dir.display()
+        ));
     }
 
     let mut installed = Vec::new();
-    for entry in WalkDir::new(&plugin_dir).max_depth(4).into_iter().filter_map(|e| e.ok()) {
+    for entry in WalkDir::new(&plugin_dir)
+        .max_depth(4)
+        .into_iter()
+        .filter_map(|e| e.ok())
+    {
         let p = entry.path();
         if p.is_file() {
             let fname = p.file_name().and_then(|s| s.to_str()).unwrap_or("");
@@ -151,7 +169,12 @@ pub fn install_claude_plugin(workspace_dir: &Path, plugin_name: &str) -> Result<
             let p = e.path();
             if p.is_file() {
                 let ext = p.extension().and_then(|s| s.to_str()).unwrap_or("");
-                if ext.eq_ignore_ascii_case("md") && p.file_name().and_then(|s| s.to_str()).map(|n| n.to_ascii_lowercase()) != Some("readme.md".into()) {
+                if ext.eq_ignore_ascii_case("md")
+                    && p.file_name()
+                        .and_then(|s| s.to_str())
+                        .map(|n| n.to_ascii_lowercase())
+                        != Some("readme.md".into())
+                {
                     let content = fs::read_to_string(&p)?;
                     let name = install_skill_md(&content, workspace_dir)?;
                     if !installed.contains(&name) {
@@ -163,7 +186,10 @@ pub fn install_claude_plugin(workspace_dir: &Path, plugin_name: &str) -> Result<
     }
 
     if installed.is_empty() {
-        return Err(anyhow!("No skills found to install in Claude plugin: {}", plugin_name));
+        return Err(anyhow!(
+            "No skills found to install in Claude plugin: {}",
+            plugin_name
+        ));
     }
 
     Ok(installed)
@@ -270,8 +296,8 @@ pub fn list_openclaw_vendored_skills(
 
         // Reuse Claude parser because OpenClaw SKILL.md also uses YAML frontmatter.
         let content = std::fs::read_to_string(&md)?;
-        let skill = super::claude::claude_skill_md_to_housaky_skill(&content)
-            .unwrap_or_else(|_| Skill {
+        let skill =
+            super::claude::claude_skill_md_to_housaky_skill(&content).unwrap_or_else(|_| Skill {
                 name: path
                     .file_name()
                     .and_then(|n| n.to_str())
@@ -294,7 +320,12 @@ pub fn list_openclaw_vendored_skills(
                 skill_md: md,
             },
             installed: true, // vendored, but not necessarily copied into workspace
-            enabled: config.skills.enabled.get(&skill.name).copied().unwrap_or(false),
+            enabled: config
+                .skills
+                .enabled
+                .get(&skill.name)
+                .copied()
+                .unwrap_or(false),
         });
     }
 
@@ -318,7 +349,8 @@ pub fn list_claude_official_plugins(
         // Fallback to HTTP; uses reqwest blocking feature already enabled.
         let resp = reqwest::blocking::get(CLAUDE_OFFICIAL_MARKETPLACE_URL)
             .with_context(|| "Failed to fetch Claude official marketplace index")?;
-        resp.text().with_context(|| "Failed to read marketplace response")?
+        resp.text()
+            .with_context(|| "Failed to read marketplace response")?
     };
 
     let index: ClaudeMarketplaceIndex = serde_json::from_str(&content)
@@ -331,12 +363,21 @@ pub fn list_claude_official_plugins(
             continue;
         };
 
-        let enabled = config.skills.enabled.get(&plugin.name).copied().unwrap_or(false);
+        let enabled = config
+            .skills
+            .enabled
+            .get(&plugin.name)
+            .copied()
+            .unwrap_or(false);
         results.push(MarketSkill {
             name: plugin.name.clone(),
             description: format!(
                 "Claude official plugin{}",
-                plugin.version.as_ref().map(|v| format!(" v{v}")).unwrap_or_default()
+                plugin
+                    .version
+                    .as_ref()
+                    .map(|v| format!(" v{v}"))
+                    .unwrap_or_default()
             ),
             source: MarketSource::ClaudeOfficialPlugin {
                 plugin_name: plugin.name,
@@ -348,4 +389,56 @@ pub fn list_claude_official_plugins(
     }
 
     Ok(results)
+}
+
+pub fn install_openclaw_skill(workspace_dir: &Path, skill_name: &str) -> Result<Vec<String>> {
+    let repo_root = workspace_dir.join(".housaky").join("openclaw");
+
+    if !repo_root.exists() {
+        std::fs::create_dir_all(&repo_root)?;
+        let out = Command::new("git")
+            .args([
+                "clone",
+                "--depth",
+                "1",
+                "https://github.com/openclaw/open-skills.git",
+            ])
+            .arg(&repo_root)
+            .output()
+            .with_context(|| "Failed to clone open-skills repo")?;
+        if !out.status.success() {
+            return Err(anyhow!(
+                "Failed to clone open-skills: {}",
+                String::from_utf8_lossy(&out.stderr)
+            ));
+        }
+    }
+
+    let skills_dir = repo_root.join("skills").join(skill_name);
+    if !skills_dir.exists() {
+        return Err(anyhow!("Skill not found: {}", skill_name));
+    }
+
+    let mut installed = Vec::new();
+    let target_dir = workspace_dir.join("skills").join(skill_name);
+    std::fs::create_dir_all(&target_dir)?;
+
+    let skill_md = skills_dir.join("SKILL.md");
+    if skill_md.exists() {
+        let content = std::fs::read_to_string(&skill_md)?;
+        let name = crate::skills::claude::claude_skill_md_to_housaky_skill(&content)
+            .map(|s| s.name)
+            .unwrap_or_else(|_| skill_name.to_string());
+
+        let toml = crate::skills::claude::claude_skill_md_to_skill_toml(&content)?;
+        std::fs::write(target_dir.join("SKILL.toml"), toml)?;
+        std::fs::write(target_dir.join("SKILL.md"), content)?;
+        installed.push(name);
+    }
+
+    if installed.is_empty() {
+        return Err(anyhow!("No skills found to install"));
+    }
+
+    Ok(installed)
 }

@@ -197,6 +197,53 @@ impl InputBar {
         self.char_count > (self.max_chars * 80 / 100)
     }
 
+    fn text_lines(&self, width: u16) -> usize {
+        if self.text.is_empty() {
+            return 1;
+        }
+        let inner_width = width.saturating_sub(4) as usize;
+        if inner_width == 0 {
+            return 1;
+        }
+        let mut lines = 1;
+        let mut current_line_width = 0;
+        for c in self.text.chars() {
+            let char_width = if c.is_ascii() { 1 } else { 2 };
+            current_line_width += char_width;
+            if current_line_width >= inner_width {
+                lines += 1;
+                current_line_width = 0;
+            }
+        }
+        lines
+    }
+
+    fn cursor_line_and_column(&self) -> (usize, usize) {
+        let width: u16 = 80;
+        let inner_width = width.saturating_sub(4) as usize;
+        if inner_width == 0 {
+            return (0, 0);
+        }
+        let mut line = 0;
+        let mut col = 0;
+        let mut current_line_width = 0;
+        for (i, c) in self.text.chars().enumerate() {
+            if i >= self.cursor_pos {
+                break;
+            }
+            let char_width = if c.is_ascii() { 1 } else { 2 };
+            current_line_width += char_width;
+            if current_line_width >= inner_width {
+                line += 1;
+                current_line_width = 0;
+                col = 0;
+            } else {
+                col += char_width;
+            }
+        }
+        (line, col)
+    }
+
     // ── Draw ──────────────────────────────────────────────────────────────────
 
     pub fn draw(&self, f: &mut Frame, area: Rect, focused: bool) {
@@ -270,6 +317,12 @@ impl InputBar {
         let inner = block.inner(input_area);
         f.render_widget(block, input_area);
 
+        // Calculate required height based on text content
+        let text_lines = self.text_lines(inner.width);
+        let min_height = 1;
+        let max_height = inner.height.saturating_sub(1).max(min_height);
+        let required_height = (text_lines as u16).min(max_height).max(min_height);
+
         // Render text with cursor
         let display_text = if self.text.is_empty() && !focused {
             Span::styled("  Type a message or /command…", style_muted())
@@ -320,16 +373,20 @@ impl InputBar {
             Line::from(display_text)
         };
 
-        let inner = Rect::new(
-            inner.x,
-            inner.y,
-            inner.width,
-            inner.height.saturating_sub(1),
-        );
+        let inner = Rect::new(inner.x, inner.y, inner.width, required_height);
+
+        // Calculate scroll position based on cursor
+        let (cursor_line, _) = self.cursor_line_and_column();
+        let scroll_line = if cursor_line >= required_height as usize {
+            cursor_line.saturating_sub(required_height as usize - 1)
+        } else {
+            0
+        };
+
         f.render_widget(
             Paragraph::new(text_with_cursor)
                 .wrap(Wrap { trim: false })
-                .scroll((0, 0)),
+                .scroll((scroll_line as u16, 0)),
             inner,
         );
     }

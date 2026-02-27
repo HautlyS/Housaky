@@ -8,49 +8,49 @@ pub struct Palette;
 
 impl Palette {
     // Backgrounds
-    pub const BG:          Color = Color::Rgb(8,  10,  18);
-    pub const BG_PANEL:    Color = Color::Rgb(13, 16,  28);
-    pub const BG_ELEVATED: Color = Color::Rgb(20, 24,  40);
-    pub const BG_SELECTED: Color = Color::Rgb(25, 35,  65);
-    pub const BG_HOVER:    Color = Color::Rgb(18, 28,  50);
+    pub const BG: Color = Color::Rgb(8, 10, 18);
+    pub const BG_PANEL: Color = Color::Rgb(13, 16, 28);
+    pub const BG_ELEVATED: Color = Color::Rgb(20, 24, 40);
+    pub const BG_SELECTED: Color = Color::Rgb(25, 35, 65);
+    pub const BG_HOVER: Color = Color::Rgb(18, 28, 50);
 
     // Brand / Primary
-    pub const CYAN:        Color = Color::Rgb(0,   210, 240);
-    pub const CYAN_DIM:    Color = Color::Rgb(0,   140, 160);
-    pub const VIOLET:      Color = Color::Rgb(140, 80,  255);
-    pub const VIOLET_DIM:  Color = Color::Rgb(90,  50,  170);
+    pub const CYAN: Color = Color::Rgb(0, 210, 240);
+    pub const CYAN_DIM: Color = Color::Rgb(0, 140, 160);
+    pub const VIOLET: Color = Color::Rgb(140, 80, 255);
+    pub const VIOLET_DIM: Color = Color::Rgb(90, 50, 170);
 
     // Semantic
-    pub const SUCCESS:     Color = Color::Rgb(50,  220, 130);
-    pub const WARNING:     Color = Color::Rgb(255, 185, 40);
-    pub const ERROR:       Color = Color::Rgb(255, 70,  80);
-    pub const INFO:        Color = Color::Rgb(90,  160, 255);
+    pub const SUCCESS: Color = Color::Rgb(50, 220, 130);
+    pub const WARNING: Color = Color::Rgb(255, 185, 40);
+    pub const ERROR: Color = Color::Rgb(255, 70, 80);
+    pub const INFO: Color = Color::Rgb(90, 160, 255);
 
-    // Text
-    pub const TEXT:        Color = Color::Rgb(210, 220, 240);
-    pub const TEXT_DIM:    Color = Color::Rgb(100, 110, 140);
-    pub const TEXT_MUTED:  Color = Color::Rgb(60,  68,  90);
-    pub const TEXT_BRIGHT: Color = Color::Rgb(240, 245, 255);
+    // Text - higher contrast white
+    pub const TEXT: Color = Color::Rgb(235, 240, 250);
+    pub const TEXT_DIM: Color = Color::Rgb(160, 170, 190);
+    pub const TEXT_MUTED: Color = Color::Rgb(110, 120, 140);
+    pub const TEXT_BRIGHT: Color = Color::Rgb(255, 255, 255);
 
     // Role colours
-    pub const USER:        Color = Color::Rgb(80,  200, 120);
-    pub const ASSISTANT:   Color = Color::Rgb(80,  170, 255);
-    pub const SYSTEM:      Color = Color::Rgb(200, 160, 80);
+    pub const USER: Color = Color::Rgb(80, 200, 120);
+    pub const ASSISTANT: Color = Color::Rgb(80, 170, 255);
+    pub const SYSTEM: Color = Color::Rgb(200, 160, 80);
 
     // AGI tags
-    pub const GOAL:        Color = Color::Rgb(255, 160, 60);
-    pub const SKILL:       Color = Color::Rgb(60,  220, 180);
-    pub const TOOL:        Color = Color::Rgb(180, 100, 255);
-    pub const THOUGHT:     Color = Color::Rgb(180, 140, 255);
+    pub const GOAL: Color = Color::Rgb(255, 160, 60);
+    pub const SKILL: Color = Color::Rgb(60, 220, 180);
+    pub const TOOL: Color = Color::Rgb(180, 100, 255);
+    pub const THOUGHT: Color = Color::Rgb(180, 140, 255);
 
     // Borders
-    pub const BORDER:      Color = Color::Rgb(35,  45,  75);
-    pub const BORDER_FOCUS:Color = Color::Rgb(0,   210, 240);
-    pub const BORDER_ACTIVE:Color= Color::Rgb(140, 80,  255);
+    pub const BORDER: Color = Color::Rgb(35, 45, 75);
+    pub const BORDER_FOCUS: Color = Color::Rgb(0, 210, 240);
+    pub const BORDER_ACTIVE: Color = Color::Rgb(140, 80, 255);
 
     // Inline code
-    pub const CODE_BG:     Color = Color::Rgb(22,  28,  45);
-    pub const CODE_FG:     Color = Color::Rgb(255, 130, 100);
+    pub const CODE_BG: Color = Color::Rgb(22, 28, 45);
+    pub const CODE_FG: Color = Color::Rgb(255, 130, 100);
 }
 
 // ── Composite style helpers ──────────────────────────────────────────────────
@@ -133,9 +133,7 @@ pub fn style_code_inline() -> Style {
 }
 
 pub fn style_code_block() -> Style {
-    Style::default()
-        .fg(Palette::TEXT)
-        .bg(Palette::CODE_BG)
+    Style::default().fg(Palette::TEXT).bg(Palette::CODE_BG)
 }
 
 pub fn style_tab_active() -> Style {
@@ -150,7 +148,9 @@ pub fn style_tab_inactive() -> Style {
 }
 
 pub fn style_tag_goal() -> Style {
-    Style::default().fg(Palette::GOAL).add_modifier(Modifier::BOLD)
+    Style::default()
+        .fg(Palette::GOAL)
+        .add_modifier(Modifier::BOLD)
 }
 
 pub fn style_tag_skill() -> Style {
@@ -162,7 +162,9 @@ pub fn style_tag_tool() -> Style {
 }
 
 pub fn style_tag_thought() -> Style {
-    Style::default().fg(Palette::THOUGHT).add_modifier(Modifier::DIM)
+    Style::default()
+        .fg(Palette::THOUGHT)
+        .add_modifier(Modifier::DIM)
 }
 
 pub fn style_input_focused() -> Style {
@@ -184,11 +186,15 @@ pub fn style_status_ok() -> Style {
 }
 
 pub fn style_status_loading() -> Style {
-    Style::default().fg(Palette::WARNING).add_modifier(Modifier::BOLD)
+    Style::default()
+        .fg(Palette::WARNING)
+        .add_modifier(Modifier::BOLD)
 }
 
 pub fn style_status_err() -> Style {
-    Style::default().fg(Palette::ERROR).add_modifier(Modifier::BOLD)
+    Style::default()
+        .fg(Palette::ERROR)
+        .add_modifier(Modifier::BOLD)
 }
 
 pub fn style_keybind() -> Style {
@@ -235,9 +241,7 @@ pub const LOGO: &str = "◈ HOUSAKY";
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 // Spinner frames — Braille dot sweep (looks slick at 30fps)
-pub const SPINNER_FRAMES: &[&str] = &[
-    "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏",
-];
+pub const SPINNER_FRAMES: &[&str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 
 // ── Progress bar ─────────────────────────────────────────────────────────────
 
