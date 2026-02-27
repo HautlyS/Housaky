@@ -3,7 +3,6 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
-use tauri::Manager;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct HousakyStatus {
@@ -668,7 +667,7 @@ async fn configure_channel(channel_type: String, config: serde_json::Value) -> R
 }
 
 #[tauri::command]
-async fn start_channel(channel_type: String) -> Result<String, String> {
+async fn start_channel(_channel_type: String) -> Result<String, String> {
     run_housaky_command(&["channel", "start"])
 }
 
@@ -772,7 +771,7 @@ async fn get_agi_telemetry() -> Result<AgiTelemetry, String> {
         avg_latency_ms: 0,
         tokens_per_sec: 0.0,
         provider:       status.provider,
-        model:          status.model.unwrap_or_default(),
+        model:          status.model,
     })
 }
 
@@ -934,7 +933,7 @@ pub fn run() {
             get_memory_entries,
             get_conversations,
         ])
-        .setup(|app| {
+        .setup(|_app| {
             log::info!("Housaky Dashboard starting...");
             Ok(())
         })
