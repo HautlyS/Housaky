@@ -68,14 +68,14 @@ impl MarketTask {
 
     pub fn best_bid(&self) -> Option<&Bid> {
         self.bids.iter().max_by(|a, b| {
-            a.score().partial_cmp(&b.score()).unwrap_or(std::cmp::Ordering::Equal)
+            a.score()
+                .partial_cmp(&b.score())
+                .unwrap_or(std::cmp::Ordering::Equal)
         })
     }
 
     pub fn is_expired(&self) -> bool {
-        self.deadline
-            .map(|d| Utc::now() > d)
-            .unwrap_or(false)
+        self.deadline.map(|d| Utc::now() > d).unwrap_or(false)
     }
 }
 
@@ -168,7 +168,10 @@ impl TaskMarket {
 
     pub async fn post_task(&self, task: MarketTask) -> String {
         let id = task.id.clone();
-        info!("Task market: posted task '{}' by '{}'", task.title, task.posted_by);
+        info!(
+            "Task market: posted task '{}' by '{}'",
+            task.title, task.posted_by
+        );
         self.tasks.write().await.insert(id.clone(), task);
         id
     }
@@ -180,7 +183,11 @@ impl TaskMarket {
             .ok_or_else(|| anyhow::anyhow!("Task {} not found", bid.task_id))?;
 
         if task.status != TaskStatus::Open && task.status != TaskStatus::Bidding {
-            anyhow::bail!("Task {} is not accepting bids (status: {:?})", bid.task_id, task.status);
+            anyhow::bail!(
+                "Task {} is not accepting bids (status: {:?})",
+                bid.task_id,
+                task.status
+            );
         }
         if task.is_expired() {
             task.status = TaskStatus::Expired;
@@ -212,7 +219,12 @@ impl TaskMarket {
             let winning_bid = best.clone();
             task.assigned_to = Some(winner.clone());
             task.status = TaskStatus::Assigned;
-            info!("Auction won: task={} winner={} score={:.3}", task_id, winner, winning_bid.score());
+            info!(
+                "Auction won: task={} winner={} score={:.3}",
+                task_id,
+                winner,
+                winning_bid.score()
+            );
             AuctionResult {
                 task_id: task_id.to_string(),
                 winner: Some(winner),
@@ -235,7 +247,12 @@ impl TaskMarket {
         Ok(result)
     }
 
-    pub async fn complete_task(&self, task_id: &str, result: &str, actual_cost: f64) -> anyhow::Result<()> {
+    pub async fn complete_task(
+        &self,
+        task_id: &str,
+        result: &str,
+        actual_cost: f64,
+    ) -> anyhow::Result<()> {
         let mut tasks = self.tasks.write().await;
         if let Some(mut task) = tasks.remove(task_id) {
             task.status = TaskStatus::Completed;
@@ -277,8 +294,14 @@ impl TaskMarket {
 
     pub async fn stats(&self) -> TaskMarketStats {
         let tasks = self.tasks.read().await;
-        let open = tasks.values().filter(|t| t.status == TaskStatus::Open).count();
-        let assigned = tasks.values().filter(|t| t.status == TaskStatus::Assigned || t.status == TaskStatus::InProgress).count();
+        let open = tasks
+            .values()
+            .filter(|t| t.status == TaskStatus::Open)
+            .count();
+        let assigned = tasks
+            .values()
+            .filter(|t| t.status == TaskStatus::Assigned || t.status == TaskStatus::InProgress)
+            .count();
         let total_bids: usize = tasks.values().map(|t| t.bids.len()).sum();
         let task_count = tasks.len().max(1);
         drop(tasks);
@@ -312,10 +335,26 @@ mod tests {
     #[tokio::test]
     async fn test_task_posting_and_bidding() {
         let market = TaskMarket::new();
-        let task = MarketTask::new("analyze code", "analyze rust code", vec!["rust".into()], 0.8, "orchestrator", 1.0);
+        let task = MarketTask::new(
+            "analyze code",
+            "analyze rust code",
+            vec!["rust".into()],
+            0.8,
+            "orchestrator",
+            1.0,
+        );
         let task_id = market.post_task(task).await;
 
-        let bid = Bid::new(&task_id, "agent-1", 0.9, 5000, 0.95, 0.88, 0.9, "I specialize in Rust");
+        let bid = Bid::new(
+            &task_id,
+            "agent-1",
+            0.9,
+            5000,
+            0.95,
+            0.88,
+            0.9,
+            "I specialize in Rust",
+        );
         market.submit_bid(bid).await.unwrap();
 
         let result = market.run_auction(&task_id).await.unwrap();
@@ -329,8 +368,32 @@ mod tests {
         let task = MarketTask::new("task", "desc", vec!["python".into()], 0.5, "orch", 1.0);
         let task_id = market.post_task(task).await;
 
-        market.submit_bid(Bid::new(&task_id, "low-quality", 0.5, 100_000, 0.4, 0.3, 0.5, "")).await.unwrap();
-        market.submit_bid(Bid::new(&task_id, "high-quality", 0.8, 1_000, 0.95, 0.95, 0.95, "")).await.unwrap();
+        market
+            .submit_bid(Bid::new(
+                &task_id,
+                "low-quality",
+                0.5,
+                100_000,
+                0.4,
+                0.3,
+                0.5,
+                "",
+            ))
+            .await
+            .unwrap();
+        market
+            .submit_bid(Bid::new(
+                &task_id,
+                "high-quality",
+                0.8,
+                1_000,
+                0.95,
+                0.95,
+                0.95,
+                "",
+            ))
+            .await
+            .unwrap();
 
         let result = market.run_auction(&task_id).await.unwrap();
         assert_eq!(result.winner, Some("high-quality".to_string()));

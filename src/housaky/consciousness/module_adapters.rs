@@ -9,9 +9,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use super::coalition_formation::{Coalition, CoalitionFormation};
-use super::global_workspace::{
-    CognitiveModule, ConsciousBroadcast, ContentType,
-};
+use super::global_workspace::{CognitiveModule, ConsciousBroadcast, ContentType};
 use tracing::debug;
 
 // ── Reasoning Module Adapter ──────────────────────────────────────────────────
@@ -59,7 +57,10 @@ impl CognitiveModule for ReasoningModuleAdapter {
                 let mut conf = self.current_confidence.write().await;
                 *conf = (*conf * 0.7 + broadcast.content.salience * 0.3).clamp(0.0, 1.0);
                 *self.last_updated.write().await = Some(Utc::now());
-                debug!(module = "reasoning_engine", "updated topic from {:?} broadcast", broadcast.content.content_type);
+                debug!(
+                    module = "reasoning_engine",
+                    "updated topic from {:?} broadcast", broadcast.content.content_type
+                );
             }
             ContentType::Emotion => {
                 // Emotional signal adjusts confidence up/down
@@ -157,7 +158,11 @@ impl CognitiveModule for MetaCognitionAdapter {
         );
         *self.current_self_assessment.write().await = Some(summary);
         *self.last_updated.write().await = Some(Utc::now());
-        debug!(module = "meta_cognition", phi = broadcast.phi_contribution, "self-assessment updated from broadcast");
+        debug!(
+            module = "meta_cognition",
+            phi = broadcast.phi_contribution,
+            "self-assessment updated from broadcast"
+        );
     }
 
     async fn propose_coalition(&self) -> Option<Coalition> {
@@ -238,11 +243,13 @@ impl CognitiveModule for GoalEngineAdapter {
                 // If no goal is set, adopt the broadcast content as an implicit goal
                 let has_goal = self.active_goal.read().await.is_some();
                 if !has_goal {
-                    *self.active_goal.write().await =
-                        Some(data.chars().take(100).collect());
+                    *self.active_goal.write().await = Some(data.chars().take(100).collect());
                     *self.last_updated.write().await = Some(Utc::now());
                 }
-                debug!(module = "goal_engine", "urgency boosted by {:?} broadcast", broadcast.content.content_type);
+                debug!(
+                    module = "goal_engine",
+                    "urgency boosted by {:?} broadcast", broadcast.content.content_type
+                );
             }
             ContentType::Goal => {
                 // A winning Goal broadcast from another module supersedes ours
@@ -325,7 +332,11 @@ impl CognitiveModule for AttentionModuleAdapter {
         // Intensity is driven by the broadcast salience — high salience = sharp focus
         *self.focus_intensity.write().await = broadcast.content.salience;
         *self.last_updated.write().await = Some(Utc::now());
-        debug!(module = "attention", salience = broadcast.content.salience, "focus updated from broadcast");
+        debug!(
+            module = "attention",
+            salience = broadcast.content.salience,
+            "focus updated from broadcast"
+        );
     }
 
     async fn propose_coalition(&self) -> Option<Coalition> {
@@ -406,7 +417,11 @@ impl CognitiveModule for MemoryModuleAdapter {
             *self.recent_retrieval.write().await = Some(data.chars().take(200).collect());
             *self.retrieval_relevance.write().await = broadcast.content.salience;
             *self.last_updated.write().await = Some(Utc::now());
-            debug!(module = "memory", relevance = broadcast.content.salience, "retrieval updated from broadcast");
+            debug!(
+                module = "memory",
+                relevance = broadcast.content.salience,
+                "retrieval updated from broadcast"
+            );
         }
     }
 
@@ -499,7 +514,12 @@ impl CognitiveModule for NarrativeSelfAdapter {
         );
         *self.last_entry.write().await = Some(narrative_line);
         *self.last_updated.write().await = Some(Utc::now());
-        debug!(module = "narrative_self", cycle = broadcast.cycle_number, self_relevant, "narrative updated from broadcast");
+        debug!(
+            module = "narrative_self",
+            cycle = broadcast.cycle_number,
+            self_relevant,
+            "narrative updated from broadcast"
+        );
     }
 
     async fn propose_coalition(&self) -> Option<Coalition> {

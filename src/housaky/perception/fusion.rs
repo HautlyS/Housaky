@@ -99,9 +99,15 @@ impl OverallHazardLevel {
             HazardLevel::Low => score += 1,
             HazardLevel::None => {}
         }
-        if force_overload { score += 2; }
-        if thermal_warning { score += 2; }
-        if audio_alarm { score += 1; }
+        if force_overload {
+            score += 2;
+        }
+        if thermal_warning {
+            score += 2;
+        }
+        if audio_alarm {
+            score += 1;
+        }
 
         match score {
             0 => OverallHazardLevel::Safe,
@@ -250,7 +256,11 @@ impl PerceptualFusion {
         let (tactile_summary, tactile_confidence, force_overload, thermal_warning) =
             if !input.tactile_maps.is_empty() {
                 active_modalities.push(PerceptualModality::Tactile);
-                let contacts: Vec<_> = input.tactile_maps.iter().filter(|m| m.is_in_contact(0.05)).collect();
+                let contacts: Vec<_> = input
+                    .tactile_maps
+                    .iter()
+                    .filter(|m| m.is_in_contact(0.05))
+                    .collect();
                 let max_force = input
                     .tactile_maps
                     .iter()
@@ -269,7 +279,11 @@ impl PerceptualFusion {
                     });
                 }
                 (
-                    format!("{} contact zones, max force={:.2}", contacts.len(), max_force),
+                    format!(
+                        "{} contact zones, max force={:.2}",
+                        contacts.len(),
+                        max_force
+                    ),
                     0.9,
                     overload,
                     false,
@@ -321,7 +335,9 @@ impl PerceptualFusion {
         }
 
         // ─── Compute attention focus ──────────────────────────────────────────
-        let attention_focus = self.compute_attention_focus(&events, &dominant_objects).await;
+        let attention_focus = self
+            .compute_attention_focus(&events, &dominant_objects)
+            .await;
 
         // ─── Novelty score ────────────────────────────────────────────────────
         let novelty_score = self.compute_novelty(&events).await;
@@ -330,7 +346,12 @@ impl PerceptualFusion {
         let audio_alarm = input
             .audio_classification
             .as_ref()
-            .map(|a| matches!(a.primary_event, AudioEventType::Alarm | AudioEventType::Crash))
+            .map(|a| {
+                matches!(
+                    a.primary_event,
+                    AudioEventType::Alarm | AudioEventType::Crash
+                )
+            })
             .unwrap_or(false);
 
         let hazard_level = OverallHazardLevel::from_components(
@@ -417,10 +438,16 @@ impl PerceptualFusion {
 
             // Detect potential hazard objects
             let hazard_labels = ["fire", "smoke", "weapon", "danger"];
-            if hazard_labels.iter().any(|l| det.label.to_lowercase().contains(l)) {
+            if hazard_labels
+                .iter()
+                .any(|l| det.label.to_lowercase().contains(l))
+            {
                 events.push(PerceptualEvent {
                     event_type: "visual_hazard".to_string(),
-                    description: format!("Hazardous object detected: {} ({:.2})", det.label, det.confidence),
+                    description: format!(
+                        "Hazardous object detected: {} ({:.2})",
+                        det.label, det.confidence
+                    ),
                     confidence: det.confidence,
                     source_modality: PerceptualModality::Vision,
                     timestamp: frame.frame.timestamp,
@@ -449,7 +476,10 @@ impl PerceptualFusion {
 
         PerceptualEvent {
             event_type: format!("audio_{:?}", audio.primary_event).to_lowercase(),
-            description: format!("Audio event: {:?} (conf={:.2})", audio.primary_event, confidence),
+            description: format!(
+                "Audio event: {:?} (conf={:.2})",
+                audio.primary_event, confidence
+            ),
             confidence,
             source_modality: PerceptualModality::Audio,
             timestamp: audio.timestamp,
@@ -462,7 +492,10 @@ impl PerceptualFusion {
 
         // Conflict: vision says person present but tactile shows no contact at expected position
         if let Some(ref frame) = input.vision {
-            let person_detected = frame.detections.iter().any(|d| d.label.eq_ignore_ascii_case("person"));
+            let person_detected = frame
+                .detections
+                .iter()
+                .any(|d| d.label.eq_ignore_ascii_case("person"));
             if person_detected && !input.tactile_maps.is_empty() {
                 let any_contact = input.tactile_maps.iter().any(|m| m.is_in_contact(0.05));
                 if !any_contact {
@@ -479,8 +512,10 @@ impl PerceptualFusion {
                     conflicts.push(PerceptualConflict {
                         modality_a: PerceptualModality::Vision,
                         modality_b: PerceptualModality::Audio,
-                        description: "Vision detects busy scene but audio reports silence".to_string(),
-                        resolution: "Trust vision; audio sensor may be muted or obstructed".to_string(),
+                        description: "Vision detects busy scene but audio reports silence"
+                            .to_string(),
+                        resolution: "Trust vision; audio sensor may be muted or obstructed"
+                            .to_string(),
                         confidence_a: 0.8,
                         confidence_b: 0.5,
                     });
@@ -494,7 +529,8 @@ impl PerceptualFusion {
                 conflicts.push(PerceptualConflict {
                     modality_a: PerceptualModality::Olfactory,
                     modality_b: PerceptualModality::Vision,
-                    description: "Chemical hazard detected but no visual data to confirm source".to_string(),
+                    description: "Chemical hazard detected but no visual data to confirm source"
+                        .to_string(),
                     resolution: "Trust olfactory; initiate visual scan".to_string(),
                     confidence_a: 0.85,
                     confidence_b: 0.0,
@@ -511,9 +547,15 @@ impl PerceptualFusion {
         dominant_objects: &[String],
     ) -> Option<String> {
         // Highest priority: events requiring attention
-        if let Some(urgent) = events.iter().filter(|e| e.requires_attention).max_by(|a, b| {
-            a.confidence.partial_cmp(&b.confidence).unwrap_or(std::cmp::Ordering::Equal)
-        }) {
+        if let Some(urgent) = events
+            .iter()
+            .filter(|e| e.requires_attention)
+            .max_by(|a, b| {
+                a.confidence
+                    .partial_cmp(&b.confidence)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+        {
             return Some(urgent.description.clone());
         }
 
@@ -667,7 +709,9 @@ mod tests {
             proprioceptive_state: None,
         };
         let percept = fusion.fuse(input).await.unwrap();
-        assert!(percept.active_modalities.contains(&PerceptualModality::Vision));
+        assert!(percept
+            .active_modalities
+            .contains(&PerceptualModality::Vision));
         assert_eq!(percept.hazard_level, OverallHazardLevel::Safe);
     }
 
@@ -683,7 +727,9 @@ mod tests {
         };
         let percept = fusion.fuse(input).await.unwrap();
         assert!(!percept.immediate_threats.is_empty());
-        assert!(percept.active_modalities.contains(&PerceptualModality::Audio));
+        assert!(percept
+            .active_modalities
+            .contains(&PerceptualModality::Audio));
     }
 
     #[tokio::test]
@@ -729,12 +775,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_hazard_from_audio_alarm() {
-        let level = OverallHazardLevel::from_components(
-            &HazardLevel::None,
-            false,
-            false,
-            true,
-        );
+        let level = OverallHazardLevel::from_components(&HazardLevel::None, false, false, true);
         assert_eq!(level, OverallHazardLevel::Caution);
     }
 

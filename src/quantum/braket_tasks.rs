@@ -4,7 +4,7 @@
 //! Amazon Braket with automatic retry on transient failures, cost estimation
 //! and tracking, and local result caching to avoid re-running identical tasks.
 
-use super::backend::{AmazonBraketBackend, BraketDeviceCatalog, QuantumBackend, QuantumConfig};
+use super::backend::{AmazonBraketBackend, BraketDeviceCatalog, QuantumBackend};
 use super::circuit::{MeasurementResult, QuantumCircuit};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
@@ -80,12 +80,19 @@ impl CostTracker {
             .unwrap_or(0.0);
         self.total_cost_usd += cost;
 
-        *self.cost_by_device.entry(device_arn.to_string()).or_insert(0.0) += cost;
+        *self
+            .cost_by_device
+            .entry(device_arn.to_string())
+            .or_insert(0.0) += cost;
         *self.tasks_by_status.entry(status.to_string()).or_insert(0) += 1;
     }
 
     pub fn budget_remaining(&self, limit: f64) -> f64 {
-        if limit <= 0.0 { f64::INFINITY } else { limit - self.total_cost_usd }
+        if limit <= 0.0 {
+            f64::INFINITY
+        } else {
+            limit - self.total_cost_usd
+        }
     }
 }
 
@@ -168,7 +175,8 @@ impl BraketTaskManager {
         circuit: &QuantumCircuit,
         label: &str,
     ) -> Result<BatchTask> {
-        let device_arn = &backend.device_catalog
+        let device_arn = &backend
+            .device_catalog
             .as_ref()
             .map(|c| c.arn.clone())
             .unwrap_or_else(|| "unknown".to_string());
@@ -202,7 +210,8 @@ impl BraketTaskManager {
             if remaining < estimated && self.config.budget_limit_usd > 0.0 {
                 anyhow::bail!(
                     "Budget exhausted: ${:.4} remaining, task costs ~${:.4}",
-                    remaining, estimated
+                    remaining,
+                    estimated
                 );
             }
         }
@@ -309,7 +318,9 @@ impl BraketTaskManager {
             self.config.max_concurrent_tasks
         );
 
-        let semaphore = Arc::new(tokio::sync::Semaphore::new(self.config.max_concurrent_tasks));
+        let semaphore = Arc::new(tokio::sync::Semaphore::new(
+            self.config.max_concurrent_tasks,
+        ));
         let mut handles = Vec::new();
 
         for (label, circuit) in circuits {
@@ -321,7 +332,8 @@ impl BraketTaskManager {
             let _cache = self.cache.clone();
             let _cost_tracker = self.cost_tracker.clone();
             let _config = self.config.clone();
-            let device_arn = backend.device_catalog
+            let device_arn = backend
+                .device_catalog
                 .as_ref()
                 .map(|c| c.arn.clone())
                 .unwrap_or_else(|| "unknown".to_string());
@@ -353,14 +365,28 @@ impl BraketTaskManager {
             tasks.push(task);
         }
 
-        let successful = tasks.iter().filter(|t| t.status == BatchTaskStatus::Completed).count();
-        let failed = tasks.iter().filter(|t| t.status == BatchTaskStatus::Failed).count();
-        let cached = tasks.iter().filter(|t| t.status == BatchTaskStatus::Cached).count();
+        let successful = tasks
+            .iter()
+            .filter(|t| t.status == BatchTaskStatus::Completed)
+            .count();
+        let failed = tasks
+            .iter()
+            .filter(|t| t.status == BatchTaskStatus::Failed)
+            .count();
+        let cached = tasks
+            .iter()
+            .filter(|t| t.status == BatchTaskStatus::Cached)
+            .count();
         let total_cost: f64 = tasks.iter().map(|t| t.cost_usd).sum();
 
         info!(
             "Batch {} complete: {}/{} succeeded, {} cached, {} failed, ${:.4}",
-            batch_id, successful, tasks.len(), cached, failed, total_cost
+            batch_id,
+            successful,
+            tasks.len(),
+            cached,
+            failed,
+            total_cost
         );
 
         Ok(BatchResult {

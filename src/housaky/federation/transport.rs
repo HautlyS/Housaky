@@ -100,14 +100,34 @@ impl PeerConnection {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum TransportMessage {
-    Ping { from: String, timestamp: i64 },
-    Pong { from: String, timestamp: i64, ping_timestamp: i64 },
-    DeltaSync { delta: KnowledgeDelta },
-    PeerAnnounce { peer: Peer },
-    PeerDiscover { requester: String },
-    PeerList { peers: Vec<Peer> },
-    Ack { message_id: String },
-    Error { code: u32, message: String },
+    Ping {
+        from: String,
+        timestamp: i64,
+    },
+    Pong {
+        from: String,
+        timestamp: i64,
+        ping_timestamp: i64,
+    },
+    DeltaSync {
+        delta: KnowledgeDelta,
+    },
+    PeerAnnounce {
+        peer: Peer,
+    },
+    PeerDiscover {
+        requester: String,
+    },
+    PeerList {
+        peers: Vec<Peer>,
+    },
+    Ack {
+        message_id: String,
+    },
+    Error {
+        code: u32,
+        message: String,
+    },
 }
 
 impl TransportMessage {
@@ -149,7 +169,9 @@ pub struct NetworkTransport {
 impl NetworkTransport {
     pub fn new(config: TransportConfig, local_id: &str) -> Self {
         let http_client = reqwest::Client::builder()
-            .timeout(std::time::Duration::from_millis(config.connection_timeout_ms))
+            .timeout(std::time::Duration::from_millis(
+                config.connection_timeout_ms,
+            ))
             .build()
             .unwrap_or_default();
 
@@ -175,17 +197,26 @@ impl NetworkTransport {
     pub async fn connect(&self, peer_id: &str, address: &str) -> Result<()> {
         let reachable = self.ping_peer(address).await.is_ok();
         if !reachable {
-            warn!("Transport: cannot reach peer '{}' at '{}'", peer_id, address);
+            warn!(
+                "Transport: cannot reach peer '{}' at '{}'",
+                peer_id, address
+            );
         }
 
         let conn = PeerConnection::new(peer_id, address, self.config.protocol.clone());
-        self.connections.write().await.insert(peer_id.to_string(), conn);
+        self.connections
+            .write()
+            .await
+            .insert(peer_id.to_string(), conn);
 
         let mut stats = self.stats.write().await;
         stats.total_connections += 1;
         stats.active_connections += 1;
 
-        info!("Transport: connected to peer '{}' via {}", peer_id, self.config.protocol);
+        info!(
+            "Transport: connected to peer '{}' via {}",
+            peer_id, self.config.protocol
+        );
         Ok(())
     }
 
@@ -207,10 +238,12 @@ impl NetworkTransport {
         drop(conns);
 
         let Some(address) = conn_addr else {
-            self.pending_messages
-                .write()
-                .await
-                .push((peer_id.to_string(), TransportMessage::DeltaSync { delta: delta.clone() }));
+            self.pending_messages.write().await.push((
+                peer_id.to_string(),
+                TransportMessage::DeltaSync {
+                    delta: delta.clone(),
+                },
+            ));
             return Ok(SyncResult {
                 peer_id: peer_id.to_string(),
                 entries_received: 0,
@@ -221,7 +254,9 @@ impl NetworkTransport {
             });
         };
 
-        let message = TransportMessage::DeltaSync { delta: delta.clone() };
+        let message = TransportMessage::DeltaSync {
+            delta: delta.clone(),
+        };
         let payload = serde_json::to_vec(&message)?;
         let payload_size = payload.len();
 
@@ -238,7 +273,11 @@ impl NetworkTransport {
                 let n = stats.total_messages_sent as f64;
                 stats.avg_latency_ms = (stats.avg_latency_ms * (n - 1.0) + dur) / n;
 
-                debug!("Transport: sent delta to '{}' ({} entries)", peer_id, delta.additions.len());
+                debug!(
+                    "Transport: sent delta to '{}' ({} entries)",
+                    peer_id,
+                    delta.additions.len()
+                );
 
                 Ok(SyncResult {
                     peer_id: peer_id.to_string(),
@@ -252,10 +291,12 @@ impl NetworkTransport {
             Err(e) => {
                 warn!("Transport: failed to send delta to '{}': {}", peer_id, e);
                 self.stats.write().await.failed_sends += 1;
-                self.pending_messages
-                    .write()
-                    .await
-                    .push((peer_id.to_string(), TransportMessage::DeltaSync { delta: delta.clone() }));
+                self.pending_messages.write().await.push((
+                    peer_id.to_string(),
+                    TransportMessage::DeltaSync {
+                        delta: delta.clone(),
+                    },
+                ));
                 Ok(SyncResult {
                     peer_id: peer_id.to_string(),
                     entries_received: 0,
@@ -271,24 +312,35 @@ impl NetworkTransport {
     pub async fn send_peer_announce(&self, address: &str, peer: &Peer) -> Result<()> {
         let message = TransportMessage::PeerAnnounce { peer: peer.clone() };
         let payload = serde_json::to_vec(&message)?;
-        self.http_send(address, "announce", payload).await.map(|_| ())
+        self.http_send(address, "announce", payload)
+            .await
+            .map(|_| ())
     }
 
     pub async fn discover_peers(&self, known_address: &str) -> Result<Vec<Peer>> {
-        let message = TransportMessage::PeerDiscover { requester: self.local_id.clone() };
+        let message = TransportMessage::PeerDiscover {
+            requester: self.local_id.clone(),
+        };
         let payload = serde_json::to_vec(&message)?;
 
         match self.http_send(known_address, "discover", payload).await {
             Ok(body) => {
                 if let Ok(peers) = serde_json::from_str::<Vec<Peer>>(&body) {
-                    info!("Transport: discovered {} peers from '{}'", peers.len(), known_address);
+                    info!(
+                        "Transport: discovered {} peers from '{}'",
+                        peers.len(),
+                        known_address
+                    );
                     Ok(peers)
                 } else {
                     Ok(vec![])
                 }
             }
             Err(e) => {
-                warn!("Transport: peer discovery from '{}' failed: {}", known_address, e);
+                warn!(
+                    "Transport: peer discovery from '{}' failed: {}",
+                    known_address, e
+                );
                 Ok(vec![])
             }
         }
@@ -331,10 +383,7 @@ impl NetworkTransport {
                 if self.http_send(&address, endpoint, payload).await.is_ok() {
                     flushed += 1;
                 } else {
-                    self.pending_messages
-                        .write()
-                        .await
-                        .push((peer_id, message));
+                    self.pending_messages.write().await.push((peer_id, message));
                 }
             }
         }
@@ -414,7 +463,11 @@ impl FederationTransportLayer {
                 connected += 1;
             }
         }
-        info!("FederationTransport: connected to {}/{} peers", connected, peers.len());
+        info!(
+            "FederationTransport: connected to {}/{} peers",
+            connected,
+            peers.len()
+        );
         connected
     }
 
@@ -422,14 +475,18 @@ impl FederationTransportLayer {
         let peer_ids = self.transport.active_peer_ids().await;
         let mut results = Vec::new();
         for peer_id in &peer_ids {
-            let result = self.transport.send_delta(peer_id, delta).await.unwrap_or(SyncResult {
-                peer_id: peer_id.clone(),
-                entries_received: 0,
-                entries_sent: 0,
-                conflicts_resolved: 0,
-                duration_ms: 0,
-                success: false,
-            });
+            let result = self
+                .transport
+                .send_delta(peer_id, delta)
+                .await
+                .unwrap_or(SyncResult {
+                    peer_id: peer_id.clone(),
+                    entries_received: 0,
+                    entries_sent: 0,
+                    conflicts_resolved: 0,
+                    duration_ms: 0,
+                    success: false,
+                });
             results.push(result);
         }
         results
@@ -495,7 +552,10 @@ mod tests {
             modifications: vec![],
             deletions: vec![],
         };
-        let result = transport.send_delta("nonexistent-peer", &delta).await.unwrap();
+        let result = transport
+            .send_delta("nonexistent-peer", &delta)
+            .await
+            .unwrap();
         assert!(!result.success);
         assert_eq!(transport.pending_messages.read().await.len(), 1);
     }

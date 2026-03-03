@@ -255,7 +255,9 @@ impl SpikeNetwork {
 
     pub fn firing_rate(&self, neuron_id: &str, window_ms: u64) -> f64 {
         let cutoff = Utc::now() - chrono::Duration::milliseconds(window_ms as i64);
-        let spikes = self.spike_history.iter()
+        let spikes = self
+            .spike_history
+            .iter()
             .filter(|e| e.neuron_id == neuron_id && e.timestamp > cutoff)
             .count();
         spikes as f64 / (window_ms as f64 / 1000.0)
@@ -281,7 +283,12 @@ impl SpikeNetwork {
         } else {
             self.synapses.iter().map(|s| s.weight.abs()).sum::<f64>() / self.synapses.len() as f64
         };
-        SpikeNetworkStats { total_neurons, total_synapses, total_spikes, avg_weight }
+        SpikeNetworkStats {
+            total_neurons,
+            total_synapses,
+            total_spikes,
+            avg_weight,
+        }
     }
 }
 

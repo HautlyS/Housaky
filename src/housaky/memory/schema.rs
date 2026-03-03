@@ -26,13 +26,20 @@ impl MemorySchema {
         if self.event_sequence_pattern.is_empty() || candidate.is_empty() {
             return 0.0;
         }
-        let self_set: std::collections::HashSet<&str> =
-            self.event_sequence_pattern.iter().map(|s| s.as_str()).collect();
+        let self_set: std::collections::HashSet<&str> = self
+            .event_sequence_pattern
+            .iter()
+            .map(|s| s.as_str())
+            .collect();
         let cand_set: std::collections::HashSet<&str> =
             candidate.iter().map(|s| s.as_str()).collect();
         let intersection = self_set.intersection(&cand_set).count();
         let union = self_set.union(&cand_set).count();
-        if union == 0 { 0.0 } else { intersection as f64 / union as f64 }
+        if union == 0 {
+            0.0
+        } else {
+            intersection as f64 / union as f64
+        }
     }
 
     pub fn assimilate(&mut self, other: &MemorySchema) {
@@ -70,7 +77,9 @@ impl SchemaLibrary {
         // Find an existing schema with high pattern similarity
         let similar_id: Option<String> = schemas
             .values()
-            .filter(|s| s.pattern_similarity(&new_schema.event_sequence_pattern) > self.merge_threshold)
+            .filter(|s| {
+                s.pattern_similarity(&new_schema.event_sequence_pattern) > self.merge_threshold
+            })
             .max_by(|a, b| {
                 a.pattern_similarity(&new_schema.event_sequence_pattern)
                     .partial_cmp(&b.pattern_similarity(&new_schema.event_sequence_pattern))
@@ -96,7 +105,11 @@ impl SchemaLibrary {
             .values()
             .filter_map(|s| {
                 let sim = s.pattern_similarity(pattern);
-                if sim > 0.3 { Some((sim, s.clone())) } else { None }
+                if sim > 0.3 {
+                    Some((sim, s.clone()))
+                } else {
+                    None
+                }
             })
             .collect();
         matches.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
@@ -111,11 +124,18 @@ impl SchemaLibrary {
         let schemas = self.schemas.read().await;
         let total = schemas.len();
         let avg_instances = if total > 0 {
-            schemas.values().map(|s| s.instance_count as f64).sum::<f64>() / total as f64
+            schemas
+                .values()
+                .map(|s| s.instance_count as f64)
+                .sum::<f64>()
+                / total as f64
         } else {
             0.0
         };
-        SchemaStats { total_schemas: total, avg_instances_per_schema: avg_instances }
+        SchemaStats {
+            total_schemas: total,
+            avg_instances_per_schema: avg_instances,
+        }
     }
 }
 
@@ -139,7 +159,10 @@ pub struct ForgettingCurve {
 
 impl ForgettingCurve {
     pub fn ebbinghaus(initial_strength: f64) -> Self {
-        Self { initial_strength, decay_constant: 0.5 }
+        Self {
+            initial_strength,
+            decay_constant: 0.5,
+        }
     }
 
     pub fn retention_at(&self, time_hours: f64) -> f64 {
@@ -158,7 +181,11 @@ mod tests {
             id: uuid::Uuid::new_v4().to_string(),
             name: "problem_solving".to_string(),
             description: "Standard problem solving pattern".to_string(),
-            event_sequence_pattern: vec!["GoalSet".to_string(), "ReasoningStep".to_string(), "GoalAchieved".to_string()],
+            event_sequence_pattern: vec![
+                "GoalSet".to_string(),
+                "ReasoningStep".to_string(),
+                "GoalAchieved".to_string(),
+            ],
             abstraction_level: 0.5,
             instance_count: 1,
             avg_emotional_valence: 0.6,
@@ -171,7 +198,9 @@ mod tests {
         let stats = lib.get_stats().await;
         assert_eq!(stats.total_schemas, 1);
 
-        let matches = lib.find_matching(&["GoalSet".to_string(), "ReasoningStep".to_string()]).await;
+        let matches = lib
+            .find_matching(&["GoalSet".to_string(), "ReasoningStep".to_string()])
+            .await;
         assert!(!matches.is_empty());
     }
 }

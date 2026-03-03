@@ -393,7 +393,11 @@ impl Provider for OpenAiCompatibleProvider {
         let chat_response: ApiChatResponse = response.json().await?;
 
         if let Some(err) = &chat_response.error {
-            return Err(anyhow::anyhow!("{} API error: {}", self.name, err.message()));
+            return Err(anyhow::anyhow!(
+                "{} API error: {}",
+                self.name,
+                err.message()
+            ));
         }
 
         chat_response
@@ -485,7 +489,11 @@ impl Provider for OpenAiCompatibleProvider {
         let chat_response: ApiChatResponse = response.json().await?;
 
         if let Some(err) = &chat_response.error {
-            return Err(anyhow::anyhow!("{} API error: {}", self.name, err.message()));
+            return Err(anyhow::anyhow!(
+                "{} API error: {}",
+                self.name,
+                err.message()
+            ));
         }
 
         chat_response

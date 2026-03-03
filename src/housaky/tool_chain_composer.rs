@@ -143,15 +143,19 @@ impl ToolChainComposer {
             let category = self.categorize_tool(tool);
             let capabilities = self.extract_capabilities(tool);
 
-            discovery.tools.insert(tool.to_string(), ToolInfo {
-                name: tool.to_string(),
-                category: category.clone(),
-                capabilities: capabilities.clone(),
-                input_types: self.estimate_input_types(tool),
-                output_types: self.estimate_output_types(tool),
-            });
+            discovery.tools.insert(
+                tool.to_string(),
+                ToolInfo {
+                    name: tool.to_string(),
+                    category: category.clone(),
+                    capabilities: capabilities.clone(),
+                    input_types: self.estimate_input_types(tool),
+                    output_types: self.estimate_output_types(tool),
+                },
+            );
 
-            discovery.categories
+            discovery
+                .categories
                 .entry(category)
                 .or_insert_with(Vec::new)
                 .push(tool.to_string());
@@ -164,16 +168,31 @@ impl ToolChainComposer {
 
     fn categorize_tool(&self, tool: &str) -> String {
         let tool_lower = tool.to_lowercase();
-        
-        if tool_lower.contains("search") || tool_lower.contains("find") || tool_lower.contains("lookup") {
+
+        if tool_lower.contains("search")
+            || tool_lower.contains("find")
+            || tool_lower.contains("lookup")
+        {
             "search".to_string()
-        } else if tool_lower.contains("read") || tool_lower.contains("get") || tool_lower.contains("fetch") {
+        } else if tool_lower.contains("read")
+            || tool_lower.contains("get")
+            || tool_lower.contains("fetch")
+        {
             "retrieval".to_string()
-        } else if tool_lower.contains("write") || tool_lower.contains("create") || tool_lower.contains("add") {
+        } else if tool_lower.contains("write")
+            || tool_lower.contains("create")
+            || tool_lower.contains("add")
+        {
             "creation".to_string()
-        } else if tool_lower.contains("analyze") || tool_lower.contains("examine") || tool_lower.contains("check") {
+        } else if tool_lower.contains("analyze")
+            || tool_lower.contains("examine")
+            || tool_lower.contains("check")
+        {
             "analysis".to_string()
-        } else if tool_lower.contains("update") || tool_lower.contains("modify") || tool_lower.contains("edit") {
+        } else if tool_lower.contains("update")
+            || tool_lower.contains("modify")
+            || tool_lower.contains("edit")
+        {
             "modification".to_string()
         } else if tool_lower.contains("delete") || tool_lower.contains("remove") {
             "deletion".to_string()
@@ -232,15 +251,20 @@ impl ToolChainComposer {
         types
     }
 
-    pub async fn compose_chain_for_goal(&self, goal: &str, available_tools: &[&str]) -> Result<Option<ToolChain>> {
+    pub async fn compose_chain_for_goal(
+        &self,
+        goal: &str,
+        available_tools: &[&str],
+    ) -> Result<Option<ToolChain>> {
         let discovery = self.discover_available_tools(available_tools).await;
-        
+
         let goal_lower = goal.to_lowercase();
-        
+
         let required_categories = self.determine_required_categories(&goal_lower);
         let required_capabilities = self.determine_required_capabilities(&goal_lower);
 
-        let chain_tools = self.find_tool_sequence(&required_categories, &required_capabilities, &discovery)?;
+        let chain_tools =
+            self.find_tool_sequence(&required_categories, &required_capabilities, &discovery)?;
 
         if chain_tools.is_empty() {
             return Ok(None);
@@ -342,9 +366,8 @@ impl ToolChainComposer {
 
         for tool_in_chain in &chain.tools {
             let tool_start = std::time::Instant::now();
-            
-            let result = executor
-                .execute(&tool_in_chain.tool_name, current_data.clone());
+
+            let result = executor.execute(&tool_in_chain.tool_name, current_data.clone());
 
             let duration_ms = tool_start.elapsed().as_millis() as u64;
 
@@ -369,7 +392,7 @@ impl ToolChainComposer {
 
         let end_time = Utc::now();
         let duration_ms = (end_time - start_time).num_milliseconds() as u64;
-        
+
         let all_success = tool_results.iter().all(|r| r.success);
 
         let exec_result = ChainExecutionResult {
@@ -386,30 +409,34 @@ impl ToolChainComposer {
             total_steps: chain.tools.len(),
         };
 
-        self.record_execution(chain.id.clone(), exec_result.clone()).await;
+        self.record_execution(chain.id.clone(), exec_result.clone())
+            .await;
 
         Ok(exec_result)
     }
 
     async fn record_execution(&self, chain_id: String, result: ChainExecutionResult) {
         let mut history = self.execution_history.write().await;
-        
+
         if history.len() >= self.max_history {
             history.pop_front();
         }
-        
+
         history.push_back(result.clone());
 
         let mut effectiveness = self.chain_effectiveness.write().await;
-        let stats = effectiveness.entry(chain_id).or_insert_with(ChainEffectiveness::default);
-        
+        let stats = effectiveness
+            .entry(chain_id)
+            .or_insert_with(ChainEffectiveness::default);
+
         stats.total_executions += 1;
         if result.success {
             stats.successful_executions += 1;
         }
         stats.success_rate = stats.successful_executions as f64 / stats.total_executions as f64;
-        
-        let total_duration = stats.avg_duration_ms * (stats.total_executions - 1) + result.duration_ms;
+
+        let total_duration =
+            stats.avg_duration_ms * (stats.total_executions - 1) + result.duration_ms;
         stats.avg_duration_ms = total_duration / stats.total_executions;
     }
 
@@ -419,10 +446,14 @@ impl ToolChainComposer {
 
     pub async fn optimize_chain(&self, chain_id: &str) -> Result<Option<ToolChain>> {
         let effectiveness = self.get_chain_effectiveness(chain_id).await;
-        
+
         if let Some(eff) = effectiveness {
             if eff.success_rate < 0.7 && eff.total_executions > 5 {
-                info!("Chain {} has low success rate ({:.1}%), attempting optimization", chain_id, eff.success_rate * 100.0);
+                info!(
+                    "Chain {} has low success rate ({:.1}%), attempting optimization",
+                    chain_id,
+                    eff.success_rate * 100.0
+                );
             }
         }
 

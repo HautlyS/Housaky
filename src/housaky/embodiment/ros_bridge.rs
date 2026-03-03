@@ -7,7 +7,7 @@ use tokio::sync::RwLock;
 use tracing::{debug, info};
 
 use super::motor_control::Pose3D;
-use super::sensor_fusion::{IMUData, LidarScan, LidarPoint};
+use super::sensor_fusion::{IMUData, LidarPoint, LidarScan};
 use super::spatial_reasoning::Point2D;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -170,7 +170,9 @@ impl ROS2LaserScan {
                     angle_rad: angle,
                     distance_m: r as f64,
                     intensity: self.intensities.get(i).copied().unwrap_or(0.0) as f64,
-                    valid: r >= self.range_min as f32 && r <= self.range_max as f32 && r.is_finite(),
+                    valid: r >= self.range_min as f32
+                        && r <= self.range_max as f32
+                        && r.is_finite(),
                 }
             })
             .collect();
@@ -286,9 +288,7 @@ impl ROSBridge {
         let node_info = ROS2NodeInfo {
             name: "housaky_node".to_string(),
             namespace: config.namespace.clone(),
-            publishers: vec![
-                config.cmd_vel_topic.clone(),
-            ],
+            publishers: vec![config.cmd_vel_topic.clone()],
             subscribers: vec![
                 config.odom_topic.clone(),
                 config.scan_topic.clone(),
@@ -328,10 +328,26 @@ impl ROSBridge {
 
         let mut topics = self.topics.write().await;
         for (name, msg_type, qos) in [
-            (&self.config.cmd_vel_topic, "geometry_msgs/Twist", ROS2QoSProfile::reliable()),
-            (&self.config.odom_topic, "nav_msgs/Odometry", ROS2QoSProfile::sensor_data()),
-            (&self.config.scan_topic, "sensor_msgs/LaserScan", ROS2QoSProfile::sensor_data()),
-            (&self.config.imu_topic, "sensor_msgs/Imu", ROS2QoSProfile::sensor_data()),
+            (
+                &self.config.cmd_vel_topic,
+                "geometry_msgs/Twist",
+                ROS2QoSProfile::reliable(),
+            ),
+            (
+                &self.config.odom_topic,
+                "nav_msgs/Odometry",
+                ROS2QoSProfile::sensor_data(),
+            ),
+            (
+                &self.config.scan_topic,
+                "sensor_msgs/LaserScan",
+                ROS2QoSProfile::sensor_data(),
+            ),
+            (
+                &self.config.imu_topic,
+                "sensor_msgs/Imu",
+                ROS2QoSProfile::sensor_data(),
+            ),
         ] {
             topics.insert(
                 name.clone(),
@@ -361,8 +377,12 @@ impl ROSBridge {
             "angular": {"x": twist.angular_x, "y": twist.angular_y, "z": twist.angular_z},
         });
 
-        self.publish(&self.config.cmd_vel_topic.clone(), msg).await?;
-        debug!("Published cmd_vel: linear={:.3}, angular={:.3}", linear, angular);
+        self.publish(&self.config.cmd_vel_topic.clone(), msg)
+            .await?;
+        debug!(
+            "Published cmd_vel: linear={:.3}, angular={:.3}",
+            linear, angular
+        );
         Ok(())
     }
 
@@ -379,7 +399,11 @@ impl ROSBridge {
 
         if connected {
             // In production: serialize and send via DDS transport
-            debug!("ROS2 publish on '{}': {} bytes", topic, message.to_string().len());
+            debug!(
+                "ROS2 publish on '{}': {} bytes",
+                topic,
+                message.to_string().len()
+            );
         } else {
             // Simulation: queue for inspection
             let mut queue = self.message_queue.write().await;
@@ -393,11 +417,7 @@ impl ROSBridge {
         Ok(())
     }
 
-    pub async fn subscribe(
-        &self,
-        topic: &str,
-        callback: TopicCallback,
-    ) -> Result<()> {
+    pub async fn subscribe(&self, topic: &str, callback: TopicCallback) -> Result<()> {
         self.callbacks
             .write()
             .await
@@ -409,21 +429,24 @@ impl ROSBridge {
     /// Simulate receiving an odometry message (for testing without real ROS2).
     pub async fn inject_odometry(&self, odom: Odometry) -> Result<()> {
         let msg = serde_json::to_value(&odom)?;
-        self.receive_message(&self.config.odom_topic.clone(), msg).await;
+        self.receive_message(&self.config.odom_topic.clone(), msg)
+            .await;
         Ok(())
     }
 
     /// Simulate receiving a laser scan.
     pub async fn inject_laser_scan(&self, scan: ROS2LaserScan) -> Result<()> {
         let msg = serde_json::to_value(&scan)?;
-        self.receive_message(&self.config.scan_topic.clone(), msg).await;
+        self.receive_message(&self.config.scan_topic.clone(), msg)
+            .await;
         Ok(())
     }
 
     /// Simulate receiving an IMU message.
     pub async fn inject_imu(&self, imu: ROS2IMU) -> Result<()> {
         let msg = serde_json::to_value(&imu)?;
-        self.receive_message(&self.config.imu_topic.clone(), msg).await;
+        self.receive_message(&self.config.imu_topic.clone(), msg)
+            .await;
         Ok(())
     }
 

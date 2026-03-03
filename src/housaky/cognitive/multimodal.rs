@@ -271,10 +271,22 @@ impl MultimodalPerception {
 
         // Entity patterns (simple keyword matching)
         let entity_types = [
-            ("person", vec!["person", "man", "woman", "child", "user", "developer"]),
-            ("object", vec!["file", "folder", "screen", "window", "button", "image"]),
-            ("action", vec!["running", "writing", "coding", "clicking", "reading"]),
-            ("location", vec!["desktop", "terminal", "browser", "editor", "server"]),
+            (
+                "person",
+                vec!["person", "man", "woman", "child", "user", "developer"],
+            ),
+            (
+                "object",
+                vec!["file", "folder", "screen", "window", "button", "image"],
+            ),
+            (
+                "action",
+                vec!["running", "writing", "coding", "clicking", "reading"],
+            ),
+            (
+                "location",
+                vec!["desktop", "terminal", "browser", "editor", "server"],
+            ),
             ("error", vec!["error", "warning", "failure", "crash", "bug"]),
         ];
 
@@ -324,7 +336,9 @@ mod tests {
     #[tokio::test]
     async fn test_perceive_image() {
         let mm = MultimodalPerception::new();
-        let result = mm.perceive_image("A person coding in a terminal", HashMap::new()).await;
+        let result = mm
+            .perceive_image("A person coding in a terminal", HashMap::new())
+            .await;
         assert!(result.text_representation.contains("Image"));
         assert!(!result.entities.is_empty());
     }
@@ -332,8 +346,12 @@ mod tests {
     #[tokio::test]
     async fn test_fusion() {
         let mm = MultimodalPerception::new();
-        let image = mm.perceive_image("A developer reading code on screen", HashMap::new()).await;
-        let audio = mm.perceive_audio("The user says please fix the bug", "en", 3.0).await;
+        let image = mm
+            .perceive_image("A developer reading code on screen", HashMap::new())
+            .await;
+        let audio = mm
+            .perceive_audio("The user says please fix the bug", "en", 3.0)
+            .await;
         let fused = mm.fuse(vec![image, audio]).await;
         assert_eq!(fused.modalities_used.len(), 2);
         assert!(!fused.unified_description.is_empty());

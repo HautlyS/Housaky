@@ -2,6 +2,7 @@ pub mod app;
 pub mod chat_pane;
 pub mod command_palette;
 pub mod config_editor;
+pub mod doctor_panel;
 pub mod help;
 pub mod input;
 pub mod layout;

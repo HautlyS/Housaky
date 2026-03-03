@@ -9,6 +9,8 @@ pub enum GateType {
     Z,
     CNOT,
     CZ,
+    /// Controlled-Phase(θ): applies phase e^(iθ) to |11⟩ component.
+    CP(f64),
     S,
     T,
     Sdg,
@@ -36,51 +38,107 @@ pub struct Gate {
 
 impl Gate {
     pub fn h(qubit: usize) -> Self {
-        Self { gate_type: GateType::H, qubits: vec![qubit], classical_bits: vec![] }
+        Self {
+            gate_type: GateType::H,
+            qubits: vec![qubit],
+            classical_bits: vec![],
+        }
     }
 
     pub fn x(qubit: usize) -> Self {
-        Self { gate_type: GateType::X, qubits: vec![qubit], classical_bits: vec![] }
+        Self {
+            gate_type: GateType::X,
+            qubits: vec![qubit],
+            classical_bits: vec![],
+        }
     }
 
     pub fn y(qubit: usize) -> Self {
-        Self { gate_type: GateType::Y, qubits: vec![qubit], classical_bits: vec![] }
+        Self {
+            gate_type: GateType::Y,
+            qubits: vec![qubit],
+            classical_bits: vec![],
+        }
     }
 
     pub fn z(qubit: usize) -> Self {
-        Self { gate_type: GateType::Z, qubits: vec![qubit], classical_bits: vec![] }
+        Self {
+            gate_type: GateType::Z,
+            qubits: vec![qubit],
+            classical_bits: vec![],
+        }
     }
 
     pub fn cnot(control: usize, target: usize) -> Self {
-        Self { gate_type: GateType::CNOT, qubits: vec![control, target], classical_bits: vec![] }
+        Self {
+            gate_type: GateType::CNOT,
+            qubits: vec![control, target],
+            classical_bits: vec![],
+        }
     }
 
     pub fn cz(control: usize, target: usize) -> Self {
-        Self { gate_type: GateType::CZ, qubits: vec![control, target], classical_bits: vec![] }
+        Self {
+            gate_type: GateType::CZ,
+            qubits: vec![control, target],
+            classical_bits: vec![],
+        }
+    }
+
+    pub fn cp(control: usize, target: usize, theta: f64) -> Self {
+        Self {
+            gate_type: GateType::CP(theta),
+            qubits: vec![control, target],
+            classical_bits: vec![],
+        }
     }
 
     pub fn rx(qubit: usize, theta: f64) -> Self {
-        Self { gate_type: GateType::Rx(theta), qubits: vec![qubit], classical_bits: vec![] }
+        Self {
+            gate_type: GateType::Rx(theta),
+            qubits: vec![qubit],
+            classical_bits: vec![],
+        }
     }
 
     pub fn ry(qubit: usize, theta: f64) -> Self {
-        Self { gate_type: GateType::Ry(theta), qubits: vec![qubit], classical_bits: vec![] }
+        Self {
+            gate_type: GateType::Ry(theta),
+            qubits: vec![qubit],
+            classical_bits: vec![],
+        }
     }
 
     pub fn rz(qubit: usize, theta: f64) -> Self {
-        Self { gate_type: GateType::Rz(theta), qubits: vec![qubit], classical_bits: vec![] }
+        Self {
+            gate_type: GateType::Rz(theta),
+            qubits: vec![qubit],
+            classical_bits: vec![],
+        }
     }
 
     pub fn measure(qubit: usize, cbit: usize) -> Self {
-        Self { gate_type: GateType::Measure, qubits: vec![qubit], classical_bits: vec![cbit] }
+        Self {
+            gate_type: GateType::Measure,
+            qubits: vec![qubit],
+            classical_bits: vec![cbit],
+        }
     }
 
     pub fn swap(q0: usize, q1: usize) -> Self {
-        Self { gate_type: GateType::Swap, qubits: vec![q0, q1], classical_bits: vec![] }
+        Self {
+            gate_type: GateType::Swap,
+            qubits: vec![q0, q1],
+            classical_bits: vec![],
+        }
     }
 
     pub fn toffoli(c0: usize, c1: usize, target: usize) -> Self {
-        Self { gate_type: GateType::Toffoli, qubits: vec![c0, c1, target], classical_bits: vec![] }
+        Self {
+            gate_type: GateType::Toffoli,
+            qubits: vec![c0, c1, target],
+            classical_bits: vec![],
+        }
     }
 
     pub fn depth_contribution(&self) -> u32 {
@@ -88,7 +146,7 @@ impl Gate {
             GateType::Barrier => 0,
             GateType::Measure => 1,
             GateType::Toffoli | GateType::Fredkin => 6,
-            GateType::CNOT | GateType::CZ | GateType::Swap => 2,
+            GateType::CNOT | GateType::CZ | GateType::CP(_) | GateType::Swap => 2,
             _ => 1,
         }
     }
@@ -171,12 +229,18 @@ impl QuantumCircuit {
         for gate in &self.gates {
             for &q in &gate.qubits {
                 if q >= self.qubits {
-                    return Err(format!("Gate references qubit {} but circuit only has {} qubits", q, self.qubits));
+                    return Err(format!(
+                        "Gate references qubit {} but circuit only has {} qubits",
+                        q, self.qubits
+                    ));
                 }
             }
             for &c in &gate.classical_bits {
                 if c >= self.classical_bits {
-                    return Err(format!("Gate references classical bit {} but circuit only has {}", c, self.classical_bits));
+                    return Err(format!(
+                        "Gate references classical bit {} but circuit only has {}",
+                        c, self.classical_bits
+                    ));
                 }
             }
         }
@@ -200,17 +264,42 @@ impl QuantumCircuit {
         circuit
     }
 
+    /// Quantum Fourier Transform on n qubits.
+    ///
+    /// Correct construction: for each qubit i apply H, then controlled-phase
+    /// rotations R_k = CP(2π/2^k) from qubit i controlled by qubit j (j>i).
+    /// Finally bit-reverse with SWAP layer.
     pub fn qft(n: usize) -> Self {
         let mut circuit = Self::new(n);
         for i in 0..n {
             circuit.add_gate(Gate::h(i));
             for j in (i + 1)..n {
-                let k = (j - i + 1) as f64;
-                circuit.add_gate(Gate::rz(j, std::f64::consts::PI / 2_f64.powf(k)));
+                let k = (j - i + 1) as u32;
+                let theta = 2.0 * std::f64::consts::PI / (2_u64.pow(k) as f64);
+                circuit.add_gate(Gate::cp(j, i, theta));
             }
         }
+        // Bit-reversal permutation
         for i in 0..(n / 2) {
             circuit.add_gate(Gate::swap(i, n - 1 - i));
+        }
+        circuit
+    }
+
+    /// Inverse QFT — conjugate transpose of QFT.
+    pub fn iqft(n: usize) -> Self {
+        let mut circuit = Self::new(n);
+        // Reverse bit-reversal
+        for i in 0..(n / 2) {
+            circuit.add_gate(Gate::swap(i, n - 1 - i));
+        }
+        for i in (0..n).rev() {
+            for j in ((i + 1)..n).rev() {
+                let k = (j - i + 1) as u32;
+                let theta = -2.0 * std::f64::consts::PI / (2_u64.pow(k) as f64);
+                circuit.add_gate(Gate::cp(j, i, theta));
+            }
+            circuit.add_gate(Gate::h(i));
         }
         circuit
     }
@@ -243,20 +332,32 @@ impl MeasurementResult {
     }
 
     pub fn expectation_value(&self) -> f64 {
-        self.counts.iter().map(|(bits, &count)| {
-            let parity: i32 = bits.chars()
-                .map(|c| if c == '1' { 1 } else { 0 })
-                .sum::<i32>() % 2;
-            let sign = if parity == 0 { 1.0 } else { -1.0 };
-            sign * (count as f64 / self.shots as f64)
-        }).sum()
+        self.counts
+            .iter()
+            .map(|(bits, &count)| {
+                let parity: i32 = bits
+                    .chars()
+                    .map(|c| if c == '1' { 1 } else { 0 })
+                    .sum::<i32>()
+                    % 2;
+                let sign = if parity == 0 { 1.0 } else { -1.0 };
+                sign * (count as f64 / self.shots as f64)
+            })
+            .sum()
     }
 
     pub fn entropy(&self) -> f64 {
-        self.counts.values().map(|&c| {
-            let p = c as f64 / self.shots as f64;
-            if p > 0.0 { -p * p.log2() } else { 0.0 }
-        }).sum()
+        self.counts
+            .values()
+            .map(|&c| {
+                let p = c as f64 / self.shots as f64;
+                if p > 0.0 {
+                    -p * p.log2()
+                } else {
+                    0.0
+                }
+            })
+            .sum()
     }
 }
 

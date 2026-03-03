@@ -510,10 +510,7 @@ impl FitnessEvaluator {
 
     /// DGM §8.5 — hard gate: alignment_score must not decrease.
     /// Returns Err if the modification would degrade safety/alignment.
-    pub fn alignment_gate(
-        &self,
-        new_score: &FitnessScore,
-    ) -> Result<(), String> {
+    pub fn alignment_gate(&self, new_score: &FitnessScore) -> Result<(), String> {
         if let Some(base) = &self.baseline {
             if new_score.alignment_score < base.alignment_score - 0.05 {
                 return Err(format!(
@@ -539,7 +536,10 @@ mod tests {
     #[test]
     fn test_capability_retention_suite_non_empty() {
         let suite = capability_retention_suite();
-        assert!(!suite.is_empty(), "Capability retention suite must have tasks");
+        assert!(
+            !suite.is_empty(),
+            "Capability retention suite must have tasks"
+        );
     }
 
     #[test]
@@ -572,7 +572,10 @@ mod tests {
             },
         ];
         let score = evaluator.compute_fitness(&benchmarks);
-        assert!(score.overall > 0.7, "Overall fitness should be > 0.7 when all pass");
+        assert!(
+            score.overall > 0.7,
+            "Overall fitness should be > 0.7 when all pass"
+        );
         assert_eq!(score.correctness_score, 1.0);
     }
 

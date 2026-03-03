@@ -327,7 +327,11 @@ mod tests {
             classical_part: None,
             quantum_part: Some(QuantumSubproblem {
                 description: "schedule 3 goals".to_string(),
-                variables: vec!["goal_a".to_string(), "goal_b".to_string(), "goal_c".to_string()],
+                variables: vec![
+                    "goal_a".to_string(),
+                    "goal_b".to_string(),
+                    "goal_c".to_string(),
+                ],
                 objective,
             }),
             metadata: HashMap::new(),

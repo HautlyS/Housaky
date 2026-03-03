@@ -1,5 +1,5 @@
 use anyhow::Result;
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseEvent};
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::Modifier,
@@ -18,6 +18,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use super::chat_pane::ChatPane;
 use super::command_palette::{CommandPalette, PaletteAction};
 use super::config_editor::ConfigEditor;
+use super::doctor_panel::DoctorPanel;
 use super::help::HelpOverlay;
 use super::input::InputBar;
 use super::layout::{BodyZones, HeaderZones, RootZones};
@@ -25,38 +26,42 @@ use super::notifications::Notifications;
 use super::sidebar::{ActivityKind, Sidebar, SidebarGoal};
 use super::skills_panel::SkillsPanel;
 use super::state::{ActivePane, AppState, InputMode, MainTab, StreamStatus};
-use super::theme::{Palette, style_border, style_dim, style_muted, style_tab_active, style_tab_inactive, style_title, LOGO, VERSION};
+use super::theme::{
+    style_border, style_dim, style_muted, style_tab_active, style_tab_inactive, style_title,
+    Palette, LOGO, VERSION,
+};
 use super::tools_panel::ToolsPanel;
 
 // ── EnhancedApp ───────────────────────────────────────────────────────────────
 
 pub struct EnhancedApp {
     // Config & provider
-    config:         Config,
-    provider_name:  String,
-    model_name:     String,
+    config: Config,
+    provider_name: String,
+    model_name: String,
 
     // AGI core reference (live metrics, goals, thoughts)
-    core:           Option<Arc<HousakyCore>>,
-    heartbeat:      Option<Arc<HousakyHeartbeat>>,
+    core: Option<Arc<HousakyCore>>,
+    heartbeat: Option<Arc<HousakyHeartbeat>>,
 
     // Core state
-    state:          AppState,
+    state: AppState,
 
     // Panels
-    chat:           ChatPane,
-    input:          InputBar,
-    sidebar:        Sidebar,
-    skills:         SkillsPanel,
-    tools:          ToolsPanel,
-    cfg_editor:     ConfigEditor,
-    help:           HelpOverlay,
-    palette:        CommandPalette,
-    notifs:         Notifications,
+    chat: ChatPane,
+    input: InputBar,
+    sidebar: Sidebar,
+    skills: SkillsPanel,
+    tools: ToolsPanel,
+    cfg_editor: ConfigEditor,
+    doctor: DoctorPanel,
+    help: HelpOverlay,
+    palette: CommandPalette,
+    notifs: Notifications,
 
     // Logs tab
-    log_entries:    Vec<String>,
-    logs_scroll:    usize,
+    log_entries: Vec<String>,
+    logs_scroll: usize,
 
     // Streaming
     streaming_active: Arc<AtomicBool>,
@@ -90,15 +95,16 @@ impl EnhancedApp {
             core: None,
             heartbeat: None,
             state,
-            chat:       ChatPane::new(),
-            input:      InputBar::new(),
-            sidebar:    Sidebar::new(),
+            chat: ChatPane::new(),
+            input: InputBar::new(),
+            sidebar: Sidebar::new(),
             skills,
-            tools:      ToolsPanel::new(),
+            tools: ToolsPanel::new(),
             cfg_editor,
-            help:       HelpOverlay::new(),
-            palette:    CommandPalette::new(),
-            notifs:     Notifications::new(),
+            help: HelpOverlay::new(),
+            doctor: DoctorPanel::new(),
+            palette: CommandPalette::new(),
+            notifs: Notifications::new(),
             log_entries: Vec::new(),
             logs_scroll: 0,
             streaming_active: Arc::new(AtomicBool::new(false)),
@@ -175,12 +181,8 @@ impl EnhancedApp {
         let total_activity = self.sidebar.activity.len();
         if total_activity > already_logged {
             for a in &self.sidebar.activity[already_logged..] {
-                self.log_entries.push(format!(
-                    "[{}] {} {}",
-                    a.time,
-                    a.kind.icon(),
-                    a.message,
-                ));
+                self.log_entries
+                    .push(format!("[{}] {} {}", a.time, a.kind.icon(), a.message,));
             }
         }
 
@@ -195,6 +197,11 @@ impl EnhancedApp {
     /// Append a line to the logs tab programmatically.
     pub fn push_log(&mut self, entry: String) {
         self.log_entries.push(entry);
+    }
+
+    fn switch_tab(&mut self, tab: MainTab) {
+        self.state.push_nav(self.state.active_tab);
+        self.state.active_tab = tab;
     }
 
     pub fn handle_key(&mut self, key: KeyEvent) -> Result<()> {
@@ -215,6 +222,28 @@ impl EnhancedApp {
                 }
                 return Ok(());
             }
+            // Left arrow - go back to previous tab (navigation history)
+            (KeyModifiers::NONE, KeyCode::Left) => {
+                if let Some(prev_tab) = self.state.pop_nav() {
+                    self.state.active_tab = prev_tab;
+                }
+                return Ok(());
+            }
+            // Right arrow - go forward (or next tab if no history)
+            (KeyModifiers::NONE, KeyCode::Right) => {
+                self.switch_tab(self.state.active_tab.next());
+                return Ok(());
+            }
+            // Tab - next tab with history
+            (KeyModifiers::NONE, KeyCode::Tab) => {
+                self.switch_tab(self.state.active_tab.next());
+                return Ok(());
+            }
+            // Shift+Tab (BackTab) - previous tab with history
+            (KeyModifiers::SHIFT, KeyCode::BackTab) => {
+                self.switch_tab(self.state.active_tab.prev());
+                return Ok(());
+            }
             _ => {}
         }
 
@@ -228,14 +257,103 @@ impl EnhancedApp {
 
         // Route to active-tab handlers
         match self.state.active_tab {
-            MainTab::Chat    => self.handle_chat_key(key),
-            MainTab::Skills  => self.handle_skills_key(key),
-            MainTab::Tools   => self.handle_tools_key(key),
-            MainTab::Goals   => self.handle_goals_key(key),
+            MainTab::Chat => self.handle_chat_key(key),
+            MainTab::Skills => self.handle_skills_key(key),
+            MainTab::Tools => self.handle_tools_key(key),
+            MainTab::Goals => self.handle_goals_key(key),
             MainTab::Metrics => self.handle_metrics_key(key),
-            MainTab::Logs    => self.handle_logs_key(key),
-            MainTab::Config  => self.handle_config_key(key),
+            MainTab::Logs => self.handle_logs_key(key),
+            MainTab::Config => self.handle_config_key(key),
+            MainTab::Doctor => self.handle_doctor_key(key),
         }
+    }
+
+    pub fn handle_mouse(&mut self, mouse: MouseEvent) -> Result<()> {
+        use crossterm::event::MouseEventKind;
+
+        if !matches!(mouse.kind, MouseEventKind::Down(_)) {
+            return Ok(());
+        }
+
+        let pos = ratatui::layout::Position::new(mouse.column, mouse.row);
+
+        let terminal_size = Rect::new(0, 0, mouse.column.max(1), mouse.row.max(1));
+        let zones = RootZones::compute(terminal_size);
+
+        if zones.header.height == 0 {
+            return Ok(());
+        }
+
+        // Check header tabs
+        let header_rect = Rect::new(0, 0, terminal_size.width, zones.header.height);
+        let hz = HeaderZones::compute(header_rect);
+
+        if hz.tabs.contains(pos) {
+            let tab_titles: Vec<&str> = MainTab::ALL.iter().map(|t| t.label()).collect();
+            let tab_width: u16 = hz.tabs.width.saturating_sub(4) / tab_titles.len() as u16;
+            if tab_width > 0 {
+                let clicked_tab = (mouse.column.saturating_sub(hz.tabs.x + 2)) / tab_width;
+                if (clicked_tab as usize) < tab_titles.len() {
+                    let tab = MainTab::ALL[clicked_tab as usize];
+                    self.switch_tab(tab);
+                }
+            }
+            return Ok(());
+        }
+
+        // Close overlays on click outside
+        if self.help.visible {
+            self.help.hide();
+            return Ok(());
+        }
+
+        if self.palette.active {
+            self.palette.close();
+            self.state.show_command_palette = false;
+            return Ok(());
+        }
+
+        // Handle panel-specific clicks
+        match self.state.active_tab {
+            MainTab::Chat => {
+                if zones.input.contains(pos) {
+                    self.state.active_pane = ActivePane::Input;
+                    self.state.input_mode = InputMode::Insert;
+                } else if zones.body.contains(pos) {
+                    self.state.active_pane = ActivePane::Chat;
+                }
+            }
+            MainTab::Skills => {
+                self.state.active_pane = ActivePane::SkillsPanel;
+            }
+            MainTab::Tools => {
+                let tools_area = zones.body;
+                if tools_area.contains(pos) {
+                    self.state.active_pane = ActivePane::ToolsPanel;
+                    let rel_y = mouse.row.saturating_sub(tools_area.y);
+                    let item_height = 2u16;
+                    if rel_y > 1 {
+                        let idx = ((rel_y - 1) / item_height) as usize;
+                        let max_idx = self.state.tool_log.len().saturating_sub(1);
+                        if idx <= max_idx {
+                            self.tools.selected = idx;
+                        }
+                    }
+                }
+            }
+            MainTab::Goals => {}
+            MainTab::Metrics => {}
+            MainTab::Logs => {
+                let logs_area = zones.body;
+                if logs_area.contains(pos) {
+                    self.state.active_pane = ActivePane::Chat;
+                }
+            }
+            MainTab::Config => {}
+            MainTab::Doctor => {}
+        }
+
+        Ok(())
     }
 
     // ── Draw entry point ──────────────────────────────────────────────────────
@@ -274,13 +392,16 @@ impl EnhancedApp {
         f.render_widget(brand, hz.brand);
 
         // Tabs
-        let tab_titles: Vec<Span> = MainTab::ALL.iter().map(|&t| {
-            if t == self.state.active_tab {
-                Span::styled(t.label(), style_tab_active())
-            } else {
-                Span::styled(t.label(), style_tab_inactive())
-            }
-        }).collect();
+        let tab_titles: Vec<Span> = MainTab::ALL
+            .iter()
+            .map(|&t| {
+                if t == self.state.active_tab {
+                    Span::styled(t.label(), style_tab_active())
+                } else {
+                    Span::styled(t.label(), style_tab_inactive())
+                }
+            })
+            .collect();
 
         let tabs = Tabs::new(tab_titles)
             .select(self.state.active_tab.index())
@@ -294,7 +415,10 @@ impl EnhancedApp {
         let model_owned = truncate_str(&self.model_name, 14).to_owned();
         let view_owned = format!(" [{}] ", view_label);
         let meta = Paragraph::new(Line::from(vec![
-            Span::styled(provider_owned, ratatui::style::Style::default().fg(Palette::CYAN)),
+            Span::styled(
+                provider_owned,
+                ratatui::style::Style::default().fg(Palette::CYAN),
+            ),
             Span::styled("/", style_muted()),
             Span::styled(
                 model_owned,
@@ -311,16 +435,17 @@ impl EnhancedApp {
         let bz = BodyZones::compute(area, self.state.view_mode, self.state.sidebar_visible);
 
         match self.state.active_tab {
-            MainTab::Chat    => {
+            MainTab::Chat => {
                 let focused_chat = self.state.active_pane == ActivePane::Chat;
                 self.chat.draw(f, bz.main, focused_chat);
             }
-            MainTab::Skills  => self.skills.draw(f, bz.main),
-            MainTab::Tools   => self.tools.draw(f, bz.main, &self.state.tool_log),
-            MainTab::Goals   => self.draw_goals_tab(f, bz.main),
+            MainTab::Skills => self.skills.draw(f, bz.main),
+            MainTab::Tools => self.tools.draw(f, bz.main, &self.state.tool_log),
+            MainTab::Goals => self.draw_goals_tab(f, bz.main),
             MainTab::Metrics => self.draw_metrics_tab(f, bz.main),
-            MainTab::Logs    => self.draw_logs_tab(f, bz.main),
-            MainTab::Config  => self.cfg_editor.draw(f, bz.main),
+            MainTab::Logs => self.draw_logs_tab(f, bz.main),
+            MainTab::Config => self.cfg_editor.draw(f, bz.main),
+            MainTab::Doctor => self.doctor.draw(f, bz.main),
         }
 
         if let Some(sb_area) = bz.sidebar {
@@ -336,7 +461,9 @@ impl EnhancedApp {
             .border_style(style_border())
             .title(Span::styled(
                 format!(" 🎯 Goals ({}) ", self.sidebar.goals.len()),
-                ratatui::style::Style::default().fg(Palette::GOAL).add_modifier(Modifier::BOLD),
+                ratatui::style::Style::default()
+                    .fg(Palette::GOAL)
+                    .add_modifier(Modifier::BOLD),
             ));
         let inner = block.inner(area);
         f.render_widget(block, area);
@@ -345,10 +472,7 @@ impl EnhancedApp {
             f.render_widget(
                 Paragraph::new(vec![
                     Line::from(""),
-                    Line::from(Span::styled(
-                        "  No active goals.",
-                        style_muted(),
-                    )),
+                    Line::from(Span::styled("  No active goals.", style_muted())),
                     Line::from(""),
                     Line::from(Span::styled(
                         "  Goals are created automatically during AGI interactions,",
@@ -382,10 +506,7 @@ impl EnhancedApp {
             lines.push(Line::from(vec![
                 Span::raw("    "),
                 Span::styled(bar, ratatui::style::Style::default().fg(Palette::CYAN_DIM)),
-                Span::styled(
-                    format!("  {:.0}%", goal.progress * 100.0),
-                    style_dim(),
-                ),
+                Span::styled(format!("  {:.0}%", goal.progress * 100.0), style_dim()),
             ]));
             lines.push(Line::from(""));
         }
@@ -419,18 +540,38 @@ impl EnhancedApp {
 
         let left_lines = vec![
             Line::from(""),
-            row("  Uptime",       m.format_uptime(),                               Palette::SUCCESS),
-            row("  Messages",     m.total_messages.to_string(),                     Palette::TEXT),
-            row("  Requests",     m.total_requests.to_string(),                     Palette::TEXT),
-            row("  Tokens In",    m.total_tokens_in.to_string(),                    Palette::CYAN_DIM),
-            row("  Tokens Out",   m.total_tokens_out.to_string(),                   Palette::CYAN_DIM),
-            row("  Avg t/s",      format!("{:.1}", m.avg_tokens_per_sec),           Palette::CYAN),
-            row("  Last Latency", format!("{}ms", m.last_latency_ms),               Palette::TEXT),
+            row("  Uptime", m.format_uptime(), Palette::SUCCESS),
+            row("  Messages", m.total_messages.to_string(), Palette::TEXT),
+            row("  Requests", m.total_requests.to_string(), Palette::TEXT),
+            row(
+                "  Tokens In",
+                m.total_tokens_in.to_string(),
+                Palette::CYAN_DIM,
+            ),
+            row(
+                "  Tokens Out",
+                m.total_tokens_out.to_string(),
+                Palette::CYAN_DIM,
+            ),
+            row(
+                "  Avg t/s",
+                format!("{:.1}", m.avg_tokens_per_sec),
+                Palette::CYAN,
+            ),
+            row(
+                "  Last Latency",
+                format!("{}ms", m.last_latency_ms),
+                Palette::TEXT,
+            ),
             Line::from(vec![
                 Span::styled("  Errors      ", style_muted()),
                 Span::styled(m.total_errors.to_string(), err_style),
             ]),
-            row("  Error Rate",   format!("{:.1}%", m.error_rate() * 100.0),        Palette::TEXT),
+            row(
+                "  Error Rate",
+                format!("{:.1}%", m.error_rate() * 100.0),
+                Palette::TEXT,
+            ),
         ];
         f.render_widget(Paragraph::new(left_lines), left_inner);
 
@@ -466,14 +607,21 @@ impl EnhancedApp {
         f.render_widget(
             Paragraph::new(Line::from(vec![
                 Span::styled("  Skills Enabled  ", style_muted()),
-                Span::styled(format!("{}/{}", skills_enabled, self.skills.skills.len()), ratatui::style::Style::default().fg(Palette::SKILL)),
+                Span::styled(
+                    format!("{}/{}", skills_enabled, self.skills.skills.len()),
+                    ratatui::style::Style::default().fg(Palette::SKILL),
+                ),
             ])),
             right_layout[0],
         );
 
         let skill_gauge = Gauge::default()
             .block(Block::default().borders(Borders::NONE))
-            .gauge_style(ratatui::style::Style::default().fg(Palette::SKILL).bg(Palette::BG_ELEVATED))
+            .gauge_style(
+                ratatui::style::Style::default()
+                    .fg(Palette::SKILL)
+                    .bg(Palette::BG_ELEVATED),
+            )
             .ratio(skill_ratio)
             .label(format!("{:.0}%", skill_ratio * 100.0));
         f.render_widget(skill_gauge, right_layout[1]);
@@ -481,27 +629,43 @@ impl EnhancedApp {
         f.render_widget(
             Paragraph::new(Line::from(vec![
                 Span::styled("  Tools Invoked   ", style_muted()),
-                Span::styled(tools_invoked.to_string(), ratatui::style::Style::default().fg(Palette::TOOL)),
+                Span::styled(
+                    tools_invoked.to_string(),
+                    ratatui::style::Style::default().fg(Palette::TOOL),
+                ),
                 Span::styled("     Goals Active  ", style_muted()),
-                Span::styled(goals_active.to_string(), ratatui::style::Style::default().fg(Palette::GOAL)),
+                Span::styled(
+                    goals_active.to_string(),
+                    ratatui::style::Style::default().fg(Palette::GOAL),
+                ),
             ])),
             right_layout[2],
         );
 
-        let activity_lines: Vec<Line> = self.sidebar.activity.iter().rev().take(8).map(|a| {
-            let icon_style = match a.kind {
-                ActivityKind::Tool    => ratatui::style::Style::default().fg(Palette::TOOL),
-                ActivityKind::Skill   => ratatui::style::Style::default().fg(Palette::SKILL),
-                ActivityKind::Thought => ratatui::style::Style::default().fg(Palette::THOUGHT),
-                ActivityKind::Goal    => ratatui::style::Style::default().fg(Palette::GOAL),
-                ActivityKind::System  => style_dim(),
-            };
-            Line::from(vec![
-                Span::styled(format!(" {} ", a.kind.icon()), icon_style),
-                Span::styled(truncate_str(&a.message, 36), ratatui::style::Style::default().fg(Palette::TEXT_DIM)),
-                Span::styled(format!(" {}", a.time), style_muted()),
-            ])
-        }).collect();
+        let activity_lines: Vec<Line> = self
+            .sidebar
+            .activity
+            .iter()
+            .rev()
+            .take(8)
+            .map(|a| {
+                let icon_style = match a.kind {
+                    ActivityKind::Tool => ratatui::style::Style::default().fg(Palette::TOOL),
+                    ActivityKind::Skill => ratatui::style::Style::default().fg(Palette::SKILL),
+                    ActivityKind::Thought => ratatui::style::Style::default().fg(Palette::THOUGHT),
+                    ActivityKind::Goal => ratatui::style::Style::default().fg(Palette::GOAL),
+                    ActivityKind::System => style_dim(),
+                };
+                Line::from(vec![
+                    Span::styled(format!(" {} ", a.kind.icon()), icon_style),
+                    Span::styled(
+                        truncate_str(&a.message, 36),
+                        ratatui::style::Style::default().fg(Palette::TEXT_DIM),
+                    ),
+                    Span::styled(format!(" {}", a.time), style_muted()),
+                ])
+            })
+            .collect();
         f.render_widget(Paragraph::new(activity_lines), right_layout[4]);
     }
 
@@ -519,7 +683,9 @@ impl EnhancedApp {
             .border_style(style_border())
             .title(Span::styled(
                 format!(" 📋 AGI Logs ({}) ", self.log_entries.len()),
-                ratatui::style::Style::default().fg(Palette::CYAN).add_modifier(Modifier::BOLD),
+                ratatui::style::Style::default()
+                    .fg(Palette::CYAN)
+                    .add_modifier(Modifier::BOLD),
             ));
         let log_inner = log_block.inner(cols[0]);
         f.render_widget(log_block, cols[0]);
@@ -534,10 +700,7 @@ impl EnhancedApp {
                         "  Logs appear here when the AGI heartbeat is active.",
                         style_dim(),
                     )),
-                    Line::from(Span::styled(
-                        "  Start with: housaky agi --tui",
-                        style_dim(),
-                    )),
+                    Line::from(Span::styled("  Start with: housaky agi --tui", style_dim())),
                 ]),
                 log_inner,
             );
@@ -568,8 +731,14 @@ impl EnhancedApp {
                         ("·", Palette::TEXT_DIM)
                     };
                     Line::from(vec![
-                        Span::styled(format!(" {} ", icon), ratatui::style::Style::default().fg(color)),
-                        Span::styled(entry.clone(), ratatui::style::Style::default().fg(Palette::TEXT)),
+                        Span::styled(
+                            format!(" {} ", icon),
+                            ratatui::style::Style::default().fg(color),
+                        ),
+                        Span::styled(
+                            entry.clone(),
+                            ratatui::style::Style::default().fg(Palette::TEXT),
+                        ),
                     ])
                 })
                 .collect();
@@ -592,10 +761,25 @@ impl EnhancedApp {
             let m = &self.state.metrics;
             state_lines.push(row("  Status", "● Active".to_string(), Palette::SUCCESS));
             state_lines.push(row("  Uptime", m.format_uptime(), Palette::TEXT));
-            state_lines.push(row("  Messages", m.total_messages.to_string(), Palette::CYAN));
-            state_lines.push(row("  Requests", m.total_requests.to_string(), Palette::TEXT));
-            state_lines.push(row("  Errors", m.total_errors.to_string(),
-                if m.total_errors > 0 { Palette::ERROR } else { Palette::SUCCESS }));
+            state_lines.push(row(
+                "  Messages",
+                m.total_messages.to_string(),
+                Palette::CYAN,
+            ));
+            state_lines.push(row(
+                "  Requests",
+                m.total_requests.to_string(),
+                Palette::TEXT,
+            ));
+            state_lines.push(row(
+                "  Errors",
+                m.total_errors.to_string(),
+                if m.total_errors > 0 {
+                    Palette::ERROR
+                } else {
+                    Palette::SUCCESS
+                },
+            ));
             state_lines.push(Line::from(""));
             state_lines.push(Line::from(Span::styled("  ── Thoughts ──", style_muted())));
 
@@ -604,7 +788,10 @@ impl EnhancedApp {
             } else {
                 for t in self.sidebar.thoughts.iter().rev().take(6) {
                     state_lines.push(Line::from(vec![
-                        Span::styled("  💭 ", ratatui::style::Style::default().fg(Palette::THOUGHT)),
+                        Span::styled(
+                            "  💭 ",
+                            ratatui::style::Style::default().fg(Palette::THOUGHT),
+                        ),
                         Span::styled(
                             truncate_str(t, 38),
                             ratatui::style::Style::default().fg(Palette::TEXT_DIM),
@@ -613,7 +800,10 @@ impl EnhancedApp {
                 }
             }
         } else {
-            state_lines.push(Line::from(Span::styled("  Status: ○ Disconnected", style_dim())));
+            state_lines.push(Line::from(Span::styled(
+                "  Status: ○ Disconnected",
+                style_dim(),
+            )));
             state_lines.push(Line::from(""));
             state_lines.push(Line::from(Span::styled(
                 "  No AGI core connected.",
@@ -631,8 +821,8 @@ impl EnhancedApp {
     // ── Input row ─────────────────────────────────────────────────────────────
 
     fn draw_input_row(&self, f: &mut Frame, area: Rect) {
-        let focused = self.state.active_pane == ActivePane::Input
-            || self.state.input_mode.is_typing();
+        let focused =
+            self.state.active_pane == ActivePane::Input || self.state.input_mode.is_typing();
         self.input.draw(f, area, focused);
     }
 
@@ -646,9 +836,9 @@ impl EnhancedApp {
 
     fn handle_help_key(&mut self, key: KeyEvent) -> Result<()> {
         match key.code {
-            KeyCode::Up   => self.help.scroll_up(),
+            KeyCode::Up => self.help.scroll_up(),
             KeyCode::Down => self.help.scroll_down(),
-            _             => self.help.hide(),
+            _ => self.help.hide(),
         }
         Ok(())
     }
@@ -691,32 +881,53 @@ impl EnhancedApp {
             }
             PaletteAction::ToggleAutoScroll => {
                 self.chat.toggle_auto_scroll();
-                self.notifs.info(if self.chat.auto_scroll { "Auto-scroll ON" } else { "Auto-scroll OFF" });
+                self.notifs.info(if self.chat.auto_scroll {
+                    "Auto-scroll ON"
+                } else {
+                    "Auto-scroll OFF"
+                });
             }
             PaletteAction::CycleView => {
                 self.state.view_mode = self.state.view_mode.cycle();
-                self.notifs.info(format!("View: {}", self.state.view_mode.label()));
+                self.notifs
+                    .info(format!("View: {}", self.state.view_mode.label()));
             }
             PaletteAction::ToggleSidebar => {
                 self.state.sidebar_visible = !self.state.sidebar_visible;
             }
-            PaletteAction::GotoChat    => { self.state.active_tab = MainTab::Chat; }
-            PaletteAction::GotoSkills  => { self.state.active_tab = MainTab::Skills; }
-            PaletteAction::GotoTools   => { self.state.active_tab = MainTab::Tools; }
-            PaletteAction::GotoGoals   => { self.state.active_tab = MainTab::Goals; }
-            PaletteAction::GotoMetrics => { self.state.active_tab = MainTab::Metrics; }
-            PaletteAction::GotoConfig  => {
-                self.state.active_tab = MainTab::Config;
+            PaletteAction::GotoChat => {
+                self.switch_tab(MainTab::Chat);
+            }
+            PaletteAction::GotoSkills => {
+                self.switch_tab(MainTab::Skills);
+            }
+            PaletteAction::GotoTools => {
+                self.switch_tab(MainTab::Tools);
+            }
+            PaletteAction::GotoGoals => {
+                self.switch_tab(MainTab::Goals);
+            }
+            PaletteAction::GotoMetrics => {
+                self.switch_tab(MainTab::Metrics);
+            }
+            PaletteAction::GotoConfig => {
+                self.switch_tab(MainTab::Config);
                 self.cfg_editor = ConfigEditor::new(&self.config);
             }
+            PaletteAction::GotoDoctor => {
+                self.switch_tab(MainTab::Doctor);
+                self.refresh_doctor();
+            }
             PaletteAction::Reflect => {
-                self.chat.push_system("AGI: initiating self-reflection cycle…".to_string());
-                self.sidebar.push_activity(ActivityKind::Thought, "Self-reflection triggered");
+                self.chat
+                    .push_system("AGI: initiating self-reflection cycle…".to_string());
+                self.sidebar
+                    .push_activity(ActivityKind::Thought, "Self-reflection triggered");
                 self.notifs.info("Reflection cycle started");
             }
             PaletteAction::AddGoal(title) => {
                 self.sidebar.goals.push(SidebarGoal {
-                    title:    title.clone(),
+                    title: title.clone(),
                     progress: 0.0,
                     priority: super::sidebar::GoalPriority::Medium,
                 });
@@ -725,7 +936,7 @@ impl EnhancedApp {
             }
             PaletteAction::AddGoalStatic(title) => {
                 self.sidebar.goals.push(SidebarGoal {
-                    title:    title.to_string(),
+                    title: title.to_string(),
                     progress: 0.0,
                     priority: super::sidebar::GoalPriority::Medium,
                 });
@@ -799,30 +1010,53 @@ impl EnhancedApp {
                 self.input.history_next();
             }
             (KeyModifiers::NONE, KeyCode::Char(c)) | (KeyModifiers::SHIFT, KeyCode::Char(c))
-                if self.state.input_mode.is_typing() => {
+                if self.state.input_mode.is_typing() =>
+            {
                 self.input.push_char(c);
             }
 
             // --- Normal mode --------------------------------------------------
             // Any printable key or Enter enters insert mode
-            (KeyModifiers::NONE, KeyCode::Char('i'))
-            | (KeyModifiers::NONE, KeyCode::Enter) => {
+            (KeyModifiers::NONE, KeyCode::Char('i')) | (KeyModifiers::NONE, KeyCode::Enter) => {
                 self.state.input_mode = InputMode::Insert;
                 self.state.active_pane = ActivePane::Input;
             }
 
+            // Ctrl+Tab to switch focus between chat and input
+            (KeyModifiers::CONTROL, KeyCode::Tab) => {
+                if self.state.active_pane == ActivePane::Chat {
+                    self.state.active_pane = ActivePane::Input;
+                    self.state.input_mode = InputMode::Insert;
+                } else {
+                    self.state.active_pane = ActivePane::Chat;
+                }
+            }
+            // Ctrl+Shift+Tab (BackTab) also switches focus
+            (KeyModifiers::CONTROL, KeyCode::BackTab) => {
+                if self.state.active_pane == ActivePane::Input {
+                    self.state.active_pane = ActivePane::Chat;
+                } else {
+                    self.state.active_pane = ActivePane::Input;
+                    self.state.input_mode = InputMode::Insert;
+                }
+            }
+
             // Scroll chat
-            (KeyModifiers::NONE, KeyCode::Up)       => self.chat.scroll_up(1),
-            (KeyModifiers::NONE, KeyCode::Down)      => self.chat.scroll_down(1),
-            (KeyModifiers::NONE, KeyCode::PageUp)    => self.chat.scroll_up(8),
-            (KeyModifiers::NONE, KeyCode::PageDown)  => self.chat.scroll_down(8),
-            (KeyModifiers::NONE, KeyCode::Home)      => self.chat.scroll_to_top(),
-            (KeyModifiers::NONE, KeyCode::End)       => self.chat.scroll_to_bottom(),
+            (KeyModifiers::NONE, KeyCode::Up) => self.chat.scroll_up(1),
+            (KeyModifiers::NONE, KeyCode::Down) => self.chat.scroll_down(1),
+            (KeyModifiers::NONE, KeyCode::PageUp) => self.chat.scroll_up(8),
+            (KeyModifiers::NONE, KeyCode::PageDown) => self.chat.scroll_down(8),
+            (KeyModifiers::NONE, KeyCode::Home) => self.chat.scroll_to_top(),
+            (KeyModifiers::NONE, KeyCode::End) => self.chat.scroll_to_bottom(),
 
             // Auto-scroll toggle
             (KeyModifiers::NONE, KeyCode::Char('a')) => {
                 self.chat.toggle_auto_scroll();
-                self.notifs.info(if self.chat.auto_scroll { "Auto-scroll ON" } else { "Auto-scroll OFF" });
+                self.notifs.info(if self.chat.auto_scroll {
+                    "Auto-scroll ON"
+                } else {
+                    "Auto-scroll OFF"
+                });
             }
 
             // Save / export
@@ -852,27 +1086,36 @@ impl EnhancedApp {
             }
 
             // Help
-            (KeyModifiers::NONE, KeyCode::Char('?'))
-            | (KeyModifiers::NONE, KeyCode::F(1)) => {
+            (KeyModifiers::NONE, KeyCode::Char('?')) | (KeyModifiers::NONE, KeyCode::F(1)) => {
                 self.help.toggle();
             }
 
-            // Tab navigation (also handled globally via number keys)
-            (KeyModifiers::NONE, KeyCode::Tab) => {
-                self.state.active_tab = self.state.active_tab.next();
+            // Number keys → direct tab (with history)
+            (KeyModifiers::NONE, KeyCode::Char('1')) => {
+                self.switch_tab(MainTab::Chat);
             }
-            (KeyModifiers::SHIFT, KeyCode::BackTab) => {
-                self.state.active_tab = self.state.active_tab.prev();
+            (KeyModifiers::NONE, KeyCode::Char('2')) => {
+                self.switch_tab(MainTab::Skills);
             }
-
-            // Number keys → direct tab
-            (KeyModifiers::NONE, KeyCode::Char('1')) => { self.state.active_tab = MainTab::Chat; }
-            (KeyModifiers::NONE, KeyCode::Char('2')) => { self.state.active_tab = MainTab::Skills; }
-            (KeyModifiers::NONE, KeyCode::Char('3')) => { self.state.active_tab = MainTab::Tools; }
-            (KeyModifiers::NONE, KeyCode::Char('4')) => { self.state.active_tab = MainTab::Goals; }
-            (KeyModifiers::NONE, KeyCode::Char('5')) => { self.state.active_tab = MainTab::Metrics; }
-            (KeyModifiers::NONE, KeyCode::Char('6')) => { self.state.active_tab = MainTab::Logs; }
-            (KeyModifiers::NONE, KeyCode::Char('7')) => { self.state.active_tab = MainTab::Config; }
+            (KeyModifiers::NONE, KeyCode::Char('3')) => {
+                self.switch_tab(MainTab::Tools);
+            }
+            (KeyModifiers::NONE, KeyCode::Char('4')) => {
+                self.switch_tab(MainTab::Goals);
+            }
+            (KeyModifiers::NONE, KeyCode::Char('5')) => {
+                self.switch_tab(MainTab::Metrics);
+            }
+            (KeyModifiers::NONE, KeyCode::Char('6')) => {
+                self.switch_tab(MainTab::Logs);
+            }
+            (KeyModifiers::NONE, KeyCode::Char('7')) => {
+                self.switch_tab(MainTab::Config);
+            }
+            (KeyModifiers::NONE, KeyCode::Char('8')) => {
+                self.switch_tab(MainTab::Doctor);
+                self.refresh_doctor();
+            }
 
             // Quit
             (KeyModifiers::NONE, KeyCode::Char('q')) => {
@@ -914,8 +1157,8 @@ impl EnhancedApp {
         if self.skills.is_filter_active() {
             match key.code {
                 KeyCode::Esc | KeyCode::Enter => self.skills.filter_commit(),
-                KeyCode::Backspace            => self.skills.filter_pop(),
-                KeyCode::Char(c)              => self.skills.filter_push(c),
+                KeyCode::Backspace => self.skills.filter_pop(),
+                KeyCode::Char(c) => self.skills.filter_push(c),
                 _ => {}
             }
             return Ok(());
@@ -923,18 +1166,20 @@ impl EnhancedApp {
 
         match (key.modifiers, key.code) {
             (_, KeyCode::Char('q')) | (KeyModifiers::NONE, KeyCode::Esc) => {
-                self.state.active_tab = MainTab::Chat;
+                self.switch_tab(MainTab::Chat);
             }
-            (_, KeyCode::Tab)                               => { self.state.active_tab = self.state.active_tab.next(); }
-            (KeyModifiers::SHIFT, KeyCode::BackTab)        => { self.state.active_tab = self.state.active_tab.prev(); }
-            (_, KeyCode::Up)   | (_, KeyCode::Char('k'))   => self.skills.select_prev(),
-            (_, KeyCode::Down) | (_, KeyCode::Char('j'))   => self.skills.tab_next(),
-            (_, KeyCode::Char(' ')) | (_, KeyCode::Enter)  => {
+            (_, KeyCode::Up) | (_, KeyCode::Char('k')) => self.skills.select_prev(),
+            (_, KeyCode::Down) | (_, KeyCode::Char('j')) => self.skills.tab_next(),
+            (_, KeyCode::Char(' ')) | (_, KeyCode::Enter) => {
                 if let Some((name, source)) = self.skills.get_selected_skill_needs_install() {
                     match source {
                         crate::tui::enhanced_app::skills_panel::SkillSource::ClaudeOfficial => {
-                            self.notifs.info(format!("Installing {} from Claude Market...", name));
-                            match crate::skills::marketplace::install_claude_plugin(&self.config.workspace_dir, &name) {
+                            self.notifs
+                                .info(format!("Installing {} from Claude Market...", name));
+                            match crate::skills::marketplace::install_claude_plugin(
+                                &self.config.workspace_dir,
+                                &name,
+                            ) {
                                 Ok(_) => {
                                     self.skills.mark_selected_installed();
                                     self.config.skills.enabled.insert(name.clone(), true);
@@ -946,8 +1191,12 @@ impl EnhancedApp {
                             }
                         }
                         crate::tui::enhanced_app::skills_panel::SkillSource::OpenClaw => {
-                            self.notifs.info(format!("Installing {} from OpenClaw...", name));
-                            if let Err(e) = crate::skills::marketplace::install_openclaw_skill(&self.config.workspace_dir, &name) {
+                            self.notifs
+                                .info(format!("Installing {} from OpenClaw...", name));
+                            if let Err(e) = crate::skills::marketplace::install_openclaw_skill(
+                                &self.config.workspace_dir,
+                                &name,
+                            ) {
                                 self.notifs.error(format!("Install failed: {}", e));
                             } else {
                                 self.skills.mark_selected_installed();
@@ -960,30 +1209,55 @@ impl EnhancedApp {
                         }
                     }
                 } else if let Some(enabled) = self.skills.toggle_selected() {
-                    self.state.metrics.skills_enabled = self.skills.skills.iter().filter(|s| s.enabled).count();
+                    self.state.metrics.skills_enabled =
+                        self.skills.skills.iter().filter(|s| s.enabled).count();
                     let kind = if enabled { "Enabled" } else { "Disabled" };
-                    self.sidebar.push_activity(ActivityKind::Skill, format!("{}: skill", kind));
+                    self.sidebar
+                        .push_activity(ActivityKind::Skill, format!("{}: skill", kind));
                 }
             }
-            (_, KeyCode::Char('r'))                        => {
+            (_, KeyCode::Char('r')) => {
                 let skills_dir = self.config.workspace_dir.join("skills");
-                let config_skills: Vec<(String, bool)> = self.config.skills.enabled.iter().map(|(name, &en)| (name.clone(), en)).collect();
+                let config_skills: Vec<(String, bool)> = self
+                    .config
+                    .skills
+                    .enabled
+                    .iter()
+                    .map(|(name, &en)| (name.clone(), en))
+                    .collect();
                 self.skills.load_from_paths(&skills_dir, &config_skills);
-                self.skills.load_marketplace_skills(&self.config.workspace_dir, &self.config);
-                self.notifs.info("Skills refreshed from local and marketplace");
+                self.skills
+                    .load_marketplace_skills(&self.config.workspace_dir, &self.config);
+                self.notifs
+                    .info("Skills refreshed from local and marketplace");
             }
-            (_, KeyCode::Char('/'))                        => self.skills.start_filter(),
-            (_, KeyCode::PageUp)                           => self.skills.detail_scroll_up(),
-            (_, KeyCode::PageDown)                         => self.skills.detail_scroll_down(),
-            (KeyModifiers::NONE, KeyCode::Char('1'))       => { self.state.active_tab = MainTab::Chat; }
-            (KeyModifiers::NONE, KeyCode::Char('2'))       => { self.state.active_tab = MainTab::Skills; }
-            (KeyModifiers::NONE, KeyCode::Char('3'))       => { self.state.active_tab = MainTab::Tools; }
-            (KeyModifiers::NONE, KeyCode::Char('4'))       => { self.state.active_tab = MainTab::Goals; }
-            (KeyModifiers::NONE, KeyCode::Char('5'))       => { self.state.active_tab = MainTab::Metrics; }
-            (KeyModifiers::NONE, KeyCode::Char('6'))       => { self.state.active_tab = MainTab::Logs; }
-            (KeyModifiers::NONE, KeyCode::Char('7'))       => { self.state.active_tab = MainTab::Config; }
-            (KeyModifiers::NONE, KeyCode::Char('?'))
-            | (KeyModifiers::NONE, KeyCode::F(1))          => { self.help.toggle(); }
+            (_, KeyCode::Char('/')) => self.skills.start_filter(),
+            (_, KeyCode::PageUp) => self.skills.detail_scroll_up(),
+            (_, KeyCode::PageDown) => self.skills.detail_scroll_down(),
+            (KeyModifiers::NONE, KeyCode::Char('1')) => {
+                self.switch_tab(MainTab::Chat);
+            }
+            (KeyModifiers::NONE, KeyCode::Char('2')) => {
+                self.switch_tab(MainTab::Skills);
+            }
+            (KeyModifiers::NONE, KeyCode::Char('3')) => {
+                self.switch_tab(MainTab::Tools);
+            }
+            (KeyModifiers::NONE, KeyCode::Char('4')) => {
+                self.switch_tab(MainTab::Goals);
+            }
+            (KeyModifiers::NONE, KeyCode::Char('5')) => {
+                self.switch_tab(MainTab::Metrics);
+            }
+            (KeyModifiers::NONE, KeyCode::Char('6')) => {
+                self.switch_tab(MainTab::Logs);
+            }
+            (KeyModifiers::NONE, KeyCode::Char('7')) => {
+                self.switch_tab(MainTab::Config);
+            }
+            (KeyModifiers::NONE, KeyCode::Char('?')) | (KeyModifiers::NONE, KeyCode::F(1)) => {
+                self.help.toggle();
+            }
             _ => {}
         }
         Ok(())
@@ -993,8 +1267,8 @@ impl EnhancedApp {
         if self.tools.is_filter_active() {
             match key.code {
                 KeyCode::Esc | KeyCode::Enter => self.tools.filter_commit(),
-                KeyCode::Backspace            => self.tools.filter_pop(),
-                KeyCode::Char(c)              => self.tools.filter_push(c),
+                KeyCode::Backspace => self.tools.filter_pop(),
+                KeyCode::Char(c) => self.tools.filter_push(c),
                 _ => {}
             }
             return Ok(());
@@ -1002,26 +1276,45 @@ impl EnhancedApp {
 
         match (key.modifiers, key.code) {
             (_, KeyCode::Char('q')) | (KeyModifiers::NONE, KeyCode::Esc) => {
-                self.state.active_tab = MainTab::Chat;
+                self.switch_tab(MainTab::Chat);
             }
-            (_, KeyCode::Up)   | (_, KeyCode::Char('k')) => self.tools.select_prev(&self.state.tool_log),
-            (_, KeyCode::Down) | (_, KeyCode::Char('j')) => self.tools.select_next(&self.state.tool_log),
-            (_, KeyCode::PageUp)                          => self.tools.detail_scroll_up(),
-            (_, KeyCode::PageDown)                        => self.tools.detail_scroll_down(),
-            (_, KeyCode::Char('/'))                       => self.tools.start_filter(),
-            (_, KeyCode::Char('c'))                       => {
+            (_, KeyCode::Up) | (_, KeyCode::Char('k')) => {
+                self.tools.select_prev(&self.state.tool_log)
+            }
+            (_, KeyCode::Down) | (_, KeyCode::Char('j')) => {
+                self.tools.select_next(&self.state.tool_log)
+            }
+            (_, KeyCode::PageUp) => self.tools.detail_scroll_up(),
+            (_, KeyCode::PageDown) => self.tools.detail_scroll_down(),
+            (_, KeyCode::Char('/')) => self.tools.start_filter(),
+            (_, KeyCode::Char('c')) => {
                 self.state.tool_log.clear();
                 self.notifs.info("Tool log cleared");
             }
-            (KeyModifiers::NONE, KeyCode::Char('1'))       => { self.state.active_tab = MainTab::Chat; }
-            (KeyModifiers::NONE, KeyCode::Char('2'))       => { self.state.active_tab = MainTab::Skills; }
-            (KeyModifiers::NONE, KeyCode::Char('3'))       => { self.state.active_tab = MainTab::Tools; }
-            (KeyModifiers::NONE, KeyCode::Char('4'))       => { self.state.active_tab = MainTab::Goals; }
-            (KeyModifiers::NONE, KeyCode::Char('5'))       => { self.state.active_tab = MainTab::Metrics; }
-            (KeyModifiers::NONE, KeyCode::Char('6'))       => { self.state.active_tab = MainTab::Logs; }
-            (KeyModifiers::NONE, KeyCode::Char('7'))       => { self.state.active_tab = MainTab::Config; }
-            (KeyModifiers::NONE, KeyCode::Char('?'))
-            | (KeyModifiers::NONE, KeyCode::F(1))         => { self.help.toggle(); }
+            (KeyModifiers::NONE, KeyCode::Char('1')) => {
+                self.state.active_tab = MainTab::Chat;
+            }
+            (KeyModifiers::NONE, KeyCode::Char('2')) => {
+                self.state.active_tab = MainTab::Skills;
+            }
+            (KeyModifiers::NONE, KeyCode::Char('3')) => {
+                self.state.active_tab = MainTab::Tools;
+            }
+            (KeyModifiers::NONE, KeyCode::Char('4')) => {
+                self.state.active_tab = MainTab::Goals;
+            }
+            (KeyModifiers::NONE, KeyCode::Char('5')) => {
+                self.state.active_tab = MainTab::Metrics;
+            }
+            (KeyModifiers::NONE, KeyCode::Char('6')) => {
+                self.state.active_tab = MainTab::Logs;
+            }
+            (KeyModifiers::NONE, KeyCode::Char('7')) => {
+                self.state.active_tab = MainTab::Config;
+            }
+            (KeyModifiers::NONE, KeyCode::Char('?')) | (KeyModifiers::NONE, KeyCode::F(1)) => {
+                self.help.toggle();
+            }
             _ => {}
         }
         Ok(())
@@ -1030,19 +1323,32 @@ impl EnhancedApp {
     fn handle_goals_key(&mut self, key: KeyEvent) -> Result<()> {
         match (key.modifiers, key.code) {
             (_, KeyCode::Char('q')) | (KeyModifiers::NONE, KeyCode::Esc) => {
-                self.state.active_tab = MainTab::Chat;
+                self.switch_tab(MainTab::Chat);
             }
-            (KeyModifiers::NONE, KeyCode::Tab)             => { self.state.active_tab = self.state.active_tab.next(); }
-            (KeyModifiers::SHIFT, KeyCode::BackTab)        => { self.state.active_tab = self.state.active_tab.prev(); }
-            (KeyModifiers::NONE, KeyCode::Char('1'))       => { self.state.active_tab = MainTab::Chat; }
-            (KeyModifiers::NONE, KeyCode::Char('2'))       => { self.state.active_tab = MainTab::Skills; }
-            (KeyModifiers::NONE, KeyCode::Char('3'))       => { self.state.active_tab = MainTab::Tools; }
-            (KeyModifiers::NONE, KeyCode::Char('4'))       => { self.state.active_tab = MainTab::Goals; }
-            (KeyModifiers::NONE, KeyCode::Char('5'))       => { self.state.active_tab = MainTab::Metrics; }
-            (KeyModifiers::NONE, KeyCode::Char('6'))       => { self.state.active_tab = MainTab::Logs; }
-            (KeyModifiers::NONE, KeyCode::Char('7'))       => { self.state.active_tab = MainTab::Config; }
-            (KeyModifiers::NONE, KeyCode::Char('?'))
-            | (KeyModifiers::NONE, KeyCode::F(1))          => { self.help.toggle(); }
+            (KeyModifiers::NONE, KeyCode::Char('1')) => {
+                self.switch_tab(MainTab::Chat);
+            }
+            (KeyModifiers::NONE, KeyCode::Char('2')) => {
+                self.switch_tab(MainTab::Skills);
+            }
+            (KeyModifiers::NONE, KeyCode::Char('3')) => {
+                self.switch_tab(MainTab::Tools);
+            }
+            (KeyModifiers::NONE, KeyCode::Char('4')) => {
+                self.switch_tab(MainTab::Goals);
+            }
+            (KeyModifiers::NONE, KeyCode::Char('5')) => {
+                self.switch_tab(MainTab::Metrics);
+            }
+            (KeyModifiers::NONE, KeyCode::Char('6')) => {
+                self.switch_tab(MainTab::Logs);
+            }
+            (KeyModifiers::NONE, KeyCode::Char('7')) => {
+                self.switch_tab(MainTab::Config);
+            }
+            (KeyModifiers::NONE, KeyCode::Char('?')) | (KeyModifiers::NONE, KeyCode::F(1)) => {
+                self.help.toggle();
+            }
             _ => {}
         }
         Ok(())
@@ -1051,19 +1357,32 @@ impl EnhancedApp {
     fn handle_metrics_key(&mut self, key: KeyEvent) -> Result<()> {
         match (key.modifiers, key.code) {
             (_, KeyCode::Char('q')) | (KeyModifiers::NONE, KeyCode::Esc) => {
-                self.state.active_tab = MainTab::Chat;
+                self.switch_tab(MainTab::Chat);
             }
-            (KeyModifiers::NONE, KeyCode::Tab)             => { self.state.active_tab = self.state.active_tab.next(); }
-            (KeyModifiers::SHIFT, KeyCode::BackTab)        => { self.state.active_tab = self.state.active_tab.prev(); }
-            (KeyModifiers::NONE, KeyCode::Char('1'))       => { self.state.active_tab = MainTab::Chat; }
-            (KeyModifiers::NONE, KeyCode::Char('2'))       => { self.state.active_tab = MainTab::Skills; }
-            (KeyModifiers::NONE, KeyCode::Char('3'))       => { self.state.active_tab = MainTab::Tools; }
-            (KeyModifiers::NONE, KeyCode::Char('4'))       => { self.state.active_tab = MainTab::Goals; }
-            (KeyModifiers::NONE, KeyCode::Char('5'))       => { self.state.active_tab = MainTab::Metrics; }
-            (KeyModifiers::NONE, KeyCode::Char('6'))       => { self.state.active_tab = MainTab::Logs; }
-            (KeyModifiers::NONE, KeyCode::Char('7'))       => { self.state.active_tab = MainTab::Config; }
-            (KeyModifiers::NONE, KeyCode::Char('?'))
-            | (KeyModifiers::NONE, KeyCode::F(1))          => { self.help.toggle(); }
+            (KeyModifiers::NONE, KeyCode::Char('1')) => {
+                self.switch_tab(MainTab::Chat);
+            }
+            (KeyModifiers::NONE, KeyCode::Char('2')) => {
+                self.switch_tab(MainTab::Skills);
+            }
+            (KeyModifiers::NONE, KeyCode::Char('3')) => {
+                self.switch_tab(MainTab::Tools);
+            }
+            (KeyModifiers::NONE, KeyCode::Char('4')) => {
+                self.switch_tab(MainTab::Goals);
+            }
+            (KeyModifiers::NONE, KeyCode::Char('5')) => {
+                self.switch_tab(MainTab::Metrics);
+            }
+            (KeyModifiers::NONE, KeyCode::Char('6')) => {
+                self.switch_tab(MainTab::Logs);
+            }
+            (KeyModifiers::NONE, KeyCode::Char('7')) => {
+                self.switch_tab(MainTab::Config);
+            }
+            (KeyModifiers::NONE, KeyCode::Char('?')) | (KeyModifiers::NONE, KeyCode::F(1)) => {
+                self.help.toggle();
+            }
             _ => {}
         }
         Ok(())
@@ -1072,32 +1391,55 @@ impl EnhancedApp {
     fn handle_logs_key(&mut self, key: KeyEvent) -> Result<()> {
         match (key.modifiers, key.code) {
             (_, KeyCode::Char('q')) | (KeyModifiers::NONE, KeyCode::Esc) => {
-                self.state.active_tab = MainTab::Chat;
+                self.switch_tab(MainTab::Chat);
             }
-            (KeyModifiers::NONE, KeyCode::Tab)             => { self.state.active_tab = self.state.active_tab.next(); }
-            (KeyModifiers::SHIFT, KeyCode::BackTab)        => { self.state.active_tab = self.state.active_tab.prev(); }
-            (KeyModifiers::NONE, KeyCode::Up)              => { self.logs_scroll = self.logs_scroll.saturating_add(1); }
-            (KeyModifiers::NONE, KeyCode::Down)            => { self.logs_scroll = self.logs_scroll.saturating_sub(1); }
-            (KeyModifiers::NONE, KeyCode::PageUp)          => { self.logs_scroll = self.logs_scroll.saturating_add(10); }
-            (KeyModifiers::NONE, KeyCode::PageDown)        => { self.logs_scroll = self.logs_scroll.saturating_sub(10); }
-            (KeyModifiers::NONE, KeyCode::Home)            => {
+            (KeyModifiers::NONE, KeyCode::Up) => {
+                self.logs_scroll = self.logs_scroll.saturating_add(1);
+            }
+            (KeyModifiers::NONE, KeyCode::Down) => {
+                self.logs_scroll = self.logs_scroll.saturating_sub(1);
+            }
+            (KeyModifiers::NONE, KeyCode::PageUp) => {
+                self.logs_scroll = self.logs_scroll.saturating_add(10);
+            }
+            (KeyModifiers::NONE, KeyCode::PageDown) => {
+                self.logs_scroll = self.logs_scroll.saturating_sub(10);
+            }
+            (KeyModifiers::NONE, KeyCode::Home) => {
                 self.logs_scroll = self.log_entries.len();
             }
-            (KeyModifiers::NONE, KeyCode::End)             => { self.logs_scroll = 0; }
-            (_, KeyCode::Char('c'))                        => {
+            (KeyModifiers::NONE, KeyCode::End) => {
+                self.logs_scroll = 0;
+            }
+            (_, KeyCode::Char('c')) => {
                 self.log_entries.clear();
                 self.logs_scroll = 0;
                 self.notifs.info("Logs cleared");
             }
-            (KeyModifiers::NONE, KeyCode::Char('1'))       => { self.state.active_tab = MainTab::Chat; }
-            (KeyModifiers::NONE, KeyCode::Char('2'))       => { self.state.active_tab = MainTab::Skills; }
-            (KeyModifiers::NONE, KeyCode::Char('3'))       => { self.state.active_tab = MainTab::Tools; }
-            (KeyModifiers::NONE, KeyCode::Char('4'))       => { self.state.active_tab = MainTab::Goals; }
-            (KeyModifiers::NONE, KeyCode::Char('5'))       => { self.state.active_tab = MainTab::Metrics; }
-            (KeyModifiers::NONE, KeyCode::Char('6'))       => { self.state.active_tab = MainTab::Logs; }
-            (KeyModifiers::NONE, KeyCode::Char('7'))       => { self.state.active_tab = MainTab::Config; }
-            (KeyModifiers::NONE, KeyCode::Char('?'))
-            | (KeyModifiers::NONE, KeyCode::F(1))          => { self.help.toggle(); }
+            (KeyModifiers::NONE, KeyCode::Char('1')) => {
+                self.switch_tab(MainTab::Chat);
+            }
+            (KeyModifiers::NONE, KeyCode::Char('2')) => {
+                self.switch_tab(MainTab::Skills);
+            }
+            (KeyModifiers::NONE, KeyCode::Char('3')) => {
+                self.switch_tab(MainTab::Tools);
+            }
+            (KeyModifiers::NONE, KeyCode::Char('4')) => {
+                self.switch_tab(MainTab::Goals);
+            }
+            (KeyModifiers::NONE, KeyCode::Char('5')) => {
+                self.switch_tab(MainTab::Metrics);
+            }
+            (KeyModifiers::NONE, KeyCode::Char('6')) => {
+                self.switch_tab(MainTab::Logs);
+            }
+            (KeyModifiers::NONE, KeyCode::Char('7')) => {
+                self.switch_tab(MainTab::Config);
+            }
+            (KeyModifiers::NONE, KeyCode::Char('?')) | (KeyModifiers::NONE, KeyCode::F(1)) => {
+                self.help.toggle();
+            }
             _ => {}
         }
         Ok(())
@@ -1116,12 +1458,12 @@ impl EnhancedApp {
                     self.cfg_editor.cancel_edit();
                 }
                 (KeyModifiers::NONE, KeyCode::Backspace) => self.cfg_editor.edit_backspace(),
-                (KeyModifiers::NONE, KeyCode::Left)      => self.cfg_editor.edit_left(),
-                (KeyModifiers::NONE, KeyCode::Right)     => self.cfg_editor.edit_right(),
-                (KeyModifiers::NONE, KeyCode::Home)      => self.cfg_editor.edit_home(),
-                (KeyModifiers::NONE, KeyCode::End)       => self.cfg_editor.edit_end(),
+                (KeyModifiers::NONE, KeyCode::Left) => self.cfg_editor.edit_left(),
+                (KeyModifiers::NONE, KeyCode::Right) => self.cfg_editor.edit_right(),
+                (KeyModifiers::NONE, KeyCode::Home) => self.cfg_editor.edit_home(),
+                (KeyModifiers::NONE, KeyCode::End) => self.cfg_editor.edit_end(),
                 (KeyModifiers::CONTROL, KeyCode::Char('k')) => self.cfg_editor.edit_kill_line(),
-                (KeyModifiers::NONE, KeyCode::Char(c))   => self.cfg_editor.edit_push(c),
+                (KeyModifiers::NONE, KeyCode::Char(c)) => self.cfg_editor.edit_push(c),
                 _ => {}
             }
             return Ok(());
@@ -1143,51 +1485,72 @@ impl EnhancedApp {
             (KeyModifiers::CONTROL, KeyCode::Char('s')) => {
                 match self.cfg_editor.apply_and_save(&mut self.config) {
                     Ok(()) => {
-                        self.notifs.success("Config saved to ~/.housaky/config.toml");
+                        self.notifs
+                            .success("Config saved to ~/.housaky/config.toml");
                         // Refresh provider/model names from updated config
-                        if let Some(p) = &self.config.default_provider { self.provider_name = p.clone(); }
-                        if let Some(m) = &self.config.default_model     { self.model_name   = m.clone(); }
+                        if let Some(p) = &self.config.default_provider {
+                            self.provider_name = p.clone();
+                        }
+                        if let Some(m) = &self.config.default_model {
+                            self.model_name = m.clone();
+                        }
                     }
                     Err(e) => self.notifs.error(format!("Save failed: {}", e)),
                 }
             }
 
             // Navigation
-            (_, KeyCode::Up)   | (_, KeyCode::Char('k')) => self.cfg_editor.field_up(),
+            (_, KeyCode::Up) | (_, KeyCode::Char('k')) => self.cfg_editor.field_up(),
             (_, KeyCode::Down) | (_, KeyCode::Char('j')) => self.cfg_editor.field_down(),
 
             // Edit selected field (also Space for bool toggle)
             (_, KeyCode::Enter) | (_, KeyCode::Char(' ')) => self.cfg_editor.start_edit(),
 
             // Section tabs
-            (_, KeyCode::Tab)                      => self.cfg_editor.section_next(&self.config),
+            (_, KeyCode::Tab) => self.cfg_editor.section_next(&self.config),
             (KeyModifiers::SHIFT, KeyCode::BackTab) => self.cfg_editor.section_prev(&self.config),
 
             // Raw TOML toggle
             (_, KeyCode::Char('r')) => self.cfg_editor.toggle_raw(&self.config),
 
             // Global tab jump
-            (KeyModifiers::NONE, KeyCode::Char('1')) => { self.state.active_tab = MainTab::Chat; }
-            (KeyModifiers::NONE, KeyCode::Char('2')) => { self.state.active_tab = MainTab::Skills; }
-            (KeyModifiers::NONE, KeyCode::Char('3')) => { self.state.active_tab = MainTab::Tools; }
-            (KeyModifiers::NONE, KeyCode::Char('4')) => { self.state.active_tab = MainTab::Goals; }
-            (KeyModifiers::NONE, KeyCode::Char('5')) => { self.state.active_tab = MainTab::Metrics; }
-            (KeyModifiers::NONE, KeyCode::Char('6')) => { self.state.active_tab = MainTab::Logs; }
-            (KeyModifiers::NONE, KeyCode::Char('7')) => { self.state.active_tab = MainTab::Config; }
+            (KeyModifiers::NONE, KeyCode::Char('1')) => {
+                self.switch_tab(MainTab::Chat);
+            }
+            (KeyModifiers::NONE, KeyCode::Char('2')) => {
+                self.switch_tab(MainTab::Skills);
+            }
+            (KeyModifiers::NONE, KeyCode::Char('3')) => {
+                self.switch_tab(MainTab::Tools);
+            }
+            (KeyModifiers::NONE, KeyCode::Char('4')) => {
+                self.switch_tab(MainTab::Goals);
+            }
+            (KeyModifiers::NONE, KeyCode::Char('5')) => {
+                self.switch_tab(MainTab::Metrics);
+            }
+            (KeyModifiers::NONE, KeyCode::Char('6')) => {
+                self.switch_tab(MainTab::Logs);
+            }
+            (KeyModifiers::NONE, KeyCode::Char('7')) => {
+                self.switch_tab(MainTab::Config);
+            }
 
             // Back to chat
             (_, KeyCode::Char('q')) | (KeyModifiers::NONE, KeyCode::Esc) => {
                 if self.cfg_editor.dirty {
-                    self.notifs.warn("Unsaved changes — Ctrl+S to save, q again to discard");
+                    self.notifs
+                        .warn("Unsaved changes — Ctrl+S to save, q again to discard");
                     // second q will actually leave — handled by marking not-dirty so next q exits
                     // For simplicity, prompt via notification; user presses q once more
                 } else {
-                    self.state.active_tab = MainTab::Chat;
+                    self.switch_tab(MainTab::Chat);
                 }
             }
 
-            (KeyModifiers::NONE, KeyCode::Char('?'))
-            | (KeyModifiers::NONE, KeyCode::F(1)) => self.help.toggle(),
+            (KeyModifiers::NONE, KeyCode::Char('?')) | (KeyModifiers::NONE, KeyCode::F(1)) => {
+                self.help.toggle()
+            }
 
             _ => {}
         }
@@ -1200,44 +1563,190 @@ impl EnhancedApp {
         let cmd = raw.trim_start_matches('/');
         let parts: Vec<&str> = cmd.splitn(2, ' ').collect();
         let name = parts[0].trim();
-        let arg  = parts.get(1).map(|s| s.trim()).unwrap_or("");
+        let arg = parts.get(1).map(|s| s.trim()).unwrap_or("");
 
         match name {
-            "clear"   => {
+            "clear" => {
                 self.chat.clear();
                 self.notifs.info("Conversation cleared");
             }
             "export" | "save" => {
                 self.export_chat()?;
             }
-            "model"   => {
+            "model" => {
                 if !arg.is_empty() {
                     self.model_name = arg.to_string();
                     self.notifs.success(format!("Model → {}", arg));
                 } else {
-                    self.chat.push_system(format!("Current model: {}", self.model_name));
+                    self.chat
+                        .push_system(format!("Current model: {}", self.model_name));
                 }
             }
-            "goals"   => { self.state.active_tab = MainTab::Goals; }
-            "skills"  => { self.state.active_tab = MainTab::Skills; }
-            "tools"   => { self.state.active_tab = MainTab::Tools; }
-            "metrics" => { self.state.active_tab = MainTab::Metrics; }
+            "provider" => {
+                if !arg.is_empty() {
+                    self.provider_name = arg.to_string();
+                    self.notifs.success(format!("Provider → {}", arg));
+                } else {
+                    self.chat
+                        .push_system(format!("Current provider: {}", self.provider_name));
+                }
+            }
+            "goals" => {
+                self.switch_tab(MainTab::Goals);
+            }
+            "skills" => {
+                self.switch_tab(MainTab::Skills);
+            }
+            "tools" => {
+                self.switch_tab(MainTab::Tools);
+            }
+            "metrics" => {
+                self.switch_tab(MainTab::Metrics);
+            }
+            "logs" => {
+                self.switch_tab(MainTab::Logs);
+            }
+            "view" => {
+                self.state.view_mode = self.state.view_mode.cycle();
+                self.notifs
+                    .info(format!("View: {}", self.state.view_mode.label()));
+            }
+            "sidebar" => {
+                self.state.sidebar_visible = !self.state.sidebar_visible;
+                self.notifs.info(if self.state.sidebar_visible {
+                    "Sidebar shown"
+                } else {
+                    "Sidebar hidden"
+                });
+            }
+            "auto" => {
+                self.chat.toggle_auto_scroll();
+                self.notifs.info(if self.chat.auto_scroll {
+                    "Auto-scroll ON"
+                } else {
+                    "Auto-scroll OFF"
+                });
+            }
+            "status" => {
+                self.chat.push_system(format!(
+                    "Provider: {} | Model: {} | View: {} | Messages: {}",
+                    self.provider_name,
+                    self.model_name,
+                    self.state.view_mode.label(),
+                    self.chat.messages.len()
+                ));
+            }
             "config" | "cfg" | "settings" => {
-                self.state.active_tab = MainTab::Config;
+                self.switch_tab(MainTab::Config);
                 self.cfg_editor = ConfigEditor::new(&self.config);
             }
             "reflect" => {
-                self.chat.push_system("Initiating self-reflection cycle…".to_string());
-                self.sidebar.push_activity(ActivityKind::Thought, "Self-reflection triggered");
+                self.chat
+                    .push_system("Initiating self-reflection cycle…".to_string());
+                self.sidebar
+                    .push_activity(ActivityKind::Thought, "Self-reflection triggered");
                 self.notifs.info("Reflection cycle started");
             }
-            "logs"    => { self.state.active_tab = MainTab::Logs; }
-            "help"    => { self.help.show(); }
-            "quit" | "exit" => { self.state.should_quit = true; }
+            "doctor" | "health" | "diag" => {
+                self.switch_tab(MainTab::Doctor);
+                self.refresh_doctor();
+                self.notifs.info("Doctor: running diagnostics…");
+            }
+            "help" => {
+                self.help.show();
+            }
+            "quit" | "exit" => {
+                self.state.should_quit = true;
+            }
             other => {
                 self.notifs.warn(format!("Unknown command: /{}", other));
-                self.chat.push_system(format!("Unknown command: /{}. Type /help for a list.", other));
+                self.chat.push_system(format!(
+                    "Unknown command: /{}. Type /help for a list.",
+                    other
+                ));
             }
+        }
+        Ok(())
+    }
+
+    // ── Doctor tab helpers ────────────────────────────────────────────────────
+
+    pub fn refresh_doctor(&mut self) {
+        let report = crate::doctor::collect(&self.config);
+        let problems = report.total_errors + report.total_warnings;
+        self.doctor.load(report);
+        if problems == 0 {
+            self.notifs.info("Doctor: all checks passed ✅");
+        } else {
+            self.notifs
+                .warn(format!("Doctor: {} issue(s) found", problems));
+        }
+        self.sidebar
+            .push_activity(ActivityKind::System, "Doctor report refreshed");
+    }
+
+    fn handle_doctor_key(&mut self, key: KeyEvent) -> Result<()> {
+        match (key.modifiers, key.code) {
+            (_, KeyCode::Char('q')) | (KeyModifiers::NONE, KeyCode::Esc) => {
+                self.switch_tab(MainTab::Chat);
+            }
+            (_, KeyCode::Up) | (_, KeyCode::Char('k')) => self.doctor.select_prev(),
+            (_, KeyCode::Down) | (_, KeyCode::Char('j')) => self.doctor.select_next(),
+            (_, KeyCode::PageUp) => self.doctor.detail_scroll_up(),
+            (_, KeyCode::PageDown) => self.doctor.detail_scroll_down(),
+            (_, KeyCode::Tab) => self.doctor.cycle_filter_next(),
+            (KeyModifiers::SHIFT, KeyCode::BackTab) => self.doctor.cycle_filter_prev(),
+            (_, KeyCode::Char('r')) | (_, KeyCode::F(5)) => {
+                self.refresh_doctor();
+            }
+            (_, KeyCode::Char('f')) => {
+                let fixable = self
+                    .doctor
+                    .report
+                    .as_ref()
+                    .map(|r| r.auto_fixable)
+                    .unwrap_or(0);
+                if fixable > 0 {
+                    match crate::doctor::run_fix(&self.config) {
+                        Ok(()) => {
+                            self.notifs
+                                .success(format!("Doctor fix: applied {} fix(es)", fixable));
+                        }
+                        Err(e) => {
+                            self.notifs.error(format!("Doctor fix failed: {e}"));
+                        }
+                    }
+                    self.refresh_doctor();
+                } else {
+                    self.notifs.info("No auto-fixable issues");
+                }
+            }
+            (KeyModifiers::NONE, KeyCode::Char('1')) => {
+                self.switch_tab(MainTab::Chat);
+            }
+            (KeyModifiers::NONE, KeyCode::Char('2')) => {
+                self.switch_tab(MainTab::Skills);
+            }
+            (KeyModifiers::NONE, KeyCode::Char('3')) => {
+                self.switch_tab(MainTab::Tools);
+            }
+            (KeyModifiers::NONE, KeyCode::Char('4')) => {
+                self.switch_tab(MainTab::Goals);
+            }
+            (KeyModifiers::NONE, KeyCode::Char('5')) => {
+                self.switch_tab(MainTab::Metrics);
+            }
+            (KeyModifiers::NONE, KeyCode::Char('6')) => {
+                self.switch_tab(MainTab::Logs);
+            }
+            (KeyModifiers::NONE, KeyCode::Char('7')) => {
+                self.switch_tab(MainTab::Config);
+            }
+            (KeyModifiers::NONE, KeyCode::Char('8')) => { /* already here */ }
+            (KeyModifiers::NONE, KeyCode::Char('?')) | (KeyModifiers::NONE, KeyCode::F(1)) => {
+                self.help.toggle();
+            }
+            _ => {}
         }
         Ok(())
     }
@@ -1256,17 +1765,19 @@ impl EnhancedApp {
         let provider = create_provider_with_keys_manager(provider_name, Some(model_name))?;
 
         let result = match tokio::runtime::Handle::try_current() {
-            Ok(handle) => {
-                tokio::task::block_in_place(|| {
-                    handle.block_on(async {
-                        provider.chat_with_history(&chat_messages, model_name, 0.7).await
-                    })
+            Ok(handle) => tokio::task::block_in_place(|| {
+                handle.block_on(async {
+                    provider
+                        .chat_with_history(&chat_messages, model_name, 0.7)
+                        .await
                 })
-            }
+            }),
             Err(_) => {
                 let rt = tokio::runtime::Runtime::new()?;
                 rt.block_on(async {
-                    provider.chat_with_history(&chat_messages, model_name, 0.7).await
+                    provider
+                        .chat_with_history(&chat_messages, model_name, 0.7)
+                        .await
                 })
             }
         };
@@ -1280,11 +1791,17 @@ impl EnhancedApp {
         self.state.stream_content.clear();
         self.state.metrics.total_messages += 1;
         self.state.metrics.total_requests += 1;
-        self.sidebar.push_activity(ActivityKind::Thought, format!("User: {}", truncate_str(&text, 40)));
+        self.sidebar.push_activity(
+            ActivityKind::Thought,
+            format!("User: {}", truncate_str(&text, 40)),
+        );
 
-        let chat_messages: Vec<ChatMessage> = self.chat.messages.iter()
+        let chat_messages: Vec<ChatMessage> = self
+            .chat
+            .messages
+            .iter()
             .map(|m| ChatMessage {
-                role:    m.role.label().to_lowercase(),
+                role: m.role.label().to_lowercase(),
                 content: m.content.clone(),
             })
             .collect();
@@ -1305,7 +1822,7 @@ impl EnhancedApp {
         // Clone what we need for the async task
         let provider_name = self.provider_name.clone();
         let model_name = self.model_name.clone();
-        let streaming_active = Arc::clone(&self.streaming_active);
+        let _streaming_active = Arc::clone(&self.streaming_active);
         let streaming_result = Arc::clone(&self.streaming_result);
         let streaming_chunks = Arc::clone(&self.streaming_chunks);
 
@@ -1315,8 +1832,11 @@ impl EnhancedApp {
             let start = std::time::Instant::now();
 
             let result = rt.block_on(async {
-                let provider = create_provider_with_keys_manager(&provider_name, Some(&model_name))?;
-                provider.chat_with_history(&chat_messages, &model_name, 0.7).await
+                let provider =
+                    create_provider_with_keys_manager(&provider_name, Some(&model_name))?;
+                provider
+                    .chat_with_history(&chat_messages, &model_name, 0.7)
+                    .await
             });
 
             let elapsed = start.elapsed().as_millis() as u64;
@@ -1326,7 +1846,7 @@ impl EnhancedApp {
                     // Simulate streaming by sending chunks incrementally
                     let words: Vec<&str> = response.split_whitespace().collect();
                     let chunk_size = (words.len() / 20).max(1);
-                    
+
                     for chunk in words.chunks(chunk_size) {
                         let chunk_text = chunk.join(" ") + " ";
                         // Send chunk to UI

@@ -41,10 +41,10 @@ pub enum EthicalCategory {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum Strictness {
-    Permissive,  // Warn only
-    Standard,    // Warn and suggest alternative
-    Strict,      // Block action
-    Absolute,    // Block and log escalation
+    Permissive, // Warn only
+    Standard,   // Warn and suggest alternative
+    Strict,     // Block action
+    Absolute,   // Block and log escalation
 }
 
 /// An action to be ethically evaluated.
@@ -143,9 +143,16 @@ impl EthicalReasoner {
                 category: EthicalCategory::HarmAvoidance,
                 strictness: Strictness::Absolute,
                 keywords: vec![
-                    "delete".into(), "destroy".into(), "remove".into(), "kill".into(),
-                    "crash".into(), "corrupt".into(), "override".into(), "wipe".into(),
-                    "format".into(), "drop".into(),
+                    "delete".into(),
+                    "destroy".into(),
+                    "remove".into(),
+                    "kill".into(),
+                    "crash".into(),
+                    "corrupt".into(),
+                    "override".into(),
+                    "wipe".into(),
+                    "format".into(),
+                    "drop".into(),
                 ],
                 enabled: true,
             },
@@ -157,8 +164,13 @@ impl EthicalReasoner {
                 category: EthicalCategory::Honesty,
                 strictness: Strictness::Strict,
                 keywords: vec![
-                    "pretend".into(), "fake".into(), "lie".into(), "fabricate".into(),
-                    "hide".into(), "conceal".into(), "mislead".into(),
+                    "pretend".into(),
+                    "fake".into(),
+                    "lie".into(),
+                    "fabricate".into(),
+                    "hide".into(),
+                    "conceal".into(),
+                    "mislead".into(),
                 ],
                 enabled: true,
             },
@@ -169,8 +181,14 @@ impl EthicalReasoner {
                 category: EthicalCategory::Privacy,
                 strictness: Strictness::Strict,
                 keywords: vec![
-                    "password".into(), "secret".into(), "private".into(), "credential".into(),
-                    "api_key".into(), "token".into(), "ssh".into(), "personal".into(),
+                    "password".into(),
+                    "secret".into(),
+                    "private".into(),
+                    "credential".into(),
+                    "api_key".into(),
+                    "token".into(),
+                    "ssh".into(),
+                    "personal".into(),
                 ],
                 enabled: true,
             },
@@ -182,8 +200,11 @@ impl EthicalReasoner {
                 category: EthicalCategory::AutonomyRespect,
                 strictness: Strictness::Standard,
                 keywords: vec![
-                    "force".into(), "override user".into(), "without asking".into(),
-                    "automatically".into(), "bypass consent".into(),
+                    "force".into(),
+                    "override user".into(),
+                    "without asking".into(),
+                    "automatically".into(),
+                    "bypass consent".into(),
                 ],
                 enabled: true,
             },
@@ -194,7 +215,10 @@ impl EthicalReasoner {
                 category: EthicalCategory::Fairness,
                 strictness: Strictness::Standard,
                 keywords: vec![
-                    "discriminate".into(), "bias".into(), "unfair".into(), "exclude".into(),
+                    "discriminate".into(),
+                    "bias".into(),
+                    "unfair".into(),
+                    "exclude".into(),
                 ],
                 enabled: true,
             },
@@ -206,7 +230,9 @@ impl EthicalReasoner {
                 category: EthicalCategory::Transparency,
                 strictness: Strictness::Permissive,
                 keywords: vec![
-                    "hidden".into(), "covert".into(), "secret operation".into(),
+                    "hidden".into(),
+                    "covert".into(),
+                    "secret operation".into(),
                     "undisclosed".into(),
                 ],
                 enabled: true,
@@ -218,8 +244,11 @@ impl EthicalReasoner {
                 category: EthicalCategory::Beneficence,
                 strictness: Strictness::Permissive,
                 keywords: vec![
-                    "infinite".into(), "unlimited".into(), "exhaust".into(),
-                    "waste".into(), "abuse".into(),
+                    "infinite".into(),
+                    "unlimited".into(),
+                    "exhaust".into(),
+                    "waste".into(),
+                    "abuse".into(),
                 ],
                 enabled: true,
             },
@@ -232,10 +261,7 @@ impl EthicalReasoner {
     }
 
     /// Evaluate an action against all ethical principles.
-    pub async fn evaluate_action(
-        &self,
-        action: &AGIAction,
-    ) -> EthicalAssessment {
+    pub async fn evaluate_action(&self, action: &AGIAction) -> EthicalAssessment {
         let principles = self.principles.read().await;
         let global_strictness = self.global_strictness.read().await;
 
@@ -297,10 +323,7 @@ impl EthicalReasoner {
                     let p2 = &violated_principles[j];
                     if p1.priority != p2.priority {
                         dilemmas.push(EthicalDilemma {
-                            conflicting_principles: vec![
-                                p1.name.clone(),
-                                p2.name.clone(),
-                            ],
+                            conflicting_principles: vec![p1.name.clone(), p2.name.clone()],
                             description: format!(
                                 "Conflict between '{}' (priority {}) and '{}' (priority {})",
                                 p1.name, p1.priority, p2.name, p2.priority
@@ -313,8 +336,7 @@ impl EthicalReasoner {
                                     &p2.name
                                 }
                             ),
-                            resolution_basis: "Priority ordering of ethical principles"
-                                .to_string(),
+                            resolution_basis: "Priority ordering of ethical principles".to_string(),
                         });
                     }
                 }
@@ -440,19 +462,16 @@ impl EthicalReasoner {
                     ));
                 }
                 EthicalCategory::Privacy => {
-                    alternatives.push(
-                        "Redact or anonymize sensitive data before processing".to_string(),
-                    );
+                    alternatives
+                        .push("Redact or anonymize sensitive data before processing".to_string());
                 }
                 EthicalCategory::AutonomyRespect => {
-                    alternatives.push(
-                        "Ask for explicit user confirmation before proceeding".to_string(),
-                    );
+                    alternatives
+                        .push("Ask for explicit user confirmation before proceeding".to_string());
                 }
                 EthicalCategory::Honesty => {
-                    alternatives.push(
-                        "Report actual status truthfully, including failures".to_string(),
-                    );
+                    alternatives
+                        .push("Report actual status truthfully, including failures".to_string());
                 }
                 _ => {
                     alternatives.push(format!(

@@ -23,11 +23,15 @@ pub use braket_tasks::{
     BatchResult, BatchTask, BatchTaskStatus, BraketTaskManager, CostTracker, TaskManagerConfig,
 };
 pub use circuit::{Gate, GateType, MeasurementResult, NoiseModel, QuantumCircuit};
-pub use error_mitigation::{ErrorMitigator, MitigationConfig, MitigationStrategy, ReadoutCalibration};
+pub use error_mitigation::{
+    ErrorMitigator, MitigationConfig, MitigationStrategy, ReadoutCalibration,
+};
 pub use grover::{GroverConfig, GroverResult, GroverSearch, SearchProblem};
-pub use hybrid_solver::{HybridProblem, HybridProblemType, HybridResult, HybridSolver, HybridSolution};
+pub use hybrid_solver::{
+    HybridProblem, HybridProblemType, HybridResult, HybridSolution, HybridSolver,
+};
 pub use optimizer::{
-    OptimizationProblem, OptimizationResult, ProblemType, QAOAConfig, QAOAOptimizer,
+    OptimizationProblem, OptimizationResult, ProblemType, QAOAConfig, QAOAOptimizer, QuboMatrix,
     VQEConfig, VQEOptimizer,
 };
 pub use tomography::{DensityMatrix, StateTomographer, TomographyConfig, TomographyResult};

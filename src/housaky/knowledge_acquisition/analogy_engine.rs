@@ -18,7 +18,7 @@ pub struct DomainConcept {
     pub domain: String,
     pub name: String,
     pub description: String,
-    pub relations: HashMap<String, String>,  // relation_type → target_concept_id
+    pub relations: HashMap<String, String>, // relation_type → target_concept_id
     pub attributes: HashMap<String, String>,
 }
 
@@ -97,7 +97,7 @@ impl Analogy {
 
 pub struct AnalogyEngine {
     pub analogies: Vec<Analogy>,
-    pub concept_registry: HashMap<String, Vec<DomainConcept>>,  // domain → concepts
+    pub concept_registry: HashMap<String, Vec<DomainConcept>>, // domain → concepts
     pub min_mapping_size: usize,
     pub min_structural_similarity: f64,
 }
@@ -127,11 +127,7 @@ impl AnalogyEngine {
 
     /// Attempt to find analogies between `source_domain` and `target_domain`
     /// using structure-mapping heuristics.
-    pub fn find_analogies(
-        &mut self,
-        source_domain: &str,
-        target_domain: &str,
-    ) -> Vec<Analogy> {
+    pub fn find_analogies(&mut self, source_domain: &str, target_domain: &str) -> Vec<Analogy> {
         let source_concepts = match self.concept_registry.get(source_domain) {
             Some(c) => c.clone(),
             None => return Vec::new(),
@@ -175,7 +171,9 @@ impl AnalogyEngine {
                     // Check which relations are preserved
                     for (rel, rel_target) in &src.relations {
                         if let Some(mapped_target) = analogy.mapping.get(rel_target.as_str()) {
-                            if let Some(tgt_concept) = target_index.get(analogy.mapping.get(&src.name).unwrap().as_str()) {
+                            if let Some(tgt_concept) =
+                                target_index.get(analogy.mapping.get(&src.name).unwrap().as_str())
+                            {
                                 if tgt_concept.relations.get(rel) == Some(mapped_target) {
                                     analogy.preserved_relations.push(rel.clone());
                                 }
@@ -227,9 +225,8 @@ impl AnalogyEngine {
             analogy.add_prediction(&p);
         }
 
-        analogy.predictive_power = (analogy.novel_predictions.len() as f64 * 0.1)
-            .min(1.0)
-            * analogy.structural_similarity;
+        analogy.predictive_power =
+            (analogy.novel_predictions.len() as f64 * 0.1).min(1.0) * analogy.structural_similarity;
         analogy.confidence = analogy.quality_score();
 
         info!(
@@ -271,7 +268,10 @@ impl AnalogyEngine {
             a.validated = true;
             a.predictive_power = (a.predictive_power + 0.1).min(1.0);
             a.confidence = a.quality_score();
-            info!("Analogy '{}' prediction validated: '{}'", analogy_id, prediction);
+            info!(
+                "Analogy '{}' prediction validated: '{}'",
+                analogy_id, prediction
+            );
         }
     }
 
@@ -285,7 +285,11 @@ impl AnalogyEngine {
             b.attributes.keys().map(|k| k.as_str()).collect();
         let intersection = keys_a.intersection(&keys_b).count();
         let union = keys_a.union(&keys_b).count();
-        let attr_sim = if union == 0 { 0.0 } else { intersection as f64 / union as f64 };
+        let attr_sim = if union == 0 {
+            0.0
+        } else {
+            intersection as f64 / union as f64
+        };
 
         // Jaccard on relation keys
         let rel_a: std::collections::HashSet<&str> =
@@ -294,7 +298,11 @@ impl AnalogyEngine {
             b.relations.keys().map(|k| k.as_str()).collect();
         let rel_inter = rel_a.intersection(&rel_b).count();
         let rel_union = rel_a.union(&rel_b).count();
-        let rel_sim = if rel_union == 0 { 0.0 } else { rel_inter as f64 / rel_union as f64 };
+        let rel_sim = if rel_union == 0 {
+            0.0
+        } else {
+            rel_inter as f64 / rel_union as f64
+        };
 
         0.5 * attr_sim + 0.5 * rel_sim
     }
@@ -303,18 +311,21 @@ impl AnalogyEngine {
         AnalogyStats {
             total_analogies: self.analogies.len(),
             validated: self.analogies.iter().filter(|a| a.validated).count(),
-            total_predictions: self.analogies.iter().map(|a| a.novel_predictions.len()).sum(),
+            total_predictions: self
+                .analogies
+                .iter()
+                .map(|a| a.novel_predictions.len())
+                .sum(),
             average_quality: if self.analogies.is_empty() {
                 0.0
             } else {
-                self.analogies.iter().map(|a| a.quality_score()).sum::<f64>()
+                self.analogies
+                    .iter()
+                    .map(|a| a.quality_score())
+                    .sum::<f64>()
                     / self.analogies.len() as f64
             },
-            domains_covered: self
-                .concept_registry
-                .keys()
-                .cloned()
-                .collect(),
+            domains_covered: self.concept_registry.keys().cloned().collect(),
         }
     }
 }

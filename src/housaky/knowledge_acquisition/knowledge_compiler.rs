@@ -237,7 +237,10 @@ impl KnowledgeCompiler {
                 parameters: HashMap::from([
                     ("posterior".to_string(), hypothesis.posterior_probability),
                     ("prior".to_string(), hypothesis.prior_probability),
-                    ("test_success_rate".to_string(), hypothesis.test_success_rate()),
+                    (
+                        "test_success_rate".to_string(),
+                        hypothesis.test_success_rate(),
+                    ),
                 ]),
                 domain: hypothesis.domain.clone(),
             },
@@ -266,10 +269,7 @@ impl KnowledgeCompiler {
             &format!("{}_to_{}", analogy.source_domain, analogy.target_domain),
             &analogy.target_domain,
             CompiledForm::Heuristic {
-                name: format!(
-                    "{} ≅ {}",
-                    analogy.source_domain, analogy.target_domain
-                ),
+                name: format!("{} ≅ {}", analogy.source_domain, analogy.target_domain),
                 description: format!(
                     "Structural analogy (quality={:.2}): {}",
                     analogy.quality_score(),
@@ -296,10 +296,7 @@ impl KnowledgeCompiler {
             .map(|(_, u)| (u.confidence, u))
             .collect();
         results.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
-        results
-            .into_iter()
-            .map(|(_, u)| u.retrieve())
-            .collect()
+        results.into_iter().map(|(_, u)| u.retrieve()).collect()
     }
 
     /// Retrieve all compiled units for a domain.
@@ -341,8 +338,7 @@ impl KnowledgeCompiler {
             average_confidence: if self.units.is_empty() {
                 0.0
             } else {
-                self.units.values().map(|u| u.confidence).sum::<f64>()
-                    / self.units.len() as f64
+                self.units.values().map(|u| u.confidence).sum::<f64>() / self.units.len() as f64
             },
         }
     }

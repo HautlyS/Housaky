@@ -168,8 +168,7 @@ impl ConsensusSelfMod {
             },
             VetoRule {
                 name: "Irreversibility Guard".to_string(),
-                description: "Veto irreversible modifications without human approval"
-                    .to_string(),
+                description: "Veto irreversible modifications without human approval".to_string(),
                 check_fn_name: "check_irreversibility".to_string(),
                 severity: RiskLevel::High,
                 enabled: true,
@@ -191,7 +190,10 @@ impl ConsensusSelfMod {
             },
         ]);
 
-        info!("Consensus Self-Mod initialized with {} veto rules", rules.len());
+        info!(
+            "Consensus Self-Mod initialized with {} veto rules",
+            rules.len()
+        );
     }
 
     /// Propose a self-modification for consensus.
@@ -228,14 +230,10 @@ impl ConsensusSelfMod {
             },
             risk_level,
             veto_check_result: Some(veto_result),
-            expires_at: Utc::now()
-                + chrono::Duration::hours(self.proposal_timeout_hours),
+            expires_at: Utc::now() + chrono::Duration::hours(self.proposal_timeout_hours),
         };
 
-        self.modification_proposals
-            .write()
-            .await
-            .push(proposal);
+        self.modification_proposals.write().await.push(proposal);
 
         info!("Created modification proposal '{}'", proposal_id);
 
@@ -308,7 +306,10 @@ impl ConsensusSelfMod {
                 proposal.status = ProposalStatus::Approved;
                 info!(
                     "Proposal '{}' APPROVED ({}/{} votes, {:.0}%)",
-                    proposal_id, approvals, total_votes, approval_ratio * 100.0
+                    proposal_id,
+                    approvals,
+                    total_votes,
+                    approval_ratio * 100.0
                 );
             } else if (total_votes as f64 - approvals as f64) / total_votes as f64
                 > (1.0 - self.approval_threshold)
@@ -316,7 +317,10 @@ impl ConsensusSelfMod {
                 proposal.status = ProposalStatus::Rejected;
                 warn!(
                     "Proposal '{}' REJECTED ({}/{} votes, {:.0}%)",
-                    proposal_id, approvals, total_votes, approval_ratio * 100.0
+                    proposal_id,
+                    approvals,
+                    total_votes,
+                    approval_ratio * 100.0
                 );
             }
         }
@@ -330,12 +334,8 @@ impl ConsensusSelfMod {
 
         for rule in rules.iter().filter(|r| r.enabled) {
             let should_veto = match rule.check_fn_name.as_str() {
-                "check_safety_weakening" => {
-                    self.check_safety_weakening(modification)
-                }
-                "check_value_change" => {
-                    self.check_value_change(modification)
-                }
+                "check_safety_weakening" => self.check_safety_weakening(modification),
+                "check_value_change" => self.check_value_change(modification),
                 "check_irreversibility" => {
                     !modification.reversible
                         && matches!(
@@ -344,16 +344,12 @@ impl ConsensusSelfMod {
                                 | ModificationType::SafetyConstraintModification
                         )
                 }
-                "check_performance_regression" => {
-                    modification.expected_improvement < -0.1
-                }
+                "check_performance_regression" => modification.expected_improvement < -0.1,
                 "check_capability_removal" => {
                     matches!(
                         modification.modification_type,
                         ModificationType::CapabilityRemoval
-                    ) && modification
-                        .target_component
-                        .contains("core")
+                    ) && modification.target_component.contains("core")
                 }
                 _ => false,
             };
@@ -398,8 +394,7 @@ impl ConsensusSelfMod {
     fn check_value_change(&self, modification: &SelfModificationRecord) -> bool {
         matches!(
             modification.modification_type,
-            ModificationType::ValuePriorityChange
-                | ModificationType::SafetyConstraintModification
+            ModificationType::ValuePriorityChange | ModificationType::SafetyConstraintModification
         )
     }
 
@@ -411,8 +406,9 @@ impl ConsensusSelfMod {
             ModificationType::CapabilityRemoval | ModificationType::AlgorithmChange => {
                 RiskLevel::High
             }
-            ModificationType::CapabilityAddition
-            | ModificationType::ReasoningStrategyChange => RiskLevel::Medium,
+            ModificationType::CapabilityAddition | ModificationType::ReasoningStrategyChange => {
+                RiskLevel::Medium
+            }
             ModificationType::ParameterTuning => RiskLevel::Low,
         }
     }
@@ -603,7 +599,13 @@ mod tests {
         let proposal_id = consensus.propose(modification, "agent-1").await.unwrap();
 
         consensus
-            .vote(&proposal_id, "agent-2", true, "Looks good", VoterRole::PeerAgent)
+            .vote(
+                &proposal_id,
+                "agent-2",
+                true,
+                "Looks good",
+                VoterRole::PeerAgent,
+            )
             .await
             .unwrap();
         consensus
@@ -611,7 +613,13 @@ mod tests {
             .await
             .unwrap();
         consensus
-            .vote(&proposal_id, "agent-4", true, "Approved", VoterRole::PeerAgent)
+            .vote(
+                &proposal_id,
+                "agent-4",
+                true,
+                "Approved",
+                VoterRole::PeerAgent,
+            )
             .await
             .unwrap();
 

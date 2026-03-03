@@ -669,8 +669,18 @@ Return JSON with:
 
         report.push_str("Uncertainty Assessment\n");
         report.push_str("======================\n\n");
-        writeln!(report, "Overall Uncertainty: {:.0}%", assessment.overall_uncertainty * 100.0).ok();
-        writeln!(report, "Calibration Score: {:.0}%\n", assessment.calibration_score * 100.0).ok();
+        writeln!(
+            report,
+            "Overall Uncertainty: {:.0}%",
+            assessment.overall_uncertainty * 100.0
+        )
+        .ok();
+        writeln!(
+            report,
+            "Calibration Score: {:.0}%\n",
+            assessment.calibration_score * 100.0
+        )
+        .ok();
 
         if !assessment.sources.is_empty() {
             report.push_str("Uncertainty Sources:\n");
@@ -681,7 +691,8 @@ Return JSON with:
                     source.category,
                     source.description,
                     source.impact * 100.0
-                ).ok();
+                )
+                .ok();
             }
             report.push('\n');
         }
@@ -694,7 +705,8 @@ Return JSON with:
                     "  - {} (severity: {:.0}%)",
                     gap.topic,
                     gap.severity * 100.0
-                ).ok();
+                )
+                .ok();
             }
             report.push('\n');
         }

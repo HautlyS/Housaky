@@ -10,12 +10,11 @@ pub mod migration;
 pub mod substrate_discovery;
 
 pub use abstract_compute::{
-    CognitiveState, Computation, ComputationKind, ComputeResult, ComputeSubstrate,
-    CpuSubstrate, GpuSubstrate, SubstrateCapabilities, SubstrateType, WasmSubstrate,
+    CognitiveState, Computation, ComputationKind, ComputeResult, ComputeSubstrate, CpuSubstrate,
+    GpuSubstrate, SubstrateCapabilities, SubstrateType, WasmSubstrate,
 };
 pub use heterogeneous::{
-    DispatchPlan, HeterogeneousScheduler, HeterogeneousStats, SchedulingPolicy,
-    SubstrateAssignment,
+    DispatchPlan, HeterogeneousScheduler, HeterogeneousStats, SchedulingPolicy, SubstrateAssignment,
 };
 pub use migration::{MigrationRecord, MigrationStatus, SubstrateMigrator};
 pub use substrate_discovery::{DiscoveredSubstrate, DiscoverySource, SubstrateDiscoverer};

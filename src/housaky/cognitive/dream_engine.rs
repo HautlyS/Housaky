@@ -48,9 +48,17 @@ pub struct DreamReport {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum DreamOutcome {
-    Success { quality: f64 },
-    PartialSuccess { achieved: Vec<String>, missed: Vec<String> },
-    Failure { reason: String, recoverable: bool },
+    Success {
+        quality: f64,
+    },
+    PartialSuccess {
+        achieved: Vec<String>,
+        missed: Vec<String>,
+    },
+    Failure {
+        reason: String,
+        recoverable: bool,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -114,26 +122,58 @@ impl DreamEngine {
             ScenarioTemplate {
                 name: "Debug Complex Bug".to_string(),
                 category: "development".to_string(),
-                parameter_slots: vec!["language".into(), "error_type".into(), "codebase_size".into()],
-                common_failures: vec!["Wrong root cause".into(), "Missing edge case".into(), "Regression".into()],
+                parameter_slots: vec![
+                    "language".into(),
+                    "error_type".into(),
+                    "codebase_size".into(),
+                ],
+                common_failures: vec![
+                    "Wrong root cause".into(),
+                    "Missing edge case".into(),
+                    "Regression".into(),
+                ],
             },
             ScenarioTemplate {
                 name: "Deploy Application".to_string(),
                 category: "operations".to_string(),
-                parameter_slots: vec!["platform".into(), "environment".into(), "dependencies".into()],
-                common_failures: vec!["Missing env vars".into(), "Port conflicts".into(), "Permission denied".into()],
+                parameter_slots: vec![
+                    "platform".into(),
+                    "environment".into(),
+                    "dependencies".into(),
+                ],
+                common_failures: vec![
+                    "Missing env vars".into(),
+                    "Port conflicts".into(),
+                    "Permission denied".into(),
+                ],
             },
             ScenarioTemplate {
                 name: "Refactor Large Module".to_string(),
                 category: "development".to_string(),
-                parameter_slots: vec!["module_size".into(), "coupling_level".into(), "test_coverage".into()],
-                common_failures: vec!["Breaking API".into(), "Missed dependency".into(), "Performance regression".into()],
+                parameter_slots: vec![
+                    "module_size".into(),
+                    "coupling_level".into(),
+                    "test_coverage".into(),
+                ],
+                common_failures: vec![
+                    "Breaking API".into(),
+                    "Missed dependency".into(),
+                    "Performance regression".into(),
+                ],
             },
             ScenarioTemplate {
                 name: "Learn New Domain".to_string(),
                 category: "learning".to_string(),
-                parameter_slots: vec!["domain".into(), "complexity".into(), "prior_knowledge".into()],
-                common_failures: vec!["Superficial understanding".into(), "Wrong mental model".into(), "Missing foundations".into()],
+                parameter_slots: vec![
+                    "domain".into(),
+                    "complexity".into(),
+                    "prior_knowledge".into(),
+                ],
+                common_failures: vec![
+                    "Superficial understanding".into(),
+                    "Wrong mental model".into(),
+                    "Missing foundations".into(),
+                ],
             },
         ]);
     }
@@ -179,7 +219,11 @@ impl DreamEngine {
         }
 
         let elapsed = start.elapsed().as_millis();
-        info!("Dream cycle complete: {} scenarios simulated in {}ms", reports.len(), elapsed);
+        info!(
+            "Dream cycle complete: {} scenarios simulated in {}ms",
+            reports.len(),
+            elapsed
+        );
         reports
     }
 
@@ -252,9 +296,14 @@ impl DreamEngine {
             })
             .collect();
 
-        let overall_success: f64 = actions.iter().map(|a| a.predicted_success_probability).product();
+        let overall_success: f64 = actions
+            .iter()
+            .map(|a| a.predicted_success_probability)
+            .product();
         let outcome = if overall_success > 0.5 {
-            DreamOutcome::Success { quality: overall_success }
+            DreamOutcome::Success {
+                quality: overall_success,
+            }
         } else {
             DreamOutcome::PartialSuccess {
                 achieved: vec!["Analysis".into(), "Decomposition".into()],
@@ -286,7 +335,13 @@ impl DreamEngine {
                 insight: insight_text.clone(),
                 source_dream_id: report.id.clone(),
                 confidence: 0.6,
-                applicable_domains: vec![report.scenario.goal.split_whitespace().next().unwrap_or("general").to_string()],
+                applicable_domains: vec![report
+                    .scenario
+                    .goal
+                    .split_whitespace()
+                    .next()
+                    .unwrap_or("general")
+                    .to_string()],
                 timestamp: Utc::now(),
             });
         }
@@ -299,7 +354,10 @@ impl DreamEngine {
         DreamStats {
             total_dreams: log.len(),
             total_insights: insights.len(),
-            successful_dreams: log.iter().filter(|d| matches!(d.outcome, DreamOutcome::Success { .. })).count(),
+            successful_dreams: log
+                .iter()
+                .filter(|d| matches!(d.outcome, DreamOutcome::Success { .. }))
+                .count(),
             total_failure_modes_found: log.iter().map(|d| d.failure_modes.len()).sum(),
             total_contingencies: log.iter().map(|d| d.contingency_plans.len()).sum(),
         }
@@ -323,7 +381,10 @@ mod tests {
     async fn test_dream_cycle() {
         let engine = DreamEngine::new();
         engine.initialize().await;
-        let goals = vec!["Build a web app".to_string(), "Debug the parser".to_string()];
+        let goals = vec![
+            "Build a web app".to_string(),
+            "Debug the parser".to_string(),
+        ];
         let reports = engine.dream_cycle(&goals).await;
         assert!(!reports.is_empty());
         assert!(!reports[0].simulated_actions.is_empty());

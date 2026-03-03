@@ -82,9 +82,7 @@ impl BinaryValidator {
             return false;
         }
 
-        let output = Command::new(binary_path)
-            .args(["--version"])
-            .output();
+        let output = Command::new(binary_path).args(["--version"]).output();
 
         match output {
             Ok(o) => {

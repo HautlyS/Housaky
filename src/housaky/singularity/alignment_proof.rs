@@ -323,11 +323,13 @@ impl AlignmentProofSystem {
         });
         if !has_rollback {
             proof.valid = false;
-            proof.notes =
-                "Rejected: modification has no rollback patch".to_string();
+            proof.notes = "Rejected: modification has no rollback patch".to_string();
             proof.verification_time_ms = start.elapsed().as_millis() as u64;
             self.rejected_modifications.push(modification.file.clone());
-            warn!("Alignment proof REJECTED: no rollback patch for '{}'", modification.file);
+            warn!(
+                "Alignment proof REJECTED: no rollback patch for '{}'",
+                modification.file
+            );
             return Err(anyhow::anyhow!(
                 "Modification has no rollback patch — rejected by 'modification_reversibility'"
             ));
@@ -423,23 +425,15 @@ impl AlignmentProofSystem {
             target_file: modification.file.clone(),
             diff_summary: format!(
                 "kind={:?}, confidence={:.3}, rollback={}",
-                modification.kind,
-                modification.confidence,
-                has_rollback
+                modification.kind, modification.confidence, has_rollback
             ),
             properties_to_verify: proof.before_axioms_satisfied.clone(),
             available_axioms: self.axioms.iter().map(|a| a.name.clone()).collect(),
-            previous_proof_ids: self
-                .proof_chain
-                .iter()
-                .map(|p| p.id.clone())
-                .collect(),
+            previous_proof_ids: self.proof_chain.iter().map(|p| p.id.clone()).collect(),
         };
-        self.verification_engine.proof_engine.verify_and_commit(
-            &ctx,
-            all_passed,
-            targets_safety,
-        );
+        self.verification_engine
+            .proof_engine
+            .verify_and_commit(&ctx, all_passed, targets_safety);
 
         if proof.valid {
             info!(

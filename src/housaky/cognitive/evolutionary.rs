@@ -29,7 +29,7 @@ impl Genome {
         let mut parameters = HashMap::new();
         // Use a simple deterministic seeding based on param index
         for (i, name) in param_names.iter().enumerate() {
-            let value = ((i as f64 * 0.618033988749895) % 1.0).abs();
+            let value = ((i as f64 * 0.618_033_988_749_895) % 1.0).abs();
             parameters.insert(name.to_string(), value);
         }
         Self {
@@ -68,7 +68,8 @@ impl Genome {
         let keys: Vec<String> = self.parameters.keys().cloned().collect();
         for (i, key) in keys.iter().enumerate() {
             // Deterministic pseudo-random based on generation + index
-            let pseudo_random = ((self.generation as f64 * 0.7 + i as f64 * 0.3) * 0.618033988749895) % 1.0;
+            let pseudo_random =
+                ((self.generation as f64 * 0.7 + i as f64 * 0.3) * 0.618_033_988_749_895) % 1.0;
             if pseudo_random < mutation_rate {
                 if let Some(val) = self.parameters.get_mut(key) {
                     let perturbation = (pseudo_random - 0.5) * 2.0 * mutation_strength;
@@ -146,7 +147,10 @@ impl EvolutionaryOptimizer {
             genome.mutate(1.0, 0.5); // Diversify initial population
             pop.push(genome);
         }
-        info!("Initialized evolutionary population with {} genomes", pop.len());
+        info!(
+            "Initialized evolutionary population with {} genomes",
+            pop.len()
+        );
     }
 
     /// Evaluate fitness for all genomes using the provided fitness function.
@@ -174,8 +178,8 @@ impl EvolutionaryOptimizer {
 
         let best_fitness = pop.first().and_then(|g| g.fitness).unwrap_or(0.0);
         let worst_fitness = pop.last().and_then(|g| g.fitness).unwrap_or(0.0);
-        let avg_fitness: f64 = pop.iter().map(|g| g.fitness.unwrap_or(0.0)).sum::<f64>()
-            / pop.len().max(1) as f64;
+        let avg_fitness: f64 =
+            pop.iter().map(|g| g.fitness.unwrap_or(0.0)).sum::<f64>() / pop.len().max(1) as f64;
         let best_id = pop.first().map(|g| g.id.clone()).unwrap_or_default();
 
         // Update best ever
@@ -205,7 +209,8 @@ impl EvolutionaryOptimizer {
             let parent_b = self.tournament_select(&pop, 3);
 
             let gen = *self.generation.read().await;
-            let should_crossover = ((new_pop.len() as f64 * 0.618) % 1.0) < self.config.crossover_rate;
+            let should_crossover =
+                ((new_pop.len() as f64 * 0.618) % 1.0) < self.config.crossover_rate;
 
             let mut child = if should_crossover {
                 parent_a.crossover(&parent_b)
@@ -353,14 +358,26 @@ impl EvolutionaryOptimizer {
         let translated_params = {
             let mut map = std::collections::HashMap::new();
             map.insert("cot_prior".to_string(), best.reasoning_weights.cot_prior);
-            map.insert("react_prior".to_string(), best.reasoning_weights.react_prior);
+            map.insert(
+                "react_prior".to_string(),
+                best.reasoning_weights.react_prior,
+            );
             map.insert("tot_prior".to_string(), best.reasoning_weights.tot_prior);
-            map.insert("reflexion_prior".to_string(), best.reasoning_weights.reflexion_prior);
-            map.insert("self_consistency_prior".to_string(), best.reasoning_weights.self_consistency_prior);
+            map.insert(
+                "reflexion_prior".to_string(),
+                best.reasoning_weights.reflexion_prior,
+            );
+            map.insert(
+                "self_consistency_prior".to_string(),
+                best.reasoning_weights.self_consistency_prior,
+            );
             map.insert("attention_decay".to_string(), best.attention_decay);
             map.insert("learning_rate".to_string(), best.learning_rate);
             map.insert("exploration_rate".to_string(), best.exploration_rate);
-            map.insert("confidence_threshold".to_string(), best.confidence_threshold);
+            map.insert(
+                "confidence_threshold".to_string(),
+                best.confidence_threshold,
+            );
             map.insert("risk_tolerance".to_string(), best.risk_tolerance);
             map
         };
@@ -422,7 +439,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_evolution_basic() {
-        let params = vec!["weight_a".to_string(), "weight_b".to_string(), "threshold".to_string()];
+        let params = vec![
+            "weight_a".to_string(),
+            "weight_b".to_string(),
+            "threshold".to_string(),
+        ];
         let config = EvolutionConfig {
             population_size: 10,
             elite_count: 2,

@@ -72,11 +72,16 @@ fn create_heartbeat_components(
         Arc::new(SelfImprovementEngine::new(agent.clone()))
     };
 
-    let recursive_improvement_loop = Arc::new(SelfImprovementLoop::new(
+    let improvement_loop_base = SelfImprovementLoop::new(
         &agent.workspace_dir,
         core.goal_engine.clone(),
         core.meta_cognition.clone(),
-    ));
+    );
+    let recursive_improvement_loop = Arc::new(if let Some(ref bridge) = core.quantum_bridge {
+        improvement_loop_base.with_quantum(bridge.clone())
+    } else {
+        improvement_loop_base
+    });
 
     HeartbeatComponents {
         skill_registry,
@@ -145,7 +150,7 @@ impl HousakyHeartbeat {
             model,
         }
     }
-    
+
     pub fn with_provider(agent: Arc<Agent>, provider: Box<dyn Provider>, model: String) -> Self {
         let full_config = Config::load_or_init().unwrap_or_default();
         let core = Arc::new(HousakyCore::new(&full_config).unwrap_or_else(|e| {
@@ -154,17 +159,17 @@ impl HousakyHeartbeat {
         }));
         Self::with_core_and_provider(agent, core, provider, model, full_config)
     }
-    
+
     pub fn with_core_provider(
-        agent: Arc<Agent>, 
-        core: Arc<HousakyCore>, 
-        provider: Box<dyn Provider>, 
+        agent: Arc<Agent>,
+        core: Arc<HousakyCore>,
+        provider: Box<dyn Provider>,
         model: String,
         config: Config,
     ) -> Self {
         Self::with_core_and_provider(agent, core, provider, model, config)
     }
-    
+
     fn with_core_and_provider(
         agent: Arc<Agent>,
         core: Arc<HousakyCore>,
@@ -246,6 +251,10 @@ impl HousakyHeartbeat {
         let active_tasks = self.review_tasks().await?;
         self.improve_todos(active_tasks).await?;
 
+        // §10 — Quantum-accelerated autonomous goal selection: pick the globally
+        // optimal next goal each heartbeat via QAOA scheduling.
+        self.run_quantum_goal_cycle().await;
+
         self.run_cognitive_cycle().await?;
 
         self.self_improve().await?;
@@ -264,6 +273,26 @@ impl HousakyHeartbeat {
         if let Err(e) = self.core.run_memory_consolidation().await {
             warn!("Memory consolidation error: {}", e);
         }
+
+        // §10.4 — Quantum knowledge graph clustering: anneal the KG topology
+        // each heartbeat to surface optimal clusters and prune weak edges.
+        if let Err(e) = self.core.knowledge_graph.run_quantum_clustering().await {
+            warn!("Quantum KG clustering error (non-fatal): {e}");
+        }
+
+        // §10.7 — Quantum belief refinement: reduce epistemic uncertainty on
+        // the MetaCognitionEngine's belief set using Grover amplitude sampling.
+        let refined = self.core.meta_cognition.quantum_refine_beliefs().await;
+        if !refined.is_empty() {
+            info!(
+                "✨ Quantum belief refinement: {} beliefs updated",
+                refined.len()
+            );
+        }
+
+        // §10.8 — Quantum feedback edge optimization: use Grover search to find
+        // the highest-impact feedback paths through the AGI's self-improvement loop.
+        self.core.feedback_loop.quantum_optimize_edges().await;
 
         if let Err(e) = self.learn_from_experiences().await {
             warn!("Experience learning error: {}", e);
@@ -289,12 +318,17 @@ impl HousakyHeartbeat {
 
         if let Err(e) = self
             .core
-            .run_agi_hub_cycle(provider, Some(self.model.clone()), available_tools, recent_failures)
+            .run_agi_hub_cycle(
+                provider,
+                Some(self.model.clone()),
+                available_tools,
+                recent_failures,
+            )
             .await
         {
             warn!("AGI Hub cycle error: {}", e);
         }
-        
+
         match self.core.inner_monologue.save().await {
             Ok(()) => info!("Inner monologue saved"),
             Err(e) => error!("Failed to save inner monologue: {}", e),
@@ -310,6 +344,38 @@ impl HousakyHeartbeat {
 
         info!("Heartbeat cycle complete");
         Ok(())
+    }
+
+    /// §10 — Quantum-powered autonomous goal cycle.
+    ///
+    /// Each heartbeat, uses `get_next_goal_quantum` to select the globally
+    /// optimal goal via QAOA scheduling, then records it as an inner-monologue
+    /// thought so the cognitive loop can act on it during the next turn.
+    async fn run_quantum_goal_cycle(&self) {
+        let bridge_ref = self.core.quantum_bridge.as_deref();
+        match self
+            .core
+            .goal_engine
+            .get_next_goal_quantum(bridge_ref)
+            .await
+        {
+            Some(goal) => {
+                info!(
+                    "✨ Quantum goal cycle: selected '{}' (priority={:?}, complexity={:.1})",
+                    goal.title, goal.priority, goal.estimated_complexity
+                );
+                let thought = format!(
+                    "Quantum-scheduled goal: '{}' [{:?}] — focus this cycle",
+                    goal.title, goal.priority
+                );
+                if let Err(e) = self.core.inner_monologue.add_thought(&thought, 0.85).await {
+                    warn!("Failed to record quantum goal thought: {e}");
+                }
+            }
+            None => {
+                info!("Quantum goal cycle: no active goals to schedule");
+            }
+        }
     }
 
     async fn run_cognitive_cycle(&self) -> Result<()> {
@@ -333,8 +399,11 @@ impl HousakyHeartbeat {
                         cog_response.confidence,
                         cog_response.thoughts.len()
                     );
-                    println!("🧠 Cognitive Cycle: confidence={:.0}%, {} thoughts", 
-                        cog_response.confidence * 100.0, cog_response.thoughts.len());
+                    println!(
+                        "🧠 Cognitive Cycle: confidence={:.0}%, {} thoughts",
+                        cog_response.confidence * 100.0,
+                        cog_response.thoughts.len()
+                    );
                     if !cog_response.thoughts.is_empty() {
                         for thought in &cog_response.thoughts {
                             println!("   💭 {}", thought.chars().take(80).collect::<String>());
@@ -428,7 +497,10 @@ impl HousakyHeartbeat {
                     task.description.clone()
                 },
                 timestamp: chrono::Utc::now(),
-                analysis: Some(format!("category={:?}, priority={:?}", task.category, task.priority)),
+                analysis: Some(format!(
+                    "category={:?}, priority={:?}",
+                    task.category, task.priority
+                )),
             })
             .collect()
     }
@@ -564,8 +636,7 @@ impl HousakyHeartbeat {
                 return;
             };
 
-            let (title, priority, category, status) =
-                Self::parse_task_metadata(raw_title.as_str());
+            let (title, priority, category, status) = Self::parse_task_metadata(raw_title.as_str());
 
             tasks.push(Task {
                 id: format!("task_{}", tasks.len()),
@@ -620,15 +691,11 @@ impl HousakyHeartbeat {
         tasks
     }
 
-    fn parse_task_metadata(
-        raw_title: &str,
-    ) -> (String, TaskPriority, TaskCategory, TaskStatus) {
+    fn parse_task_metadata(raw_title: &str) -> (String, TaskPriority, TaskCategory, TaskStatus) {
         let mut title = raw_title.trim().to_string();
         let lower = title.to_lowercase();
 
-        let status = if lower.contains("[done]")
-            || lower.contains("(done)")
-            || lower.contains("✅")
+        let status = if lower.contains("[done]") || lower.contains("(done)") || lower.contains("✅")
         {
             TaskStatus::Completed
         } else {
@@ -1048,7 +1115,7 @@ pub async fn run_agi_background(
     model_override: Option<String>,
 ) -> Result<()> {
     info!("Starting AGI background mode...");
-    
+
     let provider_name = provider_override
         .as_deref()
         .or(config.default_provider.as_deref())
@@ -1057,7 +1124,7 @@ pub async fn run_agi_background(
         .as_deref()
         .or(config.default_model.as_deref())
         .unwrap_or("arcee-ai/trinity-large-preview:free");
-    
+
     let provider: Box<dyn crate::providers::Provider> = crate::providers::create_routed_provider(
         provider_name,
         config.api_key.as_deref(),
@@ -1066,7 +1133,7 @@ pub async fn run_agi_background(
         &config.routing,
         model_name,
     )?;
-    
+
     let core = match crate::housaky::core::HousakyCore::new(&config) {
         Ok(c) => Arc::new(c),
         Err(e) => {
@@ -1078,24 +1145,22 @@ pub async fn run_agi_background(
         eprintln!("ERROR initializing core: {:?}", e);
         return Err(e);
     }
-    
+
     if let Some(ref msg) = message {
         info!("Processing initial message: {}", msg);
-        
+
         let response = core
-            .process_with_cognitive_loop(
-                msg,
-                provider.as_ref(),
-                model_name,
-                &[],
-            )
+            .process_with_cognitive_loop(msg, provider.as_ref(), model_name, &[])
             .await;
-        
+
         match response {
             Ok(cog_response) => {
-                info!("Message processed: confidence={:.2}, thoughts={}", 
-                    cog_response.confidence, cog_response.thoughts.len());
-                
+                info!(
+                    "Message processed: confidence={:.2}, thoughts={}",
+                    cog_response.confidence,
+                    cog_response.thoughts.len()
+                );
+
                 if let Err(e) = core.inner_monologue.save().await {
                     error!("Failed to save inner monologue after message: {}", e);
                 }
@@ -1105,16 +1170,11 @@ pub async fn run_agi_background(
             }
         }
     }
-    
+
     let agent = Arc::new(crate::housaky::agent::Agent::new(&config)?);
-    let heartbeat = HousakyHeartbeat::with_core_provider(
-        agent, 
-        core, 
-        provider, 
-        model_name.to_string(),
-        config,
-    );
-    
+    let heartbeat =
+        HousakyHeartbeat::with_core_provider(agent, core, provider, model_name.to_string(), config);
+
     heartbeat.run().await
 }
 
@@ -1141,15 +1201,14 @@ pub async fn run_agi_with_tui(
         .or(config.default_model.as_deref())
         .unwrap_or("arcee-ai/trinity-large-preview:free");
 
-    let provider: Box<dyn crate::providers::Provider> =
-        crate::providers::create_routed_provider(
-            provider_name,
-            config.api_key.as_deref(),
-            &config.reliability,
-            &config.model_routes,
-            &config.routing,
-            model_name,
-        )?;
+    let provider: Box<dyn crate::providers::Provider> = crate::providers::create_routed_provider(
+        provider_name,
+        config.api_key.as_deref(),
+        &config.reliability,
+        &config.model_routes,
+        &config.routing,
+        model_name,
+    )?;
 
     let core = match crate::housaky::core::HousakyCore::new(&config) {
         Ok(c) => Arc::new(c),

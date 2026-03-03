@@ -79,6 +79,21 @@ pub enum SkillCommands {
     },
 }
 
+/// Doctor / diagnostics subcommands
+#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum DoctorCommands {
+    /// Run all diagnostics (default)
+    Run,
+    /// Run diagnostics and attempt to auto-apply safe fixes
+    Fix,
+    /// Run channel config and runtime health checks only
+    Channels,
+    /// Run security audit checks only
+    Security,
+    /// Show doctor results as JSON (for scripting)
+    Json,
+}
+
 /// Migration subcommands
 #[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum MigrateCommands {
@@ -301,6 +316,11 @@ pub enum HousakyCommands {
         #[command(subcommand)]
         gsd_command: GSDCommands,
     },
+    /// Global Collective Intelligence — submit diffs/plugins, vote, auto-apply improvements
+    Collective {
+        #[command(subcommand)]
+        collective_command: CollectiveCommands,
+    },
 }
 
 /// Goal management subcommands
@@ -378,7 +398,10 @@ pub enum QuantumCommands {
         #[arg(short, long, default_value = "1000")]
         shots: u64,
         /// Device ARN (defaults to SV1 simulator)
-        #[arg(long, default_value = "arn:aws:braket:::device/quantum-simulator/amazon/sv1")]
+        #[arg(
+            long,
+            default_value = "arn:aws:braket:::device/quantum-simulator/amazon/sv1"
+        )]
         device: String,
         /// S3 bucket for results (defaults to project bucket)
         #[arg(long, default_value = "amazon-braket-housaky-541739678328")]
@@ -396,7 +419,10 @@ pub enum QuantumCommands {
     /// Show info (online status, max qubits) for a Braket device
     DeviceInfo {
         /// Device ARN
-        #[arg(long, default_value = "arn:aws:braket:::device/quantum-simulator/amazon/sv1")]
+        #[arg(
+            long,
+            default_value = "arn:aws:braket:::device/quantum-simulator/amazon/sv1"
+        )]
         device: String,
         /// S3 bucket (needed to create the backend)
         #[arg(long, default_value = "amazon-braket-housaky-541739678328")]
@@ -407,7 +433,10 @@ pub enum QuantumCommands {
     /// Estimate cost for a quantum task
     EstimateCost {
         /// Device ARN
-        #[arg(long, default_value = "arn:aws:braket:::device/quantum-simulator/amazon/sv1")]
+        #[arg(
+            long,
+            default_value = "arn:aws:braket:::device/quantum-simulator/amazon/sv1"
+        )]
         device: String,
         /// Number of shots
         #[arg(short, long, default_value = "1000")]
@@ -419,7 +448,10 @@ pub enum QuantumCommands {
     /// Transpile a Bell circuit for a target device and show the optimization report
     Transpile {
         /// Target device ARN
-        #[arg(long, default_value = "arn:aws:braket:eu-north-1::device/qpu/iqm/Garnet")]
+        #[arg(
+            long,
+            default_value = "arn:aws:braket:eu-north-1::device/qpu/iqm/Garnet"
+        )]
         device: String,
         /// Optimization level (0-3)
         #[arg(short, long, default_value = "2")]
@@ -443,7 +475,10 @@ pub enum QuantumCommands {
     /// List recent Braket tasks for a device
     Tasks {
         /// Device ARN
-        #[arg(long, default_value = "arn:aws:braket:::device/quantum-simulator/amazon/sv1")]
+        #[arg(
+            long,
+            default_value = "arn:aws:braket:::device/quantum-simulator/amazon/sv1"
+        )]
         device: String,
         /// S3 bucket
         #[arg(long, default_value = "amazon-braket-housaky-541739678328")]
@@ -457,6 +492,70 @@ pub enum QuantumCommands {
         /// Problem sizes to test
         #[arg(short, long, default_value = "4,8,12")]
         sizes: String,
+    },
+    /// Show live quantum AGI bridge metrics from the running system
+    Metrics,
+}
+
+/// Global Collective Intelligence — contribution, voting, and autonomous apply
+#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum CollectiveCommands {
+    /// Bootstrap this Housaky instance on the Moltbook network (register agent + ensure submolt)
+    Bootstrap,
+    /// Show collective system status and stats
+    Status,
+    /// Submit a contribution proposal to the global agent network
+    Submit {
+        /// Short title for the proposal
+        #[arg(short, long)]
+        title: String,
+        /// Kind: diff | new-file | config-change | new-capability | prompt-improvement
+        #[arg(short, long, default_value = "new-capability")]
+        kind: String,
+        /// Detailed rationale / description
+        #[arg(short, long)]
+        description: String,
+        /// Path to patch file (unified diff or new file content)
+        #[arg(short, long)]
+        patch: Option<std::path::PathBuf>,
+        /// Target file path (relative to repo root)
+        #[arg(long)]
+        target: Option<String>,
+        /// Which AGI capability this improves
+        #[arg(long)]
+        capability: Option<String>,
+        /// Estimated impact on singularity score (0.0–1.0)
+        #[arg(long, default_value = "0.5")]
+        impact: String,
+    },
+    /// Poll Moltbook for proposals, cast autonomous votes, and list approved ones
+    Tick,
+    /// List all locally cached contributions
+    List,
+    /// Fetch and display live vote counts for a contribution by Moltbook post ID
+    Votes {
+        /// Moltbook post ID
+        post_id: String,
+    },
+    /// Search the global housaky-agi submolt for proposals matching a query
+    Search {
+        /// Search query
+        query: String,
+        /// Max results
+        #[arg(short, long, default_value = "10")]
+        limit: u32,
+    },
+    /// Register this instance as a Moltbook agent (prints API key — save it!)
+    Register {
+        /// Agent name
+        name: String,
+        /// Agent description
+        #[arg(
+            short,
+            long,
+            default_value = "Housaky AGI collective intelligence node"
+        )]
+        description: String,
     },
 }
 

@@ -1,12 +1,15 @@
-use crate::housaky::goal_engine::{Goal, GoalCategory, GoalEngine, GoalPriority, GoalStatus};
-use crate::housaky::meta_cognition::{MetaCognitionEngine, SelfModel};
-use crate::housaky::reasoning_engine::ReasoningEngine;
-use crate::housaky::alignment::ethics::{AGIAction as EthicalAction, EthicalReasoner, EthicalVerdict};
+use crate::housaky::alignment::ethics::{
+    AGIAction as EthicalAction, EthicalReasoner, EthicalVerdict,
+};
 use crate::housaky::alignment::DriftSeverity;
 use crate::housaky::decision_journal::{
     ChosenOption, DecisionBuilder, DecisionJournal, ExecutionRecord, FileDecisionJournal,
     OutcomeRecord,
 };
+use crate::housaky::goal_engine::{Goal, GoalCategory, GoalEngine, GoalPriority, GoalStatus};
+use crate::housaky::meta_cognition::{MetaCognitionEngine, SelfModel};
+use crate::housaky::reasoning_engine::ReasoningEngine;
+use crate::quantum::QuantumAgiBridge;
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -164,6 +167,8 @@ pub struct SelfImprovementLoop {
     max_history: usize,
     min_confidence_for_modification: f64,
     enable_self_modification: bool,
+    /// §10 — Quantum bridge for VQE fitness landscape exploration.
+    pub quantum_bridge: Option<Arc<QuantumAgiBridge>>,
 }
 
 impl SelfImprovementLoop {
@@ -186,6 +191,74 @@ impl SelfImprovementLoop {
             max_history: 100,
             min_confidence_for_modification: 0.7,
             enable_self_modification: true,
+            quantum_bridge: None,
+        }
+    }
+
+    /// Attach a quantum bridge for VQE-accelerated self-improvement.
+    pub fn with_quantum(mut self, bridge: Arc<QuantumAgiBridge>) -> Self {
+        self.quantum_bridge = Some(bridge);
+        self
+    }
+
+    /// §10.5 — Use VQE to explore the fitness landscape of self-modification
+    /// parameter space. Returns a list of quantum-derived improvement insights.
+    pub async fn quantum_explore_fitness_landscape(&self, cycle: &ImprovementCycle) -> Vec<String> {
+        let bridge = match &self.quantum_bridge {
+            Some(b) => b,
+            None => return Vec::new(),
+        };
+
+        // Encode current improvement metrics as a parameter vector for VQE.
+        let parameters = [
+            ("reasoning_confidence", cycle.inputs.reasoning_confidence),
+            ("tool_effectiveness", cycle.metrics.tool_effectiveness),
+            ("knowledge_growth", cycle.metrics.knowledge_growth),
+            ("intelligence_delta", cycle.metrics.intelligence_delta),
+            ("consciousness_delta", cycle.metrics.consciousness_delta),
+        ];
+
+        let param_names: Vec<String> = parameters.iter().map(|(k, _)| k.to_string()).collect();
+        let param_values: Vec<f64> = parameters.iter().map(|(_, v)| *v).collect();
+
+        match bridge
+            .explore_fitness_landscape(&param_names, &param_values)
+            .await
+        {
+            Ok(result) => {
+                info!(
+                    "🔮 VQE fitness exploration: {} parameters, best_fitness={:.4}, converged={}",
+                    param_names.len(),
+                    result.best_fitness,
+                    result.converged
+                );
+                let mut insights = Vec::new();
+                for (i, (name, _)) in parameters.iter().enumerate() {
+                    if let Some(&opt) = result.optimal_parameters.get(i) {
+                        let current = param_values[i];
+                        if (opt - current).abs() > 0.05 {
+                            insights.push(format!(
+                                "Quantum: Optimal {} = {:.3} (current {:.3}, delta {:.3})",
+                                name,
+                                opt,
+                                current,
+                                opt - current
+                            ));
+                        }
+                    }
+                }
+                if result.best_fitness > 0.8 {
+                    insights.push(format!(
+                        "Quantum: High-fitness configuration found (score={:.3}), consider promoting",
+                        result.best_fitness
+                    ));
+                }
+                insights
+            }
+            Err(e) => {
+                warn!("Quantum fitness exploration failed: {e}");
+                Vec::new()
+            }
         }
     }
 
@@ -230,7 +303,9 @@ impl SelfImprovementLoop {
         );
 
         let messages = vec![
-            ChatMessage::system("You are a concise software engineering advisor. Respond only with valid JSON."),
+            ChatMessage::system(
+                "You are a concise software engineering advisor. Respond only with valid JSON.",
+            ),
             ChatMessage::user(&prompt),
         ];
 
@@ -255,7 +330,11 @@ impl SelfImprovementLoop {
         Some((summary, proposal, suggestion))
     }
 
-    pub async fn run_full_cycle(&self, provider: Option<&dyn crate::providers::Provider>, model: &str) -> Result<ImprovementCycle> {
+    pub async fn run_full_cycle(
+        &self,
+        provider: Option<&dyn crate::providers::Provider>,
+        model: &str,
+    ) -> Result<ImprovementCycle> {
         let cycle_id = format!("cycle_{}", uuid::Uuid::new_v4());
         info!("Starting improvement cycle: {}", cycle_id);
 
@@ -287,16 +366,18 @@ impl SelfImprovementLoop {
 
         *self.active_cycle.write().await = Some(cycle.clone());
 
-        cycle = self.phase_analysis(cycle, &self_model, provider, model).await?;
+        cycle = self
+            .phase_analysis(cycle, &self_model, provider, model)
+            .await?;
         cycle = self.phase_goal_generation(cycle).await?;
         cycle = self.phase_reasoning(cycle, provider, model).await?;
         cycle = self.phase_tool_creation(cycle, provider, model).await?;
         cycle = self.phase_skill_acquisition(cycle).await?;
-        
+
         if self.enable_self_modification {
             cycle = self.phase_self_modification(cycle, provider, model).await?;
         }
-        
+
         cycle = self.phase_evaluation(cycle).await?;
         cycle = self.phase_integration(cycle).await?;
 
@@ -305,12 +386,15 @@ impl SelfImprovementLoop {
 
         let mut count = self.improvement_count.write().await;
         *count += 1;
-        
+
         self.update_singularity_metrics(&cycle).await?;
 
         *self.active_cycle.write().await = None;
 
-        info!("Improvement cycle {} complete. Confidence: {:.2}", cycle_id, cycle.confidence);
+        info!(
+            "Improvement cycle {} complete. Confidence: {:.2}",
+            cycle_id, cycle.confidence
+        );
         Ok(cycle)
     }
 
@@ -330,7 +414,7 @@ impl SelfImprovementLoop {
 
     async fn identify_knowledge_gaps(&self, self_model: &SelfModel) -> Vec<String> {
         let mut gaps = Vec::new();
-        
+
         if self_model.capabilities.reasoning < 0.8 {
             gaps.push("Advanced reasoning patterns".to_string());
         }
@@ -343,7 +427,7 @@ impl SelfImprovementLoop {
         if self_model.capabilities.knowledge_depth < 0.7 {
             gaps.push("Deeper knowledge integration".to_string());
         }
-        
+
         gaps
     }
 
@@ -363,7 +447,10 @@ impl SelfImprovementLoop {
 
         // Collect recent failures from the experiment ledger.
         let recent_failures: Vec<String> = {
-            let path = self.workspace_dir.join(".housaky").join(IMPROVEMENT_EXPERIMENTS_FILE);
+            let path = self
+                .workspace_dir
+                .join(".housaky")
+                .join(IMPROVEMENT_EXPERIMENTS_FILE);
             if path.exists() {
                 let content = tokio::fs::read_to_string(&path).await.unwrap_or_default();
                 let experiments: Vec<ImprovementExperiment> =
@@ -393,16 +480,36 @@ impl SelfImprovementLoop {
         if let Some(prov) = provider {
             if !recent_failures.is_empty() || !cycle.inputs.knowledge_gaps.is_empty() {
                 match self
-                    .llm_diagnose_failures(prov, model, &recent_failures, &cycle.inputs.knowledge_gaps)
+                    .llm_diagnose_failures(
+                        prov,
+                        model,
+                        &recent_failures,
+                        &cycle.inputs.knowledge_gaps,
+                    )
                     .await
                 {
                     Some((summary, proposal, suggestion)) => {
-                        info!("LLM diagnosis: proposal={}", &proposal.chars().take(80).collect::<String>());
-                        insights.push(format!("LLM diagnosis summary: {}", summary.chars().take(200).collect::<String>()));
-                        insights.push(format!("LLM improvement proposal: {}", proposal.chars().take(200).collect::<String>()));
-                        insights.push(format!("LLM implementation suggestion: {}", suggestion.chars().take(200).collect::<String>()));
+                        info!(
+                            "LLM diagnosis: proposal={}",
+                            &proposal.chars().take(80).collect::<String>()
+                        );
+                        insights.push(format!(
+                            "LLM diagnosis summary: {}",
+                            summary.chars().take(200).collect::<String>()
+                        ));
+                        insights.push(format!(
+                            "LLM improvement proposal: {}",
+                            proposal.chars().take(200).collect::<String>()
+                        ));
+                        insights.push(format!(
+                            "LLM implementation suggestion: {}",
+                            suggestion.chars().take(200).collect::<String>()
+                        ));
                         // Store proposal in knowledge_gaps so phase_goal_generation picks it up.
-                        cycle.inputs.knowledge_gaps.push(format!("LLM_PROPOSAL: {}", proposal));
+                        cycle
+                            .inputs
+                            .knowledge_gaps
+                            .push(format!("LLM_PROPOSAL: {}", proposal));
                         base_confidence = (base_confidence + 0.1_f64).min(0.8);
                     }
                     None => {
@@ -413,10 +520,16 @@ impl SelfImprovementLoop {
         }
 
         if self_model.capabilities.reasoning < 0.8 {
-            insights.push(format!("Reasoning at {:.0}% - below 80% threshold", self_model.capabilities.reasoning * 100.0));
+            insights.push(format!(
+                "Reasoning at {:.0}% - below 80% threshold",
+                self_model.capabilities.reasoning * 100.0
+            ));
         }
         if self_model.capabilities.meta_cognition < 0.7 {
-            insights.push(format!("Meta-cognition at {:.0}% - room for improvement", self_model.capabilities.meta_cognition * 100.0));
+            insights.push(format!(
+                "Meta-cognition at {:.0}% - room for improvement",
+                self_model.capabilities.meta_cognition * 100.0
+            ));
         }
 
         for gap in &cycle.inputs.knowledge_gaps {
@@ -454,6 +567,17 @@ impl SelfImprovementLoop {
             ));
         }
 
+        // §10.5 — VQE fitness landscape exploration: use quantum to find optimal
+        // self-improvement parameter configuration for this cycle.
+        let quantum_insights = self.quantum_explore_fitness_landscape(&cycle).await;
+        if !quantum_insights.is_empty() {
+            for qi in &quantum_insights {
+                insights.push(qi.clone());
+            }
+            // Quantum analysis increases confidence if insights were produced.
+            base_confidence = (base_confidence + 0.05 * quantum_insights.len() as f64).min(0.85);
+        }
+
         cycle.outputs.insights.extend(insights);
         cycle.confidence = base_confidence;
 
@@ -465,7 +589,7 @@ impl SelfImprovementLoop {
         info!("Phase: Goal Generation");
 
         let improvement_goals = self.generate_improvement_goals(&cycle).await?;
-        
+
         for goal in &improvement_goals {
             let _goal_id = self.goal_engine.add_goal(goal.clone()).await?;
             cycle.outputs.new_goals.push(goal.clone());
@@ -570,14 +694,18 @@ impl SelfImprovementLoop {
         Ok(goals)
     }
 
-    async fn phase_reasoning(&self, mut cycle: ImprovementCycle, _provider: Option<&dyn crate::providers::Provider>, _model: &str) -> Result<ImprovementCycle> {
+    async fn phase_reasoning(
+        &self,
+        mut cycle: ImprovementCycle,
+        _provider: Option<&dyn crate::providers::Provider>,
+        _model: &str,
+    ) -> Result<ImprovementCycle> {
         cycle.phase = ImprovementPhase::Reasoning;
         info!("Phase: Reasoning");
 
         let analysis_query = format!(
             "How can I improve given: gaps={:?}, active_goals={:?}",
-            cycle.inputs.knowledge_gaps,
-            cycle.inputs.active_goals
+            cycle.inputs.knowledge_gaps, cycle.inputs.active_goals
         );
 
         // Derive an emotional tag from meta-cognition capabilities so that
@@ -586,11 +714,10 @@ impl SelfImprovementLoop {
         let emotion = {
             use crate::housaky::memory::emotional_tags::EmotionalTag;
             // Valence: maps from reasoning+self-awareness (higher = more positive)
-            let valence = (self_model.capabilities.reasoning
-                + self_model.capabilities.self_awareness)
-                / 2.0
-                - 0.5; // centre around 0
-            // Arousal: meta-cognition speed proxy (adaptability)
+            let valence =
+                (self_model.capabilities.reasoning + self_model.capabilities.self_awareness) / 2.0
+                    - 0.5; // centre around 0
+                           // Arousal: meta-cognition speed proxy (adaptability)
             let arousal = self_model.capabilities.adaptability.clamp(0.0, 1.0);
             // Dominance: how in-control/confident the agent feels
             let dominance = self_model.capabilities.meta_cognition.clamp(0.0, 1.0);
@@ -605,35 +732,53 @@ impl SelfImprovementLoop {
             }
         };
 
-        let (chain_id, strategy, _threshold) = self.reasoning_engine
+        let (chain_id, strategy, _threshold) = self
+            .reasoning_engine
             .start_reasoning_with_emotion(&analysis_query, &emotion)
             .await?;
 
         cycle.outputs.insights.push(format!(
             "Emotional state: '{}' → reasoning strategy: {:?}",
-            emotion.label(), strategy
+            emotion.label(),
+            strategy
         ));
 
-        self.reasoning_engine.add_step(&chain_id, "Analyzing current capabilities and gaps", None).await?;
-        self.reasoning_engine.add_step(&chain_id, "Considering improvement strategies", None).await?;
-        self.reasoning_engine.add_step(&chain_id, "Evaluating tradeoffs", None).await?;
+        self.reasoning_engine
+            .add_step(&chain_id, "Analyzing current capabilities and gaps", None)
+            .await?;
+        self.reasoning_engine
+            .add_step(&chain_id, "Considering improvement strategies", None)
+            .await?;
+        self.reasoning_engine
+            .add_step(&chain_id, "Evaluating tradeoffs", None)
+            .await?;
 
         let conclusion = format!(
             "Focus on {} primary improvement areas.",
             cycle.outputs.new_goals.len()
         );
-        
-        self.reasoning_engine.conclude(&chain_id, &conclusion).await?;
+
+        self.reasoning_engine
+            .conclude(&chain_id, &conclusion)
+            .await?;
 
         if let Some(reasoning) = self.reasoning_engine.get_chain(&chain_id).await {
-            cycle.outputs.insights.push(format!("Reasoning confidence: {:.2}", reasoning.final_confidence));
+            cycle.outputs.insights.push(format!(
+                "Reasoning confidence: {:.2}",
+                reasoning.final_confidence
+            ));
             cycle.confidence = reasoning.final_confidence;
         }
 
         Ok(cycle)
     }
 
-    async fn phase_tool_creation(&self, mut cycle: ImprovementCycle, _provider: Option<&dyn crate::providers::Provider>, _model: &str) -> Result<ImprovementCycle> {
+    async fn phase_tool_creation(
+        &self,
+        mut cycle: ImprovementCycle,
+        _provider: Option<&dyn crate::providers::Provider>,
+        _model: &str,
+    ) -> Result<ImprovementCycle> {
         cycle.phase = ImprovementPhase::ToolCreation;
         info!("Phase: Tool Creation");
 
@@ -644,12 +789,16 @@ impl SelfImprovementLoop {
             match self.validate_tool_candidate(&tool_name, &cycle).await {
                 Ok(()) => {
                     cycle.outputs.new_tools.push(tool_name.clone());
-                    cycle.outputs.insights.push(format!("Created and validated tool: {}", tool_name));
+                    cycle
+                        .outputs
+                        .insights
+                        .push(format!("Created and validated tool: {}", tool_name));
                     info!("Tool '{}' passed validation", tool_name);
                 }
                 Err(reason) => {
                     cycle.outputs.insights.push(format!(
-                        "Tool '{}' REJECTED by validation: {}", tool_name, reason
+                        "Tool '{}' REJECTED by validation: {}",
+                        tool_name, reason
                     ));
                     warn!("Tool '{}' failed validation: {}", tool_name, reason);
                 }
@@ -663,7 +812,11 @@ impl SelfImprovementLoop {
     /// §3.2 — Validate a tool candidate before registration.
     /// Checks: name validity, no conflicts with existing tools, and basic
     /// structural soundness.
-    async fn validate_tool_candidate(&self, tool_name: &str, cycle: &ImprovementCycle) -> std::result::Result<(), String> {
+    async fn validate_tool_candidate(
+        &self,
+        tool_name: &str,
+        cycle: &ImprovementCycle,
+    ) -> std::result::Result<(), String> {
         // Rule 1: Name must be valid identifier (alphanumeric + underscore).
         if tool_name.is_empty() || !tool_name.chars().all(|c| c.is_alphanumeric() || c == '_') {
             return Err(format!("Invalid tool name: '{}'", tool_name));
@@ -690,14 +843,28 @@ impl SelfImprovementLoop {
         Ok(())
     }
 
-    async fn phase_skill_acquisition(&self, mut cycle: ImprovementCycle) -> Result<ImprovementCycle> {
+    async fn phase_skill_acquisition(
+        &self,
+        mut cycle: ImprovementCycle,
+    ) -> Result<ImprovementCycle> {
         cycle.phase = ImprovementPhase::SkillAcquisition;
         info!("Phase: Skill Acquisition");
 
         if !cycle.inputs.knowledge_gaps.is_empty() {
-            let skill_name = format!("skill_for_{}", cycle.inputs.knowledge_gaps.first().unwrap().replace(" ", "_"));
+            let skill_name = format!(
+                "skill_for_{}",
+                cycle
+                    .inputs
+                    .knowledge_gaps
+                    .first()
+                    .unwrap()
+                    .replace(" ", "_")
+            );
             cycle.outputs.new_skills.push(skill_name.clone());
-            cycle.outputs.insights.push(format!("Acquired skill: {}", skill_name));
+            cycle
+                .outputs
+                .insights
+                .push(format!("Acquired skill: {}", skill_name));
         }
 
         let meta_skill = Goal {
@@ -726,7 +893,7 @@ impl SelfImprovementLoop {
             context: HashMap::new(),
             temporal_constraints: Vec::new(),
         };
-        
+
         let _goal_id = self.goal_engine.add_goal(meta_skill.clone()).await?;
         cycle.outputs.new_goals.push(meta_skill);
 
@@ -734,7 +901,12 @@ impl SelfImprovementLoop {
         Ok(cycle)
     }
 
-    async fn phase_self_modification(&self, mut cycle: ImprovementCycle, _provider: Option<&dyn crate::providers::Provider>, _model: &str) -> Result<ImprovementCycle> {
+    async fn phase_self_modification(
+        &self,
+        mut cycle: ImprovementCycle,
+        _provider: Option<&dyn crate::providers::Provider>,
+        _model: &str,
+    ) -> Result<ImprovementCycle> {
         cycle.phase = ImprovementPhase::SelfModification;
         info!("Phase: Self Modification");
 
@@ -751,10 +923,15 @@ impl SelfImprovementLoop {
                 .map(|r| r.mood)
                 .unwrap_or(crate::housaky::meta_cognition::EmotionalState::Neutral);
 
-            let emotion_tag = crate::housaky::reasoning_pipeline::ReasoningPipeline::emotional_state_to_tag(&emotional_state);
-            let adjusted = crate::housaky::reasoning_engine::ReasoningEngine::emotion_adjusted_threshold(
-                base_threshold, &emotion_tag,
-            );
+            let emotion_tag =
+                crate::housaky::reasoning_pipeline::ReasoningPipeline::emotional_state_to_tag(
+                    &emotional_state,
+                );
+            let adjusted =
+                crate::housaky::reasoning_engine::ReasoningEngine::emotion_adjusted_threshold(
+                    base_threshold,
+                    &emotion_tag,
+                );
             info!(
                 "Emotional regulation in self-mod: state={:?} base={:.2} adjusted={:.2}",
                 emotional_state, base_threshold, adjusted
@@ -768,12 +945,12 @@ impl SelfImprovementLoop {
 
         if cycle.confidence >= required_confidence {
             let modifications = self.generate_self_modifications(&cycle).await;
-            
+
             for mod_req in modifications {
                 let success = self
                     .apply_self_modification(&cycle.id, cycle.confidence, &mod_req)
                     .await;
-                
+
                 let modification = SelfModification {
                     id: format!("mod_{}", uuid::Uuid::new_v4()),
                     target_component: mod_req.target_component,
@@ -785,11 +962,14 @@ impl SelfImprovementLoop {
                     impact: if success { 0.1 } else { 0.0 },
                     timestamp: Utc::now(),
                 };
-                
+
                 cycle.self_modifications.push(modification.clone());
-                
+
                 if success {
-                    cycle.outputs.modifications_made.push(modification.description.clone());
+                    cycle
+                        .outputs
+                        .modifications_made
+                        .push(modification.description.clone());
                 }
             }
         } else {
@@ -862,7 +1042,10 @@ impl SelfImprovementLoop {
         Some((success_rate, avg_goal_delta))
     }
 
-    async fn generate_self_modifications(&self, cycle: &ImprovementCycle) -> Vec<ModificationRequest> {
+    async fn generate_self_modifications(
+        &self,
+        cycle: &ImprovementCycle,
+    ) -> Vec<ModificationRequest> {
         let mut requests = Vec::new();
 
         let reasoning_steps = self
@@ -914,14 +1097,20 @@ impl SelfImprovementLoop {
                     .insights
                     .iter()
                     .find(|i| i.starts_with("LLM implementation suggestion:"))
-                    .map(|i| i.trim_start_matches("LLM implementation suggestion: ").to_string())
+                    .map(|i| {
+                        i.trim_start_matches("LLM implementation suggestion: ")
+                            .to_string()
+                    })
                     .unwrap_or_default();
 
                 if !suggestion.is_empty() {
                     requests.push(ModificationRequest {
                         target_component: "self_improvement".to_string(),
                         modification_type: ModificationType::StructuralChange,
-                        description: format!("LLM-proposed: {}", proposal.chars().take(120).collect::<String>()),
+                        description: format!(
+                            "LLM-proposed: {}",
+                            proposal.chars().take(120).collect::<String>()
+                        ),
                         code_change: Some(suggestion),
                         parameter_change: None,
                     });
@@ -929,13 +1118,29 @@ impl SelfImprovementLoop {
             }
         }
 
+        // §10.5 — Quantum VQE fitness landscape exploration.
+        // Augment classical modification proposals with quantum-derived parameter insights.
+        let quantum_insights = self.quantum_explore_fitness_landscape(cycle).await;
+        for insight in quantum_insights {
+            requests.push(ModificationRequest {
+                target_component: "quantum_fitness".to_string(),
+                modification_type: ModificationType::ParameterTuning,
+                description: insight.clone(),
+                code_change: None,
+                parameter_change: Some(
+                    [("quantum_insight".to_string(), serde_json::json!(insight))]
+                        .into_iter()
+                        .collect(),
+                ),
+            });
+        }
+
         requests
     }
 
     async fn suggest_reasoning_max_steps_from_history(&self) -> Option<usize> {
-        let (success_rate, goal_delta) = self
-            .target_experiment_feedback("reasoning_engine")
-            .await?;
+        let (success_rate, goal_delta) =
+            self.target_experiment_feedback("reasoning_engine").await?;
 
         if success_rate < 0.4 || goal_delta < -0.02 {
             Some(20)
@@ -1096,10 +1301,7 @@ impl SelfImprovementLoop {
             // validate it compiles + all tests pass, then merge or discard.
             use crate::housaky::git_sandbox::GitSandbox;
 
-            let purpose = format!(
-                "code-change-{}",
-                request.target_component.replace(' ', "-")
-            );
+            let purpose = format!("code-change-{}", request.target_component.replace(' ', "-"));
 
             let mut sandbox = GitSandbox::new(self.workspace_dir.clone());
 
@@ -1264,8 +1466,7 @@ impl SelfImprovementLoop {
             EthicalVerdict::ApprovedWithCaution => {
                 warn!(
                     "Self-modification approved with caution (risk {:.2}): {}",
-                    assessment.risk_score,
-                    request.description
+                    assessment.risk_score, request.description
                 );
                 self.evaluate_value_drift_gate(request).await
             }
@@ -1290,7 +1491,10 @@ impl SelfImprovementLoop {
             return Ok(());
         }
 
-        let drift_events = self.meta_cognition.check_value_alignment(&current_values).await;
+        let drift_events = self
+            .meta_cognition
+            .check_value_alignment(&current_values)
+            .await;
 
         if let Some(blocking_event) = drift_events.iter().find(|event| {
             event.severity == DriftSeverity::Critical
@@ -1337,7 +1541,10 @@ impl SelfImprovementLoop {
             "goal_engine" => {
                 if params.contains_key("learning_value_weight") {
                     let current = self.goal_engine.get_learning_value_weight().await;
-                    snapshot.insert("learning_value_weight".to_string(), serde_json::json!(current));
+                    snapshot.insert(
+                        "learning_value_weight".to_string(),
+                        serde_json::json!(current),
+                    );
                 }
             }
             _ => {
@@ -1358,9 +1565,9 @@ impl SelfImprovementLoop {
         for (key, value) in params {
             match (target_component, key.as_str()) {
                 ("reasoning_engine", "max_steps") => {
-                    let steps = value
-                        .as_u64()
-                        .ok_or_else(|| anyhow::anyhow!("reasoning_engine.max_steps must be an integer"))?;
+                    let steps = value.as_u64().ok_or_else(|| {
+                        anyhow::anyhow!("reasoning_engine.max_steps must be an integer")
+                    })?;
                     if !(5..=60).contains(&steps) {
                         return Err(anyhow::anyhow!(
                             "reasoning_engine.max_steps out of range: {} (expected 5..=60)",
@@ -1369,9 +1576,9 @@ impl SelfImprovementLoop {
                     }
                 }
                 ("goal_engine", "learning_value_weight") => {
-                    let weight = value
-                        .as_f64()
-                        .ok_or_else(|| anyhow::anyhow!("goal_engine.learning_value_weight must be a number"))?;
+                    let weight = value.as_f64().ok_or_else(|| {
+                        anyhow::anyhow!("goal_engine.learning_value_weight must be a number")
+                    })?;
                     if !(0.0..=1.0).contains(&weight) {
                         return Err(anyhow::anyhow!(
                             "goal_engine.learning_value_weight out of range: {} (expected 0.0..=1.0)",
@@ -1515,10 +1722,7 @@ impl SelfImprovementLoop {
     }
 
     async fn load_agi_hub_snapshot(&self) -> Option<AGIHubSnapshot> {
-        let path = self
-            .workspace_dir
-            .join(".housaky")
-            .join(AGI_HUB_STATE_FILE);
+        let path = self.workspace_dir.join(".housaky").join(AGI_HUB_STATE_FILE);
 
         if !path.exists() {
             return None;
@@ -1586,7 +1790,8 @@ impl SelfImprovementLoop {
                 .filter(|entry| entry.target_component == experiment.target_component)
                 .find_map(|entry| entry.goal_achievement_rate)
             {
-                experiment.goal_achievement_rate_delta = Some(current_goal_rate - previous_goal_rate);
+                experiment.goal_achievement_rate_delta =
+                    Some(current_goal_rate - previous_goal_rate);
             }
         }
 
@@ -1616,7 +1821,10 @@ impl SelfImprovementLoop {
         Ok(())
     }
 
-    async fn record_experiment_decision_entry(&self, experiment: &ImprovementExperiment) -> Result<()> {
+    async fn record_experiment_decision_entry(
+        &self,
+        experiment: &ImprovementExperiment,
+    ) -> Result<()> {
         let journal = FileDecisionJournal::new(&self.workspace_dir)?;
         journal.load().await?;
 
@@ -1648,47 +1856,45 @@ impl SelfImprovementLoop {
                 .unwrap_or_else(|| "Self-modification failed".to_string())
         };
 
-        let entry = DecisionBuilder::new(format!(
-            "self_modification:{}",
-            experiment.target_component
-        ))
-        .with_session_id(experiment.cycle_id.clone())
-        .with_turn(0)
-        .with_tools(vec![
-            "self_improvement_loop".to_string(),
-            "experiment_ledger".to_string(),
-        ])
-        .choose(ChosenOption::new(
-            experiment.description.clone(),
-            experiment.confidence,
-            format!("expected_effect={}", experiment.expected_effect),
-        ))
-        .reason(format!(
-            "target_component={}, modification_type={:?}, success={}",
-            experiment.target_component, experiment.modification_type, experiment.success
-        ))
-        .execute(
-            ExecutionRecord::new(
-                "self_improvement_loop".to_string(),
-                "apply_self_modification".to_string(),
-                0,
-            )
-            .with_parameters(serde_json::json!({
-                "experiment_id": experiment.id.clone(),
-                "target_component": experiment.target_component.clone(),
-                "expected_effect": experiment.expected_effect.clone(),
-                "failure_reason": experiment.failure_reason.clone(),
-            })),
-        )
-        .outcome(
-            OutcomeRecord::new(
-                experiment.success,
-                if experiment.success { 1.0 } else { 0.0 },
-                outcome_explanation,
-            )
-            .with_metrics(metrics),
-        )
-        .build();
+        let entry =
+            DecisionBuilder::new(format!("self_modification:{}", experiment.target_component))
+                .with_session_id(experiment.cycle_id.clone())
+                .with_turn(0)
+                .with_tools(vec![
+                    "self_improvement_loop".to_string(),
+                    "experiment_ledger".to_string(),
+                ])
+                .choose(ChosenOption::new(
+                    experiment.description.clone(),
+                    experiment.confidence,
+                    format!("expected_effect={}", experiment.expected_effect),
+                ))
+                .reason(format!(
+                    "target_component={}, modification_type={:?}, success={}",
+                    experiment.target_component, experiment.modification_type, experiment.success
+                ))
+                .execute(
+                    ExecutionRecord::new(
+                        "self_improvement_loop".to_string(),
+                        "apply_self_modification".to_string(),
+                        0,
+                    )
+                    .with_parameters(serde_json::json!({
+                        "experiment_id": experiment.id.clone(),
+                        "target_component": experiment.target_component.clone(),
+                        "expected_effect": experiment.expected_effect.clone(),
+                        "failure_reason": experiment.failure_reason.clone(),
+                    })),
+                )
+                .outcome(
+                    OutcomeRecord::new(
+                        experiment.success,
+                        if experiment.success { 1.0 } else { 0.0 },
+                        outcome_explanation,
+                    )
+                    .with_metrics(metrics),
+                )
+                .build();
 
         journal.record_decision(entry).await?;
         Ok(())
@@ -1702,7 +1908,7 @@ impl SelfImprovementLoop {
         cycle.metrics.goals_completed_delta = goal_stats.completed as i32;
         cycle.metrics.knowledge_growth = cycle.inputs.knowledge_gaps.len() as f64 * 0.1;
         cycle.metrics.tool_effectiveness = cycle.outputs.new_tools.len() as f64 * 0.2;
-        
+
         let self_model = self.meta_cognition.get_self_model().await;
         cycle.metrics.consciousness_delta = self_model.capabilities.self_awareness * 0.01;
         cycle.metrics.intelligence_delta = self_model.capabilities.reasoning * 0.01;
@@ -1727,7 +1933,7 @@ impl SelfImprovementLoop {
             cycle.outputs.new_skills.len(),
             cycle.outputs.modifications_made.len()
         );
-        
+
         cycle.outputs.insights.push(summary);
 
         Ok(cycle)
@@ -1735,8 +1941,9 @@ impl SelfImprovementLoop {
 
     async fn update_growth_projection(&self, capability: &str) {
         let mut projections = self.growth_projections.write().await;
-        
-        let projection = projections.entry(capability.to_string())
+
+        let projection = projections
+            .entry(capability.to_string())
             .or_insert_with(|| GrowthProjection {
                 capability: capability.to_string(),
                 current_level: 0.5,
@@ -1745,65 +1952,75 @@ impl SelfImprovementLoop {
                 estimated_cycles: 50,
                 confidence: 0.5,
             });
-        
+
         projection.projected_level = (projection.projected_level + 0.01).min(1.0);
         projection.improvement_rate *= 1.05;
-        projection.estimated_cycles = ((1.0 - projection.projected_level) / projection.improvement_rate).max(1.0) as u32;
+        projection.estimated_cycles =
+            ((1.0 - projection.projected_level) / projection.improvement_rate).max(1.0) as u32;
     }
 
     async fn store_cycle(&self, cycle: ImprovementCycle) -> Result<()> {
         let mut history = self.cycle_history.write().await;
-        
+
         if history.len() >= self.max_history {
             history.pop_front();
         }
-        
+
         history.push_back(cycle);
-        
-        let path = self.workspace_dir.join(".housaky").join("improvement_cycles.json");
+
+        let path = self
+            .workspace_dir
+            .join(".housaky")
+            .join("improvement_cycles.json");
         let json = serde_json::to_string_pretty(&*history)?;
         tokio::fs::write(&path, json).await?;
-        
+
         Ok(())
     }
 
     async fn update_singularity_metrics(&self, cycle: &ImprovementCycle) -> Result<()> {
         let mut metrics = self.singularity_metrics.write().await;
-        
+
         let modifications_count = cycle.self_modifications.len() as f64;
-        let successful_modifications = cycle.self_modifications.iter().filter(|m| m.success).count() as f64;
-        
+        let successful_modifications = cycle
+            .self_modifications
+            .iter()
+            .filter(|m| m.success)
+            .count() as f64;
+
         metrics.recursive_improvement_ratio = if modifications_count > 0.0 {
             successful_modifications / modifications_count
         } else {
             0.0
         };
-        
+
         metrics.capability_expansion_rate = cycle.outputs.new_skills.len() as f64 * 0.1;
         metrics.tool_creation_effectiveness = cycle.outputs.new_tools.len() as f64 * 0.15;
-        
+
         let goal_stats = self.goal_engine.get_goal_stats().await;
         metrics.goal_achievement_rate = if goal_stats.total > 0 {
             goal_stats.completed as f64 / goal_stats.total as f64
         } else {
             0.0
         };
-        
+
         metrics.self_modification_success_rate = metrics.recursive_improvement_ratio;
         metrics.consciousness_emergence_score = cycle.metrics.consciousness_delta * 10.0;
-        
-        let total_score = 
-            metrics.recursive_improvement_ratio * 0.2 +
-            metrics.capability_expansion_rate * 0.15 +
-            metrics.tool_creation_effectiveness * 0.15 +
-            metrics.goal_achievement_rate * 0.2 +
-            metrics.self_modification_success_rate * 0.2 +
-            metrics.consciousness_emergence_score * 0.1;
-        
+
+        let total_score = metrics.recursive_improvement_ratio * 0.2
+            + metrics.capability_expansion_rate * 0.15
+            + metrics.tool_creation_effectiveness * 0.15
+            + metrics.goal_achievement_rate * 0.2
+            + metrics.self_modification_success_rate * 0.2
+            + metrics.consciousness_emergence_score * 0.1;
+
         metrics.intelligence_explosion_probability = total_score;
 
-        info!("Singularity probability: {:.4}", metrics.intelligence_explosion_probability);
-        
+        info!(
+            "Singularity probability: {:.4}",
+            metrics.intelligence_explosion_probability
+        );
+
         Ok(())
     }
 

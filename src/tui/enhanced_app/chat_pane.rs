@@ -1,3 +1,8 @@
+use crate::tui::enhanced_app::theme::{
+    style_assistant_msg, style_border, style_border_focus, style_code_block, style_code_inline,
+    style_dim, style_muted, style_streaming_cursor, style_system_msg, style_title, style_user_msg,
+    Palette,
+};
 use chrono::Local;
 use ratatui::{
     layout::Rect,
@@ -5,11 +10,6 @@ use ratatui::{
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState, Wrap},
     Frame,
-};
-use crate::tui::enhanced_app::theme::{
-    Palette, style_assistant_msg, style_border, style_border_focus, style_code_block,
-    style_code_inline, style_dim, style_muted, style_streaming_cursor, style_system_msg,
-    style_title, style_user_msg,
 };
 
 // ── Message types ─────────────────────────────────────────────────────────────
@@ -24,20 +24,20 @@ pub enum Role {
 impl Role {
     pub fn label(&self) -> &'static str {
         match self {
-            Role::User      => "You",
+            Role::User => "You",
             Role::Assistant => "AGI",
-            Role::System    => "SYS",
+            Role::System => "SYS",
         }
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct Message {
-    pub id:        usize,
-    pub role:      Role,
-    pub content:   String,
+    pub id: usize,
+    pub role: Role,
+    pub content: String,
     pub timestamp: String,
-    pub tokens:    Option<u32>,
+    pub tokens: Option<u32>,
 }
 
 impl Message {
@@ -75,29 +75,29 @@ impl Message {
 // ── Chat pane state ───────────────────────────────────────────────────────────
 
 pub struct ChatPane {
-    pub messages:       Vec<Message>,
-    pub streaming_buf:  String,
-    pub is_streaming:   bool,
-    pub scroll_offset:  usize,
-    pub auto_scroll:    bool,
-    pub search_query:   String,
+    pub messages: Vec<Message>,
+    pub streaming_buf: String,
+    pub is_streaming: bool,
+    pub scroll_offset: usize,
+    pub auto_scroll: bool,
+    pub search_query: String,
     pub search_results: Vec<usize>,
-    pub search_cursor:  usize,
-    next_id:            usize,
+    pub search_cursor: usize,
+    next_id: usize,
 }
 
 impl ChatPane {
     pub fn new() -> Self {
         Self {
-            messages:       Vec::new(),
-            streaming_buf:  String::new(),
-            is_streaming:   false,
-            scroll_offset:  0,
-            auto_scroll:    true,
-            search_query:   String::new(),
+            messages: Vec::new(),
+            streaming_buf: String::new(),
+            is_streaming: false,
+            scroll_offset: 0,
+            auto_scroll: true,
+            search_query: String::new(),
             search_results: Vec::new(),
-            search_cursor:  0,
-            next_id:        0,
+            search_cursor: 0,
+            next_id: 0,
         }
     }
 
@@ -106,21 +106,27 @@ impl ChatPane {
     pub fn push_user(&mut self, content: String) -> usize {
         let id = self.alloc_id();
         self.messages.push(Message::user(id, content));
-        if self.auto_scroll { self.scroll_to_bottom(); }
+        if self.auto_scroll {
+            self.scroll_to_bottom();
+        }
         id
     }
 
     pub fn push_assistant(&mut self, content: String, tokens: Option<u32>) -> usize {
         let id = self.alloc_id();
         self.messages.push(Message::assistant(id, content, tokens));
-        if self.auto_scroll { self.scroll_to_bottom(); }
+        if self.auto_scroll {
+            self.scroll_to_bottom();
+        }
         id
     }
 
     pub fn push_system(&mut self, content: String) -> usize {
         let id = self.alloc_id();
         self.messages.push(Message::system(id, content));
-        if self.auto_scroll { self.scroll_to_bottom(); }
+        if self.auto_scroll {
+            self.scroll_to_bottom();
+        }
         id
     }
 
@@ -131,7 +137,9 @@ impl ChatPane {
 
     pub fn append_stream_chunk(&mut self, chunk: &str) {
         self.streaming_buf.push_str(chunk);
-        if self.auto_scroll { self.scroll_to_bottom(); }
+        if self.auto_scroll {
+            self.scroll_to_bottom();
+        }
     }
 
     pub fn finish_streaming(&mut self, tokens: Option<u32>) -> usize {
@@ -149,7 +157,10 @@ impl ChatPane {
     }
 
     pub fn last_assistant(&self) -> Option<&Message> {
-        self.messages.iter().rev().find(|m| m.role == Role::Assistant)
+        self.messages
+            .iter()
+            .rev()
+            .find(|m| m.role == Role::Assistant)
     }
 
     pub fn export_markdown(&self) -> String {
@@ -157,7 +168,10 @@ impl ChatPane {
         out.push_str("# Housaky Chat Export\n\n");
         for m in &self.messages {
             let role = m.role.label();
-            out.push_str(&format!("**[{}] {}**\n\n{}\n\n---\n\n", m.timestamp, role, m.content));
+            out.push_str(&format!(
+                "**[{}] {}**\n\n{}\n\n---\n\n",
+                m.timestamp, role, m.content
+            ));
         }
         out
     }
@@ -172,7 +186,9 @@ impl ChatPane {
     pub fn scroll_down(&mut self, n: usize) {
         let max = self.messages.len().saturating_sub(1);
         self.scroll_offset = (self.scroll_offset + n).min(max);
-        if self.scroll_offset >= max { self.auto_scroll = true; }
+        if self.scroll_offset >= max {
+            self.auto_scroll = true;
+        }
     }
 
     pub fn scroll_to_top(&mut self) {
@@ -186,14 +202,18 @@ impl ChatPane {
 
     pub fn toggle_auto_scroll(&mut self) {
         self.auto_scroll = !self.auto_scroll;
-        if self.auto_scroll { self.scroll_to_bottom(); }
+        if self.auto_scroll {
+            self.scroll_to_bottom();
+        }
     }
 
     // ── Search ────────────────────────────────────────────────────────────────
 
     pub fn set_search(&mut self, query: String) {
         let q = query.to_lowercase();
-        self.search_results = self.messages.iter()
+        self.search_results = self
+            .messages
+            .iter()
             .filter(|m| m.content.to_lowercase().contains(&q))
             .map(|m| m.id)
             .collect();
@@ -241,12 +261,20 @@ impl ChatPane {
     // ── Draw ──────────────────────────────────────────────────────────────────
 
     pub fn draw(&self, f: &mut Frame, area: Rect, focused: bool) {
-        let border_style = if focused { style_border_focus() } else { style_border() };
+        let border_style = if focused {
+            style_border_focus()
+        } else {
+            style_border()
+        };
         let title_style = style_title();
 
         let title = if !self.search_query.is_empty() {
-            format!(" 💬 Chat  /{} [{}/{}] ", self.search_query,
-                self.search_cursor + 1, self.search_results.len())
+            format!(
+                " 💬 Chat  /{} [{}/{}] ",
+                self.search_query,
+                self.search_cursor + 1,
+                self.search_results.len()
+            )
         } else {
             format!(" 💬 Chat  {} msgs ", self.messages.len())
         };
@@ -265,13 +293,13 @@ impl ChatPane {
 
         for msg in &visible {
             let is_search_hit = self.search_results.contains(&msg.id);
-            let hit_current = is_search_hit
-                && self.search_results.get(self.search_cursor) == Some(&msg.id);
+            let hit_current =
+                is_search_hit && self.search_results.get(self.search_cursor) == Some(&msg.id);
 
             let (role_style, bracket_color) = match msg.role {
-                Role::User      => (style_user_msg(),      Palette::USER),
+                Role::User => (style_user_msg(), Palette::USER),
                 Role::Assistant => (style_assistant_msg(), Palette::ASSISTANT),
-                Role::System    => (style_system_msg(),    Palette::SYSTEM),
+                Role::System => (style_system_msg(), Palette::SYSTEM),
             };
 
             // Header line
@@ -280,15 +308,14 @@ impl ChatPane {
                     format!(" {} ", msg.role.label()),
                     role_style.add_modifier(Modifier::BOLD),
                 ),
-                Span::styled(
-                    format!(" {} ", msg.timestamp),
-                    style_muted(),
-                ),
+                Span::styled(format!(" {} ", msg.timestamp), style_muted()),
             ];
             if let Some(t) = msg.tokens {
                 header_spans.push(Span::styled(
                     format!(" {}t ", t),
-                    Style::default().fg(bracket_color).add_modifier(Modifier::DIM),
+                    Style::default()
+                        .fg(bracket_color)
+                        .add_modifier(Modifier::DIM),
                 ));
             }
             if hit_current {
@@ -320,8 +347,7 @@ impl ChatPane {
             ]));
         }
 
-        let para = Paragraph::new(lines)
-            .wrap(Wrap { trim: false });
+        let para = Paragraph::new(lines).wrap(Wrap { trim: false });
         f.render_widget(para, inner);
 
         // Scrollbar
@@ -340,7 +366,9 @@ impl ChatPane {
 }
 
 impl Default for ChatPane {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 // ── Markdown renderer ─────────────────────────────────────────────────────────
@@ -349,7 +377,7 @@ fn render_markdown<'a>(text: &'a str, highlight: bool, query: &str) -> Vec<Line<
     let mut lines = Vec::new();
     let mut in_code = false;
     let mut code_lang = String::new();
-    let mut code_buf  = String::new();
+    let mut code_buf = String::new();
 
     for raw in text.lines() {
         if raw.starts_with("```") {
@@ -389,21 +417,27 @@ fn render_markdown<'a>(text: &'a str, highlight: bool, query: &str) -> Vec<Line<
         if raw.starts_with("### ") {
             lines.push(Line::from(Span::styled(
                 raw[4..].to_owned(),
-                Style::default().fg(Palette::CYAN).add_modifier(Modifier::BOLD),
+                Style::default()
+                    .fg(Palette::CYAN)
+                    .add_modifier(Modifier::BOLD),
             )));
             continue;
         }
         if raw.starts_with("## ") {
             lines.push(Line::from(Span::styled(
                 raw[3..].to_owned(),
-                Style::default().fg(Palette::CYAN).add_modifier(Modifier::BOLD | Modifier::UNDERLINED),
+                Style::default()
+                    .fg(Palette::CYAN)
+                    .add_modifier(Modifier::BOLD | Modifier::UNDERLINED),
             )));
             continue;
         }
         if raw.starts_with("# ") {
             lines.push(Line::from(Span::styled(
                 raw[2..].to_owned(),
-                Style::default().fg(Palette::CYAN).add_modifier(Modifier::BOLD | Modifier::UNDERLINED),
+                Style::default()
+                    .fg(Palette::CYAN)
+                    .add_modifier(Modifier::BOLD | Modifier::UNDERLINED),
             )));
             continue;
         }
@@ -417,7 +451,12 @@ fn render_markdown<'a>(text: &'a str, highlight: bool, query: &str) -> Vec<Line<
         }
         if raw.len() > 3 {
             let maybe_ordered = &raw[..3];
-            if maybe_ordered.ends_with(". ") && maybe_ordered.chars().next().map_or(false, |c| c.is_ascii_digit()) {
+            if maybe_ordered.ends_with(". ")
+                && maybe_ordered
+                    .chars()
+                    .next()
+                    .map_or(false, |c| c.is_ascii_digit())
+            {
                 let mut spans = vec![Span::styled(format!("  {} ", &raw[..2]), style_dim())];
                 spans.extend(inline_md(&raw[3..]));
                 lines.push(Line::from(spans));
@@ -472,15 +511,21 @@ fn inline_md(text: &str) -> Vec<Span<'static>> {
     let mut remaining: String = text.to_owned();
 
     loop {
-        if remaining.is_empty() { break; }
+        if remaining.is_empty() {
+            break;
+        }
 
         // Bold **text**
         if let Some(s) = remaining.find("**") {
             if let Some(e) = remaining[s + 2..].find("**") {
-                if s > 0 { spans.push(Span::raw(remaining[..s].to_owned())); }
+                if s > 0 {
+                    spans.push(Span::raw(remaining[..s].to_owned()));
+                }
                 spans.push(Span::styled(
                     remaining[s + 2..s + 2 + e].to_owned(),
-                    Style::default().fg(Palette::TEXT_BRIGHT).add_modifier(Modifier::BOLD),
+                    Style::default()
+                        .fg(Palette::TEXT_BRIGHT)
+                        .add_modifier(Modifier::BOLD),
                 ));
                 remaining = remaining[s + 2 + e + 2..].to_owned();
                 continue;
@@ -490,7 +535,9 @@ fn inline_md(text: &str) -> Vec<Span<'static>> {
         // Inline code `text`
         if let Some(s) = remaining.find('`') {
             if let Some(e) = remaining[s + 1..].find('`') {
-                if s > 0 { spans.push(Span::raw(remaining[..s].to_owned())); }
+                if s > 0 {
+                    spans.push(Span::raw(remaining[..s].to_owned()));
+                }
                 spans.push(Span::styled(
                     remaining[s + 1..s + 1 + e].to_owned(),
                     style_code_inline(),
@@ -503,10 +550,14 @@ fn inline_md(text: &str) -> Vec<Span<'static>> {
         // Italic *text*
         if let Some(s) = remaining.find('*') {
             if let Some(e) = remaining[s + 1..].find('*') {
-                if s > 0 { spans.push(Span::raw(remaining[..s].to_owned())); }
+                if s > 0 {
+                    spans.push(Span::raw(remaining[..s].to_owned()));
+                }
                 spans.push(Span::styled(
                     remaining[s + 1..s + 1 + e].to_owned(),
-                    Style::default().fg(Palette::TEXT).add_modifier(Modifier::ITALIC),
+                    Style::default()
+                        .fg(Palette::TEXT)
+                        .add_modifier(Modifier::ITALIC),
                 ));
                 remaining = remaining[s + 1 + e + 1..].to_owned();
                 continue;
@@ -531,7 +582,9 @@ fn highlight_search(spans: Vec<Span<'static>>, query: &str) -> Vec<Span<'static>
         if content.contains(&q) {
             out.push(Span::styled(
                 span.content.into_owned(),
-                span.style.bg(Palette::BG_SELECTED).add_modifier(Modifier::BOLD),
+                span.style
+                    .bg(Palette::BG_SELECTED)
+                    .add_modifier(Modifier::BOLD),
             ));
         } else {
             out.push(span);

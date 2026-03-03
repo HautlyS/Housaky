@@ -8,8 +8,8 @@ pub struct AstEngine;
 
 impl AstEngine {
     pub fn parse_file(path: &Path) -> Result<File> {
-        let src = std::fs::read_to_string(path)
-            .with_context(|| format!("Failed to read {:?}", path))?;
+        let src =
+            std::fs::read_to_string(path).with_context(|| format!("Failed to read {:?}", path))?;
         parse_file(&src).with_context(|| format!("Failed to parse AST of {:?}", path))
     }
 
@@ -17,11 +17,7 @@ impl AstEngine {
         prettyprint_file(file)
     }
 
-    pub fn apply_mutation(
-        path: &Path,
-        op: &MutationOp,
-        target: &MutationTarget,
-    ) -> Result<String> {
+    pub fn apply_mutation(path: &Path, op: &MutationOp, target: &MutationTarget) -> Result<String> {
         let mut ast = Self::parse_file(path)?;
 
         match op {
@@ -111,17 +107,11 @@ impl AstEngine {
             } => {
                 // Parse the extracted lines as a function body, create a new fn,
                 // and append it to the file.
-                let fn_source = format!(
-                    "fn {}() {{ {} }}",
-                    new_fn_name, extracted_lines
-                );
+                let fn_source = format!("fn {}() {{ {} }}", new_fn_name, extracted_lines);
                 match syn::parse_str::<syn::Item>(&fn_source) {
                     Ok(item) => {
                         ast.items.push(item);
-                        info!(
-                            "RefactorExtract: created helper function '{}'",
-                            new_fn_name
-                        );
+                        info!("RefactorExtract: created helper function '{}'", new_fn_name);
                     }
                     Err(e) => {
                         warn!("RefactorExtract: failed to parse: {e}");

@@ -10,8 +10,8 @@ pub use audio_pipeline::{
     VoiceActivityDetector, VoiceActivityResult,
 };
 pub use fusion::{
-    FusedPercept, FusionInput, FusionStats, ModalityWeight, OverallHazardLevel,
-    PerceptualConflict, PerceptualEvent, PerceptualFusion, PerceptualModality, ProprioceptiveState,
+    FusedPercept, FusionInput, FusionStats, ModalityWeight, OverallHazardLevel, PerceptualConflict,
+    PerceptualEvent, PerceptualFusion, PerceptualModality, ProprioceptiveState,
 };
 pub use olfactory::{
     AQICategory, AirQualityIndex, ChemicalSensorConfig, ChemicalSensorType, GasAlarm, GasReading,

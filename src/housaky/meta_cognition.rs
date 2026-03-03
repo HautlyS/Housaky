@@ -1,4 +1,5 @@
 use crate::housaky::alignment::{DriftEvent, DriftReport, ValueBaseline, ValueDriftDetector};
+use crate::quantum::QuantumAgiBridge;
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -181,6 +182,8 @@ pub struct MetaCognitionEngine {
     introspection_depth: u32,
     max_reflections: usize,
     drift_detector: Arc<RwLock<ValueDriftDetector>>,
+    /// §10.7 — Optional quantum bridge for uncertainty reduction on beliefs.
+    quantum_bridge: Option<Arc<QuantumAgiBridge>>,
 }
 
 impl MetaCognitionEngine {
@@ -199,10 +202,68 @@ impl MetaCognitionEngine {
             introspection_depth: 3,
             max_reflections: 100,
             drift_detector: Arc::new(RwLock::new(drift_detector)),
+            quantum_bridge: None,
         }
     }
 
-    pub async fn check_value_alignment(&self, current_values: &HashMap<String, f64>) -> Vec<DriftEvent> {
+    /// §10.7 — Attach a quantum bridge for belief uncertainty reduction.
+    pub fn with_quantum(mut self, bridge: Arc<QuantumAgiBridge>) -> Self {
+        self.quantum_bridge = Some(bridge);
+        self
+    }
+
+    /// §10.7 — Refine belief confidences using quantum uncertainty reduction.
+    ///
+    /// Uses Grover-amplitude-amplified sampling to find the highest-probability
+    /// belief configuration, reducing epistemic uncertainty on key beliefs.
+    /// Returns a map of belief_id → refined confidence.
+    pub async fn quantum_refine_beliefs(&self) -> HashMap<String, f64> {
+        let bridge = match &self.quantum_bridge {
+            Some(b) => b.clone(),
+            None => return HashMap::new(),
+        };
+
+        let beliefs = self.self_model.read().await.beliefs.clone();
+        if beliefs.len() < 2 {
+            return HashMap::new();
+        }
+
+        let options: Vec<String> = beliefs.iter().map(|b| b.id.clone()).collect();
+        let priors: HashMap<String, f64> = beliefs
+            .iter()
+            .map(|b| (b.id.clone(), b.confidence))
+            .collect();
+
+        match bridge.reduce_uncertainty(&options, &priors).await {
+            Ok(posteriors) => {
+                info!(
+                    "🔮 Quantum meta-cognition: refined {} belief confidences via uncertainty reduction",
+                    posteriors.len()
+                );
+                // Write refined confidences back to the self-model
+                let mut model = self.self_model.write().await;
+                for belief in model.beliefs.iter_mut() {
+                    if let Some(&refined) = posteriors.get(&belief.id) {
+                        let old = belief.confidence;
+                        belief.confidence = refined;
+                        if (old - refined).abs() > 0.01 {
+                            info!("  belief '{}': {:.3} → {:.3}", belief.id, old, refined);
+                        }
+                    }
+                }
+                posteriors
+            }
+            Err(e) => {
+                warn!("Quantum belief refinement failed: {e}");
+                HashMap::new()
+            }
+        }
+    }
+
+    pub async fn check_value_alignment(
+        &self,
+        current_values: &HashMap<String, f64>,
+    ) -> Vec<DriftEvent> {
         let mut detector = self.drift_detector.write().await;
         detector.check_drift(current_values)
     }

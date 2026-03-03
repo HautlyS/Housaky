@@ -204,7 +204,10 @@ impl OlfactoryProcessor {
     }
 
     pub async fn register_sensor(&self, config: ChemicalSensorConfig) {
-        info!("Registering chemical sensor '{}' ({:?})", config.id, config.sensor_type);
+        info!(
+            "Registering chemical sensor '{}' ({:?})",
+            config.id, config.sensor_type
+        );
         let id = config.id.clone();
         self.sensors.write().await.insert(id.clone(), config);
         self.reading_history
@@ -281,7 +284,9 @@ impl OlfactoryProcessor {
 
         // Update baseline (slow exponential moving average)
         let mut baseline = self.baseline.write().await;
-        let current = baseline.entry(gas_name.to_string()).or_insert(concentration_ppm);
+        let current = baseline
+            .entry(gas_name.to_string())
+            .or_insert(concentration_ppm);
         *current = *current * 0.99 + concentration_ppm * 0.01;
 
         debug!(
@@ -314,14 +319,12 @@ impl OlfactoryProcessor {
             .read()
             .await
             .iter()
-            .map(|a| {
-                match a.hazard_level {
-                    HazardLevel::Critical => 4,
-                    HazardLevel::High => 3,
-                    HazardLevel::Medium => 2,
-                    HazardLevel::Low => 1,
-                    HazardLevel::None => 0,
-                }
+            .map(|a| match a.hazard_level {
+                HazardLevel::Critical => 4,
+                HazardLevel::High => 3,
+                HazardLevel::Medium => 2,
+                HazardLevel::Low => 1,
+                HazardLevel::None => 0,
             })
             .max()
             .map(|v| match v {
@@ -352,10 +355,7 @@ impl OlfactoryProcessor {
         Ok(classification)
     }
 
-    async fn classify_odor(
-        &self,
-        readings: &[GasReading],
-    ) -> (Option<String>, f64) {
+    async fn classify_odor(&self, readings: &[GasReading]) -> (Option<String>, f64) {
         let profiles = self.odor_profiles.read().await;
         if profiles.is_empty() {
             return (None, 0.0);
@@ -380,11 +380,7 @@ impl OlfactoryProcessor {
         (best_profile, best_score)
     }
 
-    fn cosine_similarity(
-        &self,
-        a: &HashMap<String, f64>,
-        b: &HashMap<String, f64>,
-    ) -> f64 {
+    fn cosine_similarity(&self, a: &HashMap<String, f64>, b: &HashMap<String, f64>) -> f64 {
         let dot: f64 = a
             .iter()
             .filter_map(|(k, v)| b.get(k).map(|bv| v * bv))
@@ -407,7 +403,12 @@ impl OlfactoryProcessor {
         hazard_level: HazardLevel,
     ) {
         let alarm = GasAlarm {
-            id: format!("alarm_{}_{}_{}", sensor_id, gas_name, Utc::now().timestamp_millis()),
+            id: format!(
+                "alarm_{}_{}_{}",
+                sensor_id,
+                gas_name,
+                Utc::now().timestamp_millis()
+            ),
             sensor_id: sensor_id.to_string(),
             gas_name: gas_name.to_string(),
             concentration_ppm,
@@ -429,10 +430,7 @@ impl OlfactoryProcessor {
     }
 
     pub async fn clear_acknowledged_alarms(&self) {
-        self.active_alarms
-            .write()
-            .await
-            .retain(|a| !a.acknowledged);
+        self.active_alarms.write().await.retain(|a| !a.acknowledged);
     }
 
     pub async fn get_active_alarms(&self) -> Vec<GasAlarm> {
@@ -513,8 +511,14 @@ mod tests {
 
     #[test]
     fn test_hazard_from_ratio() {
-        assert_eq!(HazardLevel::from_concentration_ratio(0.05), HazardLevel::None);
-        assert_eq!(HazardLevel::from_concentration_ratio(1.5), HazardLevel::Critical);
+        assert_eq!(
+            HazardLevel::from_concentration_ratio(0.05),
+            HazardLevel::None
+        );
+        assert_eq!(
+            HazardLevel::from_concentration_ratio(1.5),
+            HazardLevel::Critical
+        );
     }
 
     #[tokio::test]

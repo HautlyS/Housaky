@@ -70,7 +70,12 @@ impl Proposal {
         if total_weight < 1e-9 {
             return 0.0;
         }
-        let accept_weight: f64 = self.votes.values().filter(|v| v.in_favor).map(|v| v.weight).sum();
+        let accept_weight: f64 = self
+            .votes
+            .values()
+            .filter(|v| v.in_favor)
+            .map(|v| v.weight)
+            .sum();
         accept_weight / total_weight
     }
 
@@ -173,7 +178,10 @@ impl ConsensusEngine {
         }
 
         proposal.cast_vote(voter, in_favor, weight, reason);
-        info!("Vote cast: voter={} proposal={} in_favor={}", voter, proposal_id, in_favor);
+        info!(
+            "Vote cast: voter={} proposal={} in_favor={}",
+            voter, proposal_id, in_favor
+        );
         Ok(())
     }
 
@@ -192,8 +200,8 @@ impl ConsensusEngine {
             _ => proposal.accept_ratio(),
         };
 
-        let accepted = ratio > proposal.required_quorum
-            && proposal.status != ProposalStatus::Expired;
+        let accepted =
+            ratio > proposal.required_quorum && proposal.status != ProposalStatus::Expired;
 
         proposal.status = if accepted {
             ProposalStatus::Accepted
@@ -207,7 +215,11 @@ impl ConsensusEngine {
             proposal_id: proposal_id.to_string(),
             topic: proposal.topic.clone(),
             accepted,
-            final_value: if accepted { Some(proposal.value.clone()) } else { None },
+            final_value: if accepted {
+                Some(proposal.value.clone())
+            } else {
+                None
+            },
             accept_ratio: ratio,
             total_votes: proposal.votes.len(),
             byzantine_faults_detected: byzantine,
@@ -254,7 +266,11 @@ impl ConsensusEngine {
         let accepts = votes.values().filter(|v| v.in_favor).count();
         let rejects = n - accepts;
         let minority = accepts.min(rejects);
-        if n > 3 { (minority as f64 / n as f64 * 0.1) as usize } else { 0 }
+        if n > 3 {
+            (minority as f64 / n as f64 * 0.1) as usize
+        } else {
+            0
+        }
     }
 }
 
@@ -265,7 +281,9 @@ mod tests {
     #[tokio::test]
     async fn test_simple_majority_consensus() {
         let engine = ConsensusEngine::new(ConsensusProtocol::SimpleMajority, 0.0);
-        let id = engine.propose("agent-0", "use_tool", serde_json::json!("tool_a"), 60).await;
+        let id = engine
+            .propose("agent-0", "use_tool", serde_json::json!("tool_a"), 60)
+            .await;
 
         engine.vote(&id, "agent-1", true, 1.0, None).await.unwrap();
         engine.vote(&id, "agent-2", true, 1.0, None).await.unwrap();
@@ -279,9 +297,14 @@ mod tests {
     #[tokio::test]
     async fn test_rejection() {
         let engine = ConsensusEngine::new(ConsensusProtocol::SimpleMajority, 0.0);
-        let id = engine.propose("agent-0", "deploy", serde_json::json!("v2"), 60).await;
+        let id = engine
+            .propose("agent-0", "deploy", serde_json::json!("v2"), 60)
+            .await;
 
-        engine.vote(&id, "agent-1", false, 1.0, Some("risky".into())).await.unwrap();
+        engine
+            .vote(&id, "agent-1", false, 1.0, Some("risky".into()))
+            .await
+            .unwrap();
         engine.vote(&id, "agent-2", false, 1.0, None).await.unwrap();
 
         let result = engine.finalize(&id).await.unwrap();

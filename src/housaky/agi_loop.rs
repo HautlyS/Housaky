@@ -2,6 +2,7 @@
 
 use crate::agent::loop_::{build_tool_instructions, find_tool};
 use crate::config::Config;
+use crate::housaky::cognitive::planning::{GoalPriority as PlanGoalPriority, GoalState};
 use crate::housaky::core::{AGIAction, HousakyCore};
 use crate::housaky::goal_engine::{Goal, GoalPriority, GoalStatus};
 use crate::memory::{Memory, MemoryCategory};
@@ -13,6 +14,7 @@ use crate::util::truncate_with_ellipsis;
 use anyhow::Result;
 use std::sync::Arc;
 use std::time::Instant;
+use tracing::{info, warn};
 use uuid::Uuid;
 
 pub struct AGIAgentLoop {
@@ -52,6 +54,10 @@ impl AGIAgentLoop {
         });
 
         let _context = self.core.prepare_context(user_message).await?;
+
+        // §10.3 — Quantum planning pass: schedule active goals with QAOA/Grover
+        // so the AGI focuses on the highest-value goal this turn.
+        self.run_quantum_planning_pass().await;
 
         let decision = self
             .core
@@ -292,6 +298,11 @@ impl AGIAgentLoop {
                 continue;
             }
 
+            if content == "/quantum" {
+                self.show_quantum_metrics().await;
+                continue;
+            }
+
             let response = self
                 .process_message(
                     provider.as_ref(),
@@ -317,6 +328,78 @@ impl AGIAgentLoop {
         self.core.shutdown().await?;
 
         Ok(())
+    }
+
+    /// §10.3 — Run a quantum planning pass each AGI turn.
+    ///
+    /// Uses the `QuantumPlanningEngine` (QAOA + Grover) to schedule active goals
+    /// and select the highest-value plan. The result is logged; the top planned
+    /// action is recorded as a thought in the inner monologue so the cognitive
+    /// loop can incorporate it on the next reasoning step.
+    async fn run_quantum_planning_pass(&self) {
+        let planner = match &self.core.quantum_planner {
+            Some(p) => p.clone(),
+            None => return,
+        };
+
+        let active_goals = self.core.goal_engine.get_active_goals().await;
+        if active_goals.is_empty() {
+            return;
+        }
+
+        // Build a GoalState from the highest-priority active goal.
+        // `goal_engine::GoalPriority` is Critical=4..Low=1; higher discriminant = higher priority.
+        let top_goal = active_goals
+            .iter()
+            .max_by_key(|g| g.priority.clone() as i32);
+
+        let (goal_title, goal_state) = match top_goal {
+            Some(g) => {
+                let plan_priority = match g.priority {
+                    GoalPriority::Critical => PlanGoalPriority::Critical,
+                    GoalPriority::High => PlanGoalPriority::High,
+                    GoalPriority::Medium => PlanGoalPriority::Medium,
+                    GoalPriority::Low | GoalPriority::Background => PlanGoalPriority::Low,
+                };
+                let mut props = std::collections::HashMap::new();
+                props.insert("title".to_string(), g.title.clone());
+                props.insert("goal_id".to_string(), g.id.clone());
+                (
+                    g.title.clone(),
+                    GoalState {
+                        target_properties: props,
+                        constraints: vec![],
+                        priority: plan_priority,
+                    },
+                )
+            }
+            None => return,
+        };
+
+        match planner.plan_hybrid(&goal_state, 5).await {
+            Ok(plan) => {
+                info!(
+                    "🔮 Quantum planning turn: goal='{}', {} actions planned, confidence={:.2}",
+                    goal_title,
+                    plan.actions.len(),
+                    plan.confidence,
+                );
+                if let Some(first_action) = plan.actions.first() {
+                    let thought = format!(
+                        "Quantum plan for '{}': next action = {} (confidence={:.2})",
+                        goal_title, first_action.action.action_type, plan.confidence,
+                    );
+                    let _ = self
+                        .core
+                        .inner_monologue
+                        .add_thought(&thought, plan.confidence)
+                        .await;
+                }
+            }
+            Err(e) => {
+                warn!("Quantum planning pass failed (non-fatal): {e}");
+            }
+        }
     }
 
     async fn show_goals(&self) {
@@ -392,6 +475,35 @@ impl AGIAgentLoop {
             );
         }
         println!();
+    }
+
+    async fn show_quantum_metrics(&self) {
+        match self.core.get_quantum_metrics().await {
+            Some(m) => {
+                println!("\n⚙️  Quantum AGI Bridge Metrics");
+                println!("  ══════════════════════════════");
+                println!("  Total Quantum Calls:      {}", m.total_quantum_calls);
+                println!(
+                    "  Classical Fallbacks:      {}",
+                    m.total_classical_fallbacks
+                );
+                println!("  Goals Scheduled:          {}", m.goals_scheduled);
+                println!("  Reasoning Searches:       {}", m.reasoning_searches);
+                println!("  Memory Optimizations:     {}", m.memory_optimizations);
+                println!("  Fitness Evaluations:      {}", m.fitness_evaluations);
+                println!(
+                    "  Avg Quantum Advantage:    {:.2}x",
+                    m.average_quantum_advantage
+                );
+                println!("  Total Cost:               ${:.4}", m.total_cost_usd);
+                println!();
+            }
+            None => {
+                println!("\n⚙️  Quantum AGI Bridge: disabled");
+                println!("  Enable with [quantum] enabled = true in ~/.housaky/config.toml");
+                println!();
+            }
+        }
     }
 }
 

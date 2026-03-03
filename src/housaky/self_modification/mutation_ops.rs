@@ -12,7 +12,10 @@ pub enum MutationOp {
     AddCaching,
     AddLogging,
     AddEarlyReturn,
-    InlineConstant { name: String, value: f64 },
+    InlineConstant {
+        name: String,
+        value: f64,
+    },
     /// DGM §8.3 — structural mutations: add a new function to a file.
     AddFunction {
         function_source: String,
@@ -59,10 +62,7 @@ impl AtomicMutation {
 }
 
 /// Predefined safe atomic mutations that can be applied without human review.
-pub fn safe_mutations_for_file(
-    file: &str,
-    fn_names: &[String],
-) -> Vec<AtomicMutation> {
+pub fn safe_mutations_for_file(file: &str, fn_names: &[String]) -> Vec<AtomicMutation> {
     let mut mutations = Vec::new();
 
     for fn_name in fn_names {
@@ -91,7 +91,10 @@ pub fn safe_mutations_for_file(
                     extra: None,
                 },
                 MutationOp::AddCaching,
-                &format!("Add result caching to {} to reduce redundant computation", fn_name),
+                &format!(
+                    "Add result caching to {} to reduce redundant computation",
+                    fn_name
+                ),
                 0.75,
             ));
         }

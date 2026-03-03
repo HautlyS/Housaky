@@ -178,10 +178,8 @@ impl PurePursuitController {
         }
 
         let curvature = 2.0 * local_y / (dist.powi(2));
-        let angular_vel = (curvature * 0.5).clamp(
-            -self.max_angular_velocity,
-            self.max_angular_velocity,
-        );
+        let angular_vel =
+            (curvature * 0.5).clamp(-self.max_angular_velocity, self.max_angular_velocity);
         let linear_vel = 0.3_f64.min(1.0 / (1.0 + curvature.abs() * 2.0));
 
         Some((linear_vel, angular_vel))
@@ -239,7 +237,10 @@ impl Navigator {
 
     pub async fn navigate_to(&self, goal: NavigationGoal) -> Result<NavigationResult> {
         let t0 = std::time::Instant::now();
-        info!("Navigating to goal '{}' at ({:.2}, {:.2})", goal.id, goal.target.x, goal.target.y);
+        info!(
+            "Navigating to goal '{}' at ({:.2}, {:.2})",
+            goal.id, goal.target.x, goal.target.y
+        );
 
         *self.navigation_state.write().await = NavigationState::Planning;
         *self.current_goal.write().await = Some(goal.clone());
@@ -253,9 +254,7 @@ impl Navigator {
             .spatial_reasoner
             .find_path(&current_pos, &goal.target)
             .await
-            .map_err(|e| {
-                anyhow::anyhow!("Path planning failed: {}", e)
-            })?;
+            .map_err(|e| anyhow::anyhow!("Path planning failed: {}", e))?;
 
         self.spatial_reasoner.smooth_path(&mut path).await;
 
@@ -294,7 +293,10 @@ impl Navigator {
                     };
                     *self.navigation_state.write().await =
                         NavigationState::Failed("Stuck".to_string());
-                    self.navigation_history.write().await.push_back(result.clone());
+                    self.navigation_history
+                        .write()
+                        .await
+                        .push_back(result.clone());
                     return Ok(result);
                 }
             }
@@ -410,11 +412,15 @@ impl Navigator {
     async fn attempt_recovery(&self) -> bool {
         let mut attempts = self.recovery_attempts.write().await;
         if *attempts >= self.max_recovery_attempts {
-            warn!("Max recovery attempts ({}) reached", self.max_recovery_attempts);
+            warn!(
+                "Max recovery attempts ({}) reached",
+                self.max_recovery_attempts
+            );
             return false;
         }
         *attempts += 1;
-        let behavior = &self.recovery_behaviors[(*attempts as usize - 1).min(self.recovery_behaviors.len() - 1)];
+        let behavior = &self.recovery_behaviors
+            [(*attempts as usize - 1).min(self.recovery_behaviors.len() - 1)];
         info!("Recovery attempt {}: {:?}", attempts, behavior);
 
         match behavior {
@@ -437,7 +443,12 @@ impl Navigator {
     }
 
     pub async fn get_navigation_history(&self) -> Vec<NavigationResult> {
-        self.navigation_history.read().await.iter().cloned().collect()
+        self.navigation_history
+            .read()
+            .await
+            .iter()
+            .cloned()
+            .collect()
     }
 
     pub async fn compute_velocity_commands(

@@ -1,9 +1,9 @@
 pub mod flight_journal;
-pub mod running_registry;
 pub mod log;
 pub mod multi;
 pub mod noop;
 pub mod otel;
+pub mod running_registry;
 pub mod traits;
 pub mod verbose;
 

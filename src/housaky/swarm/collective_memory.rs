@@ -162,10 +162,12 @@ impl CollectiveMemory {
             conn.execute_batch("BEGIN;")?;
             for e in &entries {
                 let tags = serde_json::to_string(&e.tags).unwrap_or_else(|_| "[]".to_string());
-                let vector = e.vector.as_ref()
+                let vector = e
+                    .vector
+                    .as_ref()
                     .and_then(|v| serde_json::to_string(v).ok());
-                let value_json = serde_json::to_string(&e.value)
-                    .unwrap_or_else(|_| "null".to_string());
+                let value_json =
+                    serde_json::to_string(&e.value).unwrap_or_else(|_| "null".to_string());
                 conn.execute(
                     "INSERT INTO collective_memory
                         (id, key, value_json, source_agent, confidence, version,
@@ -227,63 +229,85 @@ impl CollectiveMemory {
             None => return Ok(()),
         };
 
-        let (entries, conflicts) = tokio::task::spawn_blocking(move || -> anyhow::Result<(Vec<SharedMemoryEntry>, Vec<ConflictRecord>)> {
-            let conn = Connection::open(&db_path)?;
+        let (entries, conflicts) = tokio::task::spawn_blocking(
+            move || -> anyhow::Result<(Vec<SharedMemoryEntry>, Vec<ConflictRecord>)> {
+                let conn = Connection::open(&db_path)?;
 
-            let mut stmt = conn.prepare(
-                "SELECT id, key, value_json, source_agent, confidence, version,
+                let mut stmt = conn.prepare(
+                    "SELECT id, key, value_json, source_agent, confidence, version,
                         created_at, updated_at, access_count, tags_json, vector_json
                  FROM collective_memory",
-            )?;
+                )?;
 
-            let entries: Vec<SharedMemoryEntry> = stmt.query_map([], |row| {
-                let value_json: String = row.get(2)?;
-                let tags_json: String = row.get(9)?;
-                let vector_json: Option<String> = row.get(10)?;
-                let created_str: String = row.get(6)?;
-                let updated_str: String = row.get(7)?;
-                Ok((value_json, tags_json, vector_json, created_str, updated_str,
-                    row.get::<_, String>(0)?,
-                    row.get::<_, String>(1)?,
-                    row.get::<_, String>(3)?,
-                    row.get::<_, f64>(4)?,
-                    row.get::<_, i64>(5)?,
-                    row.get::<_, i64>(8)?,
-                ))
-            })?
-            .filter_map(|r| r.ok())
-            .filter_map(|(value_json, tags_json, vector_json, created_str, updated_str,
-                          id, key, source_agent, confidence, version, access_count)| {
-                let value = serde_json::from_str(&value_json).ok()?;
-                let tags: Vec<String> = serde_json::from_str(&tags_json).unwrap_or_default();
-                let vector: Option<Vec<f32>> = vector_json
-                    .as_deref()
-                    .and_then(|s| serde_json::from_str(s).ok());
-                let created_at = DateTime::parse_from_rfc3339(&created_str)
-                    .map(|d| d.with_timezone(&Utc))
-                    .ok()?;
-                let updated_at = DateTime::parse_from_rfc3339(&updated_str)
-                    .map(|d| d.with_timezone(&Utc))
-                    .ok()?;
-                Some(SharedMemoryEntry {
-                    id,
-                    key,
-                    value,
-                    source_agent,
-                    confidence,
-                    version: version as u64,
-                    created_at,
-                    updated_at,
-                    access_count: access_count as u64,
-                    tags,
-                    vector,
-                })
-            })
-            .collect();
+                let entries: Vec<SharedMemoryEntry> = stmt
+                    .query_map([], |row| {
+                        let value_json: String = row.get(2)?;
+                        let tags_json: String = row.get(9)?;
+                        let vector_json: Option<String> = row.get(10)?;
+                        let created_str: String = row.get(6)?;
+                        let updated_str: String = row.get(7)?;
+                        Ok((
+                            value_json,
+                            tags_json,
+                            vector_json,
+                            created_str,
+                            updated_str,
+                            row.get::<_, String>(0)?,
+                            row.get::<_, String>(1)?,
+                            row.get::<_, String>(3)?,
+                            row.get::<_, f64>(4)?,
+                            row.get::<_, i64>(5)?,
+                            row.get::<_, i64>(8)?,
+                        ))
+                    })?
+                    .filter_map(|r| r.ok())
+                    .filter_map(
+                        |(
+                            value_json,
+                            tags_json,
+                            vector_json,
+                            created_str,
+                            updated_str,
+                            id,
+                            key,
+                            source_agent,
+                            confidence,
+                            version,
+                            access_count,
+                        )| {
+                            let value = serde_json::from_str(&value_json).ok()?;
+                            let tags: Vec<String> =
+                                serde_json::from_str(&tags_json).unwrap_or_default();
+                            let vector: Option<Vec<f32>> = vector_json
+                                .as_deref()
+                                .and_then(|s| serde_json::from_str(s).ok());
+                            let created_at = DateTime::parse_from_rfc3339(&created_str)
+                                .map(|d| d.with_timezone(&Utc))
+                                .ok()?;
+                            let updated_at = DateTime::parse_from_rfc3339(&updated_str)
+                                .map(|d| d.with_timezone(&Utc))
+                                .ok()?;
+                            Some(SharedMemoryEntry {
+                                id,
+                                key,
+                                value,
+                                source_agent,
+                                confidence,
+                                version: version as u64,
+                                created_at,
+                                updated_at,
+                                access_count: access_count as u64,
+                                tags,
+                                vector,
+                            })
+                        },
+                    )
+                    .collect();
 
-            let conflicts: Vec<ConflictRecord> = Vec::new();
-            Ok((entries, conflicts))
-        })
+                let conflicts: Vec<ConflictRecord> = Vec::new();
+                Ok((entries, conflicts))
+            },
+        )
         .await??;
 
         let mut store = self.store.write().await;
@@ -344,8 +368,10 @@ impl CollectiveMemory {
                     }
                 }
                 ConflictResolution::Merge => {
-                    if let (serde_json::Value::Object(existing_map), serde_json::Value::Object(new_map)) =
-                        (&mut existing.value, &value)
+                    if let (
+                        serde_json::Value::Object(existing_map),
+                        serde_json::Value::Object(new_map),
+                    ) = (&mut existing.value, &value)
                     {
                         let existing_map = existing_map.clone();
                         if let serde_json::Value::Object(ref mut em) = existing.value {
@@ -368,10 +394,13 @@ impl CollectiveMemory {
             drop(store);
             self.conflict_log.write().await.push(conflict);
         } else {
-            let entry = SharedMemoryEntry::new(key, value, source_agent, confidence)
-                .with_tags(tags);
+            let entry =
+                SharedMemoryEntry::new(key, value, source_agent, confidence).with_tags(tags);
             store.insert(key.to_string(), entry);
-            info!("Collective memory: new entry '{}' from agent '{}'", key, source_agent);
+            info!(
+                "Collective memory: new entry '{}' from agent '{}'",
+                key, source_agent
+            );
         }
     }
 
@@ -405,7 +434,11 @@ impl CollectiveMemory {
             .collect()
     }
 
-    pub async fn cosine_search(&self, query_vector: &[f32], top_k: usize) -> Vec<SharedMemoryEntry> {
+    pub async fn cosine_search(
+        &self,
+        query_vector: &[f32],
+        top_k: usize,
+    ) -> Vec<SharedMemoryEntry> {
         let store = self.store.read().await;
         let mut scored: Vec<(f32, SharedMemoryEntry)> = store
             .values()
@@ -439,7 +472,11 @@ impl CollectiveMemory {
             0.0
         };
         let conflicts = self.conflict_log.read().await.len();
-        CollectiveMemoryStats { total_entries: total, avg_confidence, total_conflicts: conflicts }
+        CollectiveMemoryStats {
+            total_entries: total,
+            avg_confidence,
+            total_conflicts: conflicts,
+        }
     }
 
     pub async fn remove(&self, key: &str) -> bool {
@@ -475,7 +512,14 @@ mod tests {
     #[tokio::test]
     async fn test_write_and_read() {
         let mem = CollectiveMemory::new(ConflictResolution::HigherConfidenceWins, 1000);
-        mem.write("fact:1", serde_json::json!("Rust is fast"), "agent-1", 0.9, vec!["fact".into()]).await;
+        mem.write(
+            "fact:1",
+            serde_json::json!("Rust is fast"),
+            "agent-1",
+            0.9,
+            vec!["fact".into()],
+        )
+        .await;
         let entry = mem.read("fact:1").await.unwrap();
         assert_eq!(entry.value, serde_json::json!("Rust is fast"));
         assert_eq!(entry.access_count, 1);
@@ -484,8 +528,10 @@ mod tests {
     #[tokio::test]
     async fn test_conflict_resolution_higher_confidence() {
         let mem = CollectiveMemory::new(ConflictResolution::HigherConfidenceWins, 1000);
-        mem.write("key", serde_json::json!("old"), "agent-1", 0.5, vec![]).await;
-        mem.write("key", serde_json::json!("new"), "agent-2", 0.9, vec![]).await;
+        mem.write("key", serde_json::json!("old"), "agent-1", 0.5, vec![])
+            .await;
+        mem.write("key", serde_json::json!("new"), "agent-2", 0.9, vec![])
+            .await;
         let entry = mem.read("key").await.unwrap();
         assert_eq!(entry.value, serde_json::json!("new"));
     }
@@ -493,8 +539,10 @@ mod tests {
     #[tokio::test]
     async fn test_conflict_resolution_keep_existing() {
         let mem = CollectiveMemory::new(ConflictResolution::KeepExisting, 1000);
-        mem.write("key", serde_json::json!("original"), "agent-1", 0.5, vec![]).await;
-        mem.write("key", serde_json::json!("override"), "agent-2", 0.9, vec![]).await;
+        mem.write("key", serde_json::json!("original"), "agent-1", 0.5, vec![])
+            .await;
+        mem.write("key", serde_json::json!("override"), "agent-2", 0.9, vec![])
+            .await;
         let entry = mem.read("key").await.unwrap();
         assert_eq!(entry.value, serde_json::json!("original"));
     }
@@ -502,8 +550,10 @@ mod tests {
     #[tokio::test]
     async fn test_tag_search() {
         let mem = CollectiveMemory::new(ConflictResolution::TakeIncoming, 1000);
-        mem.write("k1", serde_json::json!(1), "a", 0.8, vec!["rust".into()]).await;
-        mem.write("k2", serde_json::json!(2), "a", 0.8, vec!["python".into()]).await;
+        mem.write("k1", serde_json::json!(1), "a", 0.8, vec!["rust".into()])
+            .await;
+        mem.write("k2", serde_json::json!(2), "a", 0.8, vec!["python".into()])
+            .await;
         let results = mem.search_by_tag("rust").await;
         assert_eq!(results.len(), 1);
     }

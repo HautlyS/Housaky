@@ -154,7 +154,10 @@ impl SandboxVerifier {
         // Clippy check: treat any new warnings as a clippy signal
         let clippy_ok = validation.warnings.is_empty();
         if !clippy_ok && self.config.run_clippy {
-            info!("Clippy: {} new warnings detected in modified code", validation.warnings.len());
+            info!(
+                "Clippy: {} new warnings detected in modified code",
+                validation.warnings.len()
+            );
         }
 
         // Property check

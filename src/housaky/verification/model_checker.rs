@@ -119,7 +119,10 @@ pub enum ModelProperty {
     /// Invariant: a predicate holds in all reachable states.
     Invariant { predicate: String },
     /// Liveness (bounded): a target state is reached within `max_steps`.
-    BoundedLiveness { target_state: StateId, max_steps: usize },
+    BoundedLiveness {
+        target_state: StateId,
+        max_steps: usize,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -144,7 +147,9 @@ impl CheckProperty {
         Self {
             id: Uuid::new_v4().to_string(),
             name: name.to_string(),
-            property: ModelProperty::Reachability { target_state: target },
+            property: ModelProperty::Reachability {
+                target_state: target,
+            },
             critical: false,
         }
     }
@@ -240,24 +245,17 @@ impl ModelChecker {
         })
     }
 
-    fn check_property(
-        &self,
-        machine: &StateMachine,
-        property: &ModelProperty,
-    ) -> (Verdict, usize) {
+    fn check_property(&self, machine: &StateMachine, property: &ModelProperty) -> (Verdict, usize) {
         match property {
-            ModelProperty::Safety { bad_state } => {
-                self.bfs_safety(machine, bad_state)
-            }
+            ModelProperty::Safety { bad_state } => self.bfs_safety(machine, bad_state),
             ModelProperty::Reachability { target_state } => {
                 self.bfs_reachability(machine, target_state)
             }
-            ModelProperty::DeadlockFreedom => {
-                self.check_deadlock_freedom(machine)
-            }
-            ModelProperty::BoundedLiveness { target_state, max_steps } => {
-                self.bfs_bounded_liveness(machine, target_state, *max_steps)
-            }
+            ModelProperty::DeadlockFreedom => self.check_deadlock_freedom(machine),
+            ModelProperty::BoundedLiveness {
+                target_state,
+                max_steps,
+            } => self.bfs_bounded_liveness(machine, target_state, *max_steps),
             ModelProperty::Invariant { predicate } => {
                 // Invariant predicates are syntactic; flag as unknown until an
                 // external solver (kani/prusti) is integrated.
@@ -280,7 +278,10 @@ impl ModelChecker {
         let mut queue: VecDeque<(StateId, Vec<StateId>)> = VecDeque::new();
         let mut steps = 0;
 
-        queue.push_back((machine.initial_state.clone(), vec![machine.initial_state.clone()]));
+        queue.push_back((
+            machine.initial_state.clone(),
+            vec![machine.initial_state.clone()],
+        ));
 
         while let Some((current, path)) = queue.pop_front() {
             if visited.contains(&current) {
@@ -290,7 +291,12 @@ impl ModelChecker {
             steps += 1;
 
             if &current == bad_state {
-                return (Verdict::Violated { counterexample: path }, steps);
+                return (
+                    Verdict::Violated {
+                        counterexample: path,
+                    },
+                    steps,
+                );
             }
 
             if steps >= self.bound {
@@ -310,11 +316,7 @@ impl ModelChecker {
     }
 
     /// BFS reachability: return Holds if target is reachable within bound.
-    fn bfs_reachability(
-        &self,
-        machine: &StateMachine,
-        target: &StateId,
-    ) -> (Verdict, usize) {
+    fn bfs_reachability(&self, machine: &StateMachine, target: &StateId) -> (Verdict, usize) {
         let mut visited: HashSet<StateId> = HashSet::new();
         let mut queue: VecDeque<StateId> = VecDeque::new();
         let mut steps = 0;

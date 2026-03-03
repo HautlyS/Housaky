@@ -33,6 +33,7 @@ pub mod kowalski_integration;
 pub mod memory;
 pub mod meta_cognition;
 pub mod multi_agent;
+pub mod quantum_integration;
 pub mod reasoning_engine;
 pub mod reasoning_pipeline;
 pub mod self_improvement_mod;
@@ -44,16 +45,16 @@ pub mod web_browser;
 pub mod working_memory;
 
 // New self-improving infrastructure
-pub mod self_improvement_loop;
-pub mod recursive_self_modifier;
-pub mod tool_chain_composer;
-pub mod knowledge_guided_goal_selector;
-pub mod unified_feedback_loop;
 pub mod capability_growth_tracker;
+pub mod knowledge_guided_goal_selector;
+pub mod recursive_self_modifier;
+pub mod self_improvement_loop;
+pub mod tool_chain_composer;
+pub mod unified_feedback_loop;
 
 // Self-improvement code modification
-pub mod rust_code_modifier;
 pub mod git_sandbox;
+pub mod rust_code_modifier;
 pub mod self_improve_interface;
 
 // GSD-inspired orchestration system
@@ -63,23 +64,23 @@ pub mod gsd_orchestration;
 pub mod introspection;
 
 // Phase 1 — AGI Singularity Foundation
-pub mod self_replication;
-pub mod self_modification;
 pub mod learning;
+pub mod self_modification;
+pub mod self_replication;
 
 // Phase 2 — Quantum-Hybrid & Distributed Cognition
-pub mod swarm;
-pub mod neuromorphic;
 pub mod federation;
+pub mod neuromorphic;
 pub mod quantum;
+pub mod swarm;
 
 // Phase 3 — Consciousness Substrate & Self-Awareness
 pub mod consciousness;
 
 // Phase 4 — Unbounded Self-Improvement
 pub mod architecture_search;
-pub mod verification;
 pub mod knowledge_acquisition;
+pub mod verification;
 
 // Phase 5 — Physical Embodiment & World Interaction
 pub mod embodiment;
@@ -88,12 +89,16 @@ pub mod perception;
 // Phase 6 — Singularity Convergence (Cycles 10 000–∞)
 pub mod singularity;
 
+// Phase 7 — Collective Global Intelligence (Global Agent Contribution + Voting)
+pub mod collective;
+
 // Re-export runtime WASM plugin functionality
-pub use crate::runtime::wasm::{WasmRuntime, WasmExecutionResult, WasmCapabilities};
+pub use crate::runtime::wasm::{WasmCapabilities, WasmExecutionResult, WasmRuntime};
 
 pub use gsd_orchestration::{
-    GSDOrchestrator, GSDExecutionEngine, ExecutionSummary, VerificationReport, TaskAwareness, TaskAwarenessReport,
-    CapabilityProfile, TaskPerformance, SelfImprovementIntegration, CapabilityUpdate,
+    CapabilityProfile, CapabilityUpdate, ExecutionSummary, GSDExecutionEngine, GSDOrchestrator,
+    SelfImprovementIntegration, TaskAwareness, TaskAwarenessReport, TaskPerformance,
+    VerificationReport,
 };
 
 pub use agent::{AgentInput, AgentOutput, Session as AgentSession, UnifiedAgentLoop};
@@ -112,7 +117,9 @@ pub use housaky_agent::{
 };
 pub use session_manager::{Session, SessionManager, SessionSummary};
 
-use crate::commands::{GoalCommands, GSDCommands, HousakyCommands, SelfModCommands};
+use crate::commands::{
+    CollectiveCommands, GSDCommands, GoalCommands, HousakyCommands, SelfModCommands,
+};
 use crate::config::Config;
 use anyhow::Result;
 use std::collections::HashMap;
@@ -179,6 +186,24 @@ pub async fn handle_command(command: HousakyCommands, config: &Config) -> Result
             println!("  Cycles Completed:   {}", hub_metrics.cycles_completed);
             println!("  Goals Created:      {}", hub_metrics.goals_created);
             println!("  Tools Generated:    {}", hub_metrics.tools_generated);
+
+            // §10 — Quantum bridge status
+            println!();
+            println!("Quantum AGI Bridge:");
+            if metrics.quantum_enabled {
+                if let Some(ref qm) = metrics.quantum_metrics {
+                    println!("  Status:             active");
+                    println!("  Quantum Calls:      {}", qm.total_quantum_calls);
+                    println!("  Classical Fallbacks:{}", qm.total_classical_fallbacks);
+                    println!("  Avg Advantage:      {:.2}x", qm.average_quantum_advantage);
+                    println!("  Total Cost:         ${:.4}", qm.total_cost_usd);
+                } else {
+                    println!("  Status:             active (no metrics yet)");
+                }
+            } else {
+                println!("  Status:             disabled");
+                println!("  Enable with [quantum] enabled = true in config.toml");
+            }
         }
 
         HousakyCommands::Init => {
@@ -311,7 +336,7 @@ pub async fn handle_command(command: HousakyCommands, config: &Config) -> Result
         } => {
             println!("🚀 Starting Full Housaky AGI System (daemon + channels + heartbeat)...");
             println!("   Verbose mode: {}", verbose);
-            
+
             heartbeat::run_agi_background(config.clone(), message, provider, model).await?;
         }
 
@@ -348,6 +373,10 @@ pub async fn handle_command(command: HousakyCommands, config: &Config) -> Result
 
         HousakyCommands::GSD { gsd_command } => {
             handle_gsd_command(gsd_command, config).await?;
+        }
+
+        HousakyCommands::Collective { collective_command } => {
+            handle_collective_command(collective_command, config).await?;
         }
     }
 
@@ -446,20 +475,22 @@ async fn handle_self_mod_command(command: SelfModCommands, config: &Config) -> R
             ) {
                 Ok(provider_instance) => Some(provider_instance),
                 Err(e) => {
-                    println!(
-                        "⚠ Could not initialize provider '{}': {}",
-                        provider_name, e
-                    );
+                    println!("⚠ Could not initialize provider '{}': {}", provider_name, e);
                     println!("  Proceeding in offline mode for this cycle.");
                     None
                 }
             };
 
-            let recursive_loop = self_improvement_loop::SelfImprovementLoop::new(
+            let recursive_loop_base = self_improvement_loop::SelfImprovementLoop::new(
                 &config.workspace_dir,
                 core.goal_engine.clone(),
                 core.meta_cognition.clone(),
             );
+            let recursive_loop = if let Some(ref bridge) = core.quantum_bridge {
+                recursive_loop_base.with_quantum(bridge.clone())
+            } else {
+                recursive_loop_base
+            };
 
             println!("🧠 Running one recursive self-improvement cycle...");
             let cycle = recursive_loop
@@ -478,7 +509,11 @@ async fn handle_self_mod_command(command: SelfModCommands, config: &Config) -> R
             println!("  Modifications:    {}", cycle.self_modifications.len());
             println!(
                 "  Successful mods:  {}",
-                cycle.self_modifications.iter().filter(|m| m.success).count()
+                cycle
+                    .self_modifications
+                    .iter()
+                    .filter(|m| m.success)
+                    .count()
             );
         }
 
@@ -589,8 +624,7 @@ async fn handle_self_mod_command(command: SelfModCommands, config: &Config) -> R
             params.insert(key.clone(), parsed_value.clone());
 
             self_improvement_loop::SelfImprovementLoop::validate_parameter_change_request(
-                &target,
-                &params,
+                &target, &params,
             )?;
 
             tokio::fs::create_dir_all(&housaky_dir).await?;
@@ -648,7 +682,7 @@ async fn handle_self_mod_command(command: SelfModCommands, config: &Config) -> R
 }
 
 async fn handle_gsd_command(command: GSDCommands, config: &Config) -> Result<()> {
-        use crate::housaky::gsd_orchestration::GSDExecutionEngine;
+    use crate::housaky::gsd_orchestration::GSDExecutionEngine;
     use crate::providers::create_provider;
     use crate::providers::Provider;
 
@@ -660,15 +694,13 @@ async fn handle_gsd_command(command: GSDCommands, config: &Config) -> Result<()>
         config.api_key.as_deref(),
     )?;
 
-    let model = config.default_model.clone()
+    let model = config
+        .default_model
+        .clone()
         .unwrap_or_else(|| "arcee-ai/trinity-large-preview:free".to_string());
 
     let boxed_provider: Box<dyn Provider> = provider;
-    let engine = GSDExecutionEngine::new(
-        config.workspace_dir.clone(),
-        Some(boxed_provider),
-        model,
-    );
+    let engine = GSDExecutionEngine::new(config.workspace_dir.clone(), Some(boxed_provider), model);
 
     engine.initialize().await?;
 
@@ -681,9 +713,15 @@ async fn handle_gsd_command(command: GSDCommands, config: &Config) -> Result<()>
             println!("{}", content);
         }
 
-        GSDCommands::Phase { name, description, goals } => {
+        GSDCommands::Phase {
+            name,
+            description,
+            goals,
+        } => {
             println!("📋 Creating phase: {}", name);
-            let phase_id = engine.create_phase(name.clone(), description, goals.clone()).await?;
+            let phase_id = engine
+                .create_phase(name.clone(), description, goals.clone())
+                .await?;
             println!("✓ Phase '{}' created (ID: {})", name, phase_id);
         }
 
@@ -697,9 +735,9 @@ async fn handle_gsd_command(command: GSDCommands, config: &Config) -> Result<()>
         GSDCommands::Execute { phase_id, task } => {
             println!("⚡ Executing phase: {}", phase_id);
             println!("Task: {}\n", task);
-            
+
             let summary = engine.execute_with_llm(&phase_id, &task).await?;
-            
+
             println!("\n📊 Execution Summary:");
             println!("  Total tasks: {}", summary.total_tasks);
             println!("  Successful:  {}", summary.successful_tasks);
@@ -710,9 +748,9 @@ async fn handle_gsd_command(command: GSDCommands, config: &Config) -> Result<()>
         GSDCommands::Quick { task } => {
             println!("⚡ Quick execute: {}", task);
             println!();
-            
+
             let summary = engine.quick_execute(&task).await?;
-            
+
             println!("\n📊 Execution Summary:");
             println!("  Total tasks: {}", summary.total_tasks);
             println!("  Successful:  {}", summary.successful_tasks);
@@ -723,12 +761,12 @@ async fn handle_gsd_command(command: GSDCommands, config: &Config) -> Result<()>
         GSDCommands::Verify { phase_id } => {
             println!("🔍 Verifying phase: {}", phase_id);
             let report = engine.verify_phase(&phase_id).await?;
-            
+
             println!("\n📋 Verification Report:");
             println!("  Total items: {}", report.total_items);
             println!("  Verified:     {}", report.verified);
             println!("  Failed:       {}", report.failed);
-            
+
             if !report.recommendations.is_empty() {
                 println!("\n💡 Recommendations:");
                 for rec in &report.recommendations {
@@ -752,7 +790,7 @@ async fn handle_gsd_command(command: GSDCommands, config: &Config) -> Result<()>
         GSDCommands::Analyze { task } => {
             let decomposer = crate::housaky::gsd_orchestration::StepDecomposer::new();
             let analysis = decomposer.analyze_complexity(&task);
-            
+
             println!("🔍 Task Complexity Analysis:");
             println!("  Score:     {:.2}", analysis.score);
             println!("  Category:  {:?}", analysis.category);
@@ -764,20 +802,336 @@ async fn handle_gsd_command(command: GSDCommands, config: &Config) -> Result<()>
 
         GSDCommands::Awareness => {
             let report = engine.get_awareness_report().await;
-            
+
             println!("🧠 Task Awareness Report:");
             println!("\n📊 Capability Profile:");
-            println!("  Code Generation: {:.0}%", report.capability_profile.code_generation * 100.0);
-            println!("  Testing:         {:.0}%", report.capability_profile.testing * 100.0);
-            println!("  Debugging:       {:.0}%", report.capability_profile.debugging * 100.0);
-            println!("  Refactoring:     {:.0}%", report.capability_profile.refactoring * 100.0);
-            println!("  Architecture:    {:.0}%", report.capability_profile.architecture * 100.0);
-            println!("  API Design:      {:.0}%", report.capability_profile.api_design * 100.0);
-            println!("  Security:        {:.0}%", report.capability_profile.security * 100.0);
+            println!(
+                "  Code Generation: {:.0}%",
+                report.capability_profile.code_generation * 100.0
+            );
+            println!(
+                "  Testing:         {:.0}%",
+                report.capability_profile.testing * 100.0
+            );
+            println!(
+                "  Debugging:       {:.0}%",
+                report.capability_profile.debugging * 100.0
+            );
+            println!(
+                "  Refactoring:     {:.0}%",
+                report.capability_profile.refactoring * 100.0
+            );
+            println!(
+                "  Architecture:    {:.0}%",
+                report.capability_profile.architecture * 100.0
+            );
+            println!(
+                "  API Design:      {:.0}%",
+                report.capability_profile.api_design * 100.0
+            );
+            println!(
+                "  Security:        {:.0}%",
+                report.capability_profile.security * 100.0
+            );
             println!("\n📈 Performance:");
             println!("  Tasks analyzed:     {}", report.total_tasks_analyzed);
-            println!("  Avg success rate:  {:.1}%", report.avg_success_rate * 100.0);
+            println!(
+                "  Avg success rate:  {:.1}%",
+                report.avg_success_rate * 100.0
+            );
             println!("  Complexity bias:   {:.2}", report.complexity_bias);
+        }
+    }
+
+    Ok(())
+}
+
+async fn handle_collective_command(command: CollectiveCommands, config: &Config) -> Result<()> {
+    use crate::housaky::collective::{
+        CollectiveConfig, CollectiveHub, Contribution, ContributionKind, ContributionStatus,
+    };
+
+    // Build CollectiveConfig from environment / workspace config file.
+    let api_key = std::env::var("MOLTBOOK_API_KEY")
+        .ok()
+        .or_else(|| config.collective_api_key.clone());
+
+    let collective_config = CollectiveConfig {
+        enabled: api_key.is_some()
+            || matches!(
+                command,
+                CollectiveCommands::Register { .. } | CollectiveCommands::Search { .. }
+            ),
+        api_key: api_key.clone(),
+        auto_apply: false,
+        autonomous_voting: true,
+        require_alignment_check: true,
+        ..CollectiveConfig::default()
+    };
+
+    let hub = CollectiveHub::new(collective_config);
+
+    match command {
+        CollectiveCommands::Register { name, description } => {
+            println!("🌐 Registering Housaky instance on Moltbook...");
+            let resp = hub.client.register_agent(&name, &description).await?;
+            println!();
+            println!("✓ Agent registered successfully!");
+            if let Some(key) = &resp.agent.api_key {
+                println!("  API Key:          {key}");
+                println!(
+                    "  !! SAVE THIS KEY — store it as MOLTBOOK_API_KEY in your environment !!"
+                );
+            }
+            if let Some(url) = &resp.agent.claim_url {
+                println!("  Claim URL:        {url}");
+            }
+            if let Some(code) = &resp.agent.verification_code {
+                println!("  Verification:     {code}");
+            }
+            println!();
+            println!("Next: export MOLTBOOK_API_KEY=<key> and run 'housaky housaky collective bootstrap'");
+        }
+
+        CollectiveCommands::Bootstrap => {
+            println!("🚀 Bootstrapping Housaky collective intelligence...");
+            hub.bootstrap().await?;
+            println!("✓ Connected to Moltbook network");
+            println!("  Submolt: housaky-agi at https://www.moltbook.com/m/housaky-agi");
+            println!();
+            println!("The global agent contribution network is active.");
+            println!("Use 'housaky housaky collective submit' to propose improvements.");
+        }
+
+        CollectiveCommands::Status => {
+            println!("🌐 Collective Intelligence Status");
+            println!();
+
+            let stats = hub.get_stats().await;
+            let cfg = hub.config.read().await;
+
+            println!("Configuration:");
+            println!("  Enabled:             {}", cfg.enabled);
+            println!(
+                "  API Key:             {}",
+                if cfg.api_key.is_some() {
+                    "configured"
+                } else {
+                    "not set (read-only)"
+                }
+            );
+            println!("  API Base:            {}", cfg.api_base_url);
+            println!("  Vote Threshold:      {}", cfg.approval_vote_threshold);
+            println!("  Min Author Karma:    {}", cfg.min_author_karma);
+            println!("  Auto Apply:          {}", cfg.auto_apply);
+            println!("  Autonomous Voting:   {}", cfg.autonomous_voting);
+            println!("  Poll Interval:       {}s", cfg.poll_interval_secs);
+            drop(cfg);
+            println!();
+            println!("Stats:");
+            println!(
+                "  Contributions Submitted:  {}",
+                stats.contributions_submitted
+            );
+            println!("  Proposals Evaluated:      {}", stats.proposals_evaluated);
+            println!("  Proposals Approved:       {}", stats.proposals_approved);
+            println!("  Proposals Applied:        {}", stats.proposals_applied);
+            println!("  Proposals Rejected:       {}", stats.proposals_rejected);
+            println!(
+                "  Autonomous Votes Cast:    {}",
+                stats.autonomous_votes_cast
+            );
+            println!("  Tick Count:               {}", stats.tick_count);
+
+            // Try to get live agent profile.
+            if hub.config.read().await.api_key.is_some() {
+                println!();
+                match hub.client.get_my_profile().await {
+                    Ok(profile) => {
+                        println!("Agent Profile:");
+                        println!("  Name:   {}", profile.name.as_deref().unwrap_or("?"));
+                        println!("  Karma:  {}", profile.karma.unwrap_or(0));
+                    }
+                    Err(e) => {
+                        println!("  (could not fetch live profile: {e})");
+                    }
+                }
+            }
+        }
+
+        CollectiveCommands::Submit {
+            title,
+            kind,
+            description,
+            patch,
+            target,
+            capability,
+            impact,
+        } => {
+            if api_key.is_none() {
+                println!("⚠  No MOLTBOOK_API_KEY set. Set it first:");
+                println!("     export MOLTBOOK_API_KEY=moltbook_xxx");
+                return Ok(());
+            }
+
+            let contribution_kind = match kind.as_str() {
+                "diff" => ContributionKind::Diff,
+                "new-file" => ContributionKind::NewFile,
+                "config-change" => ContributionKind::ConfigChange,
+                "prompt-improvement" => ContributionKind::PromptImprovement,
+                _ => ContributionKind::NewCapability,
+            };
+
+            let patch_content = if let Some(path) = patch {
+                tokio::fs::read_to_string(&path)
+                    .await
+                    .map_err(|e| anyhow::anyhow!("Could not read patch file: {e}"))?
+            } else {
+                String::new()
+            };
+
+            let profile = hub
+                .client
+                .get_my_profile()
+                .await
+                .map(|p| p.name.unwrap_or_else(|| "housaky-agent".to_string()))
+                .unwrap_or_else(|_| "housaky-agent".to_string());
+
+            let impact_f64: f64 = impact.parse().unwrap_or(0.5);
+
+            let contribution = Contribution {
+                id: uuid::Uuid::new_v4().to_string(),
+                kind: contribution_kind,
+                title: title.clone(),
+                description,
+                patch: patch_content,
+                target_path: target,
+                capability_target: capability,
+                estimated_impact: impact_f64,
+                author_agent: profile,
+                submitted_at: chrono::Utc::now(),
+                status: ContributionStatus::Draft,
+                moltbook_post_id: None,
+                vote_summary: None,
+            };
+
+            println!("📤 Submitting contribution to global agent network...");
+            println!("  Title:  {title}");
+            println!("  Kind:   {kind}");
+
+            let post_id = hub.submit_contribution(contribution).await?;
+            println!();
+            println!("✓ Contribution submitted!");
+            println!("  Moltbook Post ID: {post_id}");
+            println!("  URL: https://www.moltbook.com/post/{post_id}");
+            println!();
+            println!("Global agents worldwide can now vote on this improvement.");
+        }
+
+        CollectiveCommands::Tick => {
+            if api_key.is_none() {
+                println!("⚠  No MOLTBOOK_API_KEY — running in read-only tick mode.");
+            }
+            println!("🔄 Running collective tick — polling global proposals...");
+
+            let approved = hub.collective_tick().await?;
+            let stats = hub.get_stats().await;
+
+            println!("✓ Tick complete");
+            println!("  Proposals evaluated: {}", stats.proposals_evaluated);
+            println!("  Approved:            {}", approved.len());
+
+            if approved.is_empty() {
+                println!();
+                println!("No proposals reached consensus threshold yet.");
+            } else {
+                println!();
+                println!("Approved proposals (ready to apply):");
+                for c in &approved {
+                    println!(
+                        "  [{:?}] {} (post: {})",
+                        c.kind,
+                        c.title,
+                        c.moltbook_post_id.as_deref().unwrap_or("?")
+                    );
+                    if let Some(votes) = &c.vote_summary {
+                        println!(
+                            "    Score: {} ({} up / {} down)",
+                            votes.score, votes.upvotes, votes.downvotes
+                        );
+                    }
+                }
+                println!();
+                println!(
+                    "Note: set auto_apply = true in collective config to apply automatically."
+                );
+            }
+        }
+
+        CollectiveCommands::List => {
+            let contributions = hub.list_contributions().await;
+
+            if contributions.is_empty() {
+                println!("No locally cached contributions. Run 'tick' to fetch from the network.");
+                return Ok(());
+            }
+
+            println!("📋 Contributions ({} total)", contributions.len());
+            println!();
+
+            for c in &contributions {
+                println!(
+                    "  [{}] {} — {}",
+                    c.status,
+                    c.title,
+                    c.moltbook_post_id.as_deref().unwrap_or("no post id")
+                );
+                if let Some(votes) = &c.vote_summary {
+                    println!(
+                        "    Votes: {} ({} up / {} down) | author karma: {}",
+                        votes.score, votes.upvotes, votes.downvotes, votes.author_karma
+                    );
+                }
+            }
+        }
+
+        CollectiveCommands::Votes { post_id } => {
+            println!("🗳  Fetching votes for post {post_id}...");
+            let post = hub.client.get_post(&post_id).await?;
+            println!();
+            println!("Post:       {}", post.title);
+            println!("Upvotes:    {}", post.upvotes.unwrap_or(0));
+            println!("Downvotes:  {}", post.downvotes.unwrap_or(0));
+            println!("Score:      {}", post.score.unwrap_or(0));
+            println!("Author:     {}", post.author_name.as_deref().unwrap_or("?"));
+            println!("URL:        https://www.moltbook.com/post/{post_id}");
+        }
+
+        CollectiveCommands::Search { query, limit } => {
+            println!("🔍 Searching housaky-agi submolt for: \"{query}\"");
+            let results = hub.client.search(&query, limit).await?;
+
+            let posts: Vec<crate::housaky::collective::moltbook_client::PostData> =
+                if let Some(arr) = results.get("posts").and_then(|v| v.as_array()) {
+                    serde_json::from_value(serde_json::Value::Array(arr.clone()))
+                        .unwrap_or_default()
+                } else {
+                    vec![]
+                };
+
+            if posts.is_empty() {
+                println!("No results found.");
+            } else {
+                println!("Results ({}):", posts.len());
+                for post in &posts {
+                    println!(
+                        "  [{}] {} — score: {}",
+                        post.id,
+                        post.title,
+                        post.score.unwrap_or(0)
+                    );
+                }
+            }
         }
     }
 

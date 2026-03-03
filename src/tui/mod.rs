@@ -1,11 +1,18 @@
-#![allow(clippy::cast_possible_truncation, clippy::cast_sign_loss, clippy::format_push_string, clippy::match_same_arms, clippy::match_wildcard_for_single_variants, clippy::trivially_copy_pass_by_ref)]
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::format_push_string,
+    clippy::match_same_arms,
+    clippy::match_wildcard_for_single_variants,
+    clippy::trivially_copy_pass_by_ref
+)]
 
 pub mod agi;
 pub mod app;
 pub mod chat;
 pub mod command;
 pub mod command_palette;
-pub mod enhanced_app;  // now a folder: src/tui/enhanced_app/
+pub mod enhanced_app; // now a folder: src/tui/enhanced_app/
 pub mod help;
 pub mod live;
 pub mod provider;
@@ -153,8 +160,19 @@ fn run_enhanced_app(
 
         // Poll for events — short timeout keeps animations smooth
         if event::poll(Duration::from_millis(10))? {
-            if let Event::Key(key) = event::read()? {
-                app.handle_key(key)?;
+            match event::read()? {
+                Event::Key(key) => {
+                    app.handle_key(key)?;
+                }
+                Event::Mouse(mouse) => {
+                    if let Err(e) = app.handle_mouse(mouse) {
+                        eprintln!("Mouse handler error: {}", e);
+                    }
+                }
+                Event::Resize(_, _) => {
+                    let _ = terminal.autoresize();
+                }
+                _ => {}
             }
         }
 

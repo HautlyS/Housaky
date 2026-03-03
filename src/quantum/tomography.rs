@@ -8,7 +8,6 @@ use super::backend::QuantumBackend;
 use super::circuit::{Gate, MeasurementResult, QuantumCircuit};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::sync::Arc;
 use tracing::{debug, info};
 
@@ -168,7 +167,8 @@ impl StateTomographer {
         if n > self.config.max_qubits {
             anyhow::bail!(
                 "Tomography limited to {} qubits (circuit has {})",
-                self.config.max_qubits, circuit.qubits
+                self.config.max_qubits,
+                circuit.qubits
             );
         }
 
@@ -189,7 +189,12 @@ impl StateTomographer {
             // Accumulate density matrix contributions from this basis.
             self.accumulate_basis_result(&mut density, &result, basis, n);
 
-            debug!("Measured {} basis: {} shots, {} distinct outcomes", basis_name, result.shots, result.counts.len());
+            debug!(
+                "Measured {} basis: {} shots, {} distinct outcomes",
+                basis_name,
+                result.shots,
+                result.counts.len()
+            );
         }
 
         // Normalize the density matrix.
@@ -231,7 +236,9 @@ impl StateTomographer {
         ideal_statevector: &[(f64, f64)],
     ) -> Result<TomographyResult> {
         let mut result = self.tomograph(circuit).await?;
-        let fidelity = result.density_matrix.fidelity_with_statevector(ideal_statevector);
+        let fidelity = result
+            .density_matrix
+            .fidelity_with_statevector(ideal_statevector);
         result.fidelity = Some(fidelity);
         info!("State fidelity: {:.6}", fidelity);
         Ok(result)
@@ -251,7 +258,9 @@ impl StateTomographer {
         for gate in &original.gates {
             match gate.gate_type {
                 super::circuit::GateType::Measure => {}
-                _ => { circuit.add_gate(gate.clone()); }
+                _ => {
+                    circuit.add_gate(gate.clone());
+                }
             }
         }
 
@@ -316,7 +325,10 @@ impl StateTomographer {
                         if idx < dim {
                             let prob = count as f64 / result.shots as f64;
                             // Parity-based contribution to off-diagonal elements.
-                            let parity: u32 = bitstring.chars().map(|c| if c == '1' { 1u32 } else { 0 }).sum();
+                            let parity: u32 = bitstring
+                                .chars()
+                                .map(|c| if c == '1' { 1u32 } else { 0 })
+                                .sum();
                             let sign = if parity % 2 == 0 { 1.0 } else { -1.0 };
 
                             // Distribute the X/Y expectation across relevant density matrix elements.
@@ -404,10 +416,13 @@ mod tests {
     #[tokio::test]
     async fn test_tomography_bell_state() {
         let backend = Arc::new(SimulatorBackend::new(2, 8192));
-        let tomographer = StateTomographer::new(backend, TomographyConfig {
-            max_qubits: 2,
-            ..Default::default()
-        });
+        let tomographer = StateTomographer::new(
+            backend,
+            TomographyConfig {
+                max_qubits: 2,
+                ..Default::default()
+            },
+        );
 
         let mut c = QuantumCircuit::new(2);
         c.add_gate(Gate::h(0));

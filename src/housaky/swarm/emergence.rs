@@ -120,7 +120,10 @@ impl EmergenceDetector {
         drop(freq);
 
         let mut history = self.agent_action_history.write().await;
-        history.entry(obs.agent_id.clone()).or_default().push(obs.action.clone());
+        history
+            .entry(obs.agent_id.clone())
+            .or_default()
+            .push(obs.action.clone());
     }
 
     pub async fn detect(&self) -> Vec<EmergentBehavior> {
@@ -165,7 +168,10 @@ impl EmergenceDetector {
         let action_groups: HashMap<&str, Vec<&str>> = {
             let mut groups: HashMap<&str, Vec<&str>> = HashMap::new();
             for o in &recent {
-                groups.entry(o.action.as_str()).or_default().push(o.agent_id.as_str());
+                groups
+                    .entry(o.action.as_str())
+                    .or_default()
+                    .push(o.agent_id.as_str());
             }
             groups
         };
@@ -177,7 +183,11 @@ impl EmergenceDetector {
                 if synchrony >= self.config.synchrony_threshold {
                     return Some(EmergentBehavior::new(
                         EmergenceType::SynchronizedBehavior,
-                        &format!("{} agents synchronously performing '{}'", unique_agents.len(), action),
+                        &format!(
+                            "{} agents synchronously performing '{}'",
+                            unique_agents.len(),
+                            action
+                        ),
                         unique_agents.iter().map(|s| s.to_string()).collect(),
                         synchrony,
                         0.6,
@@ -213,7 +223,10 @@ impl EmergenceDetector {
         if specialized_agents.len() >= 2 {
             Some(EmergentBehavior::new(
                 EmergenceType::SpontaneousSpecialization,
-                &format!("{} agents have spontaneously specialized", specialized_agents.len()),
+                &format!(
+                    "{} agents have spontaneously specialized",
+                    specialized_agents.len()
+                ),
                 specialized_agents,
                 0.7,
                 0.8,
@@ -237,7 +250,11 @@ impl EmergenceDetector {
         if success_rate > 0.85 && unique_agents.len() >= self.config.min_agents_for_collective {
             Some(EmergentBehavior::new(
                 EmergenceType::CollectiveIntelligence,
-                &format!("Swarm achieving {:.0}% success across {} agents", success_rate * 100.0, unique_agents.len()),
+                &format!(
+                    "Swarm achieving {:.0}% success across {} agents",
+                    success_rate * 100.0,
+                    unique_agents.len()
+                ),
                 unique_agents.iter().map(|s| s.to_string()).collect(),
                 success_rate,
                 0.7,
@@ -249,7 +266,8 @@ impl EmergenceDetector {
 
     async fn detect_novel_problem_solving(&self) -> Option<EmergentBehavior> {
         let freq = self.action_frequency.read().await;
-        let novel_actions: Vec<&String> = freq.iter()
+        let novel_actions: Vec<&String> = freq
+            .iter()
             .filter(|(_, &count)| count == 1)
             .map(|(action, _)| action)
             .collect();
@@ -263,7 +281,8 @@ impl EmergenceDetector {
 
         if novelty_ratio > self.config.novelty_threshold {
             let obs = self.observations.read().await;
-            let agents: Vec<String> = obs.iter()
+            let agents: Vec<String> = obs
+                .iter()
                 .filter(|o| novel_actions.iter().any(|a| *a == &o.action))
                 .map(|o| o.agent_id.clone())
                 .collect::<std::collections::HashSet<_>>()
@@ -273,7 +292,11 @@ impl EmergenceDetector {
             if !agents.is_empty() {
                 return Some(EmergentBehavior::new(
                     EmergenceType::NovelProblemSolving,
-                    &format!("{} novel actions discovered (novelty ratio: {:.2})", novel_actions.len(), novelty_ratio),
+                    &format!(
+                        "{} novel actions discovered (novelty ratio: {:.2})",
+                        novel_actions.len(),
+                        novelty_ratio
+                    ),
                     agents,
                     0.6,
                     novelty_ratio,
@@ -286,10 +309,14 @@ impl EmergenceDetector {
     pub async fn amplify(&self, behavior_id: &str) -> bool {
         let mut behaviors = self.detected_behaviors.write().await;
         if let Some(b) = behaviors.iter_mut().find(|b| b.id == behavior_id) {
-            if b.overall_score() >= self.config.amplification_threshold && !b.amplification_applied {
+            if b.overall_score() >= self.config.amplification_threshold && !b.amplification_applied
+            {
                 b.amplification_applied = true;
                 b.strength = (b.strength * 1.2).min(1.0);
-                info!("Amplified emergent behavior: {} ({})", behavior_id, b.description);
+                info!(
+                    "Amplified emergent behavior: {} ({})",
+                    behavior_id, b.description
+                );
                 return true;
             }
         }
@@ -310,7 +337,11 @@ impl EmergenceDetector {
         } else {
             0.0
         };
-        EmergenceStats { total_detected: total, amplified, avg_score }
+        EmergenceStats {
+            total_detected: total,
+            amplified,
+            avg_score,
+        }
     }
 }
 
@@ -334,14 +365,16 @@ mod tests {
         });
 
         for i in 0..10 {
-            detector.record_observation(SwarmObservation {
-                timestamp: Utc::now(),
-                agent_id: format!("agent-{}", i % 4),
-                action: "analyze".to_string(),
-                outcome: "ok".to_string(),
-                success: true,
-                metadata: HashMap::new(),
-            }).await;
+            detector
+                .record_observation(SwarmObservation {
+                    timestamp: Utc::now(),
+                    agent_id: format!("agent-{}", i % 4),
+                    action: "analyze".to_string(),
+                    outcome: "ok".to_string(),
+                    success: true,
+                    metadata: HashMap::new(),
+                })
+                .await;
         }
 
         let behaviors = detector.detect().await;

@@ -162,7 +162,9 @@ impl EpisodicMemory {
         let mut current = self.current_episode.write().await;
 
         if let Some(mut ep) = current.take() {
-            let duration = (Utc::now() - ep.timestamp).num_milliseconds().unsigned_abs();
+            let duration = (Utc::now() - ep.timestamp)
+                .num_milliseconds()
+                .unsigned_abs();
             ep.duration_ms = duration;
             ep.emotional_tag = emotional_tag;
 
@@ -173,7 +175,9 @@ impl EpisodicMemory {
                 ep.events.iter().map(|e| e.significance).sum::<f64>() / ep.events.len() as f64
             };
             ep.importance = (avg_sig * 0.6 + ep.emotional_tag.intensity() * 0.4).clamp(0.0, 1.0);
-            if success { ep.importance = (ep.importance + 0.1).min(1.0); }
+            if success {
+                ep.importance = (ep.importance + 0.1).min(1.0);
+            }
 
             let episode_id = ep.id.clone();
             let goal = ep.context.goal.clone();
@@ -237,7 +241,11 @@ impl EpisodicMemory {
                 let text = format!(
                     "{} {}",
                     ep.context.goal.as_deref().unwrap_or(""),
-                    ep.events.iter().map(|e| e.description.as_str()).collect::<Vec<_>>().join(" ")
+                    ep.events
+                        .iter()
+                        .map(|e| e.description.as_str())
+                        .collect::<Vec<_>>()
+                        .join(" ")
                 );
                 let ep_words: std::collections::HashSet<&str> = text.split_whitespace().collect();
                 let overlap = query_words.intersection(&ep_words).count() as f64;
@@ -324,7 +332,9 @@ impl EpisodicMemory {
         episodes.sort_by(|a, b| {
             let score_a = a.importance * 0.5 + (a.retrieval_count as f64 * 0.01).min(0.3);
             let score_b = b.importance * 0.5 + (b.retrieval_count as f64 * 0.01).min(0.3);
-            score_b.partial_cmp(&score_a).unwrap_or(std::cmp::Ordering::Equal)
+            score_b
+                .partial_cmp(&score_a)
+                .unwrap_or(std::cmp::Ordering::Equal)
         });
         // Remove weakest 10%
         let remove_count = (episodes.len() as f64 * 0.1) as usize;
@@ -348,8 +358,14 @@ impl EpisodicMemory {
         } else {
             0.0
         };
-        let positive_episodes = episodes.iter().filter(|e| e.emotional_tag.valence > 0.1).count();
-        let negative_episodes = episodes.iter().filter(|e| e.emotional_tag.valence < -0.1).count();
+        let positive_episodes = episodes
+            .iter()
+            .filter(|e| e.emotional_tag.valence > 0.1)
+            .count();
+        let negative_episodes = episodes
+            .iter()
+            .filter(|e| e.emotional_tag.valence < -0.1)
+            .count();
         let total_events: usize = episodes.iter().map(|e| e.events.len()).sum();
 
         EpisodicStats {
@@ -393,7 +409,10 @@ impl EpisodicMemory {
             self.apply_forgetting(&mut merged);
         }
         *episodes = merged;
-        info!("EpisodicMemory: loaded {} episodes from disk", episodes.len());
+        info!(
+            "EpisodicMemory: loaded {} episodes from disk",
+            episodes.len()
+        );
         Ok(())
     }
 
@@ -458,14 +477,18 @@ mod tests {
     #[tokio::test]
     async fn test_episode_lifecycle() {
         let mem = EpisodicMemory::new(100);
-        let _id = mem.begin_episode(Some("test goal".to_string()), "test").await;
-        mem.record_event(EpisodicEventType::GoalSet, "set goal: test", 0.6).await;
+        let _id = mem
+            .begin_episode(Some("test goal".to_string()), "test")
+            .await;
+        mem.record_event(EpisodicEventType::GoalSet, "set goal: test", 0.6)
+            .await;
         mem.record_event_with_outcome(
             EpisodicEventType::GoalAchieved,
             "achieved test goal",
             "success",
             0.8,
-        ).await;
+        )
+        .await;
         let stored = mem.end_episode(EmotionalTag::positive(0.7), true).await;
         assert!(stored.is_some());
 
@@ -478,8 +501,10 @@ mod tests {
     #[tokio::test]
     async fn test_retrieve() {
         let mem = EpisodicMemory::new(100);
-        mem.begin_episode(Some("solve problem".to_string()), "test").await;
-        mem.record_event(EpisodicEventType::ReasoningStep, "solve the problem", 0.7).await;
+        mem.begin_episode(Some("solve problem".to_string()), "test")
+            .await;
+        mem.record_event(EpisodicEventType::ReasoningStep, "solve the problem", 0.7)
+            .await;
         mem.end_episode(EmotionalTag::positive(0.5), true).await;
 
         let results = mem.retrieve("solve problem", 5).await;

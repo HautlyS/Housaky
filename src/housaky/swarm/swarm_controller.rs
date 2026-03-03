@@ -45,14 +45,21 @@ impl SwarmAgent {
 
     pub fn success_rate(&self) -> f64 {
         let total = self.tasks_completed + self.tasks_failed;
-        if total == 0 { 0.5 } else { self.tasks_completed as f64 / total as f64 }
+        if total == 0 {
+            0.5
+        } else {
+            self.tasks_completed as f64 / total as f64
+        }
     }
 
     pub fn capability_match(&self, required: &[String]) -> f64 {
         if required.is_empty() {
             return 1.0;
         }
-        let matches = required.iter().filter(|r| self.capabilities.contains(r)).count();
+        let matches = required
+            .iter()
+            .filter(|r| self.capabilities.contains(r))
+            .count();
         matches as f64 / required.len() as f64
     }
 
@@ -162,7 +169,11 @@ impl SwarmController {
         if agents.len() >= self.config.max_agents {
             anyhow::bail!("Swarm at capacity ({} agents)", self.config.max_agents);
         }
-        info!("Swarm: registered agent '{}' with {} capabilities", agent.id, agent.capabilities.len());
+        info!(
+            "Swarm: registered agent '{}' with {} capabilities",
+            agent.id,
+            agent.capabilities.len()
+        );
         agents.insert(agent.id.clone(), agent);
         Ok(())
     }
@@ -187,7 +198,8 @@ impl SwarmController {
             .await;
 
         if self.config.auto_bid {
-            self.auto_bid_available_agents(&id, &required, &task_type).await;
+            self.auto_bid_available_agents(&id, &required, &task_type)
+                .await;
         }
 
         id
@@ -207,7 +219,11 @@ impl SwarmController {
             }
 
             let path_boost = if let Some(ref path) = best_path {
-                if path.iter().any(|s| agent.capabilities.contains(s)) { 0.1 } else { 0.0 }
+                if path.iter().any(|s| agent.capabilities.contains(s)) {
+                    0.1
+                } else {
+                    0.0
+                }
             } else {
                 0.0
             };
@@ -252,7 +268,9 @@ impl SwarmController {
         drop(agents);
 
         let success_rate = if success { 1.0 } else { 0.0 };
-        self.pheromone.deposit(path_used, agent_id, task_type, success_rate).await;
+        self.pheromone
+            .deposit(path_used, agent_id, task_type, success_rate)
+            .await;
 
         if success {
             let _ = self.task_market.complete_task(task_id, result, 1.0).await;
@@ -299,7 +317,9 @@ impl SwarmController {
         confidence: f64,
         tags: Vec<String>,
     ) {
-        self.collective_memory.write(key, value, agent_id, confidence, tags).await;
+        self.collective_memory
+            .write(key, value, agent_id, confidence, tags)
+            .await;
     }
 
     pub async fn propose_collective_decision(
@@ -308,7 +328,9 @@ impl SwarmController {
         topic: &str,
         value: serde_json::Value,
     ) -> String {
-        self.consensus_engine.propose(proposer, topic, value, 120).await
+        self.consensus_engine
+            .propose(proposer, topic, value, 120)
+            .await
     }
 
     pub async fn vote_on_decision(
@@ -317,8 +339,16 @@ impl SwarmController {
         agent_id: &str,
         in_favor: bool,
     ) -> anyhow::Result<()> {
-        let agent_rep = self.agents.read().await.get(agent_id).map(|a| a.reputation).unwrap_or(0.5);
-        self.consensus_engine.vote(proposal_id, agent_id, in_favor, agent_rep, None).await
+        let agent_rep = self
+            .agents
+            .read()
+            .await
+            .get(agent_id)
+            .map(|a| a.reputation)
+            .unwrap_or(0.5);
+        self.consensus_engine
+            .vote(proposal_id, agent_id, in_favor, agent_rep, None)
+            .await
     }
 
     pub async fn finalize_decision(
@@ -356,15 +386,24 @@ impl SwarmController {
             .collect()
     }
 
-    pub async fn best_agent_for_task(&self, required_capabilities: &[String]) -> Option<SwarmAgent> {
+    pub async fn best_agent_for_task(
+        &self,
+        required_capabilities: &[String],
+    ) -> Option<SwarmAgent> {
         let agents = self.agents.read().await;
         agents
             .values()
             .filter(|a| a.status == SwarmAgentStatus::Idle && a.energy > 0.1)
             .max_by(|a, b| {
-                let score_a = a.capability_match(required_capabilities) * 0.5 + a.reputation * 0.3 + a.energy * 0.2;
-                let score_b = b.capability_match(required_capabilities) * 0.5 + b.reputation * 0.3 + b.energy * 0.2;
-                score_a.partial_cmp(&score_b).unwrap_or(std::cmp::Ordering::Equal)
+                let score_a = a.capability_match(required_capabilities) * 0.5
+                    + a.reputation * 0.3
+                    + a.energy * 0.2;
+                let score_b = b.capability_match(required_capabilities) * 0.5
+                    + b.reputation * 0.3
+                    + b.energy * 0.2;
+                score_a
+                    .partial_cmp(&score_b)
+                    .unwrap_or(std::cmp::Ordering::Equal)
             })
             .cloned()
     }
@@ -372,8 +411,14 @@ impl SwarmController {
     pub async fn stats(&self) -> SwarmStats {
         let agents = self.agents.read().await;
         let total = agents.len();
-        let idle = agents.values().filter(|a| a.status == SwarmAgentStatus::Idle).count();
-        let working = agents.values().filter(|a| a.status == SwarmAgentStatus::Working).count();
+        let idle = agents
+            .values()
+            .filter(|a| a.status == SwarmAgentStatus::Idle)
+            .count();
+        let working = agents
+            .values()
+            .filter(|a| a.status == SwarmAgentStatus::Working)
+            .count();
         let total_completed: u64 = agents.values().map(|a| a.tasks_completed).sum();
         let total_failed: u64 = agents.values().map(|a| a.tasks_failed).sum();
         let avg_rep = if total > 0 {
@@ -406,7 +451,10 @@ impl SwarmController {
         let _ = self.emergent_detector.detect().await;
         let stigmergy_stats = self.stigmergy.stats().await;
         if stigmergy_stats.blockers > 0 {
-            warn!("Swarm maintenance: {} blockers detected in environment", stigmergy_stats.blockers);
+            warn!(
+                "Swarm maintenance: {} blockers detected in environment",
+                stigmergy_stats.blockers
+            );
         }
     }
 }
@@ -422,13 +470,33 @@ mod tests {
             ..Default::default()
         });
 
-        let agent = SwarmAgent::new("agent-1", vec!["reasoning".into(), "coding".into()], vec![0.8, 0.6]);
+        let agent = SwarmAgent::new(
+            "agent-1",
+            vec!["reasoning".into(), "coding".into()],
+            vec![0.8, 0.6],
+        );
         controller.register_agent(agent).await.unwrap();
 
-        let task = MarketTask::new("analyze", "analyze codebase", vec!["coding".into()], 0.8, "orchestrator", 1.0);
+        let task = MarketTask::new(
+            "analyze",
+            "analyze codebase",
+            vec!["coding".into()],
+            0.8,
+            "orchestrator",
+            1.0,
+        );
         let task_id = controller.post_task(task).await;
 
-        controller.report_task_result("agent-1", &task_id, true, "analysis complete", vec!["coding".into()], "analyze").await;
+        controller
+            .report_task_result(
+                "agent-1",
+                &task_id,
+                true,
+                "analysis complete",
+                vec!["coding".into()],
+                "analyze",
+            )
+            .await;
 
         let stats = controller.stats().await;
         assert_eq!(stats.total_agents, 1);
@@ -436,20 +504,43 @@ mod tests {
 
     #[tokio::test]
     async fn test_capacity_limit() {
-        let controller = SwarmController::new(SwarmConfig { max_agents: 2, auto_bid: false, ..Default::default() });
-        controller.register_agent(SwarmAgent::new("a1", vec![], vec![])).await.unwrap();
-        controller.register_agent(SwarmAgent::new("a2", vec![], vec![])).await.unwrap();
-        let result = controller.register_agent(SwarmAgent::new("a3", vec![], vec![])).await;
+        let controller = SwarmController::new(SwarmConfig {
+            max_agents: 2,
+            auto_bid: false,
+            ..Default::default()
+        });
+        controller
+            .register_agent(SwarmAgent::new("a1", vec![], vec![]))
+            .await
+            .unwrap();
+        controller
+            .register_agent(SwarmAgent::new("a2", vec![], vec![]))
+            .await
+            .unwrap();
+        let result = controller
+            .register_agent(SwarmAgent::new("a3", vec![], vec![]))
+            .await;
         assert!(result.is_err());
     }
 
     #[tokio::test]
     async fn test_collective_decision() {
-        let controller = SwarmController::new(SwarmConfig { auto_bid: false, ..Default::default() });
-        controller.register_agent(SwarmAgent::new("v1", vec![], vec![])).await.unwrap();
-        controller.register_agent(SwarmAgent::new("v2", vec![], vec![])).await.unwrap();
+        let controller = SwarmController::new(SwarmConfig {
+            auto_bid: false,
+            ..Default::default()
+        });
+        controller
+            .register_agent(SwarmAgent::new("v1", vec![], vec![]))
+            .await
+            .unwrap();
+        controller
+            .register_agent(SwarmAgent::new("v2", vec![], vec![]))
+            .await
+            .unwrap();
 
-        let pid = controller.propose_collective_decision("v1", "upgrade", serde_json::json!("v2.0")).await;
+        let pid = controller
+            .propose_collective_decision("v1", "upgrade", serde_json::json!("v2.0"))
+            .await;
         controller.vote_on_decision(&pid, "v1", true).await.unwrap();
         controller.vote_on_decision(&pid, "v2", true).await.unwrap();
 

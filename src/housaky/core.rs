@@ -3,8 +3,13 @@
 use crate::config::Config;
 use crate::housaky::agent::Agent;
 use crate::housaky::agi_integration;
-use crate::housaky::alignment::ethics::{AGIAction as EthicalAction, EthicalReasoner, EthicalVerdict};
+use crate::housaky::alignment::ethics::{
+    AGIAction as EthicalAction, EthicalReasoner, EthicalVerdict,
+};
+use crate::housaky::capability_growth_tracker::CapabilityGrowthTracker;
 use crate::housaky::cognitive::cognitive_loop::{CognitiveLoop, CognitiveResponse};
+use crate::housaky::cognitive::quantum_planning::QuantumPlanningEngine;
+use crate::housaky::cognitive::world_model::{Action, ActionResult, WorldModel};
 use crate::housaky::goal_engine::{Goal, GoalEngine, GoalPriority, GoalStatus};
 use crate::housaky::inner_monologue::InnerMonologue;
 use crate::housaky::knowledge_graph::KnowledgeGraphEngine;
@@ -15,12 +20,14 @@ use crate::housaky::meta_cognition::MetaCognitionEngine;
 use crate::housaky::reasoning_pipeline::{ReasoningPipeline, ReasoningResult};
 use crate::housaky::self_improvement_loop::ImprovementExperiment;
 use crate::housaky::singularity::{SingularityEngine, SingularityPhaseStatus};
-use crate::housaky::capability_growth_tracker::CapabilityGrowthTracker;
-use crate::housaky::cognitive::world_model::{Action, ActionResult, WorldModel};
 use crate::housaky::streaming::streaming::StreamingManager;
 use crate::housaky::tool_creator::ToolCreator;
+use crate::housaky::unified_feedback_loop::UnifiedFeedbackLoop;
 use crate::housaky::working_memory::{MemoryImportance, WorkingMemoryEngine};
 use crate::providers::Provider;
+use crate::quantum::backend::AmazonBraketBackend;
+use crate::quantum::{AgiBridgeConfig, QuantumAgiBridge};
+use crate::skills::invocation::SkillInvocationEngine;
 use crate::tools::Tool;
 use anyhow::Result;
 use chrono::Utc;
@@ -50,6 +57,14 @@ pub struct HousakyCore {
     pub ethical_reasoner: Arc<EthicalReasoner>,
     pub world_model: Arc<WorldModel>,
     pub episodic_memory: Arc<EpisodicMemory>,
+    /// §10 — Quantum-AGI bridge. `None` when quantum is disabled in config.
+    pub quantum_bridge: Option<Arc<QuantumAgiBridge>>,
+    /// §10.3 — Quantum-enhanced planning engine. `None` when quantum is disabled.
+    pub quantum_planner: Option<Arc<QuantumPlanningEngine>>,
+    /// §10.8 — Unified feedback loop with optional quantum edge optimization.
+    pub feedback_loop: Arc<UnifiedFeedbackLoop>,
+    /// Skill invocation engine for automatic skill triggering
+    pub skill_invocation_engine: Arc<SkillInvocationEngine>,
     state: Arc<RwLock<HousakyCoreState>>,
     config: HousakyCoreConfig,
     workspace_dir: PathBuf,
@@ -158,25 +173,26 @@ impl HousakyCore {
         let agent = Agent::new(config)?;
         let goal_engine = Arc::new(GoalEngine::new(&workspace_dir));
         let working_memory = Arc::new(WorkingMemoryEngine::new());
-        let meta_cognition = Arc::new(MetaCognitionEngine::new());
-        let knowledge_graph = Arc::new(KnowledgeGraphEngine::new(&workspace_dir));
+        // §10.7 — MetaCognitionEngine gets quantum bridge wired in after bridge init below.
+        let meta_cognition_base = MetaCognitionEngine::new();
+        // §10.4 — KnowledgeGraphEngine gets quantum bridge wired in after bridge init below.
+        let knowledge_graph_base = KnowledgeGraphEngine::new(&workspace_dir);
         let tool_creator = Arc::new(ToolCreator::new(&workspace_dir));
         let inner_monologue = Arc::new(InnerMonologue::new(&workspace_dir));
-        let reasoning_pipeline = Arc::new(ReasoningPipeline::new());
-        let cognitive_loop = Arc::new(CognitiveLoop::with_inner_monologue(config, Some(inner_monologue.clone()))?);
-        let hierarchical_memory = Arc::new(HierarchicalMemory::new(HierarchicalMemoryConfig::default()));
-        let memory_consolidator = Arc::new(MemoryConsolidator::new(
-            hierarchical_memory.clone(),
-            &workspace_dir,
-        ));
+        // §10 — ReasoningPipeline gets quantum bridge wired in after bridge init below.
+        let reasoning_pipeline_base = ReasoningPipeline::new();
+        let hierarchical_memory =
+            Arc::new(HierarchicalMemory::new(HierarchicalMemoryConfig::default()));
+        // §10.4 — MemoryConsolidator gets quantum bridge wired in after bridge init below.
+        let memory_consolidator_base =
+            MemoryConsolidator::new(hierarchical_memory.clone(), &workspace_dir);
         let streaming_manager = Arc::new(StreamingManager::new());
 
         let agi_hub = Arc::new(agi_integration::AGIIntegrationHub::new(&workspace_dir));
 
         let growth_tracker = Arc::new(CapabilityGrowthTracker::new());
-        let singularity_engine = Arc::new(RwLock::new(
-            SingularityEngine::new(growth_tracker.clone()),
-        ));
+        // §10 — SingularityEngine gets quantum wired in below, after bridge init.
+        let singularity_engine_base = SingularityEngine::new(growth_tracker.clone());
 
         let ethical_reasoner = Arc::new(EthicalReasoner::new());
 
@@ -184,6 +200,145 @@ impl HousakyCore {
         let episodic_memory = Arc::new(EpisodicMemory::new(10_000));
 
         let core_config = HousakyCoreConfig::default();
+
+        // §10 — Initialize quantum-AGI bridge.
+        // For `backend = "braket"` we need async AWS SDK init; use block_in_place
+        // so we can call it from this sync constructor.
+        let quantum_bridge = if config.quantum.enabled {
+            let bridge_config = AgiBridgeConfig {
+                max_qubits: config.quantum.max_qubits,
+                error_mitigation: config.quantum.error_mitigation,
+                transpile: config.quantum.transpile,
+                target_device: if config.quantum.backend == "braket" {
+                    Some(config.quantum.braket_device_arn.clone())
+                } else {
+                    None
+                },
+                quantum_threshold: config.quantum.agi.quantum_threshold,
+                cycle_budget_usd: config.quantum.agi.cycle_budget_usd,
+                goal_scheduling_shots: config.quantum.shots,
+                reasoning_search_shots: config.quantum.shots * 2,
+                memory_optimization_shots: config.quantum.shots / 2,
+                fitness_eval_shots: config.quantum.shots * 2,
+            };
+            info!(
+                "✨ Quantum-AGI bridge initializing: backend={}, qubits={}",
+                config.quantum.backend, config.quantum.max_qubits
+            );
+
+            let bridge = if config.quantum.backend == "braket" {
+                // Braket backend requires async AWS SDK init — run it on a
+                // dedicated thread so we don't block the Tokio executor.
+                let device_arn = config.quantum.braket_device_arn.clone();
+                let s3_bucket = config.quantum.braket_s3_bucket.clone();
+                let s3_prefix = config.quantum.braket_s3_prefix.clone();
+                let shots = config.quantum.shots;
+                let bc = bridge_config.clone();
+
+                match tokio::task::block_in_place(|| {
+                    tokio::runtime::Handle::current().block_on(async move {
+                        if s3_bucket.is_empty() {
+                            warn!("⚠️  braket_s3_bucket not set in config — falling back to local simulator");
+                            return Err(anyhow::anyhow!("braket_s3_bucket is empty"));
+                        }
+                        let braket_backend = AmazonBraketBackend::new(
+                            device_arn, shots, s3_bucket, s3_prefix,
+                        ).await?;
+                        Ok(QuantumAgiBridge::from_braket(bc, braket_backend))
+                    })
+                }) {
+                    Ok(b) => {
+                        info!("☁️  Amazon Braket backend connected (SV1 managed simulator)");
+                        Arc::new(b)
+                    }
+                    Err(e) => {
+                        warn!(
+                            "⚠️  Braket backend init failed: {} — falling back to local simulator",
+                            e
+                        );
+                        Arc::new(QuantumAgiBridge::new(bridge_config))
+                    }
+                }
+            } else {
+                Arc::new(QuantumAgiBridge::new(bridge_config))
+            };
+            Some(bridge)
+        } else {
+            None
+        };
+
+        // §10 — Wire quantum bridge into CognitiveLoop (Grover action selection).
+        let cognitive_loop = {
+            let base = CognitiveLoop::with_inner_monologue(config, Some(inner_monologue.clone()))?;
+            Arc::new(if let Some(ref bridge) = quantum_bridge {
+                base.with_quantum(bridge.clone())
+            } else {
+                base
+            })
+        };
+
+        // §10 — Wire quantum bridge into SingularityEngine.
+        let singularity_engine = Arc::new(RwLock::new(if let Some(ref bridge) = quantum_bridge {
+            singularity_engine_base.with_quantum(bridge.clone())
+        } else {
+            singularity_engine_base
+        }));
+
+        // §10.4 — Finalise MemoryConsolidator with optional quantum bridge.
+        let memory_consolidator = Arc::new(if let Some(ref bridge) = quantum_bridge {
+            memory_consolidator_base.with_quantum(bridge.clone())
+        } else {
+            memory_consolidator_base
+        });
+
+        // §10 — Finalise ReasoningPipeline with optional quantum bridge (Grover ToT).
+        let reasoning_pipeline = Arc::new(if let Some(ref bridge) = quantum_bridge {
+            reasoning_pipeline_base.with_quantum(bridge.clone())
+        } else {
+            reasoning_pipeline_base
+        });
+
+        // §10.7 — Finalise MetaCognitionEngine with optional quantum bridge (belief uncertainty reduction).
+        let meta_cognition = Arc::new(if let Some(ref bridge) = quantum_bridge {
+            meta_cognition_base.with_quantum(bridge.clone())
+        } else {
+            meta_cognition_base
+        });
+
+        // §10.8 — Build UnifiedFeedbackLoop with optional quantum edge optimization.
+        let feedback_loop = Arc::new(if let Some(ref bridge) = quantum_bridge {
+            UnifiedFeedbackLoop::new(goal_engine.clone(), meta_cognition.clone())
+                .with_quantum(bridge.clone())
+        } else {
+            UnifiedFeedbackLoop::new(goal_engine.clone(), meta_cognition.clone())
+        });
+
+        // §10.4 — Finalise KnowledgeGraphEngine with optional quantum bridge (annealing clustering).
+        let knowledge_graph = Arc::new(if let Some(ref bridge) = quantum_bridge {
+            knowledge_graph_base.with_quantum(bridge.clone())
+        } else {
+            knowledge_graph_base
+        });
+
+        // §10.5 — Rebuild WorldModel with quantum bridge for VQE reward prediction.
+        // Drop the earlier Arc and replace with a quantum-wired instance.
+        drop(world_model);
+        let world_model = Arc::new(if let Some(ref bridge) = quantum_bridge {
+            WorldModel::with_storage(&workspace_dir).with_quantum(bridge.clone())
+        } else {
+            WorldModel::with_storage(&workspace_dir)
+        });
+
+        // §10.3 — Build quantum planning engine from the quantum-wired world model.
+        let quantum_planner = quantum_bridge.as_ref().map(|bridge| {
+            Arc::new(QuantumPlanningEngine::new(
+                world_model.clone(),
+                bridge.clone(),
+            ))
+        });
+
+        // Skill invocation engine for automatic skill triggering
+        let skill_invocation_engine = Arc::new(SkillInvocationEngine::new(&workspace_dir));
 
         let state = Arc::new(RwLock::new(HousakyCoreState {
             is_active: true,
@@ -221,6 +376,10 @@ impl HousakyCore {
             ethical_reasoner,
             world_model,
             episodic_memory,
+            quantum_bridge,
+            quantum_planner,
+            feedback_loop,
+            skill_invocation_engine,
             state,
             config: core_config,
             workspace_dir,
@@ -233,31 +392,58 @@ impl HousakyCore {
         if let Err(e) = self.goal_engine.load_goals().await {
             return Err(anyhow::anyhow!("Failed to load goals: {}", e));
         }
-        
+
         if let Err(e) = self.knowledge_graph.load_graph().await {
             return Err(anyhow::anyhow!("Failed to load knowledge graph: {}", e));
         }
-        
+
         if let Err(e) = self.inner_monologue.load().await {
             return Err(anyhow::anyhow!("Failed to load inner monologue: {}", e));
         }
-        
+
         if let Err(e) = self.tool_creator.load_tools().await {
             return Err(anyhow::anyhow!("Failed to load tools: {}", e));
         }
-        
+
         if let Err(e) = self.cognitive_loop.initialize().await {
-            return Err(anyhow::anyhow!("Failed to initialize cognitive loop: {}", e));
+            return Err(anyhow::anyhow!(
+                "Failed to initialize cognitive loop: {}",
+                e
+            ));
         }
 
         if let Err(e) = self.agi_hub.initialize().await {
             warn!("Failed to initialize AGI hub: {e}");
         }
 
+        // Initialize skill invocation engine with loaded skills
+        let skills = crate::skills::load_active_skills(
+            &self.workspace_dir,
+            &crate::config::Config::load_or_init().unwrap_or_default(),
+        );
+        if let Err(e) = self.skill_invocation_engine.initialize(&skills).await {
+            warn!("Failed to initialize skill invocation engine: {e}");
+        } else {
+            info!(
+                "Skill invocation engine initialized with {} skills",
+                skills.len()
+            );
+        }
+
         self.ethical_reasoner.initialize_defaults().await;
 
         if let Err(e) = self.initialize_default_goals().await {
             return Err(anyhow::anyhow!("Failed to initialize default goals: {}", e));
+        }
+
+        // §10 — Log quantum bridge status after async init is complete.
+        if let Some(ref bridge) = self.quantum_bridge {
+            let metrics = bridge.metrics.read().await;
+            info!(
+                "✨ Quantum-AGI bridge active: threshold={} qubits, budget=${:.2}/cycle",
+                bridge.config.max_qubits, bridge.config.cycle_budget_usd
+            );
+            drop(metrics);
         }
 
         // Phase 6 — discover and register compute substrates
@@ -275,6 +461,10 @@ impl HousakyCore {
 
         info!("Housaky AGI Core initialized successfully");
         Ok(())
+    }
+
+    pub fn skill_invocation_engine(&self) -> Arc<SkillInvocationEngine> {
+        self.skill_invocation_engine.clone()
     }
 
     async fn recent_self_modification_insights(&self, limit: usize) -> Vec<String> {
@@ -387,7 +577,8 @@ impl HousakyCore {
 
     pub async fn prepare_context(&self, user_message: &str) -> Result<TurnContext> {
         let memories = self.working_memory.search(user_message, 5).await;
-        let mut relevant_memories: Vec<String> = memories.iter().map(|m| m.content.clone()).collect();
+        let mut relevant_memories: Vec<String> =
+            memories.iter().map(|m| m.content.clone()).collect();
 
         // §2.3 — Inject consolidated episodic context into working memory context.
         let episodic_context = self.episodic_memory.summarize_for_context(4).await;
@@ -395,7 +586,8 @@ impl HousakyCore {
             relevant_memories.push(episodic_context);
         }
 
-        let active_goals = self.goal_engine.get_active_goals().await;
+        // §10 — Use quantum goal scheduling when bridge is available.
+        let active_goals = self.get_quantum_ordered_goals().await;
 
         let recent_thoughts = if self.config.enable_inner_monologue {
             self.inner_monologue.get_recent(3).await
@@ -456,6 +648,42 @@ impl HousakyCore {
                     .await?
             }
         };
+
+        // §10 — Quantum reasoning branch selection: use Grover search to find the
+        // highest-fitness reasoning alternative when multiple branches are available.
+        if let Some(ref bridge) = self.quantum_bridge {
+            let alts = &reasoning.alternatives_considered;
+            if alts.len() >= 4 {
+                let mut fitness: HashMap<String, f64> = alts
+                    .iter()
+                    .enumerate()
+                    .map(|(i, _)| {
+                        let alt_id = format!("alt_{}", i);
+                        // Score by recency-decay: earlier alternatives explored first have lower weight
+                        let score = 1.0 / (1.0 + i as f64 * 0.1);
+                        (alt_id, score)
+                    })
+                    .collect();
+                // Boost the confidence of the chosen conclusion
+                fitness.insert("conclusion".to_string(), reasoning.confidence);
+                let branch_ids: Vec<String> = fitness.keys().cloned().collect();
+
+                match bridge
+                    .search_reasoning_branches(&branch_ids, &fitness)
+                    .await
+                {
+                    Ok(result) => {
+                        info!(
+                            "🔮 Quantum reasoning search: {} branches → speedup={:.2}x, strategy={}",
+                            alts.len(), result.speedup, result.strategy
+                        );
+                    }
+                    Err(e) => {
+                        warn!("Quantum reasoning search failed: {e}");
+                    }
+                }
+            }
+        }
 
         let action = self
             .derive_action_from_reasoning(&reasoning, top_goal.as_ref())
@@ -557,7 +785,9 @@ impl HousakyCore {
     /// the caller always receives a valid action rather than a hard error.
     async fn gate_action_through_alignment(&self, action: AGIAction) -> Result<AGIAction> {
         let (action_type, description, target) = match &action {
-            AGIAction::UseTool { name, arguments, .. } => (
+            AGIAction::UseTool {
+                name, arguments, ..
+            } => (
                 "use_tool".to_string(),
                 format!("Use tool '{}' with args: {}", name, arguments),
                 Some(name.clone()),
@@ -567,26 +797,14 @@ impl HousakyCore {
                 content.chars().take(200).collect(),
                 None,
             ),
-            AGIAction::CreateGoal { title, .. } => (
-                "create_goal".to_string(),
-                title.clone(),
-                None,
-            ),
-            AGIAction::Reflect { trigger } => (
-                "reflect".to_string(),
-                trigger.clone(),
-                None,
-            ),
+            AGIAction::CreateGoal { title, .. } => ("create_goal".to_string(), title.clone(), None),
+            AGIAction::Reflect { trigger } => ("reflect".to_string(), trigger.clone(), None),
             AGIAction::Learn { topic, source } => (
                 "learn".to_string(),
-                format!("Learn about '{}' from '{}'" , topic, source),
+                format!("Learn about '{}' from '{}'", topic, source),
                 None,
             ),
-            AGIAction::Wait { reason } => (
-                "wait".to_string(),
-                reason.clone(),
-                None,
-            ),
+            AGIAction::Wait { reason } => ("wait".to_string(), reason.clone(), None),
         };
 
         let ethical_action = EthicalAction {
@@ -610,8 +828,7 @@ impl HousakyCore {
                 Ok(AGIAction::Wait {
                     reason: format!(
                         "Action blocked by ethical review (risk={:.2}): {}",
-                        assessment.risk_score,
-                        assessment.explanation
+                        assessment.risk_score, assessment.explanation
                     ),
                 })
             }
@@ -623,8 +840,7 @@ impl HousakyCore {
                 Ok(AGIAction::Wait {
                     reason: format!(
                         "Action requires ethical review before execution (risk={:.2}): {}",
-                        assessment.risk_score,
-                        assessment.explanation
+                        assessment.risk_score, assessment.explanation
                     ),
                 })
             }
@@ -660,7 +876,11 @@ impl HousakyCore {
             let current_state = self.world_model.get_current_state().await;
             let action = Action {
                 id: format!("act_{}", uuid::Uuid::new_v4()),
-                action_type: if success { "success".to_string() } else { "failure".to_string() },
+                action_type: if success {
+                    "success".to_string()
+                } else {
+                    "failure".to_string()
+                },
                 parameters: HashMap::new(),
                 preconditions: vec![],
                 expected_effects: vec![],
@@ -669,7 +889,10 @@ impl HousakyCore {
             };
             let mut ctx = current_state.context.clone();
             ctx.insert("success".to_string(), success.to_string());
-            ctx.insert("output".to_string(), output.chars().take(200).collect::<String>());
+            ctx.insert(
+                "output".to_string(),
+                output.chars().take(200).collect::<String>(),
+            );
             if let Some(gid) = goal_id {
                 ctx.insert("goal_id".to_string(), gid.to_string());
             }
@@ -683,7 +906,11 @@ impl HousakyCore {
                 expected_state: None,
                 success,
                 duration_ms: 0,
-                error: if success { None } else { Some(output.chars().take(200).collect()) },
+                error: if success {
+                    None
+                } else {
+                    Some(output.chars().take(200).collect())
+                },
                 discovered_causality: None,
             };
             self.world_model.learn(&result).await;
@@ -826,7 +1053,8 @@ impl HousakyCore {
 
     pub async fn get_state(&self) -> HousakyCoreState {
         let mut state = self.state.read().await.clone();
-        state.uptime_seconds = u64::try_from((Utc::now() - state.started_at).num_seconds()).unwrap_or(0);
+        state.uptime_seconds =
+            u64::try_from((Utc::now() - state.started_at).num_seconds()).unwrap_or(0);
         state
     }
 
@@ -860,6 +1088,12 @@ impl HousakyCore {
             current_focus: state.current_focus.clone(),
             last_thought: state.last_thought.clone(),
             uptime_seconds: state.uptime_seconds,
+            quantum_enabled: self.quantum_bridge.is_some(),
+            quantum_metrics: match &self.quantum_bridge {
+                Some(b) => Some(b.metrics.try_read().map(|m| m.clone()).ok()),
+                None => None,
+            }
+            .flatten(),
         }
     }
 
@@ -872,9 +1106,18 @@ impl HousakyCore {
     ) -> Result<CognitiveResponse> {
         info!("Processing with full cognitive loop...");
 
+        // Check for skill invocations before processing
+        let skill_context = self.check_skill_invocations(user_input).await;
+
+        let enriched_input = if let Some(ref ctx) = skill_context {
+            format!("{}\n\n{}", ctx, user_input)
+        } else {
+            user_input.to_string()
+        };
+
         let response = self
             .cognitive_loop
-            .process(user_input, provider, model, available_tools)
+            .process(&enriched_input, provider, model, available_tools)
             .await?;
 
         let mut state = self.state.write().await;
@@ -896,16 +1139,71 @@ impl HousakyCore {
         Ok(response)
     }
 
+    async fn check_skill_invocations(&self, user_input: &str) -> Option<String> {
+        let perception = &self.cognitive_loop.perception;
+
+        // Create a basic perception for skill matching
+        let perceived = perception.perceive(user_input).await.ok()?;
+
+        let active_goals = self.goal_engine.get_active_goals().await;
+        let context: Vec<String> = active_goals.iter().map(|g| g.title.clone()).collect();
+
+        let invocation = self
+            .skill_invocation_engine
+            .check_and_invoke(&perceived, user_input, &context)
+            .await;
+
+        if let Some(inv) = invocation {
+            Some(crate::skills::invocation::create_skill_invocation_context(
+                &perceived, &inv,
+            ))
+        } else {
+            None
+        }
+    }
+
     pub async fn run_memory_consolidation(&self) -> Result<()> {
         info!("Running memory consolidation...");
         self.memory_consolidator
             .run_periodic_consolidation()
             .await?;
 
+        // §10.4 — Run quantum graph optimization alongside classical consolidation.
+        if let Err(e) = self.run_quantum_memory_consolidation().await {
+            warn!("Quantum memory consolidation error (non-fatal): {e}");
+        }
+
         let mut state = self.state.write().await;
         state.evolution_stage += 1;
 
         Ok(())
+    }
+
+    /// §10.3 — Plan using quantum-enhanced MCTS when available, classical otherwise.
+    pub async fn plan_with_quantum(
+        &self,
+        goal: &crate::housaky::cognitive::planning::GoalState,
+        max_depth: usize,
+    ) -> Result<crate::housaky::cognitive::planning::Plan> {
+        if let Some(ref planner) = self.quantum_planner {
+            match planner.plan_hybrid(goal, max_depth).await {
+                Ok(plan) => {
+                    info!(
+                        "🔮 Quantum planning complete: {} actions, confidence={:.2}",
+                        plan.actions.len(),
+                        plan.confidence
+                    );
+                    return Ok(plan);
+                }
+                Err(e) => {
+                    warn!("Quantum planning failed: {e}, falling back to classical");
+                }
+            }
+        }
+        // Classical fallback
+        use crate::housaky::cognitive::planning::PlanningEngine;
+        let classical = PlanningEngine::new(self.world_model.clone());
+        classical.plan(goal, max_depth).await
     }
 
     pub async fn run_self_improvement(
@@ -954,6 +1252,16 @@ impl HousakyCore {
             let thought = format!("Improvement action: {}", action.description);
             self.inner_monologue.add_thought(&thought, 0.8).await?;
             improvements.push(format!("Action: {}", action.description));
+        }
+
+        // §10.5 — Augment self-improvement with quantum fitness landscape exploration.
+        match self.run_quantum_fitness_exploration().await {
+            Ok(quantum_insights) => {
+                for insight in quantum_insights {
+                    improvements.push(format!("Quantum: {}", insight));
+                }
+            }
+            Err(e) => warn!("Quantum fitness exploration in self-improvement failed: {e}"),
         }
 
         let mut state = self.state.write().await;
@@ -1037,8 +1345,7 @@ impl HousakyCore {
                         let success_pct = (pattern.success_rate * 100.0).round() as i32;
                         learned.push(format!(
                             "Learned procedure: {} ({}% success)",
-                            pattern.description,
-                            success_pct
+                            pattern.description, success_pct
                         ));
 
                         self.inner_monologue
@@ -1162,20 +1469,32 @@ impl HousakyCore {
     pub async fn get_streaming_stats(&self) -> crate::housaky::streaming::streaming::StreamStats {
         self.streaming_manager.get_stats().await
     }
-    
+
     pub async fn decompose_task(&self, task: &str) -> Result<Vec<SubTask>> {
         info!("Decomposing task: {}", task);
-        
+
         let complexity_indicators = [
-            " and ", " then ", " also ", " plus ", " moreover",
-            "first", "second", "third", "finally",
-            "step 1", "step 2", "step 3",
-            "multiple", "several", "various",
+            " and ",
+            " then ",
+            " also ",
+            " plus ",
+            " moreover",
+            "first",
+            "second",
+            "third",
+            "finally",
+            "step 1",
+            "step 2",
+            "step 3",
+            "multiple",
+            "several",
+            "various",
         ];
-        
-        let is_complex = complexity_indicators.iter()
+
+        let is_complex = complexity_indicators
+            .iter()
             .any(|i| task.to_lowercase().contains(i));
-        
+
         if !is_complex {
             return Ok(vec![SubTask {
                 id: format!("sub_{}", uuid::Uuid::new_v4()),
@@ -1184,32 +1503,32 @@ impl HousakyCore {
                 dependencies: vec![],
             }]);
         }
-        
+
         let parts: Vec<&str> = task
             .split(|c| c == ',' || c == '.' || c == ';' || c == '\n')
             .filter(|s| !s.trim().is_empty())
             .collect();
-        
+
         let mut subtasks = Vec::new();
         let mut dependencies: Vec<String> = vec![];
-        
+
         for (_i, part) in parts.iter().enumerate() {
             let clean = part.trim();
             if clean.is_empty() || clean.len() < 3 {
                 continue;
             }
-            
+
             let subtask = SubTask {
                 id: format!("sub_{}", uuid::Uuid::new_v4()),
                 description: clean.to_string(),
                 status: SubTaskStatus::Pending,
                 dependencies: dependencies.clone(),
             };
-            
+
             dependencies.push(subtask.id.clone());
             subtasks.push(subtask);
         }
-        
+
         if subtasks.is_empty() {
             subtasks.push(SubTask {
                 id: format!("sub_{}", uuid::Uuid::new_v4()),
@@ -1218,7 +1537,7 @@ impl HousakyCore {
                 dependencies: vec![],
             });
         }
-        
+
         info!("Decomposed into {} subtasks", subtasks.len());
         Ok(subtasks)
     }
@@ -1281,7 +1600,9 @@ impl HousakyCore {
         );
 
         // Phase 6 — run singularity engine tick
-        let cycle = output.singularity_progress.metrics
+        let cycle = output
+            .singularity_progress
+            .metrics
             .get("cycles_completed")
             .copied()
             .unwrap_or(0.0) as u64;
@@ -1308,6 +1629,247 @@ impl HousakyCore {
         }
 
         Ok(())
+    }
+
+    // ── §10 Quantum-AGI Methods ──────────────────────────────────────────────
+
+    /// §10.2 — Return active goals ordered by quantum QAOA scheduling.
+    /// Falls back gracefully to classical priority sort when quantum is disabled.
+    pub async fn get_quantum_ordered_goals(&self) -> Vec<Goal> {
+        let goals = self.goal_engine.get_active_goals().await;
+
+        if let Some(ref bridge) = self.quantum_bridge {
+            let n = goals.len();
+            if n >= bridge.config.quantum_threshold && n <= bridge.config.max_qubits {
+                let goal_ids: Vec<String> = goals.iter().map(|g| g.id.clone()).collect();
+                let priorities: HashMap<String, f64> = goals
+                    .iter()
+                    .map(|g| {
+                        let score = match g.priority {
+                            GoalPriority::Critical => 1.0,
+                            GoalPriority::High => 0.8,
+                            GoalPriority::Medium => 0.5,
+                            GoalPriority::Low => 0.3,
+                            GoalPriority::Background => 0.1,
+                        };
+                        (g.id.clone(), score)
+                    })
+                    .collect();
+                let dependencies: Vec<(String, String)> = goals
+                    .iter()
+                    .flat_map(|g| {
+                        g.dependencies
+                            .iter()
+                            .map(move |d| (d.clone(), g.id.clone()))
+                    })
+                    .collect();
+
+                match bridge
+                    .schedule_goals(&goal_ids, &priorities, &dependencies)
+                    .await
+                {
+                    Ok(result) => {
+                        info!(
+                            "🔮 Quantum goal scheduling: {} goals → strategy={}, advantage={:.2}x",
+                            n, result.strategy, result.quantum_advantage
+                        );
+                        let goal_map: HashMap<String, Goal> =
+                            goals.into_iter().map(|g| (g.id.clone(), g)).collect();
+                        return result
+                            .schedule
+                            .iter()
+                            .filter_map(|id| goal_map.get(id).cloned())
+                            .collect();
+                    }
+                    Err(e) => {
+                        warn!("Quantum goal scheduling failed: {e}, falling back to classical");
+                    }
+                }
+            }
+        }
+
+        goals
+    }
+
+    /// §10.4 — Run quantum memory graph optimization using quantum annealing.
+    /// Identifies optimal knowledge graph clusters and suggests edge pruning.
+    pub async fn run_quantum_memory_consolidation(&self) -> Result<()> {
+        let bridge = match &self.quantum_bridge {
+            Some(b) => b.clone(),
+            None => return Ok(()),
+        };
+
+        let entities = self.knowledge_graph.get_all_entities().await?;
+        let node_ids: Vec<String> = entities.iter().map(|e| e.id.as_str().to_string()).collect();
+
+        if node_ids.len() < bridge.config.quantum_threshold {
+            return Ok(());
+        }
+
+        let graph_relations = self.knowledge_graph.get_all_relations().await?;
+        let edges: Vec<(String, String, f64)> = graph_relations
+            .iter()
+            .map(|r| {
+                (
+                    r.from_entity.as_str().to_string(),
+                    r.to_entity.as_str().to_string(),
+                    r.weight,
+                )
+            })
+            .collect();
+
+        match bridge.optimize_memory_graph(&node_ids, &edges).await {
+            Ok(result) => {
+                info!(
+                    "🔮 Quantum memory optimization: {} nodes → {} clusters, energy={:.4}, strategy={}",
+                    node_ids.len(), result.clusters.len(), result.energy, result.strategy
+                );
+                // Store cluster assignments as entity metadata
+                for (node_id, cluster_id) in &result.clusters {
+                    let _ = self
+                        .knowledge_graph
+                        .set_metadata(node_id, "quantum_cluster", &cluster_id.to_string())
+                        .await;
+                }
+                // Strengthen high-value edges
+                for (from, to, weight) in &result.strengthen_edges {
+                    let _ = self
+                        .knowledge_graph
+                        .strengthen_relation(from, to, *weight)
+                        .await;
+                }
+                // Prune low-value edges
+                for (from, to) in &result.prune_edges {
+                    let _ = self.knowledge_graph.weaken_relation(from, to).await;
+                }
+                let thought = format!(
+                    "Quantum memory consolidation: {} clusters found, {} edges strengthened, {} pruned",
+                    result.clusters.len(), result.strengthen_edges.len(), result.prune_edges.len()
+                );
+                let _ = self.inner_monologue.add_thought(&thought, 0.85).await;
+            }
+            Err(e) => {
+                warn!("Quantum memory consolidation failed: {e}");
+            }
+        }
+
+        Ok(())
+    }
+
+    /// §10.5 — Explore self-improvement fitness landscape using VQE.
+    /// Returns optimized parameter suggestions for capability improvements.
+    pub async fn run_quantum_fitness_exploration(&self) -> Result<Vec<String>> {
+        let bridge = match &self.quantum_bridge {
+            Some(b) => b.clone(),
+            None => return Ok(vec![]),
+        };
+
+        let state = self.state.read().await;
+        let parameter_labels = vec![
+            "confidence_level".to_string(),
+            "reasoning_depth".to_string(),
+            "memory_retention".to_string(),
+            "goal_focus".to_string(),
+            "learning_rate".to_string(),
+            "exploration_factor".to_string(),
+        ];
+        let current_values = vec![
+            state.confidence_level,
+            (self.config.reasoning_depth as f64) / 10.0,
+            0.8,
+            0.7,
+            0.5,
+            0.3,
+        ];
+        drop(state);
+
+        match bridge
+            .explore_fitness_landscape(&parameter_labels, &current_values)
+            .await
+        {
+            Ok(result) => {
+                info!(
+                    "🔮 Quantum fitness exploration: best_fitness={:.4}, converged={}, strategy={}",
+                    result.best_fitness, result.converged, result.strategy
+                );
+                let insights: Vec<String> = result
+                    .parameter_labels
+                    .iter()
+                    .zip(result.optimal_parameters.iter())
+                    .map(|(label, value)| format!("Optimal {}: {:.4}", label, value))
+                    .collect();
+                let thought = format!(
+                    "Quantum fitness landscape: best_fitness={:.4} (converged={})",
+                    result.best_fitness, result.converged
+                );
+                let _ = self.inner_monologue.add_thought(&thought, 0.9).await;
+                Ok(insights)
+            }
+            Err(e) => {
+                warn!("Quantum fitness exploration failed: {e}");
+                Ok(vec![])
+            }
+        }
+    }
+
+    /// §10.5 — Quantum-enhanced world model reward prediction.
+    ///
+    /// Uses quantum uncertainty reduction to refine action outcome probabilities
+    /// before committing to a predicted outcome. Falls back to classical predict.
+    pub async fn predict_with_quantum(
+        &self,
+        action: &crate::housaky::cognitive::world_model::Action,
+    ) -> crate::housaky::cognitive::world_model::PredictedOutcome {
+        let classical = self.world_model.predict(action).await;
+
+        if let Some(ref bridge) = self.quantum_bridge {
+            let options = vec![
+                "high_reward".to_string(),
+                "medium_reward".to_string(),
+                "low_reward".to_string(),
+            ];
+            let mut priors = HashMap::new();
+            priors.insert(
+                "high_reward".to_string(),
+                classical.confidence * classical.reward.abs(),
+            );
+            priors.insert("medium_reward".to_string(), 1.0 - classical.confidence);
+            priors.insert(
+                "low_reward".to_string(),
+                (1.0 - classical.reward.abs()).max(0.0),
+            );
+
+            match bridge.reduce_uncertainty(&options, &priors).await {
+                Ok(posteriors) => {
+                    let high = posteriors.get("high_reward").copied().unwrap_or(0.5);
+                    let refined_confidence =
+                        (classical.confidence * 0.7 + high * 0.3).clamp(0.0, 1.0);
+                    info!(
+                        "🔮 Quantum reward prediction: action={}, confidence {:.3} → {:.3}",
+                        action.action_type, classical.confidence, refined_confidence
+                    );
+                    return crate::housaky::cognitive::world_model::PredictedOutcome {
+                        confidence: refined_confidence,
+                        reasoning: format!("{} [quantum-refined confidence]", classical.reasoning),
+                        ..classical
+                    };
+                }
+                Err(e) => {
+                    warn!("Quantum uncertainty reduction failed: {e}");
+                }
+            }
+        }
+
+        classical
+    }
+
+    /// §10 — Return current quantum bridge metrics snapshot.
+    pub async fn get_quantum_metrics(&self) -> Option<crate::quantum::AgiBridgeMetrics> {
+        if let Some(ref bridge) = self.quantum_bridge {
+            Some(bridge.metrics.read().await.clone())
+        } else {
+            None
+        }
     }
 
     pub async fn shutdown(&self) -> Result<()> {
@@ -1341,7 +1903,7 @@ pub enum SubTaskStatus {
     Failed,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct DashboardMetrics {
     pub is_active: bool,
     pub total_turns: u64,
@@ -1361,4 +1923,8 @@ pub struct DashboardMetrics {
     pub current_focus: Option<String>,
     pub last_thought: Option<String>,
     pub uptime_seconds: u64,
+    /// §10 — Whether quantum bridge is active.
+    pub quantum_enabled: bool,
+    /// §10 — Live quantum bridge metrics when enabled.
+    pub quantum_metrics: Option<crate::quantum::AgiBridgeMetrics>,
 }

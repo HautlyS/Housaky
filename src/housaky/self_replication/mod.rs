@@ -73,10 +73,7 @@ impl SelfReplicationEngine {
                 config.max_build_time_secs,
                 config.binary_size_regression_pct,
             ),
-            validator: BinaryValidator::with_config(
-                config.require_tests,
-                config.min_fitness_delta,
-            ),
+            validator: BinaryValidator::with_config(config.require_tests, config.min_fitness_delta),
             hot_swapper: HotSwapper::new(workspace_dir.clone()),
             lineage: Arc::new(RwLock::new(GenerationLineage::new())),
             config,
@@ -194,12 +191,7 @@ impl SelfReplicationEngine {
         Ok(())
     }
 
-    fn compute_fitness(
-        &self,
-        build: &BuildResult,
-        tests: &[TestResult],
-        gates_pass: bool,
-    ) -> f64 {
+    fn compute_fitness(&self, build: &BuildResult, tests: &[TestResult], gates_pass: bool) -> f64 {
         if !gates_pass || !build.success {
             return 0.0;
         }

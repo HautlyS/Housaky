@@ -245,7 +245,10 @@ impl TactileProcessor {
     }
 
     pub async fn register_sensor(&self, config: TactileSensorConfig) {
-        info!("Registering tactile sensor '{}' ({:?})", config.id, config.sensor_type);
+        info!(
+            "Registering tactile sensor '{}' ({:?})",
+            config.id, config.sensor_type
+        );
         let id = config.id.clone();
         self.sensors.write().await.insert(id.clone(), config);
         self.pressure_history
@@ -311,13 +314,18 @@ impl TactileProcessor {
         }
 
         if map.max_value > 0.9 {
-            warn!("Force overload on sensor '{}': {:.2}", sensor_id, map.max_value);
+            warn!(
+                "Force overload on sensor '{}': {:.2}",
+                sensor_id, map.max_value
+            );
             self.emit_event(sensor_id, TactileEventType::OverloadForce, map.max_value)
                 .await;
         }
 
         let mut history = self.pressure_history.write().await;
-        let sensor_history = history.entry(sensor_id.to_string()).or_insert_with(VecDeque::new);
+        let sensor_history = history
+            .entry(sensor_id.to_string())
+            .or_insert_with(VecDeque::new);
         if sensor_history.len() >= self.max_history {
             sensor_history.pop_front();
         }
@@ -361,14 +369,17 @@ impl TactileProcessor {
     ) -> Result<ThermalReading> {
         let rate = {
             let history = self.thermal_history.read().await;
-            history.back().map(|prev| {
-                let dt = (Utc::now() - prev.timestamp).num_milliseconds() as f64 / 1000.0;
-                if dt > 0.0 {
-                    (temperature_c - prev.temperature_c) / dt
-                } else {
-                    0.0
-                }
-            }).unwrap_or(0.0)
+            history
+                .back()
+                .map(|prev| {
+                    let dt = (Utc::now() - prev.timestamp).num_milliseconds() as f64 / 1000.0;
+                    if dt > 0.0 {
+                        (temperature_c - prev.temperature_c) / dt
+                    } else {
+                        0.0
+                    }
+                })
+                .unwrap_or(0.0)
         };
 
         let above_safe = temperature_c > self.thermal_safe_threshold_c;
@@ -399,12 +410,7 @@ impl TactileProcessor {
         Ok(reading)
     }
 
-    async fn emit_event(
-        &self,
-        sensor_id: &str,
-        event_type: TactileEventType,
-        severity: f64,
-    ) {
+    async fn emit_event(&self, sensor_id: &str, event_type: TactileEventType, severity: f64) {
         let event = TactileEvent {
             id: format!("tact_{}_{}", sensor_id, Utc::now().timestamp_millis()),
             event_type,
@@ -552,6 +558,8 @@ mod tests {
         assert!(reading.above_safe_threshold);
 
         let events = proc.get_recent_events(10).await;
-        assert!(events.iter().any(|e| e.event_type == TactileEventType::ThermalWarning));
+        assert!(events
+            .iter()
+            .any(|e| e.event_type == TactileEventType::ThermalWarning));
     }
 }

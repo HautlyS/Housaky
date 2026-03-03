@@ -108,13 +108,13 @@ impl ModuleSpec {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ModuleConnection {
     pub id: String,
-    pub from: String,  // module ID
-    pub to: String,    // module ID
+    pub from: String, // module ID
+    pub to: String,   // module ID
     pub data_type: String,
-    pub bandwidth: f64,       // messages/second (soft limit)
+    pub bandwidth: f64, // messages/second (soft limit)
     pub latency_budget_ms: u64,
     pub bidirectional: bool,
-    pub weight: f64,          // how important this connection is (0.0–1.0)
+    pub weight: f64, // how important this connection is (0.0–1.0)
 }
 
 impl ModuleConnection {
@@ -177,8 +177,8 @@ pub struct ArchitectureGenome {
     pub parameters: HashMap<String, f64>,
     pub fitness: Option<ArchitectureFitness>,
     pub generation: u64,
-    pub parent: Option<String>,  // parent genome ID
-    pub lineage: Vec<String>,    // ancestry chain
+    pub parent: Option<String>, // parent genome ID
+    pub lineage: Vec<String>,   // ancestry chain
     pub created_at: DateTime<Utc>,
     pub description: String,
     pub tags: Vec<String>,

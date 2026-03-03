@@ -4,7 +4,7 @@
 //! across different problem types and sizes, producing a report of where
 //! quantum approaches show advantage.
 
-use super::hybrid_solver::{HybridSolver, Problem, ProblemType, SolverBackend};
+use super::hybrid_solver::{HybridSolver, Problem, ProblemType};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -169,7 +169,7 @@ impl QuantumBenchmarkSuite {
         let mut data = HashMap::new();
         for i in 0..size {
             // Deterministic pseudo-random targets for reproducibility.
-            let val = ((i as f64 * 0.618033988) % 1.0).abs();
+            let val = ((i as f64 * 0.618_033_988) % 1.0).abs();
             data.insert(i.to_string(), val);
         }
         Problem {

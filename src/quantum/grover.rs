@@ -14,7 +14,11 @@ pub struct GroverConfig {
 
 impl Default for GroverConfig {
     fn default() -> Self {
-        Self { shots: 1024, iterations: None, target_probability: 0.9 }
+        Self {
+            shots: 1024,
+            iterations: None,
+            target_probability: 0.9,
+        }
     }
 }
 
@@ -55,7 +59,11 @@ impl GroverSearch {
     }
 
     pub fn qubits_needed(n: usize) -> usize {
-        if n <= 1 { 1 } else { (n as f64).log2().ceil() as usize }
+        if n <= 1 {
+            1
+        } else {
+            (n as f64).log2().ceil() as usize
+        }
     }
 
     pub async fn search(&self, problem: &SearchProblem) -> Result<GroverResult> {
@@ -155,7 +163,11 @@ impl GroverSearch {
             return Ok(vec![]);
         }
 
-        let threshold = fitness_scores.values().cloned().fold(f64::NEG_INFINITY, f64::max) * 0.8;
+        let threshold = fitness_scores
+            .values()
+            .cloned()
+            .fold(f64::NEG_INFINITY, f64::max)
+            * 0.8;
         let targets: Vec<String> = branches
             .iter()
             .filter(|b| fitness_scores.get(*b).copied().unwrap_or(0.0) >= threshold)
@@ -219,30 +231,17 @@ impl GroverSearch {
         n_qubits: usize,
         ancilla: usize,
     ) {
-        // Flip qubits where the target bit is 0
+        // Flip qubits where the target bit is 0 so target state becomes |1...1>.
         for bit in 0..n_qubits {
             if (target >> bit) & 1 == 0 {
                 circuit.add_gate(Gate::x(bit));
             }
         }
 
-        // Multi-controlled X onto ancilla using cascade of CNOTs
-        if n_qubits == 1 {
-            circuit.add_gate(Gate::cnot(0, ancilla));
-        } else if n_qubits == 2 {
-            circuit.add_gate(Gate::toffoli(0, 1, ancilla));
-        } else {
-            // Approximate: CNOT chain through qubits
-            for bit in 0..n_qubits.saturating_sub(1) {
-                circuit.add_gate(Gate::cnot(bit, bit + 1));
-            }
-            circuit.add_gate(Gate::cnot(n_qubits - 1, ancilla));
-            for bit in (0..n_qubits.saturating_sub(1)).rev() {
-                circuit.add_gate(Gate::cnot(bit, bit + 1));
-            }
-        }
+        // Multi-controlled X onto ancilla: C^n-X decomposed correctly.
+        self.add_mcx(circuit, &(0..n_qubits).collect::<Vec<_>>(), ancilla);
 
-        // Undo qubit flips
+        // Undo qubit flips.
         for bit in 0..n_qubits {
             if (target >> bit) & 1 == 0 {
                 circuit.add_gate(Gate::x(bit));
@@ -250,22 +249,94 @@ impl GroverSearch {
         }
     }
 
+    /// Decompose multi-controlled X (C^n-X) onto `target` using `controls`.
+    ///
+    /// n=1 → CNOT, n=2 → Toffoli, n>2 → Toffoli ladder using the ancilla
+    /// register slots above the data/ancilla qubits (scratch qubits are
+    /// borrowed temporarily via compute-uncompute pattern so no extra
+    /// persistent ancillae are consumed).
+    fn add_mcx(&self, circuit: &mut QuantumCircuit, controls: &[usize], target: usize) {
+        match controls.len() {
+            0 => {
+                circuit.add_gate(Gate::x(target));
+            }
+            1 => {
+                circuit.add_gate(Gate::cnot(controls[0], target));
+            }
+            2 => {
+                circuit.add_gate(Gate::toffoli(controls[0], controls[1], target));
+            }
+            n => {
+                // Relative-phase Toffoli ladder: C^n-X via n-1 ancilla qubits.
+                // We borrow qubit slots at circuit.qubits-1 downward as scratch.
+                // This is the standard compute-uncompute decomposition.
+                //
+                // Controls: c[0]..c[n-1], target: t
+                // Step 1: Toffoli c[0],c[1] → scratch[0]
+                // Step 2: Toffoli scratch[k-1],c[k+1] → scratch[k]  for k=1..n-3
+                // Step n-2: Toffoli scratch[n-3],c[n-1] → target
+                // Uncompute scratch (steps n-2..1 in reverse)
+                let n_scratch = n - 2;
+                let scratch_base = circuit.qubits; // qubits beyond circuit size — safe
+                                                   // Ensure circuit has enough qubits for scratch.
+                let needed = scratch_base + n_scratch;
+                if needed > circuit.qubits {
+                    circuit.qubits = needed;
+                    circuit.classical_bits = circuit.qubits;
+                }
+
+                // Compute phase
+                circuit.add_gate(Gate::toffoli(controls[0], controls[1], scratch_base));
+                for k in 1..n_scratch {
+                    circuit.add_gate(Gate::toffoli(
+                        scratch_base + k - 1,
+                        controls[k + 1],
+                        scratch_base + k,
+                    ));
+                }
+                // Final Toffoli into target
+                circuit.add_gate(Gate::toffoli(
+                    scratch_base + n_scratch - 1,
+                    controls[n - 1],
+                    target,
+                ));
+                // Uncompute scratch (reverse order to restore |0>)
+                for k in (1..n_scratch).rev() {
+                    circuit.add_gate(Gate::toffoli(
+                        scratch_base + k - 1,
+                        controls[k + 1],
+                        scratch_base + k,
+                    ));
+                }
+                circuit.add_gate(Gate::toffoli(controls[0], controls[1], scratch_base));
+            }
+        }
+    }
+
     fn add_diffusion(&self, circuit: &mut QuantumCircuit, n_qubits: usize) {
+        // H⊗n
         for i in 0..n_qubits {
             circuit.add_gate(Gate::h(i));
         }
+        // X⊗n — maps |0...0> ↔ |1...1>
         for i in 0..n_qubits {
             circuit.add_gate(Gate::x(i));
         }
-        // Phase flip on |0...0>
-        if n_qubits >= 2 {
+        // Multi-controlled phase flip on |1...1> (= phase flip on |0...0> after X).
+        // Implement as H · C^(n-1)-X · H on the last qubit.
+        if n_qubits == 1 {
+            circuit.add_gate(Gate::z(0));
+        } else {
             circuit.add_gate(Gate::h(n_qubits - 1));
-            circuit.add_gate(Gate::cnot(0, n_qubits - 1));
+            let controls: Vec<usize> = (0..n_qubits - 1).collect();
+            self.add_mcx(circuit, &controls, n_qubits - 1);
             circuit.add_gate(Gate::h(n_qubits - 1));
         }
+        // X⊗n — undo
         for i in 0..n_qubits {
             circuit.add_gate(Gate::x(i));
         }
+        // H⊗n
         for i in 0..n_qubits {
             circuit.add_gate(Gate::h(i));
         }

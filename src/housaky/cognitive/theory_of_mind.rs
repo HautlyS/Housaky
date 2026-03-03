@@ -121,7 +121,9 @@ impl MentalModel {
     /// Update prediction accuracy based on whether a prediction was correct.
     pub fn update_accuracy(&mut self, correct: bool) {
         self.total_predictions += 1;
-        if correct { self.correct_predictions += 1; }
+        if correct {
+            self.correct_predictions += 1;
+        }
         self.prediction_accuracy = self.correct_predictions as f64 / self.total_predictions as f64;
         self.last_updated = Utc::now();
     }
@@ -180,7 +182,10 @@ impl TheoryOfMind {
         drop(models);
 
         let model = MentalModel::new(agent_id, agent_type);
-        self.mental_models.write().await.insert(agent_id.to_string(), model.clone());
+        self.mental_models
+            .write()
+            .await
+            .insert(agent_id.to_string(), model.clone());
         debug!("TheoryOfMind: created mental model for '{}'", agent_id);
         model
     }
@@ -207,7 +212,10 @@ impl TheoryOfMind {
         // Infer beliefs from explicit statements
         if let Some(ref statement) = action.explicit_statement {
             let belief = BeliefState {
-                topic: format!("statement_about_{}", &action.action[..action.action.len().min(20)]),
+                topic: format!(
+                    "statement_about_{}",
+                    &action.action[..action.action.len().min(20)]
+                ),
                 content: statement.clone(),
                 confidence: 0.8,
                 source: BeliefSource::DirectExperience,
@@ -249,14 +257,19 @@ impl TheoryOfMind {
                     probability: intention.confidence * 0.8,
                     rationale: format!("Inferred from intention: {}", intention.description),
                     time_horizon: intention.time_horizon.clone(),
-                    based_on_interaction: model.interaction_history.last().map(|i| i.action.clone()),
+                    based_on_interaction: model
+                        .interaction_history
+                        .last()
+                        .map(|i| i.action.clone()),
                 });
             }
         }
 
         // Prediction 2: Based on strongest desire
         if let Some(desire) = model.desires.iter().max_by(|a, b| {
-            a.inferred_strength.partial_cmp(&b.inferred_strength).unwrap_or(std::cmp::Ordering::Equal)
+            a.inferred_strength
+                .partial_cmp(&b.inferred_strength)
+                .unwrap_or(std::cmp::Ordering::Equal)
         }) {
             let predicted_action = match desire.category {
                 DesireCategory::TaskCompletion => "request task execution or follow-up".to_string(),
@@ -279,7 +292,10 @@ impl TheoryOfMind {
         // Prediction 3: Based on interaction history recency
         if let Some(last) = model.interaction_history.last() {
             predictions.push(PredictedAction {
-                action: format!("follow up on: {}", &last.action[..last.action.len().min(60)]),
+                action: format!(
+                    "follow up on: {}",
+                    &last.action[..last.action.len().min(60)]
+                ),
                 probability: 0.4,
                 rationale: "Based on most recent interaction".to_string(),
                 time_horizon: IntentionHorizon::Immediate,
@@ -288,7 +304,11 @@ impl TheoryOfMind {
         }
 
         // Sort by probability descending
-        predictions.sort_by(|a, b| b.probability.partial_cmp(&a.probability).unwrap_or(std::cmp::Ordering::Equal));
+        predictions.sort_by(|a, b| {
+            b.probability
+                .partial_cmp(&a.probability)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         predictions
     }
 
@@ -317,7 +337,10 @@ impl TheoryOfMind {
         let action_lower = my_action.to_lowercase();
 
         // Positive framing actions
-        if action_lower.contains("help") || action_lower.contains("solve") || action_lower.contains("complete") {
+        if action_lower.contains("help")
+            || action_lower.contains("solve")
+            || action_lower.contains("complete")
+        {
             reactions.push(PredictedReaction {
                 reaction: "positive acknowledgment and cooperation".to_string(),
                 probability: 0.5 + model.trust_level * 0.3,
@@ -327,7 +350,10 @@ impl TheoryOfMind {
         }
 
         // Question/clarification actions
-        if action_lower.contains("?") || action_lower.contains("clarif") || action_lower.contains("explain") {
+        if action_lower.contains("?")
+            || action_lower.contains("clarif")
+            || action_lower.contains("explain")
+        {
             reactions.push(PredictedReaction {
                 reaction: "provide clarification or answer".to_string(),
                 probability: 0.7,
@@ -344,7 +370,11 @@ impl TheoryOfMind {
             likely_follow_up: None,
         });
 
-        reactions.sort_by(|a, b| b.probability.partial_cmp(&a.probability).unwrap_or(std::cmp::Ordering::Equal));
+        reactions.sort_by(|a, b| {
+            b.probability
+                .partial_cmp(&a.probability)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         reactions
     }
 
@@ -405,13 +435,27 @@ impl TheoryOfMind {
     fn infer_desires_from_action(&self, model: &mut MentalModel, action: &ObservedAction) {
         let action_lower = action.action.to_lowercase();
 
-        let category = if action_lower.contains("help") || action_lower.contains("do") || action_lower.contains("run") || action_lower.contains("build") {
+        let category = if action_lower.contains("help")
+            || action_lower.contains("do")
+            || action_lower.contains("run")
+            || action_lower.contains("build")
+        {
             DesireCategory::TaskCompletion
-        } else if action_lower.contains("what") || action_lower.contains("how") || action_lower.contains("why") || action_lower.contains("explain") {
+        } else if action_lower.contains("what")
+            || action_lower.contains("how")
+            || action_lower.contains("why")
+            || action_lower.contains("explain")
+        {
             DesireCategory::InformationSeeking
-        } else if action_lower.contains("create") || action_lower.contains("write") || action_lower.contains("design") {
+        } else if action_lower.contains("create")
+            || action_lower.contains("write")
+            || action_lower.contains("design")
+        {
             DesireCategory::Creative
-        } else if action_lower.contains("fix") || action_lower.contains("debug") || action_lower.contains("solve") {
+        } else if action_lower.contains("fix")
+            || action_lower.contains("debug")
+            || action_lower.contains("solve")
+        {
             DesireCategory::ProblemSolving
         } else {
             DesireCategory::Unknown
@@ -419,7 +463,8 @@ impl TheoryOfMind {
 
         // Update or add desire
         if let Some(existing) = model.desires.iter_mut().find(|d| d.category == category) {
-            existing.inferred_strength = (existing.inferred_strength * 0.8 + 0.6 * 0.2).clamp(0.0, 1.0);
+            existing.inferred_strength =
+                (existing.inferred_strength * 0.8 + 0.6 * 0.2).clamp(0.0, 1.0);
             existing.inferred_from.push(action.action.clone());
             if existing.inferred_from.len() > 20 {
                 existing.inferred_from.remove(0);
@@ -436,7 +481,11 @@ impl TheoryOfMind {
 
         // Cap desires list
         if model.desires.len() > 20 {
-            model.desires.sort_by(|a, b| b.inferred_strength.partial_cmp(&a.inferred_strength).unwrap_or(std::cmp::Ordering::Equal));
+            model.desires.sort_by(|a, b| {
+                b.inferred_strength
+                    .partial_cmp(&a.inferred_strength)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
             model.desires.truncate(20);
         }
     }
@@ -451,27 +500,37 @@ impl TheoryOfMind {
         let pattern: Vec<String> = recent.iter().map(|i| i.action.clone()).collect();
 
         // Check if an existing intention covers this pattern
-        let already_covered = model.intentions.iter().any(|int| {
-            int.inferred_from.iter().any(|e| pattern.contains(e))
-        });
+        let already_covered = model
+            .intentions
+            .iter()
+            .any(|int| int.inferred_from.iter().any(|e| pattern.contains(e)));
 
         if !already_covered && !pattern.is_empty() {
             model.intentions.push(Intention {
                 description: format!(
                     "Inferred intent from recent pattern: {}",
-                    pattern.iter().map(|s| &s[..s.len().min(30)]).collect::<Vec<_>>().join(" → ")
+                    pattern
+                        .iter()
+                        .map(|s| &s[..s.len().min(30)])
+                        .collect::<Vec<_>>()
+                        .join(" → ")
                 ),
                 inferred_from: pattern.iter().cloned().collect(),
                 confidence: 0.5,
-                predicted_actions: vec![
-                    format!("continue: {}", &pattern[0][..pattern[0].len().min(40)])
-                ],
+                predicted_actions: vec![format!(
+                    "continue: {}",
+                    &pattern[0][..pattern[0].len().min(40)]
+                )],
                 time_horizon: IntentionHorizon::ShortTerm,
             });
 
             // Cap intentions
             if model.intentions.len() > 10 {
-                model.intentions.sort_by(|a, b| b.confidence.partial_cmp(&a.confidence).unwrap_or(std::cmp::Ordering::Equal));
+                model.intentions.sort_by(|a, b| {
+                    b.confidence
+                        .partial_cmp(&a.confidence)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                });
                 model.intentions.truncate(10);
             }
         }
@@ -521,14 +580,17 @@ mod tests {
         // Seed a model
         tom.get_or_create_model("user-001", AgentType::Human).await;
 
-        let reactions = tom.simulate_reaction("user-001", "I will help you solve this problem").await;
+        let reactions = tom
+            .simulate_reaction("user-001", "I will help you solve this problem")
+            .await;
         assert!(!reactions.is_empty());
     }
 
     #[tokio::test]
     async fn test_prediction_accuracy_update() {
         let tom = TheoryOfMind::new();
-        tom.get_or_create_model("agent-1", AgentType::PeerAgent).await;
+        tom.get_or_create_model("agent-1", AgentType::PeerAgent)
+            .await;
 
         tom.record_prediction_outcome("agent-1", true).await;
         tom.record_prediction_outcome("agent-1", true).await;

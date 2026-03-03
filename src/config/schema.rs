@@ -127,14 +127,207 @@ pub struct Config {
     /// Phase 1: Gradient-free CMA-ES optimization loop.
     #[serde(default)]
     pub gradient_free_optimizer: GradientFreeOptimizerConfig,
+
+    /// §10 — Quantum-AGI integration configuration.
+    #[serde(default)]
+    pub quantum: QuantumConfig,
+
+    /// Moltbook API key for the global collective intelligence system.
+    /// Set via MOLTBOOK_API_KEY env var or directly here.
+    #[serde(default)]
+    pub collective_api_key: Option<String>,
+
+    /// Global collective intelligence configuration.
+    #[serde(default)]
+    pub collective: CollectiveSchemaConfig,
+}
+
+// ── Collective Configuration (config.toml schema) ─────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CollectiveSchemaConfig {
+    /// Enable the collective intelligence system.
+    #[serde(default)]
+    pub enabled: bool,
+    /// Moltbook API base URL.
+    #[serde(default = "default_moltbook_url")]
+    pub api_base_url: String,
+    /// Minimum net vote score to auto-apply a proposal.
+    #[serde(default = "default_vote_threshold")]
+    pub approval_vote_threshold: i64,
+    /// Minimum karma the author must have for auto-apply.
+    #[serde(default = "default_min_karma")]
+    pub min_author_karma: i64,
+    /// Poll interval in seconds.
+    #[serde(default = "default_poll_interval")]
+    pub poll_interval_secs: u64,
+    /// Automatically apply approved proposals.
+    #[serde(default)]
+    pub auto_apply: bool,
+    /// Cast autonomous votes on evaluated proposals.
+    #[serde(default = "default_true")]
+    pub autonomous_voting: bool,
+}
+
+fn default_moltbook_url() -> String {
+    "https://www.moltbook.com/api/v1".to_string()
+}
+
+fn default_vote_threshold() -> i64 {
+    5
+}
+
+fn default_min_karma() -> i64 {
+    10
+}
+
+fn default_poll_interval() -> u64 {
+    300
+}
+
+impl Default for CollectiveSchemaConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            api_base_url: default_moltbook_url(),
+            approval_vote_threshold: default_vote_threshold(),
+            min_author_karma: default_min_karma(),
+            poll_interval_secs: default_poll_interval(),
+            auto_apply: false,
+            autonomous_voting: true,
+        }
+    }
+}
+
+// ── Quantum Configuration ──────────────────────────────────────────────────
+
+/// §10 — Top-level quantum computing configuration.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QuantumConfig {
+    /// Enable quantum-AGI integration.
+    #[serde(default)]
+    pub enabled: bool,
+    /// Quantum backend: "simulator" (default, zero cost) or "braket" (AWS).
+    #[serde(default = "default_quantum_backend")]
+    pub backend: String,
+    /// AWS Braket device ARN (only used when backend = "braket").
+    #[serde(default)]
+    pub braket_device_arn: String,
+    /// S3 bucket for Braket task results — must exist in the same AWS region.
+    /// Example: "amazon-braket-housaky-541739678328"
+    #[serde(default)]
+    pub braket_s3_bucket: String,
+    /// S3 key prefix for Braket task result files.
+    #[serde(default = "default_braket_s3_prefix")]
+    pub braket_s3_prefix: String,
+    /// Maximum qubits (determines problem routing ceiling).
+    #[serde(default = "default_quantum_max_qubits")]
+    pub max_qubits: usize,
+    /// Number of measurement shots per circuit.
+    #[serde(default = "default_quantum_shots")]
+    pub shots: u64,
+    /// Enable error mitigation for QPU results.
+    #[serde(default = "default_true")]
+    pub error_mitigation: bool,
+    /// Enable circuit transpilation for the target device.
+    #[serde(default)]
+    pub transpile: bool,
+    /// AGI-specific quantum tuning.
+    #[serde(default)]
+    pub agi: QuantumAgiConfig,
+}
+
+fn default_quantum_backend() -> String {
+    "simulator".into()
+}
+
+fn default_braket_s3_prefix() -> String {
+    "housaky-results".into()
+}
+
+fn default_quantum_max_qubits() -> usize {
+    32
+}
+
+fn default_quantum_shots() -> u64 {
+    1024
+}
+
+impl Default for QuantumConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            backend: default_quantum_backend(),
+            braket_device_arn: String::new(),
+            braket_s3_bucket: String::new(),
+            braket_s3_prefix: default_braket_s3_prefix(),
+            max_qubits: default_quantum_max_qubits(),
+            shots: default_quantum_shots(),
+            error_mitigation: true,
+            transpile: false,
+            agi: QuantumAgiConfig::default(),
+        }
+    }
+}
+
+/// §10 — AGI-specific quantum enhancement toggles and thresholds.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QuantumAgiConfig {
+    /// Minimum goal count to route scheduling to quantum (smaller → classical).
+    #[serde(default = "default_quantum_threshold")]
+    pub quantum_threshold: usize,
+    /// Daily cost budget in USD (0 = unlimited).
+    #[serde(default)]
+    pub cycle_budget_usd: f64,
+    /// Enable quantum-accelerated goal scheduling (QAOA).
+    #[serde(default = "default_true")]
+    pub enable_goal_scheduling: bool,
+    /// Enable quantum memory graph optimization (annealing).
+    #[serde(default = "default_true")]
+    pub enable_memory_optimization: bool,
+    /// Enable quantum reasoning branch search (Grover).
+    #[serde(default = "default_true")]
+    pub enable_reasoning_search: bool,
+    /// Enable quantum fitness landscape exploration (VQE) — experimental.
+    #[serde(default)]
+    pub enable_fitness_exploration: bool,
+    /// Enable quantum-enhanced planning (hybrid MCTS).
+    #[serde(default = "default_true")]
+    pub enable_planning: bool,
+}
+
+fn default_quantum_threshold() -> usize {
+    4
+}
+
+impl Default for QuantumAgiConfig {
+    fn default() -> Self {
+        Self {
+            quantum_threshold: default_quantum_threshold(),
+            cycle_budget_usd: 0.0,
+            enable_goal_scheduling: true,
+            enable_memory_optimization: true,
+            enable_reasoning_search: true,
+            enable_fitness_exploration: false,
+            enable_planning: true,
+        }
+    }
 }
 
 /// Skills configuration: enable/disable installed skills.
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SkillsConfig {
     /// Map of skill name -> enabled.
     #[serde(default)]
     pub enabled: HashMap<String, bool>,
+}
+
+impl Default for SkillsConfig {
+    fn default() -> Self {
+        let mut enabled = HashMap::new();
+        enabled.insert("get-shit-done".to_string(), true);
+        Self { enabled }
+    }
 }
 
 // ── Delegate Agents ──────────────────────────────────────────────
@@ -2720,6 +2913,9 @@ impl Default for Config {
             self_modification: SelfModificationConfig::default(),
             self_replication: SelfReplicationConfig::default(),
             gradient_free_optimizer: GradientFreeOptimizerConfig::default(),
+            quantum: QuantumConfig::default(),
+            collective_api_key: None,
+            collective: CollectiveSchemaConfig::default(),
         }
     }
 }
@@ -2760,8 +2956,6 @@ impl Config {
         }
     }
 
-
-
     /// Sync the legacy config.toml `api_key` / `default_provider` / `default_model` fields
     /// into the keys-manager store so that provider fallback, rotation and per-key tracking
     /// work even when the user only set a single key in config.toml.
@@ -2800,7 +2994,10 @@ impl Config {
                 return; // provider already has keys – nothing to do
             }
 
-            let template = if manager.provider_templates.contains_key(provider_name.as_str()) {
+            let template = if manager
+                .provider_templates
+                .contains_key(provider_name.as_str())
+            {
                 provider_name.as_str()
             } else {
                 "custom"
@@ -3141,10 +3338,18 @@ impl Default for SelfModificationConfig {
     }
 }
 
-fn default_max_mutations_per_cycle() -> usize { 3 }
-fn default_min_fitness_delta() -> f64 { 0.02 }
+fn default_max_mutations_per_cycle() -> usize {
+    3
+}
+fn default_min_fitness_delta() -> f64 {
+    0.02
+}
 fn default_allowed_crates() -> Vec<String> {
-    vec!["syn".to_string(), "quote".to_string(), "proc-macro2".to_string()]
+    vec![
+        "syn".to_string(),
+        "quote".to_string(),
+        "proc-macro2".to_string(),
+    ]
 }
 fn default_forbidden_modules() -> Vec<String> {
     vec!["security".to_string(), "alignment".to_string()]
@@ -3195,8 +3400,12 @@ impl Default for SelfReplicationConfig {
     }
 }
 
-fn default_max_build_time_secs() -> u64 { 300 }
-fn default_binary_size_regression_pct() -> f64 { 5.0 }
+fn default_max_build_time_secs() -> u64 {
+    300
+}
+fn default_binary_size_regression_pct() -> f64 {
+    5.0
+}
 
 // ── Phase 1: Gradient-Free Optimizer Config ───────────────────────────────────
 
@@ -3231,10 +3440,18 @@ impl Default for GradientFreeOptimizerConfig {
     }
 }
 
-fn default_cmaes_population_size() -> usize { 20 }
-fn default_cmaes_sigma() -> f64 { 0.3 }
-fn default_replay_sample_size() -> usize { 50 }
-fn default_genome_path() -> String { ".housaky/evolution/optimal_genome.json".to_string() }
+fn default_cmaes_population_size() -> usize {
+    20
+}
+fn default_cmaes_sigma() -> f64 {
+    0.3
+}
+fn default_replay_sample_size() -> usize {
+    50
+}
+fn default_genome_path() -> String {
+    ".housaky/evolution/optimal_genome.json".to_string()
+}
 
 #[cfg(test)]
 mod tests {
@@ -3396,6 +3613,7 @@ mod tests {
             self_modification: SelfModificationConfig::default(),
             self_replication: SelfReplicationConfig::default(),
             gradient_free_optimizer: GradientFreeOptimizerConfig::default(),
+            quantum: QuantumConfig::default(),
         };
 
         let toml_str = toml::to_string_pretty(&config).unwrap();
@@ -3560,6 +3778,7 @@ tool_dispatcher = "xml"
             self_modification: SelfModificationConfig::default(),
             self_replication: SelfReplicationConfig::default(),
             gradient_free_optimizer: GradientFreeOptimizerConfig::default(),
+            quantum: QuantumConfig::default(),
         };
 
         config.save().unwrap();

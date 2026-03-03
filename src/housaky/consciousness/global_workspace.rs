@@ -209,7 +209,9 @@ impl GlobalWorkspace {
             .max_by(|a, b| {
                 let score_a = a.strength * 0.5 + a.urgency * 0.3 + a.novelty * 0.2;
                 let score_b = b.strength * 0.5 + b.urgency * 0.3 + b.novelty * 0.2;
-                score_a.partial_cmp(&score_b).unwrap_or(std::cmp::Ordering::Equal)
+                score_a
+                    .partial_cmp(&score_b)
+                    .unwrap_or(std::cmp::Ordering::Equal)
             })
             .cloned()
             .unwrap_or_else(|| coalitions[0].clone())
@@ -307,8 +309,8 @@ pub struct WorkspaceStats {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::coalition_formation::Coalition;
+    use super::*;
 
     struct MockModule {
         name: String,
@@ -354,8 +356,14 @@ mod tests {
     #[tokio::test]
     async fn test_gwt_cycle() {
         let gw = GlobalWorkspace::new();
-        let m1 = Arc::new(MockModule { name: "reasoning".to_string(), content: "solve problem A".to_string() });
-        let m2 = Arc::new(MockModule { name: "goal_engine".to_string(), content: "achieve goal B".to_string() });
+        let m1 = Arc::new(MockModule {
+            name: "reasoning".to_string(),
+            content: "solve problem A".to_string(),
+        });
+        let m2 = Arc::new(MockModule {
+            name: "goal_engine".to_string(),
+            content: "achieve goal B".to_string(),
+        });
 
         gw.subscribe(m1).await;
         gw.subscribe(m2).await;

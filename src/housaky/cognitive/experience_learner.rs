@@ -622,7 +622,9 @@ This skill was automatically generated from successful patterns observed during 
         if state_dir.exists() {
             let patterns_path = state_dir.join("patterns.msgpack");
             if patterns_path.exists() {
-                if let Ok(loaded) = read_msgpack_file::<HashMap<String, Pattern>>(&patterns_path).await {
+                if let Ok(loaded) =
+                    read_msgpack_file::<HashMap<String, Pattern>>(&patterns_path).await
+                {
                     *self.patterns.write().await = loaded;
                 }
             }

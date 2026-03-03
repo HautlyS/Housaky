@@ -23,7 +23,9 @@ pub use model_checker::{
     CheckProperty, Guard, ModelCheckReport, ModelChecker, ModelProperty, PropertyCheckOutcome,
     State, StateId, StateMachine, Transition, Verdict,
 };
-pub use proof_engine::{Proof, ProofChain, ProofEngine, ProofStep, ProofStepKind, VerificationContext};
+pub use proof_engine::{
+    Proof, ProofChain, ProofEngine, ProofStep, ProofStepKind, VerificationContext,
+};
 pub use property_checker::{
     InvariantCheckResult, InvariantProperty, InvariantSeverity, PropertyCheckReport,
     PropertyChecker, SafetyInvariant, SystemSnapshot,

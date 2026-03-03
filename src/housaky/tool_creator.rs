@@ -1,4 +1,10 @@
-#![allow(clippy::match_same_arms, clippy::match_wildcard_for_single_variants, clippy::format_push_string, clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+#![allow(
+    clippy::match_same_arms,
+    clippy::match_wildcard_for_single_variants,
+    clippy::format_push_string,
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss
+)]
 
 use anyhow::{bail, Result};
 use chrono::{DateTime, Utc};
@@ -1033,7 +1039,12 @@ if __name__ == "__main__":
                     let stdout = String::from_utf8_lossy(&output.stdout);
                     match serde_json::from_str::<serde_json::Value>(&stdout) {
                         Ok(json) => (Some(json), None),
-                        Err(_) => (Some(serde_json::json!({"status": "success", "output": stdout.to_string()})), None),
+                        Err(_) => (
+                            Some(
+                                serde_json::json!({"status": "success", "output": stdout.to_string()}),
+                            ),
+                            None,
+                        ),
                     }
                 } else {
                     let stderr = String::from_utf8_lossy(&output.stderr);

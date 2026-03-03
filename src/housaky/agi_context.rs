@@ -88,13 +88,13 @@ impl DecisionJournal for InMemoryDecisionJournal {
     async fn record_decision(&self, mut record: DecisionRecord) -> Result<String> {
         let id = format!("decision_{}", uuid::Uuid::new_v4());
         record.id = id.clone();
-        
+
         let mut decisions = self.decisions.lock().await;
         if decisions.len() >= self.max_entries {
             decisions.remove(0);
         }
         decisions.push(record);
-        
+
         Ok(id)
     }
 
@@ -127,16 +127,17 @@ impl DecisionJournal for InMemoryDecisionJournal {
 
     async fn analyze_patterns(&self) -> DecisionPatternAnalysis {
         let decisions = self.decisions.lock().await;
-        
+
         if decisions.is_empty() {
             return DecisionPatternAnalysis::default();
         }
 
         let total = decisions.len();
-        let successful = decisions.iter().filter(|d| {
-            d.outcome.as_ref().map(|o| o.success).unwrap_or(false)
-        }).count();
-        
+        let successful = decisions
+            .iter()
+            .filter(|d| d.outcome.as_ref().map(|o| o.success).unwrap_or(false))
+            .count();
+
         let success_rate = successful as f64 / total as f64;
 
         let mut tool_stats: HashMap<String, (usize, usize, f64)> = HashMap::new();
@@ -144,7 +145,12 @@ impl DecisionJournal for InMemoryDecisionJournal {
             if let Some(ref tool) = decision.tool_name {
                 let entry = tool_stats.entry(tool.clone()).or_insert((0, 0, 0.0));
                 entry.0 += 1;
-                if decision.outcome.as_ref().map(|o| o.success).unwrap_or(false) {
+                if decision
+                    .outcome
+                    .as_ref()
+                    .map(|o| o.success)
+                    .unwrap_or(false)
+                {
                     entry.1 += 1;
                 }
                 entry.2 += decision.confidence;
@@ -235,7 +241,9 @@ impl AGIContext {
         };
 
         let decision_journal: Option<Arc<dyn DecisionJournal>> = if config.enable_decision_journal {
-            Some(Arc::new(InMemoryDecisionJournal::new(config.max_decisions_in_journal)))
+            Some(Arc::new(InMemoryDecisionJournal::new(
+                config.max_decisions_in_journal,
+            )))
         } else {
             None
         };
@@ -340,10 +348,7 @@ impl AGIContext {
         }
     }
 
-    async fn persist_learning_model(
-        &self,
-        engine: &ContinuousLearningEngine,
-    ) -> Result<()> {
+    async fn persist_learning_model(&self, engine: &ContinuousLearningEngine) -> Result<()> {
         use tokio::io::AsyncWriteExt;
 
         // If disabled() was used, workspace_dir may be empty.

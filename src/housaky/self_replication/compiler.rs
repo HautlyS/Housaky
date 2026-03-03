@@ -100,10 +100,7 @@ impl SandboxCompiler {
                     .collect();
 
                 if o.status.success() {
-                    let binary_path = worktree_path
-                        .join("target")
-                        .join("release")
-                        .join("housaky");
+                    let binary_path = worktree_path.join("target").join("release").join("housaky");
                     let binary_size_bytes = std::fs::metadata(&binary_path)
                         .map(|m| m.len())
                         .unwrap_or(0);
@@ -148,11 +145,7 @@ impl SandboxCompiler {
         }
     }
 
-    pub fn check_size_regression(
-        &self,
-        baseline_size: u64,
-        new_size: u64,
-    ) -> bool {
+    pub fn check_size_regression(&self, baseline_size: u64, new_size: u64) -> bool {
         if baseline_size == 0 {
             return false;
         }

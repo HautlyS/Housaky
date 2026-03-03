@@ -1,13 +1,14 @@
+use crate::quantum::QuantumAgiBridge;
 use crate::util::{read_msgpack_file, write_msgpack_file};
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
+use std::fmt::Write as _;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::info;
-use std::fmt::Write as _;
+use tracing::{info, warn};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct EntityId(String);
@@ -161,6 +162,8 @@ pub struct KnowledgeGraphEngine {
     max_entities: usize,
     max_relations: usize,
     decay_factor: f64,
+    /// §10.4 — Optional quantum bridge for annealing-based graph clustering.
+    quantum_bridge: Option<Arc<QuantumAgiBridge>>,
 }
 
 impl KnowledgeGraphEngine {
@@ -171,7 +174,85 @@ impl KnowledgeGraphEngine {
             max_entities: 10000,
             max_relations: 50000,
             decay_factor: 0.99,
+            quantum_bridge: None,
         }
+    }
+
+    /// §10.4 — Attach a quantum bridge for annealing-based graph clustering.
+    pub fn with_quantum(mut self, bridge: Arc<QuantumAgiBridge>) -> Self {
+        self.quantum_bridge = Some(bridge);
+        self
+    }
+
+    /// §10.4 — Run quantum annealing on the knowledge graph to:
+    ///   1. Cluster semantically related entities
+    ///   2. Strengthen high-value edges
+    ///   3. Prune low-value redundant connections
+    ///
+    /// Skipped when graph has fewer than 4 entities (problem too small for quantum).
+    pub async fn run_quantum_clustering(&self) -> Result<()> {
+        let bridge = match &self.quantum_bridge {
+            Some(b) => b.clone(),
+            None => return Ok(()),
+        };
+
+        let graph = self.graph.read().await;
+        let node_ids: Vec<String> = graph
+            .entities
+            .keys()
+            .map(|id| id.as_str().to_string())
+            .collect();
+
+        if node_ids.len() < 4 {
+            info!(
+                "Knowledge graph too small for quantum clustering ({} entities)",
+                node_ids.len()
+            );
+            return Ok(());
+        }
+
+        let edges: Vec<(String, String, f64)> = graph
+            .relations
+            .iter()
+            .map(|r| {
+                (
+                    r.from_entity.as_str().to_string(),
+                    r.to_entity.as_str().to_string(),
+                    r.weight * r.confidence,
+                )
+            })
+            .collect();
+        drop(graph);
+
+        match bridge.optimize_memory_graph(&node_ids, &edges).await {
+            Ok(result) => {
+                info!(
+                    "🔮 Quantum KG clustering: {} nodes → {} clusters, \
+                     {} strengthen, {} prune, energy={:.4}, strategy={}",
+                    node_ids.len(),
+                    result.clusters.len(),
+                    result.strengthen_edges.len(),
+                    result.prune_edges.len(),
+                    result.energy,
+                    result.strategy
+                );
+                for (from, to, delta) in result.strengthen_edges {
+                    let _ = self.strengthen_relation(&from, &to, delta).await;
+                }
+                for (from, to) in result.prune_edges {
+                    let _ = self.weaken_relation(&from, &to).await;
+                }
+                for (node_id, cluster_id) in result.clusters {
+                    let _ = self
+                        .set_metadata(&node_id, "quantum_cluster", &cluster_id.to_string())
+                        .await;
+                }
+            }
+            Err(e) => {
+                warn!("Quantum KG clustering failed (non-fatal): {e}");
+            }
+        }
+        Ok(())
     }
 
     pub async fn add_entity(
@@ -738,6 +819,58 @@ impl KnowledgeGraphEngine {
         self.save_graph(&graph).await
     }
 
+    // ── §10 Quantum consolidation helpers ────────────────────────────────────
+
+    /// Return all relations as a flat list (used by quantum memory consolidator).
+    pub async fn get_all_relations(&self) -> Result<Vec<Relation>> {
+        let graph = self.graph.read().await;
+        Ok(graph.relations.clone())
+    }
+
+    /// Return all entities as a flat list (used by quantum memory consolidator).
+    pub async fn get_all_entities(&self) -> Result<Vec<Entity>> {
+        let graph = self.graph.read().await;
+        Ok(graph.entities.values().cloned().collect())
+    }
+
+    /// Store a metadata key-value pair on an entity (used for quantum cluster labels).
+    pub async fn set_metadata(&self, entity_id: &str, key: &str, value: &str) -> Result<()> {
+        let mut graph = self.graph.write().await;
+        let eid = EntityId(entity_id.to_string());
+        if let Some(entity) = graph.entities.get_mut(&eid) {
+            entity.attributes.insert(key.to_string(), value.to_string());
+        }
+        Ok(())
+    }
+
+    /// Increase the weight of an existing relation between two entities.
+    pub async fn strengthen_relation(&self, from_id: &str, to_id: &str, delta: f64) -> Result<()> {
+        let mut graph = self.graph.write().await;
+        let from = EntityId(from_id.to_string());
+        let to = EntityId(to_id.to_string());
+        for rel in graph.relations.iter_mut() {
+            if rel.from_entity == from && rel.to_entity == to {
+                rel.weight = (rel.weight + delta).min(1.0);
+                break;
+            }
+        }
+        Ok(())
+    }
+
+    /// Decrease the weight of an existing relation (used for quantum pruning).
+    pub async fn weaken_relation(&self, from_id: &str, to_id: &str) -> Result<()> {
+        let mut graph = self.graph.write().await;
+        let from = EntityId(from_id.to_string());
+        let to = EntityId(to_id.to_string());
+        for rel in graph.relations.iter_mut() {
+            if rel.from_entity == from && rel.to_entity == to {
+                rel.weight = (rel.weight - 0.1).max(0.0);
+                break;
+            }
+        }
+        Ok(())
+    }
+
     pub async fn export_dot(&self) -> String {
         let graph = self.graph.read().await;
 
@@ -758,7 +891,8 @@ impl KnowledgeGraphEngine {
                 entity.id.as_str(),
                 label,
                 color
-            ).ok();
+            )
+            .ok();
         }
 
         dot.push('\n');
@@ -777,7 +911,8 @@ impl KnowledgeGraphEngine {
                 relation.to_entity.as_str(),
                 label,
                 style
-            ).ok();
+            )
+            .ok();
         }
 
         dot.push_str("}\n");

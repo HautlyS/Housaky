@@ -64,7 +64,8 @@ impl ContextFile {
         if !self.is_within_limit() {
             let target_chars = self.max_tokens * 4;
             self.content.truncate(target_chars);
-            self.content.push_str("\n\n[... truncated for context limit ...]");
+            self.content
+                .push_str("\n\n[... truncated for context limit ...]");
         }
     }
 }
@@ -138,7 +139,7 @@ pub struct DecisionRecord {
 impl ContextManager {
     pub fn new(workspace_dir: PathBuf) -> Self {
         let context_dir = workspace_dir.join(".planning");
-        
+
         Self {
             workspace_dir,
             context_dir,
@@ -162,25 +163,25 @@ impl ContextManager {
     pub async fn create_project_file(&self, context: ProjectContext) -> Result<String> {
         let path = self.context_dir.join("PROJECT.md");
         let content = Self::render_project(&context);
-        
+
         fs::write(&path, &content).await?;
-        
-        let _file = ContextFile::new(
-            "PROJECT.md".to_string(),
-            path,
-            ContextFileType::Project,
-        );
-        
+
+        let _file = ContextFile::new("PROJECT.md".to_string(), path, ContextFileType::Project);
+
         info!("Created PROJECT.md");
         Ok(content)
     }
 
-    pub async fn create_requirements_file(&self, reqs: RequirementsContext, phase: u32) -> Result<String> {
+    pub async fn create_requirements_file(
+        &self,
+        reqs: RequirementsContext,
+        phase: u32,
+    ) -> Result<String> {
         let path = self.context_dir.join(format!("REQUIREMENTS.md"));
         let content = Self::render_requirements(&reqs, phase);
-        
+
         fs::write(&path, &content).await?;
-        
+
         info!("Created REQUIREMENTS.md for phase {}", phase);
         Ok(content)
     }
@@ -188,9 +189,9 @@ impl ContextManager {
     pub async fn create_roadmap_file(&self, roadmap: RoadmapContext) -> Result<String> {
         let path = self.context_dir.join("ROADMAP.md");
         let content = Self::render_roadmap(&roadmap);
-        
+
         fs::write(&path, &content).await?;
-        
+
         info!("Created ROADMAP.md");
         Ok(content)
     }
@@ -198,73 +199,95 @@ impl ContextManager {
     pub async fn create_state_file(&self, state: StateContext) -> Result<String> {
         let path = self.context_dir.join("STATE.md");
         let content = Self::render_state(&state);
-        
+
         fs::write(&path, &content).await?;
-        
+
         info!("Created STATE.md");
         Ok(content)
     }
 
     pub async fn create_phase_context_file(&self, phase: u32, content: &str) -> Result<String> {
         let path = self.context_dir.join(format!("{}-CONTEXT.md", phase));
-        
+
         fs::write(&path, content).await?;
-        
+
         info!("Created context file for phase {}", phase);
         Ok(content.to_string())
     }
 
     pub async fn create_research_file(&self, phase: u32, content: &str) -> Result<String> {
-        let path = self.context_dir.join("research").join(format!("{}-RESEARCH.md", phase));
-        
+        let path = self
+            .context_dir
+            .join("research")
+            .join(format!("{}-RESEARCH.md", phase));
+
         fs::write(&path, content).await?;
-        
+
         info!("Created research file for phase {}", phase);
         Ok(content.to_string())
     }
 
-    pub async fn create_plan_file(&self, phase: u32, plan_num: u32, content: &str) -> Result<String> {
-        let path = self.context_dir.join("plans").join(format!("{}-{}-PLAN.md", phase, plan_num));
-        
+    pub async fn create_plan_file(
+        &self,
+        phase: u32,
+        plan_num: u32,
+        content: &str,
+    ) -> Result<String> {
+        let path = self
+            .context_dir
+            .join("plans")
+            .join(format!("{}-{}-PLAN.md", phase, plan_num));
+
         fs::write(&path, content).await?;
-        
+
         info!("Created plan file: {}-{}-PLAN.md", phase, plan_num);
         Ok(content.to_string())
     }
 
-    pub async fn create_summary_file(&self, phase: u32, plan_num: u32, content: &str) -> Result<String> {
-        let path = self.context_dir.join("summaries").join(format!("{}-{}-SUMMARY.md", phase, plan_num));
-        
+    pub async fn create_summary_file(
+        &self,
+        phase: u32,
+        plan_num: u32,
+        content: &str,
+    ) -> Result<String> {
+        let path = self
+            .context_dir
+            .join("summaries")
+            .join(format!("{}-{}-SUMMARY.md", phase, plan_num));
+
         fs::write(&path, content).await?;
-        
+
         info!("Created summary file: {}-{}-SUMMARY.md", phase, plan_num);
         Ok(content.to_string())
     }
 
     pub async fn create_verification_file(&self, phase: u32, content: &str) -> Result<String> {
-        let path = self.context_dir.join("verification").join(format!("{}-VERIFICATION.md", phase));
-        
+        let path = self
+            .context_dir
+            .join("verification")
+            .join(format!("{}-VERIFICATION.md", phase));
+
         fs::write(&path, content).await?;
-        
+
         info!("Created verification file for phase {}", phase);
         Ok(content.to_string())
     }
 
     pub async fn load_project_context(&self) -> Result<Option<ProjectContext>> {
         let path = self.context_dir.join("PROJECT.md");
-        
+
         if !path.exists() {
             return Ok(None);
         }
-        
+
         let content = fs::read_to_string(&path).await?;
-        
+
         Ok(Some(Self::parse_project(&content)?))
     }
 
     pub async fn get_context_summary(&self) -> Result<String> {
         let mut summary = String::new();
-        
+
         let project_path = self.context_dir.join("PROJECT.md");
         if project_path.exists() {
             summary.push_str("## Project\n");
@@ -272,7 +295,7 @@ impl ContextManager {
             summary.push_str(&content.chars().take(500).collect::<String>());
             summary.push_str("\n\n");
         }
-        
+
         let roadmap_path = self.context_dir.join("ROADMAP.md");
         if roadmap_path.exists() {
             summary.push_str("## Roadmap\n");
@@ -280,29 +303,29 @@ impl ContextManager {
             summary.push_str(&content.chars().take(500).collect::<String>());
             summary.push_str("\n\n");
         }
-        
+
         let state_path = self.context_dir.join("STATE.md");
         if state_path.exists() {
             summary.push_str("## State\n");
             let content = fs::read_to_string(&state_path).await?;
             summary.push_str(&content.chars().take(300).collect::<String>());
         }
-        
+
         Ok(summary)
     }
 
     fn render_project(ctx: &ProjectContext) -> String {
         let mut md = String::new();
-        
+
         md.push_str(&format!("# {}\n\n", ctx.name));
         md.push_str(&format!("## Vision\n{}\n\n", ctx.vision));
-        
+
         md.push_str("## Goals\n");
         for goal in &ctx.goals {
             md.push_str(&format!("- {}\n", goal));
         }
         md.push_str("\n");
-        
+
         if !ctx.constraints.is_empty() {
             md.push_str("## Constraints\n");
             for constraint in &ctx.constraints {
@@ -310,61 +333,64 @@ impl ContextManager {
             }
             md.push_str("\n");
         }
-        
+
         md.push_str("## Tech Preferences\n");
         for pref in &ctx.tech_preferences {
             md.push_str(&format!("- {}\n", pref));
         }
         md.push_str("\n");
-        
+
         md.push_str("## Success Criteria\n");
         for criteria in &ctx.success_criteria {
             md.push_str(&format!("- {}\n", criteria));
         }
-        
+
         md
     }
 
     fn render_requirements(reqs: &RequirementsContext, phase: u32) -> String {
         let mut md = String::new();
-        
+
         md.push_str(&format!("# Requirements - Phase {}\n\n", phase));
-        
+
         md.push_str("## Must Have (v1)\n");
         for req in &reqs.must_haves {
             md.push_str(&format!("- [ ] {}\n", req));
         }
         md.push_str("\n");
-        
+
         md.push_str("## Should Have (v2)\n");
         for req in &reqs.should_haves {
             md.push_str(&format!("- [ ] {}\n", req));
         }
         md.push_str("\n");
-        
+
         md.push_str("## Could Have\n");
         for req in &reqs.could_haves {
             md.push_str(&format!("- [ ] {}\n", req));
         }
         md.push_str("\n");
-        
+
         md.push_str("## Out of Scope\n");
         for req in &reqs.out_of_scope {
             md.push_str(&format!("- {}\n", req));
         }
-        
+
         md
     }
 
     fn render_roadmap(roadmap: &RoadmapContext) -> String {
         let mut md = String::new();
-        
+
         md.push_str("# Roadmap\n\n");
-        
+
         for milestone in &roadmap.milestones {
-            md.push_str(&format!("## {} (v{})\n\n", milestone.name, milestone.version));
+            md.push_str(&format!(
+                "## {} (v{})\n\n",
+                milestone.name, milestone.version
+            ));
             md.push_str(&format!("Status: {:?}\n\n", milestone.status));
-            
+
             md.push_str("Phases:\n");
             for phase in &milestone.phases {
                 let status = if roadmap.completed_phases.contains(phase) {
@@ -378,22 +404,22 @@ impl ContextManager {
             }
             md.push_str("\n");
         }
-        
+
         md
     }
 
     fn render_state(state: &StateContext) -> String {
         let mut md = String::new();
-        
+
         md.push_str("# State\n\n");
-        
+
         md.push_str("## Decisions\n");
         for decision in &state.decisions {
             md.push_str(&format!("### {} - {}\n", decision.id, decision.timestamp));
             md.push_str(&format!("{}\n\n", decision.description));
             md.push_str(&format!("Rationale: {}\n\n", decision.rationale));
         }
-        
+
         if !state.blockers.is_empty() {
             md.push_str("## Blockers\n");
             for blocker in &state.blockers {
@@ -401,13 +427,13 @@ impl ContextManager {
             }
             md.push_str("\n");
         }
-        
+
         md.push_str(&format!("## Position\n{}\n", state.position));
-        
+
         if let Some(last) = state.last_phase {
             md.push_str(&format!("\nLast Phase: {}\n", last));
         }
-        
+
         md
     }
 
@@ -423,13 +449,16 @@ impl ContextManager {
 
         for line in content.lines() {
             let trimmed = line.trim();
-            
+
             if trimmed.starts_with("# ") && !trimmed.contains("\n") {
                 name = trimmed.trim_start_matches("# ").to_string();
             } else if trimmed.starts_with("## ") {
                 current_section = trimmed.trim_start_matches("## ").to_string();
             } else if trimmed.starts_with("- ") || trimmed.starts_with("- [") {
-                let item = trimmed.trim_start_matches("- [ ] ").trim_start_matches("- ").to_string();
+                let item = trimmed
+                    .trim_start_matches("- [ ] ")
+                    .trim_start_matches("- ")
+                    .to_string();
                 match current_section.as_str() {
                     "Goals" => goals.push(item),
                     "Constraints" => constraints.push(item),

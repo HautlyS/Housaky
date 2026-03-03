@@ -293,12 +293,7 @@ impl EmbodimentSensorFusion {
         Ok(())
     }
 
-    pub async fn update_encoder(
-        &self,
-        delta_x: f64,
-        delta_y: f64,
-        delta_theta: f64,
-    ) -> Result<()> {
+    pub async fn update_encoder(&self, delta_x: f64, delta_y: f64, delta_theta: f64) -> Result<()> {
         let mut kf = self.kalman.write().await;
         let px = kf.state[0] + delta_x;
         let py = kf.state[1] + delta_y;

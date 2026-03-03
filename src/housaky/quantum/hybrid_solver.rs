@@ -144,19 +144,35 @@ impl HybridSolver {
             ProblemType::Search => n.sqrt() / n.max(1.0) * n.sqrt(),
             // QAOA / VQE: polynomial advantage for combinatorial problems.
             ProblemType::Optimisation => {
-                if n > 8.0 { 1.0 + (n - 8.0).ln().max(0.0) * 0.3 } else { 0.8 }
+                if n > 8.0 {
+                    1.0 + (n - 8.0).ln().max(0.0) * 0.3
+                } else {
+                    0.8
+                }
             }
             // Shor: exponential advantage for factoring.
             ProblemType::Factoring => {
-                if n > 4.0 { (n * n.ln().max(1.0)).sqrt() } else { 0.5 }
+                if n > 4.0 {
+                    (n * n.ln().max(1.0)).sqrt()
+                } else {
+                    0.5
+                }
             }
             // Quantum sampling: exponential advantage in specific regimes.
             ProblemType::Sampling => {
-                if n > 10.0 { 2.0_f64.powf((n - 10.0) * 0.1) } else { 0.9 }
+                if n > 10.0 {
+                    2.0_f64.powf((n - 10.0) * 0.1)
+                } else {
+                    0.9
+                }
             }
             // HHL: exponential advantage for sparse linear systems.
             ProblemType::LinearAlgebra => {
-                if n > 16.0 { n.ln().max(1.0) } else { 0.7 }
+                if n > 16.0 {
+                    n.ln().max(1.0)
+                } else {
+                    0.7
+                }
             }
             ProblemType::General => 0.5,
         }
@@ -173,10 +189,14 @@ impl HybridSolver {
 
         for i in 0..n {
             solution[i] = (i as f64) / n.max(1) as f64;
-            let obj: f64 = solution.iter().enumerate().map(|(j, &v)| {
-                let target = problem.data.get(&j.to_string()).copied().unwrap_or(0.5);
-                (v - target).powi(2)
-            }).sum();
+            let obj: f64 = solution
+                .iter()
+                .enumerate()
+                .map(|(j, &v)| {
+                    let target = problem.data.get(&j.to_string()).copied().unwrap_or(0.5);
+                    (v - target).powi(2)
+                })
+                .sum();
             if obj < best_obj {
                 best_obj = obj;
             }
@@ -199,10 +219,14 @@ impl HybridSolver {
             let target = problem.data.get(&i.to_string()).copied().unwrap_or(0.5);
             // "Quantum" finds closer-to-optimal values.
             solution[i] = target + (i as f64 * 0.01).sin() * 0.05;
-            let obj: f64 = solution.iter().enumerate().map(|(j, &v)| {
-                let t = problem.data.get(&j.to_string()).copied().unwrap_or(0.5);
-                (v - t).powi(2)
-            }).sum();
+            let obj: f64 = solution
+                .iter()
+                .enumerate()
+                .map(|(j, &v)| {
+                    let t = problem.data.get(&j.to_string()).copied().unwrap_or(0.5);
+                    (v - t).powi(2)
+                })
+                .sum();
             if obj < best_obj {
                 best_obj = obj;
             }
@@ -220,10 +244,14 @@ impl HybridSolver {
 
         for iter in 0..max_iters {
             // "Quantum circuit evaluation" — simulated cost function.
-            let obj: f64 = params.iter().enumerate().map(|(j, &p)| {
-                let target = problem.data.get(&j.to_string()).copied().unwrap_or(0.5);
-                (p - target).powi(2)
-            }).sum();
+            let obj: f64 = params
+                .iter()
+                .enumerate()
+                .map(|(j, &p)| {
+                    let target = problem.data.get(&j.to_string()).copied().unwrap_or(0.5);
+                    (p - target).powi(2)
+                })
+                .sum();
 
             if obj < best_obj {
                 best_obj = obj;

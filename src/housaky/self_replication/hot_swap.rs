@@ -22,23 +22,15 @@ impl HotSwapper {
     }
 
     pub fn prepare_state_handoff(&self, generation: u64) -> Result<PathBuf> {
-        let handoff_dir = self
-            .workspace_dir
-            .join(".housaky")
-            .join("hot_swap");
+        let handoff_dir = self.workspace_dir.join(".housaky").join("hot_swap");
         std::fs::create_dir_all(&handoff_dir)?;
         let state_path = handoff_dir.join(format!("gen_{}.json", generation));
         Ok(state_path)
     }
 
-    pub fn write_handoff_state(
-        &self,
-        state_path: &Path,
-        state: &HotSwapState,
-    ) -> Result<()> {
+    pub fn write_handoff_state(&self, state_path: &Path, state: &HotSwapState) -> Result<()> {
         let json = serde_json::to_string_pretty(state)?;
-        std::fs::write(state_path, json)
-            .context("Failed to write hot-swap handoff state")?;
+        std::fs::write(state_path, json).context("Failed to write hot-swap handoff state")?;
         info!("Wrote hot-swap state to {:?}", state_path);
         Ok(())
     }
@@ -72,10 +64,7 @@ impl HotSwapper {
         let state = HotSwapState {
             current_binary_hash: String::new(),
             current_generation: generation,
-            socket_path: self
-                .workspace_dir
-                .join(".housaky")
-                .join("hot_swap.sock"),
+            socket_path: self.workspace_dir.join(".housaky").join("hot_swap.sock"),
             state_handoff_path: self
                 .workspace_dir
                 .join(".housaky")
@@ -120,20 +109,14 @@ impl HotSwapper {
         }
     }
 
-    pub fn install_new_binary(
-        &self,
-        new_binary: &Path,
-        install_path: &Path,
-    ) -> Result<()> {
+    pub fn install_new_binary(&self, new_binary: &Path, install_path: &Path) -> Result<()> {
         let backup = install_path.with_extension("bak");
         if install_path.exists() {
-            std::fs::copy(install_path, &backup)
-                .context("Failed to backup current binary")?;
+            std::fs::copy(install_path, &backup).context("Failed to backup current binary")?;
             info!("Backed up current binary to {:?}", backup);
         }
 
-        std::fs::copy(new_binary, install_path)
-            .context("Failed to install new binary")?;
+        std::fs::copy(new_binary, install_path).context("Failed to install new binary")?;
 
         #[cfg(unix)]
         {
@@ -150,8 +133,7 @@ impl HotSwapper {
     pub fn rollback_binary(&self, install_path: &Path) -> Result<()> {
         let backup = install_path.with_extension("bak");
         if backup.exists() {
-            std::fs::copy(&backup, install_path)
-                .context("Failed to restore backup binary")?;
+            std::fs::copy(&backup, install_path).context("Failed to restore backup binary")?;
             info!("Rolled back binary at {:?} from backup", install_path);
             Ok(())
         } else {

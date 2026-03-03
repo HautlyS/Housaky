@@ -35,12 +35,10 @@
     clippy::unnecessary_wraps,
     dead_code
 )]
-
 #![allow(clippy::all)]
 
 pub mod agent;
 pub mod channels;
-pub mod quantum;
 pub mod commands;
 pub mod config;
 pub mod config_editor;
@@ -64,6 +62,7 @@ pub mod observability;
 pub mod onboard;
 pub mod peripherals;
 pub mod providers;
+pub mod quantum;
 pub mod rag;
 pub mod runtime;
 pub mod security;

@@ -1,5 +1,5 @@
 use crate::housaky::git_sandbox::GitSandbox;
-use crate::housaky::rust_code_modifier::{CodeModification, RustCodeParser, RustCodeModifier};
+use crate::housaky::rust_code_modifier::{CodeModification, RustCodeModifier, RustCodeParser};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -114,7 +114,7 @@ pub struct ImprovementStats {
 impl SelfImproveInterface {
     pub fn new(project_root: PathBuf) -> Self {
         let config = SelfImproveConfig::default();
-        
+
         Self {
             config: config.clone(),
             parser: Arc::new(RustCodeParser::new(project_root.clone())),
@@ -136,7 +136,7 @@ impl SelfImproveInterface {
 
     pub async fn execute_action(&self, action: ImprovementAction) -> Result<ActionResult> {
         let start = std::time::Instant::now();
-        
+
         if !self.config.enabled {
             return Ok(ActionResult {
                 success: false,
@@ -193,35 +193,47 @@ impl SelfImproveInterface {
     async fn action_parse_module(&self, action: &ImprovementAction) -> Result<ActionResult> {
         let target = &action.target;
         let path = PathBuf::from(target);
-        
+
         let module = self.parser.parse_file(&path)?;
-        
+
         Ok(ActionResult {
             success: true,
             action: ActionType::ParseModule,
             output: serde_json::to_value(&module)?,
-            message: format!("Parsed module with {} functions, {} structs, {} enums",
-                module.functions.len(), module.structs.len(), module.enums.len()),
+            message: format!(
+                "Parsed module with {} functions, {} structs, {} enums",
+                module.functions.len(),
+                module.structs.len(),
+                module.enums.len()
+            ),
             metrics: ActionMetrics::default(),
         })
     }
 
     async fn action_find_function(&self, action: &ImprovementAction) -> Result<ActionResult> {
-        let file_path = action.parameters.get("file")
+        let file_path = action
+            .parameters
+            .get("file")
             .map(PathBuf::from)
             .ok_or_else(|| anyhow::anyhow!("Missing 'file' parameter"))?;
-        let function_name = action.parameters.get("name")
+        let function_name = action
+            .parameters
+            .get("name")
             .ok_or_else(|| anyhow::anyhow!("Missing 'name' parameter"))?;
-        
+
         let function = self.parser.find_function(&file_path, function_name)?;
-        
+
         Ok(ActionResult {
             success: function.is_some(),
             action: ActionType::FindFunction,
             output: serde_json::to_value(&function)?,
             message: if function.is_some() {
-                format!("Found function '{}' at lines {}-{}", 
-                    function_name, function.as_ref().unwrap().line_start, function.as_ref().unwrap().line_end)
+                format!(
+                    "Found function '{}' at lines {}-{}",
+                    function_name,
+                    function.as_ref().unwrap().line_start,
+                    function.as_ref().unwrap().line_end
+                )
             } else {
                 format!("Function '{}' not found", function_name)
             },
@@ -241,18 +253,23 @@ impl SelfImproveInterface {
         }
 
         let modification: CodeModification = serde_json::from_str(&action.target)?;
-        
+
         let result = self.modifier.apply_modification(&modification)?;
-        
+
         Ok(ActionResult {
             success: result.success,
             action: ActionType::ModifyCode,
             output: serde_json::to_value(&result)?,
             message: if result.success {
-                format!("Code modification applied successfully (compiled: {}, tests: {})", 
-                    result.compiled, result.tests_passed)
+                format!(
+                    "Code modification applied successfully (compiled: {}, tests: {})",
+                    result.compiled, result.tests_passed
+                )
             } else {
-                format!("Modification failed: {}", result.error.as_deref().unwrap_or("Unknown error"))
+                format!(
+                    "Modification failed: {}",
+                    result.error.as_deref().unwrap_or("Unknown error")
+                )
             },
             metrics: ActionMetrics {
                 confidence: modification.confidence,
@@ -272,13 +289,15 @@ impl SelfImproveInterface {
             });
         }
 
-        let purpose = action.parameters.get("purpose")
+        let purpose = action
+            .parameters
+            .get("purpose")
             .cloned()
             .unwrap_or_else(|| "general-improvement".to_string());
-        
+
         let mut sandbox = self.sandbox.write().await;
         let session = sandbox.create_session(&purpose)?;
-        
+
         let mut stats = self.stats.write().await;
         stats.sessions_created += 1;
 
@@ -286,36 +305,46 @@ impl SelfImproveInterface {
             success: true,
             action: ActionType::CreateSandbox,
             output: serde_json::to_value(&session)?,
-            message: format!("Created sandbox session '{}' on branch '{}'", 
-                session.id, session.branch_name),
+            message: format!(
+                "Created sandbox session '{}' on branch '{}'",
+                session.id, session.branch_name
+            ),
             metrics: ActionMetrics::default(),
         })
     }
 
     async fn action_apply_modification(&self, action: &ImprovementAction) -> Result<ActionResult> {
-        let session_id = action.parameters.get("session_id")
+        let session_id = action
+            .parameters
+            .get("session_id")
             .ok_or_else(|| anyhow::anyhow!("Missing 'session_id' parameter"))?;
-        let file_path = action.parameters.get("file")
+        let file_path = action
+            .parameters
+            .get("file")
             .ok_or_else(|| anyhow::anyhow!("Missing 'file' parameter"))?;
-        let content = action.parameters.get("content")
+        let content = action
+            .parameters
+            .get("content")
             .ok_or_else(|| anyhow::anyhow!("Missing 'content' parameter"))?;
-        
+
         let sandbox = self.sandbox.read().await;
         sandbox.apply_modification(session_id, file_path, content)?;
-        
+
         Ok(ActionResult {
             success: true,
             action: ActionType::ApplyModification,
             output: serde_json::json!({"session_id": session_id, "file": file_path}),
-            message: format!("Applied modification to {} in session {}", file_path, session_id),
+            message: format!(
+                "Applied modification to {} in session {}",
+                file_path, session_id
+            ),
             metrics: ActionMetrics::default(),
         })
     }
 
     async fn action_run_tests(&self, action: &ImprovementAction) -> Result<ActionResult> {
-        let session_id = action.parameters.get("session_id")
-            .cloned();
-        
+        let session_id = action.parameters.get("session_id").cloned();
+
         let (test_results, session_info) = if let Some(sid) = session_id {
             let sandbox = self.sandbox.read().await;
             let results = sandbox.run_tests(&sid)?;
@@ -327,45 +356,57 @@ impl SelfImproveInterface {
                 .output()?;
             (None, None)
         };
-        
+
         Ok(ActionResult {
             success: test_results.as_ref().map(|r| r.failed == 0).unwrap_or(true),
             action: ActionType::RunTests,
             output: serde_json::to_value(&test_results)?,
-            message: format!("Tests {} in session {:?}",
-                if test_results.as_ref().map(|r| r.failed == 0).unwrap_or(true) { "passed" } else { "failed" },
-                session_info),
+            message: format!(
+                "Tests {} in session {:?}",
+                if test_results.as_ref().map(|r| r.failed == 0).unwrap_or(true) {
+                    "passed"
+                } else {
+                    "failed"
+                },
+                session_info
+            ),
             metrics: ActionMetrics::default(),
         })
     }
 
     async fn action_validate_session(&self, action: &ImprovementAction) -> Result<ActionResult> {
-        let session_id = action.parameters.get("session_id")
+        let session_id = action
+            .parameters
+            .get("session_id")
             .ok_or_else(|| anyhow::anyhow!("Missing 'session_id' parameter"))?;
-        
+
         let sandbox = self.sandbox.read().await;
         let validation = sandbox.validate_session(session_id)?;
-        
+
         Ok(ActionResult {
             success: validation.no_regressions,
             action: ActionType::ValidateSession,
             output: serde_json::to_value(&validation)?,
-            message: format!("Validation: compiles={}, tests_pass={}", 
-                validation.compiles, validation.tests_pass),
+            message: format!(
+                "Validation: compiles={}, tests_pass={}",
+                validation.compiles, validation.tests_pass
+            ),
             metrics: ActionMetrics::default(),
         })
     }
 
     async fn action_merge_session(&self, action: &ImprovementAction) -> Result<ActionResult> {
-        let session_id = action.parameters.get("session_id")
+        let session_id = action
+            .parameters
+            .get("session_id")
             .ok_or_else(|| anyhow::anyhow!("Missing 'session_id' parameter"))?;
-        
+
         let sandbox = self.sandbox.read().await;
         let result = sandbox.merge_session(session_id)?;
-        
+
         let mut stats = self.stats.write().await;
         stats.sessions_merged += 1;
-        
+
         Ok(ActionResult {
             success: true,
             action: ActionType::MergeSession,
@@ -376,15 +417,17 @@ impl SelfImproveInterface {
     }
 
     async fn action_discard_session(&self, action: &ImprovementAction) -> Result<ActionResult> {
-        let session_id = action.parameters.get("session_id")
+        let session_id = action
+            .parameters
+            .get("session_id")
             .ok_or_else(|| anyhow::anyhow!("Missing 'session_id' parameter"))?;
-        
+
         let mut sandbox = self.sandbox.write().await;
         sandbox.discard_session(session_id)?;
-        
+
         let mut stats = self.stats.write().await;
         stats.sessions_discarded += 1;
-        
+
         Ok(ActionResult {
             success: true,
             action: ActionType::DiscardSession,
@@ -397,7 +440,7 @@ impl SelfImproveInterface {
     async fn action_list_sessions(&self, _action: &ImprovementAction) -> Result<ActionResult> {
         let sandbox = self.sandbox.read().await;
         let sessions = sandbox.list_sessions();
-        
+
         Ok(ActionResult {
             success: true,
             action: ActionType::ListSessions,
@@ -408,18 +451,24 @@ impl SelfImproveInterface {
     }
 
     async fn action_get_session_status(&self, action: &ImprovementAction) -> Result<ActionResult> {
-        let session_id = action.parameters.get("session_id")
+        let session_id = action
+            .parameters
+            .get("session_id")
             .ok_or_else(|| anyhow::anyhow!("Missing 'session_id' parameter"))?;
-        
+
         let sandbox = self.sandbox.read().await;
         let session = sandbox.get_session(session_id);
-        
+
         Ok(ActionResult {
             success: session.is_some(),
             action: ActionType::GetSessionStatus,
             output: serde_json::to_value(&session)?,
             message: if session.is_some() {
-                format!("Session '{}' status: {:?}", session_id, session.as_ref().unwrap().status)
+                format!(
+                    "Session '{}' status: {:?}",
+                    session_id,
+                    session.as_ref().unwrap().status
+                )
             } else {
                 format!("Session '{}' not found", session_id)
             },
@@ -428,15 +477,19 @@ impl SelfImproveInterface {
     }
 
     async fn action_rollback(&self, action: &ImprovementAction) -> Result<ActionResult> {
-        let backup_path = action.parameters.get("backup_path")
+        let backup_path = action
+            .parameters
+            .get("backup_path")
             .map(PathBuf::from)
             .ok_or_else(|| anyhow::anyhow!("Missing 'backup_path' parameter"))?;
-        let target_path = action.parameters.get("target_path")
+        let target_path = action
+            .parameters
+            .get("target_path")
             .map(PathBuf::from)
             .ok_or_else(|| anyhow::anyhow!("Missing 'target_path' parameter"))?;
-        
+
         self.modifier.rollback(&backup_path, &target_path)?;
-        
+
         Ok(ActionResult {
             success: true,
             action: ActionType::Rollback,
@@ -448,7 +501,7 @@ impl SelfImproveInterface {
 
     async fn action_list_backups(&self, _action: &ImprovementAction) -> Result<ActionResult> {
         let backups = self.modifier.list_backups()?;
-        
+
         Ok(ActionResult {
             success: true,
             action: ActionType::ListBackups,
@@ -459,21 +512,27 @@ impl SelfImproveInterface {
     }
 
     async fn action_generate_tests(&self, action: &ImprovementAction) -> Result<ActionResult> {
-        let function_name = action.parameters.get("function")
+        let function_name = action
+            .parameters
+            .get("function")
             .ok_or_else(|| anyhow::anyhow!("Missing 'function' parameter"))?;
-        let input_types = action.parameters.get("input_types")
+        let input_types = action
+            .parameters
+            .get("input_types")
             .map(|s| s.split(',').collect::<Vec<_>>())
             .unwrap_or_default();
-        let output_type = action.parameters.get("output_type")
+        let output_type = action
+            .parameters
+            .get("output_type")
             .cloned()
             .unwrap_or_else(|| "()".to_string());
-        
+
         let test_code = crate::housaky::git_sandbox::TestGenerator::generate_tests_for_function(
             function_name,
             &input_types,
             &output_type,
         );
-        
+
         Ok(ActionResult {
             success: true,
             action: ActionType::GenerateTests,
@@ -483,9 +542,12 @@ impl SelfImproveInterface {
         })
     }
 
-    async fn action_analyze_performance(&self, _action: &ImprovementAction) -> Result<ActionResult> {
+    async fn action_analyze_performance(
+        &self,
+        _action: &ImprovementAction,
+    ) -> Result<ActionResult> {
         let stats = self.stats.read().await;
-        
+
         let analysis = serde_json::json!({
             "total_modifications": stats.total_modifications,
             "success_rate": if stats.total_modifications > 0 {
@@ -496,7 +558,7 @@ impl SelfImproveInterface {
             "sessions_discarded": stats.sessions_discarded,
             "last_action": stats.last_action,
         });
-        
+
         Ok(ActionResult {
             success: true,
             action: ActionType::AnalyzePerformance,
@@ -506,30 +568,37 @@ impl SelfImproveInterface {
         })
     }
 
-    async fn action_suggest_improvements(&self, _action: &ImprovementAction) -> Result<ActionResult> {
+    async fn action_suggest_improvements(
+        &self,
+        _action: &ImprovementAction,
+    ) -> Result<ActionResult> {
         let stats = self.stats.read().await;
-        
+
         let mut suggestions: Vec<String> = Vec::new();
-        
+
         if stats.failed_modifications > stats.successful_modifications / 2 {
-            suggestions.push("High failure rate - consider reviewing modification strategy".to_string());
+            suggestions
+                .push("High failure rate - consider reviewing modification strategy".to_string());
         }
-        
+
         if stats.sessions_discarded > stats.sessions_merged {
-            suggestions.push("Many sessions discarded - improve validation before merging".to_string());
+            suggestions
+                .push("Many sessions discarded - improve validation before merging".to_string());
         }
-        
+
         let modules = self.parser.parse_directory(&PathBuf::from("src/housaky"))?;
-        
+
         for module in &modules {
             for function in &module.functions {
-                if function.body_preview.contains("TODO") || function.body_preview.contains("unwrap") {
+                if function.body_preview.contains("TODO")
+                    || function.body_preview.contains("unwrap")
+                {
                     let msg = format!("Function '{}' may need improvement", function.name);
                     suggestions.push(msg);
                 }
             }
         }
-        
+
         Ok(ActionResult {
             success: true,
             action: ActionType::SuggestImprovements,
@@ -542,9 +611,9 @@ impl SelfImproveInterface {
     pub async fn get_status(&self) -> SystemStatus {
         let stats = self.stats.read().await;
         let sandbox = self.sandbox.read().await;
-        
+
         let backups = self.modifier.list_backups().unwrap_or_default();
-        
+
         SystemStatus {
             is_enabled: self.config.enabled,
             active_sessions: sandbox.list_sessions().len(),

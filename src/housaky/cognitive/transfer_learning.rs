@@ -47,13 +47,13 @@ pub struct PatternStep {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum StepRole {
-    Decompose,    // Break problem into parts
-    Analyze,      // Understand the problem
-    Transform,    // Change representation
-    Synthesize,   // Combine results
-    Validate,     // Check correctness
-    Iterate,      // Repeat until satisfied
-    Adapt,        // Modify approach based on feedback
+    Decompose,  // Break problem into parts
+    Analyze,    // Understand the problem
+    Transform,  // Change representation
+    Synthesize, // Combine results
+    Validate,   // Check correctness
+    Iterate,    // Repeat until satisfied
+    Adapt,      // Modify approach based on feedback
 }
 
 /// An analogy mapping between two domains.
@@ -166,10 +166,7 @@ impl TransferLearningEngine {
     }
 
     /// Extract abstract patterns from a set of experiences.
-    pub async fn abstract_pattern(
-        &self,
-        experiences: &[Experience],
-    ) -> Option<AbstractPattern> {
+    pub async fn abstract_pattern(&self, experiences: &[Experience]) -> Option<AbstractPattern> {
         if experiences.len() < 2 {
             return None;
         }
@@ -394,13 +391,15 @@ impl TransferLearningEngine {
         skill: &Procedure,
         target_domain: &str,
     ) -> Result<TransferResult> {
-        let analogies = self
-            .find_analogies(&skill.domain, target_domain)
-            .await;
+        let analogies = self.find_analogies(&skill.domain, target_domain).await;
 
-        let analogy = analogies
-            .first()
-            .ok_or_else(|| anyhow::anyhow!("No analogies found between '{}' and '{}'", skill.domain, target_domain))?;
+        let analogy = analogies.first().ok_or_else(|| {
+            anyhow::anyhow!(
+                "No analogies found between '{}' and '{}'",
+                skill.domain,
+                target_domain
+            )
+        })?;
 
         // Adapt procedure steps for the target domain
         let adapted_steps: Vec<ProcedureStep> = skill
@@ -410,10 +409,8 @@ impl TransferLearningEngine {
                 let mut adapted_action = step.action.clone();
                 // Replace domain-specific terms using analogy mappings
                 for mapping in &analogy.concept_mappings {
-                    adapted_action = adapted_action.replace(
-                        &mapping.source_concept,
-                        &mapping.target_concept,
-                    );
+                    adapted_action =
+                        adapted_action.replace(&mapping.source_concept, &mapping.target_concept);
                 }
 
                 ProcedureStep {
@@ -466,10 +463,7 @@ impl TransferLearningEngine {
     }
 
     /// Get applicable patterns for a new task.
-    pub async fn find_applicable_patterns(
-        &self,
-        task_description: &str,
-    ) -> Vec<AbstractPattern> {
+    pub async fn find_applicable_patterns(&self, task_description: &str) -> Vec<AbstractPattern> {
         let patterns = self.abstract_patterns.read().await;
         let task_lower = task_description.to_lowercase();
 
@@ -492,10 +486,7 @@ impl TransferLearningEngine {
         let desc_words: Vec<&str> = desc_lower.split_whitespace().collect();
         let task_words: Vec<&str> = task_lower.split_whitespace().collect();
 
-        let matches = desc_words
-            .iter()
-            .filter(|w| task_words.contains(w))
-            .count();
+        let matches = desc_words.iter().filter(|w| task_words.contains(w)).count();
 
         let word_overlap = if desc_words.is_empty() {
             0.0
@@ -521,8 +512,7 @@ impl TransferLearningEngine {
             total_experiences: experiences.len(),
             known_domains: domains.keys().cloned().collect(),
             avg_pattern_success_rate: if !patterns.is_empty() {
-                patterns.iter().map(|p| p.success_rate).sum::<f64>()
-                    / patterns.len() as f64
+                patterns.iter().map(|p| p.success_rate).sum::<f64>() / patterns.len() as f64
             } else {
                 0.0
             },
@@ -605,22 +595,28 @@ mod tests {
             vocab.insert(
                 "programming".to_string(),
                 vec![
-                    "function".into(), "variable".into(), "loop".into(),
-                    "debug".into(), "test".into(), "refactor".into(),
+                    "function".into(),
+                    "variable".into(),
+                    "loop".into(),
+                    "debug".into(),
+                    "test".into(),
+                    "refactor".into(),
                 ],
             );
             vocab.insert(
                 "cooking".to_string(),
                 vec![
-                    "recipe".into(), "ingredient".into(), "mix".into(),
-                    "test".into(), "adjust".into(), "prepare".into(),
+                    "recipe".into(),
+                    "ingredient".into(),
+                    "mix".into(),
+                    "test".into(),
+                    "adjust".into(),
+                    "prepare".into(),
                 ],
             );
         }
 
-        let analogies = engine
-            .find_analogies("programming", "cooking")
-            .await;
+        let analogies = engine.find_analogies("programming", "cooking").await;
         assert!(!analogies.is_empty());
     }
 }

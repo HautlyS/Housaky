@@ -50,7 +50,11 @@ impl ReadoutCalibration {
         for i in 0..dim {
             matrix[i][i] = 1.0;
         }
-        Self { confusion_matrix: matrix, num_qubits, calibration_shots: 0 }
+        Self {
+            confusion_matrix: matrix,
+            num_qubits,
+            calibration_shots: 0,
+        }
     }
 
     pub fn from_error_rate(num_qubits: usize, error_rate: f64) -> Self {
@@ -65,7 +69,11 @@ impl ReadoutCalibration {
                 }
             }
         }
-        Self { confusion_matrix: matrix, num_qubits, calibration_shots: 1024 }
+        Self {
+            confusion_matrix: matrix,
+            num_qubits,
+            calibration_shots: 1024,
+        }
     }
 
     pub fn apply(&self, counts: &HashMap<String, u64>, shots: u64) -> HashMap<String, u64> {
@@ -96,10 +104,7 @@ impl ReadoutCalibration {
             for (i, &p) in corrected.iter().enumerate() {
                 let count = ((p / total) * shots as f64).round() as u64;
                 if count > 0 {
-                    result.insert(
-                        format!("{:0>width$b}", i, width = self.num_qubits),
-                        count,
-                    );
+                    result.insert(format!("{:0>width$b}", i, width = self.num_qubits), count);
                 }
             }
         }
@@ -125,7 +130,11 @@ pub struct ErrorMitigator {
 
 impl ErrorMitigator {
     pub fn new(backend: Arc<dyn QuantumBackend>, config: MitigationConfig) -> Self {
-        Self { backend, config, readout_calibration: None }
+        Self {
+            backend,
+            config,
+            readout_calibration: None,
+        }
     }
 
     pub fn with_calibration(mut self, calibration: ReadoutCalibration) -> Self {
@@ -133,22 +142,27 @@ impl ErrorMitigator {
         self
     }
 
-    pub async fn execute_mitigated(
-        &self,
-        circuit: &QuantumCircuit,
-    ) -> Result<MitigatedResult> {
+    pub async fn execute_mitigated(&self, circuit: &QuantumCircuit) -> Result<MitigatedResult> {
         let raw_result = self.backend.execute_circuit(circuit).await?;
         let mut strategies_applied = Vec::new();
         let mut counts = raw_result.counts.clone();
 
-        if self.config.strategies.contains(&MitigationStrategy::ReadoutErrorMitigation) {
+        if self
+            .config
+            .strategies
+            .contains(&MitigationStrategy::ReadoutErrorMitigation)
+        {
             if let Some(cal) = &self.readout_calibration {
                 counts = cal.apply(&counts, raw_result.shots);
                 strategies_applied.push("readout_error_mitigation".to_string());
             }
         }
 
-        if self.config.strategies.contains(&MitigationStrategy::ZeroNoiseExtrapolation) {
+        if self
+            .config
+            .strategies
+            .contains(&MitigationStrategy::ZeroNoiseExtrapolation)
+        {
             let zne_result = self.zero_noise_extrapolation(circuit).await?;
             counts = zne_result;
             strategies_applied.push("zero_noise_extrapolation".to_string());
@@ -209,7 +223,9 @@ impl ErrorMitigator {
 
     fn scale_circuit_noise(&self, circuit: &QuantumCircuit, scale: f64) -> QuantumCircuit {
         let mut scaled = circuit.clone();
-        scaled.metadata.insert("noise_scale".to_string(), scale.to_string());
+        scaled
+            .metadata
+            .insert("noise_scale".to_string(), scale.to_string());
         if scale > 1.0 {
             let mut extra_gates = Vec::new();
             for gate in &circuit.gates {
@@ -246,18 +262,29 @@ impl ErrorMitigator {
             coeffs[i] = c;
         }
 
-        coeffs.iter().zip(data.iter()).map(|(&c, &(_, e))| c * e).sum()
+        coeffs
+            .iter()
+            .zip(data.iter())
+            .map(|(&c, &(_, e))| c * e)
+            .sum()
     }
 
     fn compute_expectation(&self, counts: &HashMap<String, u64>, shots: u64) -> f64 {
         if shots == 0 {
             return 0.0;
         }
-        counts.iter().map(|(bits, &count)| {
-            let parity: i32 = bits.chars().map(|c| if c == '1' { 1 } else { 0 }).sum::<i32>() % 2;
-            let sign = if parity == 0 { 1.0 } else { -1.0 };
-            sign * (count as f64 / shots as f64)
-        }).sum()
+        counts
+            .iter()
+            .map(|(bits, &count)| {
+                let parity: i32 = bits
+                    .chars()
+                    .map(|c| if c == '1' { 1 } else { 0 })
+                    .sum::<i32>()
+                    % 2;
+                let sign = if parity == 0 { 1.0 } else { -1.0 };
+                sign * (count as f64 / shots as f64)
+            })
+            .sum()
     }
 
     fn compute_overhead(&self) -> f64 {
@@ -301,6 +328,10 @@ mod tests {
         let mitigator = ErrorMitigator::new(backend, MitigationConfig::default());
         let data = vec![(1.0, 0.9), (2.0, 0.8), (3.0, 0.7)];
         let result = mitigator.richardson_extrapolate(&data);
-        assert!(result > 0.9 && result < 1.1, "ZNE extrapolation result: {}", result);
+        assert!(
+            result > 0.9 && result < 1.1,
+            "ZNE extrapolation result: {}",
+            result
+        );
     }
 }

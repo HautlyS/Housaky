@@ -184,10 +184,7 @@ impl ProvenanceTracker {
     }
 
     /// Trace the full provenance chain: "Why do I believe X?"
-    pub async fn trace_provenance(
-        &self,
-        knowledge_item_id: &str,
-    ) -> ProvenanceTrace {
+    pub async fn trace_provenance(&self, knowledge_item_id: &str) -> ProvenanceTrace {
         let records = self.provenance_records.read().await;
         let mut chain = Vec::new();
         let mut visited = std::collections::HashSet::new();
@@ -258,11 +255,7 @@ impl ProvenanceTracker {
     }
 
     /// Resolve a conflict between two knowledge items using provenance quality.
-    pub async fn resolve_conflict(
-        &self,
-        item_a_id: &str,
-        item_b_id: &str,
-    ) -> ConflictResolution {
+    pub async fn resolve_conflict(&self, item_a_id: &str, item_b_id: &str) -> ConflictResolution {
         let records = self.provenance_records.read().await;
 
         let score_a = records
@@ -426,7 +419,10 @@ mod tests {
 
         let prov = tracker.get_provenance("fact-1").await;
         assert!(prov.is_some());
-        assert_eq!(prov.unwrap().source_type, ProvenanceSource::DirectObservation);
+        assert_eq!(
+            prov.unwrap().source_type,
+            ProvenanceSource::DirectObservation
+        );
     }
 
     #[tokio::test]

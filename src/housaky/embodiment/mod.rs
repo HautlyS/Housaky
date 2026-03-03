@@ -18,13 +18,13 @@ pub use navigation::{
     RecoveryBehavior, SLAMMap, SLAMPose,
 };
 pub use ros_bridge::{
-    Odometry, ROS2Header, ROS2IMU, ROS2LaserScan, ROS2QoSProfile, ROS2Topic, ROSBridge,
-    ROSBridgeConfig, ROSBridgeStats, Twist,
+    Odometry, ROS2Header, ROS2LaserScan, ROS2QoSProfile, ROS2Topic, ROSBridge, ROSBridgeConfig,
+    ROSBridgeStats, Twist, ROS2IMU,
 };
 pub use sensor_fusion::{
     EmbodimentSensorFusion, FusedState, IMUData, KalmanFilter, LidarPoint, LidarScan,
     SensorReading, SensorType,
 };
 pub use spatial_reasoning::{
-    BoundingBox, OccupancyGrid, Obstacle, Path, Point2D, Point3D, SpatialReasoner,
+    BoundingBox, Obstacle, OccupancyGrid, Path, Point2D, Point3D, SpatialReasoner,
 };

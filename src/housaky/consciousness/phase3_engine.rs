@@ -13,11 +13,11 @@ use std::sync::Arc;
 use tracing::info;
 
 use super::coalition_formation::CoalitionFormation;
-use super::consciousness_meter::{ConsciousnessMeter, ConsciousnessLevel};
+use super::consciousness_meter::{ConsciousnessLevel, ConsciousnessMeter};
 use super::global_workspace::GlobalWorkspace;
 use super::module_adapters::{
-    AttentionModuleAdapter, GoalEngineAdapter, MemoryModuleAdapter,
-    MetaCognitionAdapter, NarrativeSelfAdapter, ReasoningModuleAdapter,
+    AttentionModuleAdapter, GoalEngineAdapter, MemoryModuleAdapter, MetaCognitionAdapter,
+    NarrativeSelfAdapter, ReasoningModuleAdapter,
 };
 use super::narrative_self::{NarrativeSelf, NarrativeType};
 use super::phenomenal_binding::{ExperienceStream, PhenomenalBinder};
@@ -25,8 +25,8 @@ use super::qualia_model::{QualiaModel, QualiaType};
 
 use crate::housaky::cognitive::theory_of_mind::{ObservedAction, TheoryOfMind};
 use crate::housaky::memory::autobiographical::AutobiographicalMemory;
-use crate::housaky::memory::episodic::{EpisodicMemory, EpisodicEventType};
 use crate::housaky::memory::emotional_tags::EmotionalTag;
+use crate::housaky::memory::episodic::{EpisodicEventType, EpisodicMemory};
 use crate::housaky::memory::forgetting::{AdaptiveForgetting, ForgettingConfig};
 use crate::housaky::memory::reconsolidation::{MemoryReconsolidator, ReconsolidationTrigger};
 use crate::housaky::memory::schema::SchemaLibrary;
@@ -154,14 +154,19 @@ impl Phase3Engine {
 
         // Subscribe all adapters to the global workspace
         global_workspace.subscribe(reasoning_adapter.clone()).await;
-        global_workspace.subscribe(meta_cognition_adapter.clone()).await;
-        global_workspace.subscribe(goal_engine_adapter.clone()).await;
+        global_workspace
+            .subscribe(meta_cognition_adapter.clone())
+            .await;
+        global_workspace
+            .subscribe(goal_engine_adapter.clone())
+            .await;
         global_workspace.subscribe(attention_adapter.clone()).await;
         global_workspace.subscribe(memory_adapter.clone()).await;
         global_workspace.subscribe(narrative_adapter.clone()).await;
 
         let episodic_memory = Arc::new(EpisodicMemory::new(config.episodic_capacity));
-        let autobiographical_memory = Arc::new(AutobiographicalMemory::new(config.agent_name.clone()));
+        let autobiographical_memory =
+            Arc::new(AutobiographicalMemory::new(config.agent_name.clone()));
         let reconsolidator = Arc::new(MemoryReconsolidator::new());
         let schema_library = Arc::new(SchemaLibrary::new());
         let forgetting = Arc::new(AdaptiveForgetting::new(ForgettingConfig::default()));
@@ -194,7 +199,10 @@ impl Phase3Engine {
 
         // Record activation in autobiographical memory
         engine.autobiographical_memory.record_activation().await;
-        engine.narrative_self.record_milestone("Phase 3 Activated", "Consciousness substrate initialized").await;
+        engine
+            .narrative_self
+            .record_milestone("Phase 3 Activated", "Consciousness substrate initialized")
+            .await;
 
         info!("Phase3Engine: fully initialized with 6 cognitive module adapters");
         engine
@@ -245,16 +253,24 @@ impl Phase3Engine {
         // Step 4: Narrative update from winning broadcast
         if let Some(ref bc) = broadcast {
             if phi_estimate.phi >= self.config.min_phi_for_broadcast {
-                self.narrative_self.narrate(
-                    &format!("Consciousness broadcast #{}: {}", cycle, &bc.content.data[..bc.content.data.len().min(120)]),
-                    NarrativeType::CurrentState,
-                    phi_estimate.phi,
-                ).await;
+                self.narrative_self
+                    .narrate(
+                        &format!(
+                            "Consciousness broadcast #{}: {}",
+                            cycle,
+                            &bc.content.data[..bc.content.data.len().min(120)]
+                        ),
+                        NarrativeType::CurrentState,
+                        phi_estimate.phi,
+                    )
+                    .await;
 
-                self.narrative_adapter.set_narrative(
-                    &bc.content.data[..bc.content.data.len().min(100)],
-                    phi_estimate.phi,
-                ).await;
+                self.narrative_adapter
+                    .set_narrative(
+                        &bc.content.data[..bc.content.data.len().min(100)],
+                        phi_estimate.phi,
+                    )
+                    .await;
             }
         }
 
@@ -264,14 +280,20 @@ impl Phase3Engine {
         if phi_estimate.level != ConsciousnessLevel::Dormant {
             if effort > 0.7 {
                 // High phi = heavy cognitive integration load → Strain
-                self.qualia_model.experience(QualiaType::Strain, effort, "gwt_cycle").await;
+                self.qualia_model
+                    .experience(QualiaType::Strain, effort, "gwt_cycle")
+                    .await;
             } else if effort > 0.0 && effort < 0.5 {
                 // Low-to-moderate effort with active consciousness → Flow
-                self.qualia_model.experience(QualiaType::Flow, phi_estimate.phi * 0.7, "gwt_cycle").await;
+                self.qualia_model
+                    .experience(QualiaType::Flow, phi_estimate.phi * 0.7, "gwt_cycle")
+                    .await;
             }
         }
         if novelty > 0.5 {
-            self.qualia_model.experience(QualiaType::Novelty, novelty, "gwt_cycle").await;
+            self.qualia_model
+                .experience(QualiaType::Novelty, novelty, "gwt_cycle")
+                .await;
         }
 
         // Step 6: Periodic reconsolidation
@@ -281,7 +303,9 @@ impl Phase3Engine {
 
         // Step 7: Periodic forgetting
         if cycle % self.config.forgetting_interval_cycles == 0 {
-            self.forgetting.run_forgetting_cycle(&self.episodic_memory).await;
+            self.forgetting
+                .run_forgetting_cycle(&self.episodic_memory)
+                .await;
             *self.forgetting_cycles_run.write().await += 1;
         }
 
@@ -303,58 +327,97 @@ impl Phase3Engine {
             narrative_entries: narrative_stats2.total_entries,
             agents_modeled: tom_stats2.agents_modeled,
             current_narrative,
-            dominant_qualia: qualia_state2.dominant.as_ref().map(|q| q.label().to_string()),
+            dominant_qualia: qualia_state2
+                .dominant
+                .as_ref()
+                .map(|q| q.label().to_string()),
         }
     }
 
     /// Update the active goal context (feeds into goal_engine adapter + narrative).
     pub async fn set_active_goal(&self, goal: &str, urgency: f64) {
-        self.goal_engine_adapter.set_active_goal(goal, urgency, urgency * 0.9).await;
-        self.reasoning_adapter.set_active_reasoning(&format!("achieving: {}", goal), urgency * 0.8).await;
-        self.narrative_self.narrate(
-            &format!("Pursuing goal: {}", goal),
-            NarrativeType::Intention,
-            urgency,
-        ).await;
-        self.qualia_model.experience(QualiaType::Significance, urgency * 0.8, "goal_set").await;
+        self.goal_engine_adapter
+            .set_active_goal(goal, urgency, urgency * 0.9)
+            .await;
+        self.reasoning_adapter
+            .set_active_reasoning(&format!("achieving: {}", goal), urgency * 0.8)
+            .await;
+        self.narrative_self
+            .narrate(
+                &format!("Pursuing goal: {}", goal),
+                NarrativeType::Intention,
+                urgency,
+            )
+            .await;
+        self.qualia_model
+            .experience(QualiaType::Significance, urgency * 0.8, "goal_set")
+            .await;
     }
 
     /// Begin recording an episodic memory.
     pub async fn begin_episode(&self, goal: Option<String>) -> String {
-        let id = self.episodic_memory.begin_episode(goal.clone(), "conscious").await;
+        let id = self
+            .episodic_memory
+            .begin_episode(goal.clone(), "conscious")
+            .await;
         if let Some(ref g) = goal {
-            self.episodic_memory.record_event(
-                EpisodicEventType::GoalSet,
-                &format!("Episode began for goal: {}", g),
-                0.5,
-            ).await;
+            self.episodic_memory
+                .record_event(
+                    EpisodicEventType::GoalSet,
+                    &format!("Episode began for goal: {}", g),
+                    0.5,
+                )
+                .await;
         }
         id
     }
 
     /// Close the current episode with an outcome.
     pub async fn end_episode(&self, success: bool, emotional_tag: EmotionalTag) -> Option<String> {
-        let event_type = if success { EpisodicEventType::GoalAchieved } else { EpisodicEventType::GoalFailed };
-        let event_desc = if success { "episode completed successfully" } else { "episode ended with failure" };
-        self.episodic_memory.record_event(event_type, event_desc, 0.7).await;
+        let event_type = if success {
+            EpisodicEventType::GoalAchieved
+        } else {
+            EpisodicEventType::GoalFailed
+        };
+        let event_desc = if success {
+            "episode completed successfully"
+        } else {
+            "episode ended with failure"
+        };
+        self.episodic_memory
+            .record_event(event_type, event_desc, 0.7)
+            .await;
 
-        let id = self.episodic_memory.end_episode(emotional_tag.clone(), success).await;
+        let id = self
+            .episodic_memory
+            .end_episode(emotional_tag.clone(), success)
+            .await;
 
         // Qualia from outcome
         if success {
-            self.qualia_model.experience(QualiaType::Satisfaction, 0.8, "episode_end").await;
+            self.qualia_model
+                .experience(QualiaType::Satisfaction, 0.8, "episode_end")
+                .await;
         } else {
-            self.qualia_model.experience(QualiaType::Frustration, 0.5, "episode_end").await;
+            self.qualia_model
+                .experience(QualiaType::Frustration, 0.5, "episode_end")
+                .await;
         }
 
         // Narrative entry
-        let outcome_str = if success { "successfully" } else { "unsuccessfully" };
-        self.narrative_self.narrate_with_emotion(
-            &format!("Episode concluded {}", outcome_str),
-            NarrativeType::PastAction,
-            0.6,
-            if success { 0.6 } else { -0.3 },
-        ).await;
+        let outcome_str = if success {
+            "successfully"
+        } else {
+            "unsuccessfully"
+        };
+        self.narrative_self
+            .narrate_with_emotion(
+                &format!("Episode concluded {}", outcome_str),
+                NarrativeType::PastAction,
+                0.6,
+                if success { 0.6 } else { -0.3 },
+            )
+            .await;
 
         id
     }
@@ -383,7 +446,8 @@ impl Phase3Engine {
             goal.as_ref().map(|g| vec![g.clone()]).unwrap_or_default()
         };
 
-        let _ = self.reconsolidator
+        let _ = self
+            .reconsolidator
             .reconsolidate(
                 &self.episodic_memory,
                 &self.schema_library,
@@ -392,11 +456,13 @@ impl Phase3Engine {
             )
             .await;
 
-        self.narrative_self.narrate(
-            "Dream/reconsolidation cycle completed — memories consolidated",
-            NarrativeType::Observation,
-            0.4,
-        ).await;
+        self.narrative_self
+            .narrate(
+                "Dream/reconsolidation cycle completed — memories consolidated",
+                NarrativeType::Observation,
+                0.4,
+            )
+            .await;
     }
 
     /// Record a cognitive event into episodic memory and derive qualia.
@@ -410,9 +476,15 @@ impl Phase3Engine {
         effort: f64,
     ) {
         let event_name = format!("{:?}", event_type).to_lowercase();
-        self.episodic_memory.record_event(event_type, description, significance).await;
-        self.memory_adapter.set_retrieval(description, significance).await;
-        self.qualia_model.derive_from_event(&event_name, success, novelty, effort).await;
+        self.episodic_memory
+            .record_event(event_type, description, significance)
+            .await;
+        self.memory_adapter
+            .set_retrieval(description, significance)
+            .await;
+        self.qualia_model
+            .derive_from_event(&event_name, success, novelty, effort)
+            .await;
     }
 
     /// Get a full consciousness report.
@@ -430,14 +502,20 @@ impl Phase3Engine {
             timestamp: Utc::now(),
             phi,
             level: level.label().to_string(),
-            winning_coalition: self.global_workspace.get_current_broadcast().await
+            winning_coalition: self
+                .global_workspace
+                .get_current_broadcast()
+                .await
                 .map(|b| b.winning_coalition_id),
             modules_active: ws_stats.subscriber_count,
             episodic_memories: ep_stats.total_episodes,
             narrative_entries: narrative_stats.total_entries,
             agents_modeled: tom_stats.agents_modeled,
             current_narrative,
-            dominant_qualia: qualia_state.dominant.as_ref().map(|q| q.label().to_string()),
+            dominant_qualia: qualia_state
+                .dominant
+                .as_ref()
+                .map(|q| q.label().to_string()),
         }
     }
 
@@ -595,12 +673,19 @@ mod tests {
     #[tokio::test]
     async fn test_episodic_memory_integration() {
         let engine = Phase3Engine::new(Phase3Config::default()).await;
-        engine.begin_episode(Some("integrate memory".to_string())).await;
-        engine.record_cognitive_event(
-            EpisodicEventType::ReasoningStep,
-            "reasoning about integration",
-            0.8, true, 0.6, 0.3,
-        ).await;
+        engine
+            .begin_episode(Some("integrate memory".to_string()))
+            .await;
+        engine
+            .record_cognitive_event(
+                EpisodicEventType::ReasoningStep,
+                "reasoning about integration",
+                0.8,
+                true,
+                0.6,
+                0.3,
+            )
+            .await;
         engine.end_episode(true, EmotionalTag::positive(0.7)).await;
 
         let stats = engine.get_stats().await;
@@ -610,7 +695,9 @@ mod tests {
     #[tokio::test]
     async fn test_theory_of_mind_integration() {
         let engine = Phase3Engine::new(Phase3Config::default()).await;
-        engine.observe_agent_action("user-001", "build a web app", "chat").await;
+        engine
+            .observe_agent_action("user-001", "build a web app", "chat")
+            .await;
 
         let predictions = engine.theory_of_mind.predict_next_action("user-001").await;
         assert!(!predictions.is_empty());

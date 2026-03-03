@@ -96,7 +96,7 @@ impl ReliableProvider {
             .first()
             .map(|(n, _)| n.clone())
             .unwrap_or_else(|| "unknown".to_string());
-        
+
         Self {
             providers,
             max_retries,
@@ -141,14 +141,14 @@ impl ReliableProvider {
         if let Some(ref keys_manager) = self.keys_manager {
             let rt = tokio::runtime::Handle::current();
             let provider_name = self.current_provider_name.clone();
-            
-            let key = rt.block_on(async {
-                keys_manager.rotate_key(&provider_name).await
+
+            let key = tokio::task::block_in_place(|| {
+                rt.block_on(async { keys_manager.rotate_key(&provider_name).await })
             });
-            
+
             return key.ok().flatten().map(|k| k.key);
         }
-        
+
         if self.api_keys.is_empty() {
             return None;
         }
@@ -161,12 +161,15 @@ impl ReliableProvider {
         if let Some(ref keys_manager) = self.keys_manager {
             let rt = tokio::runtime::Handle::current();
             let provider_name = self.current_provider_name.clone();
-            
-            return rt.block_on(async {
-                keys_manager.get_next_key(&provider_name).await
-            }).map(|k| k.key);
+
+            return tokio::task::block_in_place(|| {
+                rt.block_on(async { keys_manager.get_next_key(&provider_name).await })
+            })
+            .map(|k| k.key);
         }
-        self.api_keys.get(self.key_index.load(Ordering::Relaxed)).cloned()
+        self.api_keys
+            .get(self.key_index.load(Ordering::Relaxed))
+            .cloned()
     }
 
     /// Report key success to keys manager
@@ -176,7 +179,7 @@ impl ReliableProvider {
             let rt = tokio::runtime::Handle::current();
             let provider_name = self.current_provider_name.clone();
             let key_id = key_id.to_string();
-            
+
             rt.spawn(async move {
                 keys_manager.report_success(&provider_name, &key_id).await;
             });
@@ -190,9 +193,11 @@ impl ReliableProvider {
             let rt = tokio::runtime::Handle::current();
             let provider_name = self.current_provider_name.clone();
             let key_id = key_id.to_string();
-            
+
             rt.spawn(async move {
-                keys_manager.report_failure(&provider_name, &key_id, is_rate_limit).await;
+                keys_manager
+                    .report_failure(&provider_name, &key_id, is_rate_limit)
+                    .await;
             });
         }
     }

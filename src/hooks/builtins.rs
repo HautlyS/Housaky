@@ -51,7 +51,10 @@ impl SessionMemoryHook {
     }
 
     /// Save the current session to disk.
-    async fn save_session(&self, session_key: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    async fn save_session(
+        &self,
+        session_key: &str,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let state = self.state.read().await;
         let context = &state.context;
 
@@ -130,7 +133,10 @@ impl Hook for SessionMemoryHook {
         events
     }
 
-    async fn handle(&self, event: HookEvent) -> Result<HookResult, Box<dyn std::error::Error + Send + Sync>> {
+    async fn handle(
+        &self,
+        event: HookEvent,
+    ) -> Result<HookResult, Box<dyn std::error::Error + Send + Sync>> {
         let action = &event.action;
 
         match action.as_str() {
@@ -149,10 +155,9 @@ impl Hook for SessionMemoryHook {
 
                     // Load context if any provided
                     if let Some(context) = &event.context {
-                        state.context = context.as_object()
-                            .map(|m| m.iter()
-                                .map(|(k, v)| (k.clone(), v.clone()))
-                                .collect())
+                        state.context = context
+                            .as_object()
+                            .map(|m| m.iter().map(|(k, v)| (k.clone(), v.clone())).collect())
                             .unwrap_or_default();
                     }
                 }
@@ -230,7 +235,9 @@ impl BootMdHook {
     }
 
     /// Search for and load bootstrap files.
-    async fn load_bootstrap_files(&self) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
+    async fn load_bootstrap_files(
+        &self,
+    ) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
         let mut contents = Vec::new();
 
         for dir in &self.config.extra_dirs {
@@ -301,9 +308,7 @@ impl BootMdHook {
     /// Check if a path matches any of the configured patterns.
     #[must_use]
     fn matches_patterns(&self, path: &PathBuf) -> bool {
-        let filename = path.file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or("");
+        let filename = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
 
         self.config.patterns.iter().any(|pattern| {
             if pattern.contains('*') {
@@ -338,7 +343,10 @@ impl Hook for BootMdHook {
         vec![(HookEventType::Session, vec!["start".to_string()])]
     }
 
-    async fn handle(&self, event: HookEvent) -> Result<HookResult, Box<dyn std::error::Error + Send + Sync>> {
+    async fn handle(
+        &self,
+        event: HookEvent,
+    ) -> Result<HookResult, Box<dyn std::error::Error + Send + Sync>> {
         if event.action != "start" {
             return Ok(HookResult::continue_result());
         }
@@ -390,10 +398,15 @@ impl CommandLoggerHook {
     }
 
     /// Log a command to the configured output.
-    async fn log_command(&self, event: &HookEvent) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    async fn log_command(
+        &self,
+        event: &HookEvent,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let timestamp = event.timestamp.format("%Y-%m-%d %H:%M:%S").to_string();
         let session = event.session_key.as_deref().unwrap_or("unknown");
-        let command = event.context.as_ref()
+        let command = event
+            .context
+            .as_ref()
             .and_then(|c| c.get("command"))
             .and_then(|c| c.as_str())
             .unwrap_or("unknown");
@@ -459,7 +472,10 @@ impl Hook for CommandLoggerHook {
         ]
     }
 
-    async fn handle(&self, event: HookEvent) -> Result<HookResult, Box<dyn std::error::Error + Send + Sync>> {
+    async fn handle(
+        &self,
+        event: HookEvent,
+    ) -> Result<HookResult, Box<dyn std::error::Error + Send + Sync>> {
         if !self.config.log_output {
             return Ok(HookResult::continue_result());
         }
@@ -508,7 +524,11 @@ mod tests {
     #[tokio::test]
     async fn test_session_memory_hook_handles_new() {
         let hook = SessionMemoryHook::with_defaults();
-        let event = HookEvent::new(HookEventType::Session, "new".to_string(), Some("test-session".to_string()));
+        let event = HookEvent::new(
+            HookEventType::Session,
+            "new".to_string(),
+            Some("test-session".to_string()),
+        );
 
         let result = hook.handle(event).await;
         assert!(result.is_ok());

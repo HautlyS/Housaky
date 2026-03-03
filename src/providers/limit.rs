@@ -99,7 +99,10 @@ impl Provider for LimitProvider {
                 .await
                 .map_err(|_| anyhow::anyhow!("{} concurrency limiter closed", self.label))?
         };
-        let res = self.inner.chat_with_history(messages, model, temperature).await;
+        let res = self
+            .inner
+            .chat_with_history(messages, model, temperature)
+            .await;
         drop(permit);
         res
     }

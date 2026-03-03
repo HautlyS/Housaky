@@ -11,7 +11,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{debug, info};
 
-use super::episodic::{EpisodicMemory, Episode};
+use super::episodic::{Episode, EpisodicMemory};
 use super::schema::{MemorySchema, SchemaLibrary};
 
 // ── Reconsolidation Record ────────────────────────────────────────────────────
@@ -86,13 +86,17 @@ impl MemoryReconsolidator {
             if let Some(schema) = self.try_extract_schema(episode, schema_library).await {
                 episodic.assign_schema(&episode.id, &schema.id).await;
                 schemas_extracted += 1;
-                debug!("Reconsolidation: extracted schema '{}' from episode {}", schema.name, episode.id);
+                debug!(
+                    "Reconsolidation: extracted schema '{}' from episode {}",
+                    schema.name, episode.id
+                );
             }
 
             // Phase 3: Goal-relevance based strength modulation
             let goal_relevance = self.compute_goal_relevance(episode, active_goals);
             if goal_relevance > 0.6 {
-                self.strengthen_memory(episodic, &episode.id, goal_relevance).await;
+                self.strengthen_memory(episodic, &episode.id, goal_relevance)
+                    .await;
                 memories_strengthened += 1;
             } else if goal_relevance < 0.2 && episode.retrieval_count == 0 {
                 self.weaken_memory(episodic, &episode.id).await;
@@ -186,7 +190,12 @@ impl MemoryReconsolidator {
         let episode_text = format!(
             "{} {}",
             episode.context.goal.as_deref().unwrap_or(""),
-            episode.events.iter().map(|e| e.description.as_str()).collect::<Vec<_>>().join(" ")
+            episode
+                .events
+                .iter()
+                .map(|e| e.description.as_str())
+                .collect::<Vec<_>>()
+                .join(" ")
         );
 
         let ep_words: std::collections::HashSet<&str> = episode_text.split_whitespace().collect();
@@ -197,7 +206,11 @@ impl MemoryReconsolidator {
                 let goal_words: std::collections::HashSet<&str> = g.split_whitespace().collect();
                 let intersection = ep_words.intersection(&goal_words).count();
                 let union = ep_words.union(&goal_words).count();
-                if union == 0 { 0.0 } else { intersection as f64 / union as f64 }
+                if union == 0 {
+                    0.0
+                } else {
+                    intersection as f64 / union as f64
+                }
             })
             .fold(0.0_f64, f64::max);
 
@@ -269,7 +282,7 @@ pub struct ReconsolidationStats {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::housaky::memory::episodic::{EpisodicMemory, EpisodicEventType};
+    use crate::housaky::memory::episodic::{EpisodicEventType, EpisodicMemory};
     use crate::housaky::memory::EmotionalTag;
 
     #[tokio::test]
@@ -279,11 +292,33 @@ mod tests {
         let reconsolidator = MemoryReconsolidator::new();
 
         // Create a test episode
-        episodic.begin_episode(Some("solve complex problem".to_string()), "test").await;
-        episodic.record_event(EpisodicEventType::GoalSet, "set goal: solve complex problem", 0.8).await;
-        episodic.record_event(EpisodicEventType::ReasoningStep, "applied chain-of-thought reasoning", 0.7).await;
-        episodic.record_event(EpisodicEventType::GoalAchieved, "goal achieved successfully", 0.9).await;
-        episodic.end_episode(EmotionalTag::positive(0.8), true).await;
+        episodic
+            .begin_episode(Some("solve complex problem".to_string()), "test")
+            .await;
+        episodic
+            .record_event(
+                EpisodicEventType::GoalSet,
+                "set goal: solve complex problem",
+                0.8,
+            )
+            .await;
+        episodic
+            .record_event(
+                EpisodicEventType::ReasoningStep,
+                "applied chain-of-thought reasoning",
+                0.7,
+            )
+            .await;
+        episodic
+            .record_event(
+                EpisodicEventType::GoalAchieved,
+                "goal achieved successfully",
+                0.9,
+            )
+            .await;
+        episodic
+            .end_episode(EmotionalTag::positive(0.8), true)
+            .await;
 
         let result = reconsolidator
             .reconsolidate(

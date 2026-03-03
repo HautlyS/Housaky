@@ -145,6 +145,9 @@ pub fn run_wizard() -> Result<Config> {
         self_modification: crate::config::schema::SelfModificationConfig::default(),
         self_replication: crate::config::schema::SelfReplicationConfig::default(),
         gradient_free_optimizer: crate::config::schema::GradientFreeOptimizerConfig::default(),
+        quantum: crate::config::schema::QuantumConfig::default(),
+        collective_api_key: None,
+        collective: crate::config::schema::CollectiveSchemaConfig::default(),
     };
 
     println!(
@@ -367,6 +370,9 @@ pub fn run_quick_setup(
         self_modification: crate::config::schema::SelfModificationConfig::default(),
         self_replication: crate::config::schema::SelfReplicationConfig::default(),
         gradient_free_optimizer: crate::config::schema::GradientFreeOptimizerConfig::default(),
+        quantum: crate::config::schema::QuantumConfig::default(),
+        collective_api_key: None,
+        collective: crate::config::schema::CollectiveSchemaConfig::default(),
     };
 
     config.save()?;

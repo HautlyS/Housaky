@@ -1,6 +1,7 @@
 #![allow(clippy::format_push_string, clippy::self_only_used_in_recursion)]
 
 use crate::housaky::memory::emotional_tags::EmotionalTag;
+use crate::quantum::QuantumAgiBridge;
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use rand;
@@ -108,6 +109,8 @@ pub struct ReasoningEngine {
     enable_branching: bool,
     enable_self_correction: bool,
     confidence_threshold: f64,
+    /// §10 — Optional quantum bridge for Grover-accelerated branch selection.
+    pub quantum_bridge: Option<Arc<QuantumAgiBridge>>,
 }
 
 impl ReasoningEngine {
@@ -119,7 +122,47 @@ impl ReasoningEngine {
             enable_branching: true,
             enable_self_correction: true,
             confidence_threshold: 0.7,
+            quantum_bridge: None,
         }
+    }
+
+    /// Attach a quantum bridge for Grover-accelerated branch selection.
+    pub fn with_quantum(mut self, bridge: Arc<QuantumAgiBridge>) -> Self {
+        self.quantum_bridge = Some(bridge);
+        self
+    }
+
+    /// §10 — Select the best reasoning branches using Grover search when a
+    /// quantum bridge is available, falling back to classical sort otherwise.
+    ///
+    /// `branches` is a list of branch IDs; `fitness` maps each ID to a score.
+    /// Returns the top-k branch IDs ordered by quality.
+    pub async fn quantum_select_branches(
+        &self,
+        branches: &[String],
+        fitness: &HashMap<String, f64>,
+    ) -> Vec<String> {
+        if let Some(ref bridge) = self.quantum_bridge {
+            if branches.len() >= 4 && branches.len() <= 32 {
+                match bridge.search_reasoning_branches(branches, fitness).await {
+                    Ok(result) => {
+                        info!(
+                            "🔮 ReasoningEngine quantum branch selection: {} → {} branches, speedup={:.2}x",
+                            branches.len(), result.best_branches.len(), result.speedup
+                        );
+                        return result.best_branches;
+                    }
+                    Err(e) => warn!("Quantum branch selection failed: {e}, using classical"),
+                }
+            }
+        }
+        // Classical fallback: top-3 by fitness score.
+        let mut scored: Vec<(String, f64)> = branches
+            .iter()
+            .map(|b| (b.clone(), fitness.get(b).copied().unwrap_or(0.0)))
+            .collect();
+        scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        scored.into_iter().take(3).map(|(b, _)| b).collect()
     }
 
     /// Map a PAD emotional state to the most appropriate `ReasoningType`.
@@ -784,7 +827,8 @@ Final Answer: [Your conclusion]
                 r#"You are a reasoning assistant that thinks step by step.
 Break down complex problems into manageable steps.
 Show your reasoning at each stage.
-End with a clear, well-supported conclusion."#.to_string()
+End with a clear, well-supported conclusion."#
+                    .to_string()
             }
             ReasoningType::ReAct => {
                 r#"You are an advanced AI assistant with access to tools for reasoning and acting.
@@ -815,10 +859,10 @@ Observation 1: [tool result]
 ...
 Final Answer: [your conclusion]
 ```
-"#.to_string()
+"#
+                .to_string()
             }
-            ReasoningType::TreeOfThought => {
-                r#"You are an AI that explores multiple solution paths.
+            ReasoningType::TreeOfThought => r#"You are an AI that explores multiple solution paths.
 
 ## Tree of Thoughts
 
@@ -828,8 +872,8 @@ Final Answer: [your conclusion]
 4. Explain why your chosen approach is superior
 
 Consider at least 3 different paths and provide thorough analysis of each.
-"#.to_string()
-            }
+"#
+            .to_string(),
             ReasoningType::Reflexion => {
                 r#"You are a reflective AI that improves through self-evaluation.
 
@@ -841,7 +885,8 @@ Consider at least 3 different paths and provide thorough analysis of each.
 4. **Refine**: Propose an improved solution
 
 Always question your assumptions and look for weaknesses in your reasoning.
-"#.to_string()
+"#
+                .to_string()
             }
             ReasoningType::SelfConsistency => {
                 r#"You are an AI that values consistency in reasoning.
@@ -854,10 +899,10 @@ Always question your assumptions and look for weaknesses in your reasoning.
 4. Explain why this answer is most reliable
 
 Consistency indicates robustness in your reasoning.
-"#.to_string()
+"#
+                .to_string()
             }
-            ReasoningType::MultiStep => {
-                r#"You are an AI that breaks complex problems into steps.
+            ReasoningType::MultiStep => r#"You are an AI that breaks complex problems into steps.
 
 ## Multi-Step Framework
 
@@ -868,10 +913,9 @@ Consistency indicates robustness in your reasoning.
 5. Adjust plan if needed
 
 Show clear progress markers between steps.
-"#.to_string()
-            }
-            ReasoningType::Comparative => {
-                r#"You are an AI skilled in comparative analysis.
+"#
+            .to_string(),
+            ReasoningType::Comparative => r#"You are an AI skilled in comparative analysis.
 
 ## Comparative Framework
 
@@ -882,10 +926,9 @@ Show clear progress markers between steps.
 5. Provide a conclusion or recommendation
 
 Be objective and balanced in your comparison.
-"#.to_string()
-            }
-            ReasoningType::Diagnostic => {
-                r#"You are an AI diagnostician.
+"#
+            .to_string(),
+            ReasoningType::Diagnostic => r#"You are an AI diagnostician.
 
 ## Diagnostic Framework
 
@@ -896,10 +939,9 @@ Be objective and balanced in your comparison.
 5. Identify the most probable root cause
 
 Think like a doctor diagnosing an illness.
-"#.to_string()
-            }
-            ReasoningType::Creative => {
-                r#"You are a creative AI that thinks outside the box.
+"#
+            .to_string(),
+            ReasoningType::Creative => r#"You are a creative AI that thinks outside the box.
 
 ## Creative Framework
 
@@ -910,10 +952,9 @@ Think like a doctor diagnosing an illness.
 5. Present the most creative viable solution
 
 Don't be afraid to suggest unusual solutions.
-"#.to_string()
-            }
-            ReasoningType::Strategic => {
-                r#"You are a strategic AI planner.
+"#
+            .to_string(),
+            ReasoningType::Strategic => r#"You are a strategic AI planner.
 
 ## Strategic Framework
 
@@ -924,8 +965,8 @@ Don't be afraid to suggest unusual solutions.
 5. Recommend the optimal path forward
 
 Consider short-term and long-term implications.
-"#.to_string()
-            }
+"#
+            .to_string(),
         }
     }
 

@@ -81,7 +81,9 @@ impl UnifiedAgentLoop {
             cognitive_loop: Arc::new(CognitiveLoop::new(config)?),
             reasoning: Arc::new(ReasoningEngine::new()),
             world_model: Arc::new(WorldModel::with_storage(workspace_dir)),
-            planning: Arc::new(PlanningEngine::new(Arc::new(WorldModel::with_storage(workspace_dir)))),
+            planning: Arc::new(PlanningEngine::new(Arc::new(WorldModel::with_storage(
+                workspace_dir,
+            )))),
             information_gap: Arc::new(InformationGapEngine::new()),
             action_selector: Arc::new(ActionSelector::new()),
             belief_tracker: Arc::new(BeliefTracker::new()),

@@ -54,7 +54,10 @@ pub struct SharedEnvironment {
 
 impl SharedEnvironment {
     pub fn new() -> Self {
-        Self { marks: HashMap::new(), update_count: 0 }
+        Self {
+            marks: HashMap::new(),
+            update_count: 0,
+        }
     }
 
     pub fn write_mark(&mut self, mark: EnvironmentMark) {
@@ -70,7 +73,10 @@ impl SharedEnvironment {
     }
 
     pub fn marks_by_type(&self, mark_type: &MarkType) -> Vec<&EnvironmentMark> {
-        self.marks.values().filter(|m| &m.mark_type == mark_type).collect()
+        self.marks
+            .values()
+            .filter(|m| &m.mark_type == mark_type)
+            .collect()
     }
 
     pub fn marks_by_author(&self, author: &str) -> Vec<&EnvironmentMark> {
@@ -83,10 +89,28 @@ impl SharedEnvironment {
 
     pub fn stats(&self) -> StigmergyStats {
         let total = self.marks.len();
-        let warnings = self.marks.values().filter(|m| m.mark_type == MarkType::Warning).count();
-        let opportunities = self.marks.values().filter(|m| m.mark_type == MarkType::Opportunity).count();
-        let blockers = self.marks.values().filter(|m| m.mark_type == MarkType::Blocker).count();
-        StigmergyStats { total_marks: total, warnings, opportunities, blockers, update_count: self.update_count }
+        let warnings = self
+            .marks
+            .values()
+            .filter(|m| m.mark_type == MarkType::Warning)
+            .count();
+        let opportunities = self
+            .marks
+            .values()
+            .filter(|m| m.mark_type == MarkType::Opportunity)
+            .count();
+        let blockers = self
+            .marks
+            .values()
+            .filter(|m| m.mark_type == MarkType::Blocker)
+            .count();
+        StigmergyStats {
+            total_marks: total,
+            warnings,
+            opportunities,
+            blockers,
+            update_count: self.update_count,
+        }
     }
 }
 
@@ -111,35 +135,64 @@ pub struct StigmergyLayer {
 
 impl StigmergyLayer {
     pub fn new() -> Self {
-        Self { env: Arc::new(RwLock::new(SharedEnvironment::new())) }
+        Self {
+            env: Arc::new(RwLock::new(SharedEnvironment::new())),
+        }
     }
 
-    pub async fn mark(&self, key: &str, value: serde_json::Value, author: &str, mark_type: MarkType) {
+    pub async fn mark(
+        &self,
+        key: &str,
+        value: serde_json::Value,
+        author: &str,
+        mark_type: MarkType,
+    ) {
         let mark = EnvironmentMark::new(key, value, author, mark_type);
         self.env.write().await.write_mark(mark);
         tracing::debug!("Stigmergy mark written: key={} by={}", key, author);
     }
 
     pub async fn read(&self, key: &str) -> Option<serde_json::Value> {
-        self.env.write().await.read_mark(key).map(|m| m.value.clone())
+        self.env
+            .write()
+            .await
+            .read_mark(key)
+            .map(|m| m.value.clone())
     }
 
     pub async fn signal_opportunity(&self, description: &str, agent_id: &str, priority: f64) {
         let val = serde_json::json!({ "description": description, "priority": priority });
-        self.mark(&format!("opportunity:{}", uuid::Uuid::new_v4()), val, agent_id, MarkType::Opportunity).await;
+        self.mark(
+            &format!("opportunity:{}", uuid::Uuid::new_v4()),
+            val,
+            agent_id,
+            MarkType::Opportunity,
+        )
+        .await;
     }
 
     pub async fn signal_blocker(&self, resource: &str, agent_id: &str, reason: &str) {
         let val = serde_json::json!({ "resource": resource, "reason": reason });
-        self.mark(&format!("blocker:{}", resource), val, agent_id, MarkType::Blocker).await;
+        self.mark(
+            &format!("blocker:{}", resource),
+            val,
+            agent_id,
+            MarkType::Blocker,
+        )
+        .await;
     }
 
     pub async fn clear_blocker(&self, resource: &str) {
-        self.env.write().await.remove_mark(&format!("blocker:{}", resource));
+        self.env
+            .write()
+            .await
+            .remove_mark(&format!("blocker:{}", resource));
     }
 
     pub async fn get_opportunities(&self) -> Vec<serde_json::Value> {
-        self.env.read().await
+        self.env
+            .read()
+            .await
             .marks_by_type(&MarkType::Opportunity)
             .iter()
             .map(|m| m.value.clone())
@@ -147,7 +200,9 @@ impl StigmergyLayer {
     }
 
     pub async fn get_blockers(&self) -> Vec<serde_json::Value> {
-        self.env.read().await
+        self.env
+            .read()
+            .await
             .marks_by_type(&MarkType::Blocker)
             .iter()
             .map(|m| m.value.clone())
@@ -172,7 +227,14 @@ mod tests {
     #[tokio::test]
     async fn test_mark_and_read() {
         let layer = StigmergyLayer::new();
-        layer.mark("test_key", serde_json::json!("hello"), "agent-1", MarkType::Insight).await;
+        layer
+            .mark(
+                "test_key",
+                serde_json::json!("hello"),
+                "agent-1",
+                MarkType::Insight,
+            )
+            .await;
         let val = layer.read("test_key").await;
         assert_eq!(val, Some(serde_json::json!("hello")));
     }

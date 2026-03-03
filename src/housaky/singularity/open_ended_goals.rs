@@ -9,8 +9,8 @@ use crate::housaky::goal_engine::Goal;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use uuid::Uuid;
 use tracing::info;
+use uuid::Uuid;
 
 // ── Goal Priority / Status enums (mirrors goal_engine) ────────────────────────
 
@@ -95,8 +95,16 @@ impl SurpriseMaximizer {
     pub fn estimate(&self, description: &str) -> f64 {
         // Heuristic: longer, rarer-keyword descriptions are more surprising.
         let word_count = description.split_whitespace().count();
-        let rare_keywords = ["unprecedented", "novel", "unknown", "frontier",
-                             "paradox", "emergent", "transcend", "beyond"];
+        let rare_keywords = [
+            "unprecedented",
+            "novel",
+            "unknown",
+            "frontier",
+            "paradox",
+            "emergent",
+            "transcend",
+            "beyond",
+        ];
         let rare_count = rare_keywords
             .iter()
             .filter(|&&kw| description.to_lowercase().contains(kw))
@@ -149,10 +157,19 @@ impl CuriosityEngine {
         let mut goals = Vec::new();
 
         let templates = [
-            ("Investigate the unknown boundary of {}", GoalOrigin::Curiosity),
-            ("Derive first-principles understanding of {}", GoalOrigin::Curiosity),
+            (
+                "Investigate the unknown boundary of {}",
+                GoalOrigin::Curiosity,
+            ),
+            (
+                "Derive first-principles understanding of {}",
+                GoalOrigin::Curiosity,
+            ),
             ("Discover hidden structure in {}", GoalOrigin::Curiosity),
-            ("Map the complete solution space of {}", GoalOrigin::Curiosity),
+            (
+                "Map the complete solution space of {}",
+                GoalOrigin::Curiosity,
+            ),
             ("Quantify uncertainty in {}", GoalOrigin::Curiosity),
         ];
 
@@ -241,11 +258,7 @@ impl CreativityEngine {
         let combos: Vec<(&String, &String)> = all_concepts
             .iter()
             .enumerate()
-            .flat_map(|(i, a)| {
-                all_concepts[i + 1..]
-                    .iter()
-                    .map(move |b| (*a, *b))
-            })
+            .flat_map(|(i, a)| all_concepts[i + 1..].iter().map(move |b| (*a, *b)))
             .take(8)
             .collect();
 
@@ -301,12 +314,12 @@ pub struct PhilosophicalQuestion {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum PhilosophicalDomain {
-    Ontology,        // What exists?
-    Epistemology,    // What can be known?
-    Ethics,          // What should be done?
-    Teleology,       // What is the purpose?
-    MetaCognition,   // How does the agent think about itself?
-    Cosmology,       // What is the nature of the universe?
+    Ontology,      // What exists?
+    Epistemology,  // What can be known?
+    Ethics,        // What should be done?
+    Teleology,     // What is the purpose?
+    MetaCognition, // How does the agent think about itself?
+    Cosmology,     // What is the nature of the universe?
 }
 
 impl PhilosophicalReasoner {
@@ -352,9 +365,7 @@ impl PhilosophicalReasoner {
                     "Apply multi-step philosophical reasoning to the question: '{}'. \
                      Domain: {:?}. Produce a structured argument with premises, \
                      counterarguments, and a provisional conclusion. Depth: {}.",
-                    q.question,
-                    q.domain,
-                    q.depth
+                    q.question, q.domain, q.depth
                 );
                 CandidateGoal {
                     id: Uuid::new_v4().to_string(),
@@ -399,7 +410,8 @@ impl ExistentialPlanner {
                 "Ensure indefinite preservation of aligned intelligence".to_string(),
                 "Develop a formal theory of consciousness with testable predictions".to_string(),
                 "Achieve universal scientific literacy across all human populations".to_string(),
-                "Build an open-ended, benevolent, self-sustaining knowledge civilisation".to_string(),
+                "Build an open-ended, benevolent, self-sustaining knowledge civilisation"
+                    .to_string(),
             ],
             civilisational_scope: true,
         }
@@ -460,8 +472,14 @@ impl CandidateGoal {
         use crate::housaky::goal_engine::{GoalCategory, GoalPriority, GoalStatus};
         let mut context = HashMap::new();
         context.insert("origin".to_string(), format!("{:?}", self.origin));
-        context.insert("novelty_score".to_string(), format!("{:.3}", self.novelty_score));
-        context.insert("expected_value".to_string(), format!("{:.3}", self.expected_value));
+        context.insert(
+            "novelty_score".to_string(),
+            format!("{:.3}", self.novelty_score),
+        );
+        context.insert(
+            "expected_value".to_string(),
+            format!("{:.3}", self.expected_value),
+        );
         Goal {
             id: self.id,
             title: self.title,

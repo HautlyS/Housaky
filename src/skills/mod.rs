@@ -1,6 +1,7 @@
 use anyhow::Result;
 
 pub mod claude;
+pub mod invocation;
 pub mod marketplace;
 use directories::UserDirs;
 use serde::{Deserialize, Serialize};
@@ -419,7 +420,9 @@ pub fn ensure_skills_for_message(
         if lower.contains(&name_l) {
             let target_dir = skills_dir(workspace_dir).join(&item.name);
             if !target_dir.exists() {
-                if let Ok(installed) = crate::skills::marketplace::install_claude_plugin(workspace_dir, &item.name) {
+                if let Ok(installed) =
+                    crate::skills::marketplace::install_claude_plugin(workspace_dir, &item.name)
+                {
                     for s in installed {
                         config.skills.enabled.insert(s.clone(), true);
                     }
@@ -541,7 +544,10 @@ pub fn handle_command(command: crate::SkillCommands, workspace_dir: &Path) -> Re
             let mut should_enable = enable;
             if !should_enable {
                 should_enable = dialoguer::Confirm::new()
-                    .with_prompt(format!("Enable skill(s) '{}' now?", installed_names.join(", ")))
+                    .with_prompt(format!(
+                        "Enable skill(s) '{}' now?",
+                        installed_names.join(", ")
+                    ))
                     .default(true)
                     .interact()?;
             }
@@ -552,7 +558,10 @@ pub fn handle_command(command: crate::SkillCommands, workspace_dir: &Path) -> Re
                 config.save()?;
                 println!("✓ Enabled skills: {}", installed_names.join(", "));
             } else {
-                println!("Installed skills: {} (not enabled)", installed_names.join(", "));
+                println!(
+                    "Installed skills: {} (not enabled)",
+                    installed_names.join(", ")
+                );
             }
             Ok(())
         }

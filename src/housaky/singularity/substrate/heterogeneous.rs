@@ -86,7 +86,11 @@ impl HeterogeneousScheduler {
             Ok(result) => Ok(result),
             Err(e) => {
                 self.total_failed += 1;
-                warn!("Dispatch to {} failed: {}", substrate.substrate_type().display_name(), e);
+                warn!(
+                    "Dispatch to {} failed: {}",
+                    substrate.substrate_type().display_name(),
+                    e
+                );
                 Err(e)
             }
         }
@@ -131,24 +135,22 @@ impl HeterogeneousScheduler {
 
     fn select_substrate(&mut self, computation: &Computation) -> Result<Arc<dyn ComputeSubstrate>> {
         match &self.policy {
-            SchedulingPolicy::CostOptimised => {
-                self.substrates
-                    .iter()
-                    .min_by(|a, b| {
-                        a.cost_per_flop()
-                            .partial_cmp(&b.cost_per_flop())
-                            .unwrap_or(std::cmp::Ordering::Equal)
-                    })
-                    .cloned()
-                    .ok_or_else(|| anyhow::anyhow!("No substrate available"))
-            }
-            SchedulingPolicy::LatencyOptimised => {
-                self.substrates
-                    .iter()
-                    .min_by_key(|s| s.latency_ns())
-                    .cloned()
-                    .ok_or_else(|| anyhow::anyhow!("No substrate available"))
-            }
+            SchedulingPolicy::CostOptimised => self
+                .substrates
+                .iter()
+                .min_by(|a, b| {
+                    a.cost_per_flop()
+                        .partial_cmp(&b.cost_per_flop())
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                })
+                .cloned()
+                .ok_or_else(|| anyhow::anyhow!("No substrate available")),
+            SchedulingPolicy::LatencyOptimised => self
+                .substrates
+                .iter()
+                .min_by_key(|s| s.latency_ns())
+                .cloned()
+                .ok_or_else(|| anyhow::anyhow!("No substrate available")),
             SchedulingPolicy::RoundRobin | SchedulingPolicy::Redundant => {
                 let idx = self.round_robin_index % self.substrates.len();
                 self.round_robin_index += 1;

@@ -63,10 +63,7 @@ impl GeneratedShellTool {
         workspace_dir: &Path,
         spec: StoredToolSpec,
     ) -> Option<Self> {
-        let tool_path = workspace_dir
-            .join("tools")
-            .join(&spec.name)
-            .join("tool.sh");
+        let tool_path = workspace_dir.join("tools").join(&spec.name).join("tool.sh");
 
         if !tool_path.exists() {
             return None;
@@ -84,7 +81,11 @@ impl GeneratedShellTool {
             parameters,
             tool_path,
             security,
-            timeout_ms: if spec.timeout_ms == 0 { 30_000 } else { spec.timeout_ms },
+            timeout_ms: if spec.timeout_ms == 0 {
+                30_000
+            } else {
+                spec.timeout_ms
+            },
             max_output_bytes: 1_048_576,
         })
     }
@@ -188,7 +189,11 @@ impl Tool for GeneratedShellTool {
         Ok(ToolResult {
             success: output.status.success(),
             output: stdout,
-            error: if stderr.is_empty() { None } else { Some(stderr) },
+            error: if stderr.is_empty() {
+                None
+            } else {
+                Some(stderr)
+            },
         })
     }
 }
@@ -209,10 +214,7 @@ impl GeneratedJavaScriptTool {
         workspace_dir: &Path,
         spec: StoredToolSpec,
     ) -> Option<Self> {
-        let tool_path = workspace_dir
-            .join("tools")
-            .join(&spec.name)
-            .join("tool.js");
+        let tool_path = workspace_dir.join("tools").join(&spec.name).join("tool.js");
 
         if !tool_path.exists() {
             return None;
@@ -230,7 +232,11 @@ impl GeneratedJavaScriptTool {
             parameters,
             tool_path,
             security,
-            timeout_ms: if spec.timeout_ms == 0 { 30_000 } else { spec.timeout_ms },
+            timeout_ms: if spec.timeout_ms == 0 {
+                30_000
+            } else {
+                spec.timeout_ms
+            },
             max_output_bytes: 1_048_576,
         })
     }
@@ -334,7 +340,11 @@ impl Tool for GeneratedJavaScriptTool {
         Ok(ToolResult {
             success: output.status.success(),
             output: stdout,
-            error: if stderr.is_empty() { None } else { Some(stderr) },
+            error: if stderr.is_empty() {
+                None
+            } else {
+                Some(stderr)
+            },
         })
     }
 }
@@ -345,10 +355,7 @@ impl GeneratedPythonTool {
         workspace_dir: &Path,
         spec: StoredToolSpec,
     ) -> Option<Self> {
-        let tool_path = workspace_dir
-            .join("tools")
-            .join(&spec.name)
-            .join("tool.py");
+        let tool_path = workspace_dir.join("tools").join(&spec.name).join("tool.py");
 
         if !tool_path.exists() {
             return None;
@@ -366,7 +373,11 @@ impl GeneratedPythonTool {
             parameters,
             tool_path,
             security,
-            timeout_ms: if spec.timeout_ms == 0 { 30_000 } else { spec.timeout_ms },
+            timeout_ms: if spec.timeout_ms == 0 {
+                30_000
+            } else {
+                spec.timeout_ms
+            },
             max_output_bytes: 1_048_576,
         })
     }
@@ -470,7 +481,11 @@ impl Tool for GeneratedPythonTool {
         Ok(ToolResult {
             success: output.status.success(),
             output: stdout,
-            error: if stderr.is_empty() { None } else { Some(stderr) },
+            error: if stderr.is_empty() {
+                None
+            } else {
+                Some(stderr)
+            },
         })
     }
 }

@@ -123,16 +123,14 @@ impl MutationLineage {
         }
 
         // Compute fitness mean over the archive.
-        let fitness_mean = archive.iter().map(|n| n.fitness_after).sum::<f64>()
-            / archive.len() as f64;
+        let fitness_mean =
+            archive.iter().map(|n| n.fitness_after).sum::<f64>() / archive.len() as f64;
         let lambda = 3.0_f64;
 
         // Count children for each archive member.
         let children_count: HashMap<&str, usize> = {
-            let mut map: HashMap<&str, usize> = archive
-                .iter()
-                .map(|n| (n.id.as_str(), 0usize))
-                .collect();
+            let mut map: HashMap<&str, usize> =
+                archive.iter().map(|n| (n.id.as_str(), 0usize)).collect();
             for node in self.nodes.values() {
                 if let Some(ref pid) = node.parent_id {
                     if let Some(cnt) = map.get_mut(pid.as_str()) {
@@ -170,7 +168,9 @@ impl MutationLineage {
             let mut h: u64 = 0x517c_c1b7_2722_0a95;
             for n in &archive {
                 for b in n.id.bytes() {
-                    h = h.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(b as u64);
+                    h = h
+                        .wrapping_mul(6_364_136_223_846_793_005)
+                        .wrapping_add(b as u64);
                 }
             }
             // Map to [0, 1)
@@ -283,7 +283,11 @@ pub struct LineageStats {
 impl MutationLineage {
     /// Compute summary statistics for the entire lineage archive.
     pub fn statistics(&self) -> LineageStats {
-        let applied: Vec<&MutationNode> = self.nodes.values().filter(|n| n.applied && !n.rolled_back).collect();
+        let applied: Vec<&MutationNode> = self
+            .nodes
+            .values()
+            .filter(|n| n.applied && !n.rolled_back)
+            .collect();
         let avg_fitness_applied = if applied.is_empty() {
             0.0
         } else {
@@ -292,7 +296,11 @@ impl MutationLineage {
         let avg_fitness_delta = if applied.is_empty() {
             0.0
         } else {
-            applied.iter().map(|n| n.fitness_after - n.fitness_before).sum::<f64>() / applied.len() as f64
+            applied
+                .iter()
+                .map(|n| n.fitness_after - n.fitness_before)
+                .sum::<f64>()
+                / applied.len() as f64
         };
 
         // Find most-targeted file.

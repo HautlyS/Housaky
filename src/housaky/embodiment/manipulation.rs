@@ -171,7 +171,10 @@ impl ManipulationEngine {
     pub async fn update_force_feedback(&self, feedback: ForceFeedback) {
         let force = feedback.magnitude_n();
         if force > self.force_limit_n * 0.9 {
-            warn!("Force feedback approaching limit: {:.2}N / {:.2}N", force, self.force_limit_n);
+            warn!(
+                "Force feedback approaching limit: {:.2}N / {:.2}N",
+                force, self.force_limit_n
+            );
         }
         *self.force_feedback.write().await = feedback;
     }
@@ -284,13 +287,20 @@ impl ManipulationEngine {
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
 
-        debug!("Generated {} grasp candidates for '{}'", candidates.len(), object_id);
+        debug!(
+            "Generated {} grasp candidates for '{}'",
+            candidates.len(),
+            object_id
+        );
         Ok(candidates)
     }
 
     /// Execute a grasp candidate (simulation / hardware abstraction).
     pub async fn execute_grasp(&self, candidate: GraspCandidate) -> Result<GraspExecution> {
-        info!("Executing grasp '{}' on '{}'", candidate.id, candidate.target_object_id);
+        info!(
+            "Executing grasp '{}' on '{}'",
+            candidate.id, candidate.target_object_id
+        );
 
         let mut execution = GraspExecution {
             candidate: candidate.clone(),
@@ -415,10 +425,7 @@ mod tests {
         DetectedObject {
             id: id.to_string(),
             label: "test_object".to_string(),
-            bounds: BoundingBox::new(
-                Point3D::new(0.0, 0.0, 0.0),
-                Point3D::new(0.05, 0.05, 0.1),
-            ),
+            bounds: BoundingBox::new(Point3D::new(0.0, 0.0, 0.0), Point3D::new(0.05, 0.05, 0.1)),
             centroid: Point3D::new(0.025, 0.025, 0.05),
             mass_kg: Some(0.2),
             friction_coefficient: Some(0.5),

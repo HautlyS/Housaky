@@ -232,7 +232,10 @@ impl ReflexArcSystem {
     }
 
     pub async fn register_reflex(&self, arc: ReflexArc) {
-        info!("ReflexArc: registered '{}' (bypass_reasoning={})", arc.name, arc.bypass_reasoning);
+        info!(
+            "ReflexArc: registered '{}' (bypass_reasoning={})",
+            arc.name, arc.bypass_reasoning
+        );
         self.arcs.write().await.push(arc);
     }
 
@@ -251,9 +254,13 @@ impl ReflexArcSystem {
 
         let prev_value = {
             let history = self.sensor_history.read().await;
-            history
-                .get(&event.sensor_id)
-                .and_then(|h| if h.len() >= 2 { h.get(h.len() - 2).copied() } else { None })
+            history.get(&event.sensor_id).and_then(|h| {
+                if h.len() >= 2 {
+                    h.get(h.len() - 2).copied()
+                } else {
+                    None
+                }
+            })
         };
 
         let mut arcs = self.arcs.write().await;
@@ -275,7 +282,9 @@ impl ReflexArcSystem {
                     if latency_us > latency_budget {
                         tracing::warn!(
                             "ReflexArc '{}' exceeded latency budget: {}µs > {}µs",
-                            arc_name, latency_us, latency_budget
+                            arc_name,
+                            latency_us,
+                            latency_budget
                         );
                     }
                     results.push(ReflexResult {
@@ -303,10 +312,7 @@ impl ReflexArcSystem {
         results
     }
 
-    pub async fn process_neuromorphic_event(
-        &self,
-        event: &NeuromorphicEvent,
-    ) -> Vec<ReflexResult> {
+    pub async fn process_neuromorphic_event(&self, event: &NeuromorphicEvent) -> Vec<ReflexResult> {
         let sensor_type = match event.event_type.as_str() {
             "temperature" => SensorType::Temperature,
             "gpio" | "gpio_interrupt" => SensorType::GPIO,
@@ -360,7 +366,12 @@ impl ReflexArcSystem {
     }
 
     pub async fn total_activations(&self) -> u64 {
-        self.arcs.read().await.iter().map(|a| a.activation_count).sum()
+        self.arcs
+            .read()
+            .await
+            .iter()
+            .map(|a| a.activation_count)
+            .sum()
     }
 }
 
@@ -377,18 +388,25 @@ mod tests {
     #[tokio::test]
     async fn test_temperature_reflex() {
         let system = ReflexArcSystem::new();
-        system.register_reflex(ReflexArc::temperature_safety("cooling_fan", 80.0)).await;
+        system
+            .register_reflex(ReflexArc::temperature_safety("cooling_fan", 80.0))
+            .await;
 
         let event = SensorEvent::new("temp-1", SensorType::Temperature, 85.0, "celsius");
         let results = system.process_sensor_event(&event).await;
         assert_eq!(results.len(), 1);
-        assert_eq!(results[0].action.action_type, HardwareActionType::TriggerAlarm);
+        assert_eq!(
+            results[0].action.action_type,
+            HardwareActionType::TriggerAlarm
+        );
     }
 
     #[tokio::test]
     async fn test_no_trigger_below_threshold() {
         let system = ReflexArcSystem::new();
-        system.register_reflex(ReflexArc::temperature_safety("fan", 80.0)).await;
+        system
+            .register_reflex(ReflexArc::temperature_safety("fan", 80.0))
+            .await;
 
         let event = SensorEvent::new("temp-1", SensorType::Temperature, 70.0, "celsius");
         let results = system.process_sensor_event(&event).await;

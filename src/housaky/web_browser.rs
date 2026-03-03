@@ -1,13 +1,13 @@
 //! Web browsing and scraping functionality for Housaky.
-//! 
+//!
 //! This module provides tools for fetching web pages, searching the web,
 //! extracting content, and crawling links with proper error handling.
-//! 
+//!
 //! # Example Usage
-//! 
+//!
 //! ```ignore
 //! use housaky::web_browser::{WebBrowser, WebBrowserConfig};
-//! 
+//!
 //! #[tokio::main]
 //! async fn main() -> anyhow::Result<()> {
 //!     let config = WebBrowserConfig::default()
@@ -78,23 +78,17 @@ pub enum WebError {
     },
 
     #[error("Failed to parse HTML content from URL `{url}`: {details}")]
-    Parse {
-        url: String,
-        details: String,
-    },
+    Parse { url: String, details: String },
 
     #[error("URL not allowed by configuration: {url}")]
     NotAllowed { url: String },
 
     #[error("Unsupported content type `{content_type}` for URL: {url}")]
-    UnsupportedContentType { 
-        content_type: String,
-        url: String,
-    },
+    UnsupportedContentType { content_type: String, url: String },
 
     #[error("Content too large: {size} bytes (max allowed: {max} bytes) for URL: {url}")]
-    ContentTooLarge { 
-        size: usize, 
+    ContentTooLarge {
+        size: usize,
         max: usize,
         url: String,
     },
@@ -128,10 +122,7 @@ pub enum WebError {
     RateLimitExceeded,
 
     #[error("Analysis failed for URL `{url}`: {reason}")]
-    AnalysisFailed {
-        url: String,
-        reason: String,
-    },
+    AnalysisFailed { url: String, reason: String },
 }
 
 /// Classification of website types for specialized extraction.
@@ -438,7 +429,11 @@ pub struct SearchResult {
 }
 
 impl SearchResult {
-    pub fn new(title: impl Into<String>, url: impl Into<String>, snippet: impl Into<String>) -> Self {
+    pub fn new(
+        title: impl Into<String>,
+        url: impl Into<String>,
+        snippet: impl Into<String>,
+    ) -> Self {
         Self {
             title: title.into(),
             url: url.into(),
@@ -584,7 +579,9 @@ impl WebBrowser {
         let builder = reqwest::Client::builder()
             .timeout(config.timeout)
             .user_agent(&config.user_agent)
-            .redirect(reqwest::redirect::Policy::limited(config.max_redirects as usize))
+            .redirect(reqwest::redirect::Policy::limited(
+                config.max_redirects as usize,
+            ))
             .danger_accept_invalid_certs(false);
 
         builder.build().unwrap_or_else(|_| {
@@ -659,7 +656,10 @@ impl WebBrowser {
             .client
             .get(url)
             .header("Accept-Language", &self.config.accept_language)
-            .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+            .header(
+                "Accept",
+                "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            )
             .send()
             .await
             .map_err(|e| WebError::Fetch {
@@ -703,7 +703,12 @@ impl WebBrowser {
 
         let (title, content, links, metadata) = self.parse_html(url, &body);
 
-        debug!("Fetched {} ({} bytes, {} links)", url, body.len(), links.len());
+        debug!(
+            "Fetched {} ({} bytes, {} links)",
+            url,
+            body.len(),
+            links.len()
+        );
 
         Ok(WebPage {
             url: url.to_string(),
@@ -772,7 +777,11 @@ impl WebBrowser {
         None
     }
 
-    fn extract_metadata(&self, document: &Html, metadata: &mut std::collections::HashMap<String, String>) {
+    fn extract_metadata(
+        &self,
+        document: &Html,
+        metadata: &mut std::collections::HashMap<String, String>,
+    ) {
         if let Ok(selector) = Selector::parse("meta[name]") {
             for element in document.select(&selector) {
                 if let (Some(name), Some(content)) = (
@@ -787,7 +796,10 @@ impl WebBrowser {
         if let Ok(selector) = Selector::parse("meta[property], meta[name]") {
             for element in document.select(&selector) {
                 if let (Some(name), Some(content)) = (
-                    element.value().attr("property").or_else(|| element.value().attr("name")),
+                    element
+                        .value()
+                        .attr("property")
+                        .or_else(|| element.value().attr("name")),
                     element.value().attr("content"),
                 ) {
                     metadata.insert(name.to_string(), content.to_string());
@@ -810,7 +822,10 @@ impl WebBrowser {
                 let text = element.text().collect::<String>();
                 let clean_text = self.clean_text(&text);
 
-                if clean_text.is_empty() || href.starts_with("javascript:") || href.starts_with("mailto:") {
+                if clean_text.is_empty()
+                    || href.starts_with("javascript:")
+                    || href.starts_with("mailto:")
+                {
                     continue;
                 }
 
@@ -874,7 +889,8 @@ impl WebBrowser {
 
         if let Ok(selector) = Selector::parse("body") {
             if let Some(element) = document.select(&selector).next() {
-                return self.normalize_whitespace(&self.clean_text(&element.text().collect::<String>()));
+                return self
+                    .normalize_whitespace(&self.clean_text(&element.text().collect::<String>()));
             }
         }
 
@@ -908,7 +924,10 @@ impl WebBrowser {
             .client
             .get(url)
             .header("Accept-Language", &self.config.accept_language)
-            .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+            .header(
+                "Accept",
+                "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            )
             .send()
             .await
             .map_err(|e| WebError::Fetch {
@@ -1066,7 +1085,10 @@ impl WebBrowser {
         }
 
         let og_type = document
-            .select(&Selector::parse("meta[property=\"og:type\"]").unwrap_or_else(|_| Selector::parse("meta").unwrap()))
+            .select(
+                &Selector::parse("meta[property=\"og:type\"]")
+                    .unwrap_or_else(|_| Selector::parse("meta").unwrap()),
+            )
             .next()
             .and_then(|el| el.value().attr("content"));
 
@@ -1110,12 +1132,11 @@ impl WebBrowser {
 
         if let Ok(selector) = Selector::parse("pre code") {
             for element in document.select(&selector) {
-                let language = element.value().attr("class")
-                    .and_then(|c| {
-                        c.split_whitespace()
-                            .find(|c| c.starts_with("language-"))
-                            .map(|c| c.trim_start_matches("language-").to_string())
-                    });
+                let language = element.value().attr("class").and_then(|c| {
+                    c.split_whitespace()
+                        .find(|c| c.starts_with("language-"))
+                        .map(|c| c.trim_start_matches("language-").to_string())
+                });
 
                 let code = element.text().collect::<String>();
                 let element_id = element.value().attr("id").map(String::from);
@@ -1133,12 +1154,11 @@ impl WebBrowser {
         if code_blocks.is_empty() {
             if let Ok(selector) = Selector::parse("pre") {
                 for element in document.select(&selector) {
-                    let language = element.value().attr("class")
-                        .and_then(|c| {
-                            c.split_whitespace()
-                                .find(|c| c.starts_with("language-"))
-                                .map(|c| c.trim_start_matches("language-").to_string())
-                        });
+                    let language = element.value().attr("class").and_then(|c| {
+                        c.split_whitespace()
+                            .find(|c| c.starts_with("language-"))
+                            .map(|c| c.trim_start_matches("language-").to_string())
+                    });
 
                     let code = element.text().collect::<String>();
                     let element_id = element.value().attr("id").map(String::from);
@@ -1167,7 +1187,9 @@ impl WebBrowser {
                         let code = element.text().collect::<String>().trim().to_string();
                         let element_id = element.value().attr("id").map(String::from);
 
-                        if code.len() > 20 && (code.contains('(') || code.contains('{') || code.contains(';')) {
+                        if code.len() > 20
+                            && (code.contains('(') || code.contains('{') || code.contains(';'))
+                        {
                             code_blocks.push(CodeBlock {
                                 language: None,
                                 code,
@@ -1211,7 +1233,9 @@ impl WebBrowser {
                 }
 
                 if headers.is_empty() {
-                    if let Ok(header_selector) = Selector::parse("tr:first-child th, tr:first-child td") {
+                    if let Ok(header_selector) =
+                        Selector::parse("tr:first-child th, tr:first-child td")
+                    {
                         for header in table_element.select(&header_selector) {
                             let text = self.clean_text(&header.text().collect::<String>());
                             if !text.is_empty() {
@@ -1341,10 +1365,7 @@ impl WebBrowser {
                 for element in document.select(&selector) {
                     let text = self.clean_text(&element.text().collect::<String>());
                     if !text.is_empty() {
-                        headings.push(Heading {
-                            level,
-                            text,
-                        });
+                        headings.push(Heading { level, text });
                     }
                 }
             };
@@ -1394,15 +1415,7 @@ impl WebBrowser {
         let html = document.root_element().html().to_lowercase();
 
         let js_markers = [
-            "react",
-            "vue",
-            "angular",
-            "svelte",
-            "next.js",
-            "nuxt",
-            "gatsby",
-            "ember",
-            "backbone",
+            "react", "vue", "angular", "svelte", "next.js", "nuxt", "gatsby", "ember", "backbone",
             "mithril",
         ];
 
@@ -1434,14 +1447,26 @@ impl WebBrowser {
             }
         }
 
-        let xhr_indicators = ["axios", "fetch(", "XMLHttpRequest", ".ajax(", ".get(", ".post("];
+        let xhr_indicators = [
+            "axios",
+            "fetch(",
+            "XMLHttpRequest",
+            ".ajax(",
+            ".get(",
+            ".post(",
+        ];
         for indicator in &xhr_indicators {
             if html.contains(indicator) {
                 return true;
             }
         }
 
-        let router_indicators = ["react-router", "vue-router", "angular-router", "svelte-routing"];
+        let router_indicators = [
+            "react-router",
+            "vue-router",
+            "angular-router",
+            "svelte-routing",
+        ];
         for router in &router_indicators {
             if html.contains(router) {
                 return true;
@@ -1486,7 +1511,10 @@ impl WebBrowser {
                             .map(|t| t.to_lowercase())
                             .unwrap_or_else(|| "text".to_string());
 
-                        if input_type == "submit" || input_type == "button" || input_type == "hidden" {
+                        if input_type == "submit"
+                            || input_type == "button"
+                            || input_type == "hidden"
+                        {
                             continue;
                         }
 
@@ -1499,9 +1527,7 @@ impl WebBrowser {
                                 let label_selector = format!("label[for=\"{}\"]", id);
                                 Selector::parse(&label_selector).ok()
                             })
-                            .and_then(|selector| {
-                                document.select(&selector).next()
-                            })
+                            .and_then(|selector| document.select(&selector).next())
                             .map(|el| el.text().collect::<String>());
 
                         inputs.push(FormInput {
@@ -1563,7 +1589,10 @@ impl WebBrowser {
         let mut recommendations = Vec::new();
 
         if page.is_js_heavy {
-            recommendations.push("Consider using a headless browser (e.g., Playwright) for full content extraction".to_string());
+            recommendations.push(
+                "Consider using a headless browser (e.g., Playwright) for full content extraction"
+                    .to_string(),
+            );
         }
 
         if page.site_type == SiteType::Documentation {
@@ -1575,15 +1604,24 @@ impl WebBrowser {
         }
 
         if !page.forms.is_empty() {
-            recommendations.push(format!("Found {} form(s) on the page that could be used for automation", page.forms.len()));
+            recommendations.push(format!(
+                "Found {} form(s) on the page that could be used for automation",
+                page.forms.len()
+            ));
         }
 
         if page.json_ld.is_empty() && page.site_type == SiteType::Documentation {
-            recommendations.push("No JSON-LD structured data found. Consider alternative metadata extraction".to_string());
+            recommendations.push(
+                "No JSON-LD structured data found. Consider alternative metadata extraction"
+                    .to_string(),
+            );
         }
 
         if page.code_blocks.is_empty() && page.site_type == SiteType::Documentation {
-            recommendations.push("No code blocks detected. Consider checking for dynamically loaded content".to_string());
+            recommendations.push(
+                "No code blocks detected. Consider checking for dynamically loaded content"
+                    .to_string(),
+            );
         }
 
         if page.content.len() < 500 {
@@ -1646,17 +1684,22 @@ impl WebBrowser {
             .await
             .map_err(|e| WebError::Search { source: e })?;
 
-        let body = response.text().await.map_err(|e| WebError::Search { source: e })?;
+        let body = response
+            .text()
+            .await
+            .map_err(|e| WebError::Search { source: e })?;
 
-        let ddg_response: DuckDuckGoResponse = serde_json::from_str(&body)
-            .map_err(|e| WebError::JsonParse { 
-                url: search_url, 
-                source: e 
+        let ddg_response: DuckDuckGoResponse =
+            serde_json::from_str(&body).map_err(|e| WebError::JsonParse {
+                url: search_url,
+                source: e,
             })?;
 
         let mut results = Vec::new();
 
-        if let (Some(abstract_text), Some(abstract_url)) = (&ddg_response.abstract_text, &ddg_response.abstract_url) {
+        if let (Some(abstract_text), Some(abstract_url)) =
+            (&ddg_response.abstract_text, &ddg_response.abstract_url)
+        {
             if !abstract_text.is_empty() {
                 results.push(SearchResult::new(
                     ddg_response.heading.as_deref().unwrap_or(query),
@@ -1668,15 +1711,15 @@ impl WebBrowser {
 
         for topic in ddg_response.related_topics.iter().take(max_results) {
             if let (Some(text), Some(url)) = (&topic.text, &topic.first_url) {
-                let title = text
-                    .split('-')
-                    .next()
-                    .unwrap_or(text)
-                    .trim()
-                    .to_string();
+                let title = text.split('-').next().unwrap_or(text).trim().to_string();
 
                 let snippet = if text.contains('-') {
-                    text.split('-').skip(1).collect::<Vec<_>>().join("-").trim().to_string()
+                    text.split('-')
+                        .skip(1)
+                        .collect::<Vec<_>>()
+                        .join("-")
+                        .trim()
+                        .to_string()
                 } else {
                     String::new()
                 };
@@ -1905,7 +1948,9 @@ impl WebBrowser {
                     match name {
                         "twitter:card" => metadata.twitter_card = Some(content.to_string()),
                         "twitter:title" => metadata.twitter_title = Some(content.to_string()),
-                        "twitter:description" => metadata.twitter_description = Some(content.to_string()),
+                        "twitter:description" => {
+                            metadata.twitter_description = Some(content.to_string())
+                        }
                         "twitter:image" => metadata.twitter_image = Some(content.to_string()),
                         "twitter:site" => metadata.twitter_site = Some(content.to_string()),
                         _ => {}
@@ -2163,11 +2208,7 @@ mod tests {
 
     #[test]
     fn test_search_result_new() {
-        let result = SearchResult::new(
-            "Test Title",
-            "https://example.com",
-            "Test snippet",
-        );
+        let result = SearchResult::new("Test Title", "https://example.com", "Test snippet");
         assert_eq!(result.title, "Test Title");
         assert_eq!(result.url, "https://example.com");
         assert_eq!(result.snippet, "Test snippet");
@@ -2258,7 +2299,9 @@ mod tests {
     #[tokio::test]
     async fn test_is_reachable_invalid_url() {
         let mut browser = WebBrowser::with_default_config();
-        let result = browser.is_reachable("https://this-domain-does-not-exist-123456789.invalid").await;
+        let result = browser
+            .is_reachable("https://this-domain-does-not-exist-123456789.invalid")
+            .await;
         assert!(result.is_ok());
         assert!(!result.unwrap());
     }
@@ -2323,7 +2366,11 @@ mod integration_tests {
     async fn test_fetch_example_com() {
         let mut browser = WebBrowser::with_default_config();
         let page = browser.fetch("https://example.com").await;
-        assert!(page.is_ok(), "Failed to fetch example.com: {:?}", page.err());
+        assert!(
+            page.is_ok(),
+            "Failed to fetch example.com: {:?}",
+            page.err()
+        );
         let page = page.unwrap();
         assert!(!page.title.is_none() || page.title.is_none());
         assert!(!page.content.is_empty());
@@ -2334,7 +2381,11 @@ mod integration_tests {
     async fn test_fetch_rust_lang_learn() {
         let mut browser = WebBrowser::with_default_config();
         let page = browser.fetch("https://www.rust-lang.org/learn").await;
-        assert!(page.is_ok(), "Failed to fetch rust-lang.org: {:?}", page.err());
+        assert!(
+            page.is_ok(),
+            "Failed to fetch rust-lang.org: {:?}",
+            page.err()
+        );
     }
 
     #[tokio::test]
@@ -2404,15 +2455,17 @@ mod integration_tests {
     #[tokio::test]
     #[ignore = "Integration test - requires network"]
     async fn test_rate_limiting() {
-        let config = WebBrowserConfig::default()
-            .with_rate_limit_delay(Duration::from_millis(100));
+        let config = WebBrowserConfig::default().with_rate_limit_delay(Duration::from_millis(100));
         let mut browser = WebBrowser::with_config(config);
-        
+
         let start = Instant::now();
         let _ = browser.fetch("https://example.com").await;
         let _ = browser.fetch("https://example.com").await;
         let elapsed = start.elapsed();
-        
-        assert!(elapsed >= Duration::from_millis(100), "Rate limiting not working");
+
+        assert!(
+            elapsed >= Duration::from_millis(100),
+            "Rate limiting not working"
+        );
     }
 }

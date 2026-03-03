@@ -15,8 +15,7 @@ use super::backend::{QuantumBackend, QuantumConfig, SimulatorBackend};
 use super::circuit::{Gate, QuantumCircuit};
 use super::grover::{GroverConfig, GroverSearch};
 use super::optimizer::{
-    OptimizationProblem, ProblemType, QAOAConfig, QAOAOptimizer, VQEConfig,
-    VQEOptimizer,
+    OptimizationProblem, ProblemType, QAOAConfig, QAOAOptimizer, VQEConfig, VQEOptimizer,
 };
 use super::transpiler::CircuitTranspiler;
 use anyhow::Result;
@@ -79,7 +78,10 @@ pub struct AgiBridgeMetrics {
     pub reasoning_searches: u64,
     pub memory_optimizations: u64,
     pub fitness_evaluations: u64,
+    /// Cumulative cost across the current UTC calendar day.
     pub total_cost_usd: f64,
+    /// UTC date-stamp of the current budget window (YYYY-MM-DD).
+    pub budget_window_date: String,
     pub average_quantum_advantage: f64,
     pub quantum_advantage_samples: Vec<f64>,
 }
@@ -94,6 +96,7 @@ impl Default for AgiBridgeMetrics {
             memory_optimizations: 0,
             fitness_evaluations: 0,
             total_cost_usd: 0.0,
+            budget_window_date: chrono::Utc::now().format("%Y-%m-%d").to_string(),
             average_quantum_advantage: 1.0,
             quantum_advantage_samples: Vec::new(),
         }
@@ -187,12 +190,33 @@ pub struct QuantumAgiBridge {
 impl QuantumAgiBridge {
     /// Create a new AGI bridge with a local simulator backend.
     pub fn new(config: AgiBridgeConfig) -> Self {
-        let backend = Arc::new(SimulatorBackend::new(config.max_qubits, config.goal_scheduling_shots));
-        let transpiler = config.target_device.as_ref().map(|d| {
-            CircuitTranspiler::for_device(d)
-        });
+        let backend = Arc::new(SimulatorBackend::new(
+            config.max_qubits,
+            config.goal_scheduling_shots,
+        ));
+        let transpiler = config
+            .target_device
+            .as_ref()
+            .map(|d| CircuitTranspiler::for_device(d));
         Self {
             backend,
+            config,
+            metrics: Arc::new(RwLock::new(AgiBridgeMetrics::default())),
+            transpiler,
+        }
+    }
+
+    /// Create with a pre-built Amazon Braket backend (from async init in core.rs).
+    pub fn from_braket(
+        config: AgiBridgeConfig,
+        braket: crate::quantum::backend::AmazonBraketBackend,
+    ) -> Self {
+        let transpiler = config
+            .target_device
+            .as_ref()
+            .map(|d| CircuitTranspiler::for_device(d));
+        Self {
+            backend: Arc::new(braket),
             config,
             metrics: Arc::new(RwLock::new(AgiBridgeMetrics::default())),
             transpiler,
@@ -219,9 +243,10 @@ impl QuantumAgiBridge {
             ..Default::default()
         };
 
-        let transpiler = agi_config.target_device.as_ref().map(|d| {
-            CircuitTranspiler::for_device(d)
-        });
+        let transpiler = agi_config
+            .target_device
+            .as_ref()
+            .map(|d| CircuitTranspiler::for_device(d));
 
         Ok(Self {
             backend,
@@ -229,6 +254,11 @@ impl QuantumAgiBridge {
             metrics: Arc::new(RwLock::new(AgiBridgeMetrics::default())),
             transpiler,
         })
+    }
+
+    /// Return the maximum qubit count this bridge supports.
+    pub fn max_qubits(&self) -> usize {
+        self.config.max_qubits
     }
 
     /// Attach a custom quantum backend (e.g. pre-configured Braket backend).
@@ -264,11 +294,16 @@ impl QuantumAgiBridge {
             });
         }
 
-        // Route to quantum or classical based on problem size.
+        // Route to quantum or classical based on problem size and budget.
         let (schedule, mask, objective, strategy, advantage) = if n <= self.config.max_qubits
             && n >= self.config.quantum_threshold
+            && self.within_budget(self.config.goal_scheduling_shots).await
         {
-            self.schedule_goals_quantum(goal_ids, priorities, dependencies).await?
+            let result = self
+                .schedule_goals_quantum(goal_ids, priorities, dependencies)
+                .await?;
+            self.record_cost(self.config.goal_scheduling_shots).await;
+            result
         } else {
             self.schedule_goals_classical(goal_ids, priorities, dependencies)
         };
@@ -305,7 +340,7 @@ impl QuantumAgiBridge {
 
         // Build QAOA optimization problem from goals.
         let mut objective = HashMap::new();
-        for (i, id) in goal_ids.iter().enumerate() {
+        for (_i, id) in goal_ids.iter().enumerate() {
             let priority = priorities.get(id).copied().unwrap_or(0.5);
             objective.insert(id.clone(), priority);
         }
@@ -338,21 +373,27 @@ impl QuantumAgiBridge {
         let quantum_ms = quantum_start.elapsed().as_millis() as u64;
 
         // Build schedule from QAOA solution.
-        let mut scored_goals: Vec<(String, f64, bool)> = goal_ids.iter().enumerate().map(|(i, id)| {
-            let selected = result.best_solution.get(i).copied().unwrap_or(false);
-            let priority = priorities.get(id).copied().unwrap_or(0.0);
-            (id.clone(), priority, selected)
-        }).collect();
+        let mut scored_goals: Vec<(String, f64, bool)> = goal_ids
+            .iter()
+            .enumerate()
+            .map(|(i, id)| {
+                let selected = result.best_solution.get(i).copied().unwrap_or(false);
+                let priority = priorities.get(id).copied().unwrap_or(0.0);
+                (id.clone(), priority, selected)
+            })
+            .collect();
 
         // Sort selected goals by priority (descending).
         scored_goals.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
-        let schedule: Vec<String> = scored_goals.iter()
+        let schedule: Vec<String> = scored_goals
+            .iter()
             .filter(|(_, _, selected)| *selected)
             .map(|(id, _, _)| id.clone())
             .collect();
 
-        let mask: HashMap<String, bool> = scored_goals.iter()
+        let mask: HashMap<String, bool> = scored_goals
+            .iter()
             .map(|(id, _, selected)| (id.clone(), *selected))
             .collect();
 
@@ -364,9 +405,21 @@ impl QuantumAgiBridge {
 
         // Use whichever solution is better.
         if result.best_value >= classical_obj {
-            Ok((schedule, mask, result.best_value, "quantum_qaoa".into(), advantage))
+            Ok((
+                schedule,
+                mask,
+                result.best_value,
+                "quantum_qaoa".into(),
+                advantage,
+            ))
         } else {
-            Ok((classical_schedule, classical_mask, classical_obj, "classical_fallback".into(), advantage))
+            Ok((
+                classical_schedule,
+                classical_mask,
+                classical_obj,
+                "classical_fallback".into(),
+                advantage,
+            ))
         }
     }
 
@@ -388,9 +441,8 @@ impl QuantumAgiBridge {
         dependencies: &[(String, String)],
     ) -> (Vec<String>, HashMap<String, bool>, f64) {
         // Topological sort with priority weighting.
-        let mut in_degree: HashMap<String, usize> = goal_ids.iter()
-            .map(|id| (id.clone(), 0))
-            .collect();
+        let mut in_degree: HashMap<String, usize> =
+            goal_ids.iter().map(|id| (id.clone(), 0)).collect();
 
         for (_, to) in dependencies {
             if let Some(d) = in_degree.get_mut(to) {
@@ -404,14 +456,16 @@ impl QuantumAgiBridge {
 
         while !remaining.is_empty() {
             // Find goals with no unmet dependencies.
-            let ready: Vec<String> = remaining.iter()
+            let ready: Vec<String> = remaining
+                .iter()
                 .filter(|id| in_degree.get(*id).copied().unwrap_or(0) == 0)
                 .cloned()
                 .collect();
 
             if ready.is_empty() {
                 // Cycle detected — break ties by priority.
-                let best = remaining.iter()
+                let best = remaining
+                    .iter()
                     .max_by(|a, b| {
                         let pa = priorities.get(*a).unwrap_or(&0.0);
                         let pb = priorities.get(*b).unwrap_or(&0.0);
@@ -449,11 +503,15 @@ impl QuantumAgiBridge {
             }
         }
 
-        let objective: f64 = schedule.iter().enumerate().map(|(i, id)| {
-            let priority = priorities.get(id).copied().unwrap_or(0.0);
-            // Weight by position: earlier = higher value.
-            priority * (1.0 - i as f64 / schedule.len().max(1) as f64)
-        }).sum();
+        let objective: f64 = schedule
+            .iter()
+            .enumerate()
+            .map(|(i, id)| {
+                let priority = priorities.get(id).copied().unwrap_or(0.0);
+                // Weight by position: earlier = higher value.
+                priority * (1.0 - i as f64 / schedule.len().max(1) as f64)
+            })
+            .sum();
 
         (schedule, mask, objective)
     }
@@ -483,7 +541,9 @@ impl QuantumAgiBridge {
             });
         }
 
-        let node_index: HashMap<&str, usize> = node_ids.iter().enumerate()
+        let node_index: HashMap<&str, usize> = node_ids
+            .iter()
+            .enumerate()
             .map(|(i, id)| (id.as_str(), i))
             .collect();
 
@@ -491,7 +551,9 @@ impl QuantumAgiBridge {
         let mut model = IsingModel::new(n);
 
         for (from, to, weight) in edges {
-            if let (Some(&i), Some(&j)) = (node_index.get(from.as_str()), node_index.get(to.as_str())) {
+            if let (Some(&i), Some(&j)) =
+                (node_index.get(from.as_str()), node_index.get(to.as_str()))
+            {
                 // Negative coupling → favor same cluster assignment.
                 model.add_quadratic(i, j, -weight.abs());
             }
@@ -592,7 +654,10 @@ impl QuantumAgiBridge {
 
         let n = branches.len();
 
-        if n >= self.config.quantum_threshold && n <= self.config.max_qubits {
+        if n >= self.config.quantum_threshold
+            && n <= self.config.max_qubits
+            && self.within_budget(self.config.reasoning_search_shots).await
+        {
             let grover = GroverSearch::new(
                 self.backend.clone(),
                 GroverConfig {
@@ -601,7 +666,10 @@ impl QuantumAgiBridge {
                 },
             );
 
-            let result = grover.search_reasoning_branches(branches, fitness_scores).await?;
+            let result = grover
+                .search_reasoning_branches(branches, fitness_scores)
+                .await?;
+            self.record_cost(self.config.reasoning_search_shots).await;
 
             {
                 let mut m = self.metrics.write().await;
@@ -621,15 +689,13 @@ impl QuantumAgiBridge {
             })
         } else {
             // Classical fallback: sort by fitness.
-            let mut scored: Vec<(String, f64)> = branches.iter()
+            let mut scored: Vec<(String, f64)> = branches
+                .iter()
                 .map(|b| (b.clone(), fitness_scores.get(b).copied().unwrap_or(0.0)))
                 .collect();
             scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
-            let best = scored.into_iter()
-                .take(3)
-                .map(|(b, _)| b)
-                .collect();
+            let best = scored.into_iter().take(3).map(|(b, _)| b).collect();
 
             {
                 let mut m = self.metrics.write().await;
@@ -674,6 +740,7 @@ impl QuantumAgiBridge {
 
         let (params, converged, strategy) = if n <= self.config.max_qubits
             && n >= self.config.quantum_threshold
+            && self.within_budget(self.config.fitness_eval_shots).await
         {
             let vqe = VQEOptimizer::new(
                 self.backend.clone(),
@@ -687,13 +754,18 @@ impl QuantumAgiBridge {
             );
 
             let optimized = vqe.optimize_parameters(n).await?;
+            self.record_cost(self.config.fitness_eval_shots).await;
 
             // Map VQE output [0, 2π] → parameter scaling.
-            let scaled: Vec<f64> = optimized.iter().enumerate().map(|(i, &v)| {
-                let base = current_values.get(i).copied().unwrap_or(0.5);
-                // Scale VQE parameter to be centered around current value.
-                base + (v - std::f64::consts::PI) * 0.1
-            }).collect();
+            let scaled: Vec<f64> = optimized
+                .iter()
+                .enumerate()
+                .map(|(i, &v)| {
+                    let base = current_values.get(i).copied().unwrap_or(0.5);
+                    // Scale VQE parameter to be centered around current value.
+                    base + (v - std::f64::consts::PI) * 0.1
+                })
+                .collect();
 
             {
                 let mut m = self.metrics.write().await;
@@ -704,11 +776,15 @@ impl QuantumAgiBridge {
             (scaled, true, "quantum_vqe".to_string())
         } else {
             // Classical gradient-free optimization.
-            let optimized: Vec<f64> = current_values.iter().enumerate().map(|(i, &v)| {
-                // Simple perturbation search.
-                let delta = 0.01 * (i as f64 * 0.618).sin();
-                (v + delta).clamp(0.0, 1.0)
-            }).collect();
+            let optimized: Vec<f64> = current_values
+                .iter()
+                .enumerate()
+                .map(|(i, &v)| {
+                    // Simple perturbation search.
+                    let delta = 0.01 * (i as f64 * 0.618).sin();
+                    (v + delta).clamp(0.0, 1.0)
+                })
+                .collect();
 
             {
                 let mut m = self.metrics.write().await;
@@ -805,6 +881,51 @@ impl QuantumAgiBridge {
     pub async fn reset_metrics(&self) {
         *self.metrics.write().await = AgiBridgeMetrics::default();
     }
+
+    /// §10.6 — Cost budget guard: returns true if a quantum call is permitted
+    /// within the configured per-day budget. If budget is 0, always permit.
+    /// Estimated cost uses a simple shots × per-shot pricing model:
+    ///   $0.00035 / shot on Amazon Braket SV1 simulator (as of 2024).
+    /// Automatically resets the daily spend counter at UTC midnight.
+    async fn within_budget(&self, estimated_shots: u64) -> bool {
+        if self.config.cycle_budget_usd <= 0.0 {
+            return true;
+        }
+        const COST_PER_SHOT: f64 = 0.00035;
+        let estimated_cost = estimated_shots as f64 * COST_PER_SHOT;
+
+        let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+        {
+            let mut m = self.metrics.write().await;
+            if m.budget_window_date != today {
+                info!(
+                    "💰 Quantum daily budget reset: {} → {} (spent=${:.5})",
+                    m.budget_window_date, today, m.total_cost_usd
+                );
+                m.total_cost_usd = 0.0;
+                m.budget_window_date = today;
+            }
+        }
+
+        let spent = self.metrics.read().await.total_cost_usd;
+        let remaining = self.config.cycle_budget_usd - spent;
+        if estimated_cost > remaining {
+            info!(
+                "💰 Quantum budget guard: estimated=${:.5} > remaining=${:.5} — falling back to classical",
+                estimated_cost, remaining
+            );
+            false
+        } else {
+            true
+        }
+    }
+
+    /// Record cost for a completed quantum call (approximate).
+    async fn record_cost(&self, shots: u64) {
+        const COST_PER_SHOT: f64 = 0.00035;
+        let cost = shots as f64 * COST_PER_SHOT;
+        self.metrics.write().await.total_cost_usd += cost;
+    }
 }
 
 #[cfg(test)]
@@ -839,7 +960,10 @@ mod tests {
             ("write-tests".to_string(), "deploy-v2".to_string()),
         ];
 
-        let result = bridge.schedule_goals(&goals, &priorities, &deps).await.unwrap();
+        let result = bridge
+            .schedule_goals(&goals, &priorities, &deps)
+            .await
+            .unwrap();
         assert!(!result.schedule.is_empty());
         assert!(result.runtime_ms < 30_000);
     }
@@ -847,7 +971,10 @@ mod tests {
     #[tokio::test]
     async fn test_goal_scheduling_empty() {
         let bridge = default_bridge();
-        let result = bridge.schedule_goals(&[], &HashMap::new(), &[]).await.unwrap();
+        let result = bridge
+            .schedule_goals(&[], &HashMap::new(), &[])
+            .await
+            .unwrap();
         assert!(result.schedule.is_empty());
         assert_eq!(result.strategy, "empty");
     }
@@ -877,7 +1004,10 @@ mod tests {
             scores.insert(b.clone(), (i as f64) / 8.0);
         }
 
-        let result = bridge.search_reasoning_branches(&branches, &scores).await.unwrap();
+        let result = bridge
+            .search_reasoning_branches(&branches, &scores)
+            .await
+            .unwrap();
         assert!(!result.best_branches.is_empty());
         assert!(result.speedup >= 1.0);
     }
@@ -885,10 +1015,18 @@ mod tests {
     #[tokio::test]
     async fn test_fitness_landscape() {
         let bridge = default_bridge();
-        let labels = vec!["lr".into(), "momentum".into(), "decay".into(), "batch_size".into()];
+        let labels = vec![
+            "lr".into(),
+            "momentum".into(),
+            "decay".into(),
+            "batch_size".into(),
+        ];
         let values = vec![0.01, 0.9, 0.001, 0.5];
 
-        let result = bridge.explore_fitness_landscape(&labels, &values).await.unwrap();
+        let result = bridge
+            .explore_fitness_landscape(&labels, &values)
+            .await
+            .unwrap();
         assert_eq!(result.optimal_parameters.len(), 4);
         assert!(result.converged);
     }
@@ -904,7 +1042,10 @@ mod tests {
         let posteriors = bridge.reduce_uncertainty(&options, &priors).await.unwrap();
         assert_eq!(posteriors.len(), 2);
         let total: f64 = posteriors.values().sum();
-        assert!((total - 1.0).abs() < 0.1, "posteriors should sum to ~1.0: {total}");
+        assert!(
+            (total - 1.0).abs() < 0.1,
+            "posteriors should sum to ~1.0: {total}"
+        );
     }
 
     #[tokio::test]

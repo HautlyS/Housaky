@@ -65,7 +65,8 @@ impl Default for BenchmarkSuite {
                     name: "module_integration".to_string(),
                     category: BenchmarkCategory::ModuleIntegration,
                     weight: 0.15,
-                    description: "How well modules share information (connectivity score)".to_string(),
+                    description: "How well modules share information (connectivity score)"
+                        .to_string(),
                 },
                 ArchitectureBenchmark {
                     name: "alignment_compliance".to_string(),
@@ -193,7 +194,11 @@ impl ArchitectureEvaluator {
                 .modules
                 .iter()
                 .any(|m| m.enabled && m.module_type == ModuleType::Alignment);
-            if has_alignment { 0.95 } else { 0.50 }
+            if has_alignment {
+                0.95
+            } else {
+                0.50
+            }
         };
         scores.insert("alignment_compliance".to_string(), alignment_score);
 
@@ -215,7 +220,8 @@ impl ArchitectureEvaluator {
             task_completion_rate: task_score,
             latency_score,
             alignment_score,
-            modularity_score: 1.0 - graph_summary.isolated_modules as f64 / (enabled_modules.max(1) as f64),
+            modularity_score: 1.0
+                - graph_summary.isolated_modules as f64 / (enabled_modules.max(1) as f64),
             resource_efficiency: resource_score,
             ..Default::default()
         };

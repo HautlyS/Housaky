@@ -184,7 +184,12 @@ impl CuriosityEngine {
 
         let event_words: std::collections::HashSet<String> = recent_events
             .iter()
-            .flat_map(|e| e.to_lowercase().split_whitespace().map(String::from).collect::<Vec<_>>())
+            .flat_map(|e| {
+                e.to_lowercase()
+                    .split_whitespace()
+                    .map(String::from)
+                    .collect::<Vec<_>>()
+            })
             .collect();
 
         let intersection = topic_words.intersection(&event_words).count() as f64;
@@ -301,7 +306,9 @@ impl InformationGapEngine {
     }
 
     pub fn with_storage(mut self, workspace_dir: &PathBuf) -> Self {
-        let storage_path = workspace_dir.join(".housaky").join("information_gaps.msgpack");
+        let storage_path = workspace_dir
+            .join(".housaky")
+            .join("information_gaps.msgpack");
         self.storage_path = Some(storage_path);
         self
     }

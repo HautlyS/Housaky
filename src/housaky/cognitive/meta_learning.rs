@@ -196,13 +196,15 @@ impl MetaLearningEngine {
             if path.exists() {
                 let strategies_path = path.join("strategies.msgpack");
                 if strategies_path.exists() {
-                    let loaded: HashMap<String, LearningStrategy> = read_msgpack_file(&strategies_path).await?;
+                    let loaded: HashMap<String, LearningStrategy> =
+                        read_msgpack_file(&strategies_path).await?;
                     *self.strategies.write().await = loaded;
                 }
 
                 let history_path = path.join("history.msgpack");
                 if history_path.exists() {
-                    let loaded: VecDeque<LearningOutcome> = read_msgpack_file(&history_path).await?;
+                    let loaded: VecDeque<LearningOutcome> =
+                        read_msgpack_file(&history_path).await?;
                     *self.outcome_history.write().await = loaded;
                 }
 

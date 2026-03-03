@@ -17,16 +17,16 @@ use uuid::Uuid;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum TemporalScale {
-    Microsecond,   // Hardware reflexes, interrupt handling          <1ms
-    Millisecond,   // Tool execution, API calls                      1–999ms
-    Second,        // Reasoning steps, user interaction turns        1–59s
-    Minute,        // Task completion, multi-step workflows          1–59min
-    Hour,          // Goal achievement, project milestones           1–23h
-    Day,           // Strategic planning, learning cycles            1–6d
-    Week,          // Capability development, architecture evolution 1–3w
-    Month,         // Research programs, self-improvement arcs       1–11mo
-    Year,          // Long-term vision, singularity progress         1+ yr
-    Unbounded,     // Post-singularity: open-ended self-improvement
+    Microsecond, // Hardware reflexes, interrupt handling          <1ms
+    Millisecond, // Tool execution, API calls                      1–999ms
+    Second,      // Reasoning steps, user interaction turns        1–59s
+    Minute,      // Task completion, multi-step workflows          1–59min
+    Hour,        // Goal achievement, project milestones           1–23h
+    Day,         // Strategic planning, learning cycles            1–6d
+    Week,        // Capability development, architecture evolution 1–3w
+    Month,       // Research programs, self-improvement arcs       1–11mo
+    Year,        // Long-term vision, singularity progress         1+ yr
+    Unbounded,   // Post-singularity: open-ended self-improvement
 }
 
 impl TemporalScale {
@@ -34,7 +34,9 @@ impl TemporalScale {
     pub fn duration_range(&self) -> (Option<Duration>, Option<Duration>) {
         match self {
             TemporalScale::Microsecond => (None, Some(Duration::milliseconds(1))),
-            TemporalScale::Millisecond => (Some(Duration::milliseconds(1)), Some(Duration::seconds(1))),
+            TemporalScale::Millisecond => {
+                (Some(Duration::milliseconds(1)), Some(Duration::seconds(1)))
+            }
             TemporalScale::Second => (Some(Duration::seconds(1)), Some(Duration::minutes(1))),
             TemporalScale::Minute => (Some(Duration::minutes(1)), Some(Duration::hours(1))),
             TemporalScale::Hour => (Some(Duration::hours(1)), Some(Duration::days(1))),
@@ -186,7 +188,7 @@ pub struct TemporalAction {
     pub id: String,
     pub description: String,
     pub estimated_duration: Option<Duration>,
-    pub dependencies: Vec<String>,  // action IDs
+    pub dependencies: Vec<String>, // action IDs
     pub scheduled_at: Option<DateTime<Utc>>,
     pub completed: bool,
     pub scale: TemporalScale,
@@ -367,7 +369,11 @@ impl MultiScaleTemporalEngine {
     pub fn plans_at_scale(&self, scale: &TemporalScale) -> Vec<&TemporalPlan> {
         self.active_plans
             .get(scale)
-            .map(|m| m.values().filter(|p| p.status == PlanStatus::Active).collect())
+            .map(|m| {
+                m.values()
+                    .filter(|p| p.status == PlanStatus::Active)
+                    .collect()
+            })
             .unwrap_or_default()
     }
 
@@ -411,7 +417,11 @@ impl MultiScaleTemporalEngine {
             let slow_plans: Vec<&TemporalPlan> = self
                 .active_plans
                 .get(&constraint.slow_scale)
-                .map(|m| m.values().filter(|p| p.status == PlanStatus::Active).collect())
+                .map(|m| {
+                    m.values()
+                        .filter(|p| p.status == PlanStatus::Active)
+                        .collect()
+                })
                 .unwrap_or_default();
 
             // Simple heuristic: if there are no slow-scale plans, no conflict possible
@@ -557,7 +567,10 @@ impl MultiScaleTemporalEngine {
         let mut sub_plan_ids = Vec::new();
         for action in &plan_clone.actions {
             let mut sub = TemporalPlan::new(
-                &format!("{} [decomposed from {}]", action.description, plan_clone.name),
+                &format!(
+                    "{} [decomposed from {}]",
+                    action.description, plan_clone.name
+                ),
                 finer_scale.clone(),
                 &action.description,
             );
@@ -618,10 +631,7 @@ impl MultiScaleTemporalEngine {
         for scale_plans in self.active_plans.values_mut() {
             if let Some(parent) = scale_plans.get_mut(parent_plan_id) {
                 parent.update_progress(avg);
-                debug!(
-                    "Aggregated progress for '{}': {:.2}",
-                    parent.name, avg
-                );
+                debug!("Aggregated progress for '{}': {:.2}", parent.name, avg);
                 break;
             }
         }

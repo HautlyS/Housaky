@@ -1,12 +1,13 @@
 use crate::housaky::goal_engine::GoalEngine;
 use crate::housaky::meta_cognition::MetaCognitionEngine;
+use crate::quantum::QuantumAgiBridge;
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::info;
+use tracing::{info, warn};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FeedbackEdge {
@@ -65,6 +66,8 @@ pub struct UnifiedFeedbackLoop {
     feedback_history: Arc<RwLock<VecDeque<FeedbackEvent>>>,
     component_states: Arc<RwLock<HashMap<String, ComponentState>>>,
     loop_closures: Arc<RwLock<Vec<LoopClosure>>>,
+    /// §10.8 — Optional quantum bridge for Grover-accelerated edge optimization.
+    quantum_bridge: Option<Arc<QuantumAgiBridge>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -98,12 +101,9 @@ pub struct LoopClosure {
 }
 
 impl UnifiedFeedbackLoop {
-    pub fn new(
-        goal_engine: Arc<GoalEngine>,
-        meta_cognition: Arc<MetaCognitionEngine>,
-    ) -> Self {
+    pub fn new(goal_engine: Arc<GoalEngine>, meta_cognition: Arc<MetaCognitionEngine>) -> Self {
         let edges = Self::create_default_edges();
-        
+
         Self {
             goal_engine,
             meta_cognition,
@@ -112,6 +112,80 @@ impl UnifiedFeedbackLoop {
             feedback_history: Arc::new(RwLock::new(VecDeque::new())),
             component_states: Arc::new(RwLock::new(HashMap::new())),
             loop_closures: Arc::new(RwLock::new(Vec::new())),
+            quantum_bridge: None,
+        }
+    }
+
+    /// §10.8 — Attach a quantum bridge for Grover-accelerated feedback optimization.
+    pub fn with_quantum(mut self, bridge: Arc<QuantumAgiBridge>) -> Self {
+        self.quantum_bridge = Some(bridge);
+        self
+    }
+
+    /// §10.8 — Quantum-accelerated feedback edge optimization.
+    ///
+    /// Uses Grover search over edge configurations to find the globally optimal
+    /// set of active feedback paths, maximising average impact per hop.
+    /// Falls back to classical `optimize_feedback_paths` when bridge unavailable.
+    pub async fn quantum_optimize_edges(&self) {
+        let bridge = match &self.quantum_bridge {
+            Some(b) => b.clone(),
+            None => {
+                self.optimize_feedback_paths().await;
+                return;
+            }
+        };
+
+        let edges_snapshot = self.feedback_edges.read().await.clone();
+        if edges_snapshot.len() < 4 {
+            self.optimize_feedback_paths().await;
+            return;
+        }
+
+        // Build branch IDs and fitness map from current edge strengths.
+        let branch_ids: Vec<String> = edges_snapshot
+            .iter()
+            .map(|e| format!("{}->{}", e.from_component, e.to_component))
+            .collect();
+        let fitness: HashMap<String, f64> = edges_snapshot
+            .iter()
+            .map(|e| {
+                let key = format!("{}->{}", e.from_component, e.to_component);
+                (key, e.strength)
+            })
+            .collect();
+
+        match bridge
+            .search_reasoning_branches(&branch_ids, &fitness)
+            .await
+        {
+            Ok(result) => {
+                info!(
+                    "🔮 Quantum feedback optimization: {} edges, \
+                     top paths={:?}, speedup={:.2}x, strategy={}",
+                    branch_ids.len(),
+                    &result.best_branches.iter().take(3).collect::<Vec<_>>(),
+                    result.speedup,
+                    result.strategy
+                );
+                // Boost strength of quantum-identified best paths by 5%.
+                let best_set: std::collections::HashSet<&String> =
+                    result.best_branches.iter().collect();
+                let mut edges = self.feedback_edges.write().await;
+                for edge in edges.iter_mut() {
+                    let key = format!("{}->{}", edge.from_component, edge.to_component);
+                    if best_set.contains(&key) {
+                        edge.strength = (edge.strength * 1.05).min(1.0);
+                    } else {
+                        edge.strength *= self.config.feedback_decay;
+                    }
+                }
+            }
+            Err(e) => {
+                warn!("Quantum feedback edge optimization failed (classical fallback): {e}");
+                drop(edges_snapshot);
+                self.optimize_feedback_paths().await;
+            }
         }
     }
 
@@ -247,16 +321,19 @@ impl UnifiedFeedbackLoop {
     }
 
     async fn handle_failed_tool(&self, event: FeedbackEvent) -> Result<()> {
-        let reason = event.data.get("error").and_then(|v| v.as_str()).unwrap_or("Unknown");
+        let reason = event
+            .data
+            .get("error")
+            .and_then(|v| v.as_str())
+            .unwrap_or("Unknown");
 
-        let _ = self.meta_cognition
+        let _ = self
+            .meta_cognition
             .reflect(&format!("Tool failure: {}", reason))
             .await;
 
         if let Some(goal_id) = event.data.get("goal_id").and_then(|v| v.as_str()) {
-            let _ = self.goal_engine
-                .mark_failed(goal_id, reason)
-                .await;
+            let _ = self.goal_engine.mark_failed(goal_id, reason).await;
         }
 
         Ok(())
@@ -271,7 +348,8 @@ impl UnifiedFeedbackLoop {
                 _ => "learning",
             };
 
-            let _ = self.meta_cognition
+            let _ = self
+                .meta_cognition
                 .update_capability(capability, 0.02)
                 .await;
         }
@@ -280,7 +358,8 @@ impl UnifiedFeedbackLoop {
     async fn handle_goal_update(&self, event: FeedbackEvent) {
         if let Some(goal_status) = event.data.get("status").and_then(|v| v.as_str()) {
             if goal_status == "completed" {
-                let _ = self.meta_cognition
+                let _ = self
+                    .meta_cognition
                     .update_capability("goal_achievement", 0.01)
                     .await;
             }
@@ -290,7 +369,8 @@ impl UnifiedFeedbackLoop {
     async fn handle_capability_change(&self, event: FeedbackEvent) {
         if let Some(capability) = event.data.get("capability").and_then(|v| v.as_str()) {
             if let Some(delta) = event.data.get("delta").and_then(|v| v.as_f64()) {
-                let _ = self.meta_cognition
+                let _ = self
+                    .meta_cognition
                     .update_capability(capability, delta)
                     .await;
             }
@@ -299,20 +379,15 @@ impl UnifiedFeedbackLoop {
 
     async fn check_for_loop_closure(&self, _event: &FeedbackEvent) {
         let history = self.feedback_history.read().await;
-        
-        let recent_events: Vec<_> = history
-            .iter()
-            .rev()
-            .take(10)
-            .collect();
 
-        let loop_components: Vec<String> = recent_events
-            .iter()
-            .map(|e| e.target.clone())
-            .collect();
+        let recent_events: Vec<_> = history.iter().rev().take(10).collect();
+
+        let loop_components: Vec<String> = recent_events.iter().map(|e| e.target.clone()).collect();
 
         let has_cycle = loop_components.windows(2).any(|w| {
-            recent_events.iter().any(|e| e.source == w[1] && e.target == w[0])
+            recent_events
+                .iter()
+                .any(|e| e.source == w[1] && e.target == w[0])
         });
 
         if has_cycle && loop_components.len() >= 4 {
@@ -338,12 +413,17 @@ impl UnifiedFeedbackLoop {
                 FeedbackType::GoalUpdate,
                 serde_json::json!({ "goal_id": goal }),
                 true,
-            ).await?;
+            )
+            .await?;
         }
         Ok(())
     }
 
-    pub async fn propagate_reasoning_to_tools(&self, reasoning_result: &str, suggested_tools: &[String]) -> Result<()> {
+    pub async fn propagate_reasoning_to_tools(
+        &self,
+        reasoning_result: &str,
+        suggested_tools: &[String],
+    ) -> Result<()> {
         for tool in suggested_tools {
             self.register_feedback(
                 "reasoning",
@@ -354,12 +434,18 @@ impl UnifiedFeedbackLoop {
                     "tool": tool
                 }),
                 true,
-            ).await?;
+            )
+            .await?;
         }
         Ok(())
     }
 
-    pub async fn propagate_tool_to_learning(&self, tool_name: &str, success: bool, result: &str) -> Result<()> {
+    pub async fn propagate_tool_to_learning(
+        &self,
+        tool_name: &str,
+        success: bool,
+        result: &str,
+    ) -> Result<()> {
         self.register_feedback(
             "tools",
             "learning",
@@ -370,7 +456,8 @@ impl UnifiedFeedbackLoop {
                 "result": result
             }),
             success,
-        ).await
+        )
+        .await
     }
 
     pub async fn propagate_learning_to_goals(&self, learning_outcome: &str) -> Result<()> {
@@ -380,7 +467,8 @@ impl UnifiedFeedbackLoop {
             FeedbackType::Learning,
             serde_json::json!({ "outcome": learning_outcome }),
             true,
-        ).await
+        )
+        .await
     }
 
     pub async fn get_feedback_metrics(&self) -> FeedbackMetrics {
@@ -390,7 +478,7 @@ impl UnifiedFeedbackLoop {
 
         let total_events = history.len();
         let success_events = history.iter().filter(|e| e.success).count();
-        
+
         let avg_latency: u64 = if !edges.is_empty() {
             edges.iter().map(|e| e.latency_ms).sum::<u64>() / edges.len() as u64
         } else {
@@ -399,7 +487,11 @@ impl UnifiedFeedbackLoop {
 
         FeedbackMetrics {
             total_feedback_events: total_events,
-            success_rate: if total_events > 0 { success_events as f64 / total_events as f64 } else { 0.0 },
+            success_rate: if total_events > 0 {
+                success_events as f64 / total_events as f64
+            } else {
+                0.0
+            },
             active_edges: edges.iter().filter(|e| e.enabled).count(),
             loop_closures_detected: closures.len(),
             average_latency_ms: avg_latency,
@@ -408,20 +500,21 @@ impl UnifiedFeedbackLoop {
 
     pub async fn optimize_feedback_paths(&self) {
         let mut edges = self.feedback_edges.write().await;
-        
+
         for edge in edges.iter_mut() {
             let history = self.feedback_history.read().await;
-            
+
             let relevant_feedback: Vec<_> = history
                 .iter()
                 .filter(|e| e.source == edge.from_component && e.target == edge.to_component)
                 .collect();
 
             if !relevant_feedback.is_empty() {
-                let avg_impact: f64 = relevant_feedback.iter().map(|e| e.impact).sum::<f64>() 
+                let avg_impact: f64 = relevant_feedback.iter().map(|e| e.impact).sum::<f64>()
                     / relevant_feedback.len() as f64;
-                
-                edge.strength = (edge.strength * self.config.feedback_decay + avg_impact * (1.0 - self.config.feedback_decay))
+
+                edge.strength = (edge.strength * self.config.feedback_decay
+                    + avg_impact * (1.0 - self.config.feedback_decay))
                     .clamp(0.0, 1.0);
             }
         }

@@ -1,13 +1,13 @@
-use std::time::{Duration, Instant};
+use crate::tui::enhanced_app::theme::{
+    style_toast_error, style_toast_info, style_toast_success, style_toast_warn,
+};
 use ratatui::{
     layout::Rect,
     text::{Line, Span},
     widgets::{Block, Borders, Clear, Paragraph},
     Frame,
 };
-use crate::tui::enhanced_app::theme::{
-    style_toast_info, style_toast_success, style_toast_error, style_toast_warn,
-};
+use std::time::{Duration, Instant};
 
 // ── Toast kind ────────────────────────────────────────────────────────────────
 
@@ -22,18 +22,18 @@ pub enum ToastKind {
 impl ToastKind {
     fn icon(&self) -> &'static str {
         match self {
-            ToastKind::Info    => "ℹ",
+            ToastKind::Info => "ℹ",
             ToastKind::Success => "✓",
-            ToastKind::Error   => "✗",
-            ToastKind::Warn    => "⚠",
+            ToastKind::Error => "✗",
+            ToastKind::Warn => "⚠",
         }
     }
 
     fn ttl(&self) -> Duration {
         match self {
             ToastKind::Error => Duration::from_secs(6),
-            ToastKind::Warn  => Duration::from_secs(5),
-            _                => Duration::from_secs(3),
+            ToastKind::Warn => Duration::from_secs(5),
+            _ => Duration::from_secs(3),
         }
     }
 }
@@ -41,9 +41,9 @@ impl ToastKind {
 // ── Toast entry ───────────────────────────────────────────────────────────────
 
 struct Toast {
-    kind:    ToastKind,
+    kind: ToastKind,
     message: String,
-    born:    Instant,
+    born: Instant,
 }
 
 impl Toast {
@@ -121,10 +121,10 @@ impl Notifications {
             f.render_widget(Clear, toast_area);
 
             let style = match toast.kind {
-                ToastKind::Info    => style_toast_info(),
+                ToastKind::Info => style_toast_info(),
                 ToastKind::Success => style_toast_success(),
-                ToastKind::Error   => style_toast_error(),
-                ToastKind::Warn    => style_toast_warn(),
+                ToastKind::Error => style_toast_error(),
+                ToastKind::Warn => style_toast_warn(),
             };
 
             // Fade-out effect: dim text slightly near expiry

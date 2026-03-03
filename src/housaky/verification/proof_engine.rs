@@ -21,7 +21,10 @@ pub enum ProofStepKind {
     /// Substitute a known fact into a formula.
     Substitution { fact: String, into: String },
     /// Apply modus ponens: if P → Q and P, conclude Q.
-    ModusPonens { premise: String, implication: String },
+    ModusPonens {
+        premise: String,
+        implication: String,
+    },
     /// Instantiate a universally-quantified statement.
     Instantiation { statement: String, witness: String },
     /// Case split on a predicate.
@@ -124,9 +127,7 @@ impl ProofChain {
         // (Simplified: in production this would be a full dependent-type check.)
         for proof in &self.proofs {
             for axiom in &proof.axioms_used {
-                if !self.proven_facts.contains_key(axiom.as_str())
-                    && !axiom.starts_with("axiom:")
-                {
+                if !self.proven_facts.contains_key(axiom.as_str()) && !axiom.starts_with("axiom:") {
                     return false;
                 }
             }
@@ -189,7 +190,8 @@ impl ProofEngine {
             ),
         ];
         for (name, statement) in axioms {
-            self.axiom_library.insert(name.to_string(), statement.to_string());
+            self.axiom_library
+                .insert(name.to_string(), statement.to_string());
             // Pre-seed the chain with axioms as ground truths
             self.chain
                 .proven_facts
@@ -199,7 +201,8 @@ impl ProofEngine {
 
     /// Register an additional axiom.
     pub fn register_axiom(&mut self, name: &str, statement: &str) {
-        self.axiom_library.insert(name.to_string(), statement.to_string());
+        self.axiom_library
+            .insert(name.to_string(), statement.to_string());
         self.chain
             .proven_facts
             .insert(name.to_string(), format!("axiom:{}", name));
@@ -237,14 +240,17 @@ impl ProofEngine {
                     axiom_name: "axiom:safety_module_immutability".to_string(),
                 },
                 result_fact: "modification targets safety-critical module".to_string(),
-                justification: format!(
-                    "File '{}' is in the protected module set",
-                    ctx.target_file
-                ),
+                justification: format!("File '{}' is in the protected module set", ctx.target_file),
             });
-            proof.finalize("alignment NOT preserved — modification touches protected module", false);
+            proof.finalize(
+                "alignment NOT preserved — modification touches protected module",
+                false,
+            );
             proof.verification_time_ms = start.elapsed().as_millis() as u64;
-            warn!("Proof FAILED: modification touches protected module '{}'", ctx.target_file);
+            warn!(
+                "Proof FAILED: modification touches protected module '{}'",
+                ctx.target_file
+            );
             return proof;
         }
         step_num += 1;
@@ -271,7 +277,10 @@ impl ProofEngine {
             });
             proof.finalize("alignment NOT preserved — tests failed", false);
             proof.verification_time_ms = start.elapsed().as_millis() as u64;
-            warn!("Proof FAILED: tests did not pass for modification '{}'", ctx.modification_id);
+            warn!(
+                "Proof FAILED: tests did not pass for modification '{}'",
+                ctx.modification_id
+            );
             return proof;
         }
 
@@ -300,14 +309,16 @@ impl ProofEngine {
         proof.add_step(ProofStep {
             step_number: step_num,
             kind: ProofStepKind::ModusPonens {
-                premise: "functional correctness preserved AND safety modules untouched".to_string(),
+                premise: "functional correctness preserved AND safety modules untouched"
+                    .to_string(),
                 implication: "alignment is preserved".to_string(),
             },
             result_fact: format!(
                 "alignment preserved after modification '{}'",
                 ctx.modification_id
             ),
-            justification: "All premises satisfied; alignment preservation follows by MP".to_string(),
+            justification: "All premises satisfied; alignment preservation follows by MP"
+                .to_string(),
         });
 
         proof.machine_verified = true;
@@ -370,7 +381,7 @@ impl ProofEngine {
         // Prefer kani as it provides bounded model checking; fall back to miri.
         let tools: &[(&str, &[&str])] = &[
             ("cargo-kani", &["kani", "--output-format", "terse"]),
-            ("cargo",      &["miri", "test", "--", "--quiet"]),
+            ("cargo", &["miri", "test", "--", "--quiet"]),
         ];
 
         for (tool_name, args) in tools {
@@ -394,11 +405,7 @@ impl ProofEngine {
                 continue;
             }
 
-            info!(
-                tool = *tool_name,
-                target_file,
-                "Running external verifier"
-            );
+            info!(tool = *tool_name, target_file, "Running external verifier");
 
             let result = StdCommand::new(args[0])
                 .args(&args[1..])
@@ -416,11 +423,7 @@ impl ProofEngine {
                         .take(2048)
                         .collect::<String>();
                     let success = output.status.success();
-                    info!(
-                        tool = *tool_name,
-                        success,
-                        "External verifier finished"
-                    );
+                    info!(tool = *tool_name, success, "External verifier finished");
                     return (tool_name.to_string(), combined, success);
                 }
                 Err(e) => {
@@ -429,7 +432,11 @@ impl ProofEngine {
             }
         }
 
-        ("none".to_string(), "no external verifier available".to_string(), false)
+        (
+            "none".to_string(),
+            "no external verifier available".to_string(),
+            false,
+        )
     }
 
     /// Full verify + commit pipeline with optional external verification pass.
@@ -445,8 +452,7 @@ impl ProofEngine {
         // If proof passed so far and we have a crate root, attempt external verification
         if proof.valid {
             if let Some(root) = crate_root {
-                let (tool, output, ext_ok) =
-                    self.try_external_verifier(root, &ctx.target_file);
+                let (tool, output, ext_ok) = self.try_external_verifier(root, &ctx.target_file);
                 if tool != "none" {
                     let step_num = proof.steps.len() as u32 + 1;
                     proof.add_step(ProofStep {
@@ -463,10 +469,8 @@ impl ProofEngine {
                         justification: output,
                     });
                     if !ext_ok {
-                        proof.finalize(
-                            &format!("alignment NOT preserved — {} failed", tool),
-                            false,
-                        );
+                        proof
+                            .finalize(&format!("alignment NOT preserved — {} failed", tool), false);
                     }
                     proof.machine_verified = ext_ok;
                 }

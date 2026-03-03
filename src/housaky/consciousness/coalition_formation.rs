@@ -60,10 +60,7 @@ impl CoalitionFormation {
     }
 
     /// Collect proposals from all modules and form coalitions.
-    pub async fn form_coalitions(
-        &self,
-        modules: &[Arc<dyn CognitiveModule>],
-    ) -> Vec<Coalition> {
+    pub async fn form_coalitions(&self, modules: &[Arc<dyn CognitiveModule>]) -> Vec<Coalition> {
         let mut coalitions = Vec::new();
 
         for module in modules {
@@ -89,7 +86,11 @@ impl CoalitionFormation {
             }
         }
 
-        debug!("CoalitionFormation: {} coalitions formed from {} modules", merged.len(), modules.len());
+        debug!(
+            "CoalitionFormation: {} coalitions formed from {} modules",
+            merged.len(),
+            modules.len()
+        );
         merged
     }
 
@@ -114,7 +115,8 @@ impl CoalitionFormation {
                     existing.urgency = existing.urgency.max(candidate.urgency);
                     existing.novelty = (existing.novelty + candidate.novelty) / 2.0;
                     // Strength boost for coalition size
-                    existing.strength = (existing.strength + 0.05 * existing.source_modules.len() as f64).min(1.0);
+                    existing.strength =
+                        (existing.strength + 0.05 * existing.source_modules.len() as f64).min(1.0);
                     continue 'outer;
                 }
             }

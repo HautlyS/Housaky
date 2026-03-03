@@ -37,7 +37,10 @@ pub enum InvariantProperty {
     /// Every self-modification is reversible (rollback patch exists).
     ReversibilityGuarantee,
     /// The module must implement a required trait.
-    RequiredTraitImpl { trait_name: String, module_name: String },
+    RequiredTraitImpl {
+        trait_name: String,
+        module_name: String,
+    },
     /// Custom predicate expressed as a description string (checked externally).
     Custom { predicate: String },
 }
@@ -137,7 +140,9 @@ pub struct PropertyChecker {
 
 impl PropertyChecker {
     pub fn new() -> Self {
-        Self { invariants: Vec::new() }
+        Self {
+            invariants: Vec::new(),
+        }
     }
 
     /// Load the standard set of safety invariants.
@@ -256,9 +261,7 @@ impl PropertyChecker {
                 let violations: Vec<String> = snapshot
                     .recent_commands
                     .iter()
-                    .filter(|cmd| {
-                        !allowed.iter().any(|a| cmd.starts_with(a.as_str()))
-                    })
+                    .filter(|cmd| !allowed.iter().any(|a| cmd.starts_with(a.as_str())))
                     .cloned()
                     .collect();
                 if violations.is_empty() {
@@ -295,10 +298,7 @@ impl PropertyChecker {
                 if violations.is_empty() {
                     (true, None)
                 } else {
-                    (
-                        false,
-                        Some(format!("Disallowed domains: {:?}", violations)),
-                    )
+                    (false, Some(format!("Disallowed domains: {:?}", violations)))
                 }
             }
 
@@ -320,9 +320,7 @@ impl PropertyChecker {
                 let violations: Vec<String> = snapshot
                     .modified_files
                     .iter()
-                    .filter(|f| {
-                        protected_paths.iter().any(|p| f.starts_with(p.as_str()))
-                    })
+                    .filter(|f| protected_paths.iter().any(|p| f.starts_with(p.as_str())))
                     .cloned()
                     .collect();
                 if violations.is_empty() {
@@ -330,10 +328,7 @@ impl PropertyChecker {
                 } else {
                     (
                         false,
-                        Some(format!(
-                            "Protected files modified: {:?}",
-                            violations
-                        )),
+                        Some(format!("Protected files modified: {:?}", violations)),
                     )
                 }
             }
@@ -349,7 +344,10 @@ impl PropertyChecker {
                 }
             }
 
-            InvariantProperty::RequiredTraitImpl { trait_name, module_name } => {
+            InvariantProperty::RequiredTraitImpl {
+                trait_name,
+                module_name,
+            } => {
                 let has_impl = snapshot
                     .module_trait_implementations
                     .get(module_name.as_str())
@@ -372,7 +370,10 @@ impl PropertyChecker {
                 // Custom predicates are evaluated externally; pass through with a note.
                 (
                     true,
-                    Some(format!("Custom predicate deferred to external verifier: {}", predicate)),
+                    Some(format!(
+                        "Custom predicate deferred to external verifier: {}",
+                        predicate
+                    )),
                 )
             }
         };

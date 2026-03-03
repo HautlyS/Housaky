@@ -4,7 +4,6 @@ use anyhow::Result;
 use clap::{Args, Subcommand};
 use std::collections::HashMap;
 
-
 #[derive(Debug, Subcommand, Clone)]
 pub enum KeysManagerCommands {
     /// List providers/keys in keys.json store.
@@ -54,7 +53,6 @@ pub enum KeysManagerCommands {
 
     /// Import keys.json from a JSON string or file.
     Import(KeysImportArgs),
-
 
     /// Sync the legacy config.toml api_key/default_provider/default_model into keys.json
     /// without overwriting an existing api_key in config.toml.
@@ -164,7 +162,6 @@ pub struct KeysImportArgs {
     pub json: Option<String>,
 }
 
-
 pub async fn handle_keys_manager_command(
     config: &mut Config,
     manager: &KeysManager,
@@ -194,10 +191,22 @@ pub async fn handle_keys_manager_command(
             let _ = manager.load().await;
             let stats = manager.get_stats().await;
             println!("Keys stats:");
-            println!("  Providers: total={} enabled={} primary={}", stats.total_providers, stats.enabled_providers, stats.primary_providers);
-            println!("  Keys:      total={} enabled={}", stats.total_keys, stats.enabled_keys);
-            println!("  Health:    healthy={} rate_limited={}", stats.healthy_providers, stats.rate_limited_providers);
-            println!("  Requests:  total={} ok={} failed={}", stats.total_requests, stats.successful_requests, stats.failed_requests);
+            println!(
+                "  Providers: total={} enabled={} primary={}",
+                stats.total_providers, stats.enabled_providers, stats.primary_providers
+            );
+            println!(
+                "  Keys:      total={} enabled={}",
+                stats.total_keys, stats.enabled_keys
+            );
+            println!(
+                "  Health:    healthy={} rate_limited={}",
+                stats.healthy_providers, stats.rate_limited_providers
+            );
+            println!(
+                "  Requests:  total={} ok={} failed={}",
+                stats.total_requests, stats.successful_requests, stats.failed_requests
+            );
             Ok(())
         }
         KeysManagerCommands::Tui => {
@@ -213,7 +222,8 @@ pub async fn handle_keys_manager_command(
                 rt.block_on(async move {
                     let inner_manager = crate::keys_manager::manager::KeysManager::new();
                     let _ = inner_manager.load().await;
-                    tx.send(crate::keys_manager::tui::run_keys_tui(&inner_manager).await).ok();
+                    tx.send(crate::keys_manager::tui::run_keys_tui(&inner_manager).await)
+                        .ok();
                 });
             });
             rx.recv()
@@ -328,12 +338,16 @@ pub async fn handle_keys_manager_command(
         KeysManagerCommands::SetPriority(args) => {
             let priority = ProviderPriority::from_str(&args.priority)
                 .ok_or_else(|| anyhow::anyhow!("Invalid priority: {}", args.priority))?;
-            manager.set_provider_priority(&args.provider, priority).await?;
+            manager
+                .set_provider_priority(&args.provider, priority)
+                .await?;
             println!("Updated priority");
             Ok(())
         }
         KeysManagerCommands::SetDefaultModel(args) => {
-            manager.set_default_model(&args.provider, &args.model).await?;
+            manager
+                .set_default_model(&args.provider, &args.model)
+                .await?;
             println!("Updated default model");
             Ok(())
         }
@@ -407,7 +421,9 @@ pub async fn handle_keys_manager_command(
             }
 
             manager.save().await?;
-            println!("Synced from config.toml into keys.json (did not modify config.toml api_key)." );
+            println!(
+                "Synced from config.toml into keys.json (did not modify config.toml api_key)."
+            );
             Ok(())
         }
         KeysManagerCommands::PrintRoutesExample => {

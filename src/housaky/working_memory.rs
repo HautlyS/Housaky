@@ -278,7 +278,7 @@ impl WorkingMemoryEngine {
         let mut tokens_used = 0;
 
         let total_available = stm.items.iter().map(|i| i.token_count).sum::<usize>();
-        
+
         if total_available > max_tokens * 80 / 100 {
             let summary = self.summarize_oldest_items(max_tokens / 2).await;
             if !summary.is_empty() {
@@ -301,31 +301,32 @@ impl WorkingMemoryEngine {
 
         context
     }
-    
+
     async fn summarize_oldest_items(&self, _max_tokens: usize) -> String {
         let stm = self.short_term.read().await;
         let oldest: Vec<_> = stm.items.iter().take(5).collect();
-        
+
         if oldest.is_empty() {
             return String::new();
         }
-        
-        let _content: String = oldest.iter()
+
+        let _content: String = oldest
+            .iter()
             .map(|i| i.content.as_str())
             .collect::<Vec<_>>()
             .join("\n");
-        
+
         let summary = format!(
-            "[{} older messages summarized - approximately {} tokens]", 
+            "[{} older messages summarized - approximately {} tokens]",
             oldest.len(),
             oldest.iter().map(|i| i.token_count).sum::<usize>()
         );
-        
+
         drop(stm);
-        
+
         summary
     }
-    
+
     pub fn count_tokens(&self, text: &str) -> usize {
         text.chars().count() / 4
     }

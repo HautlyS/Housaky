@@ -28,7 +28,12 @@ pub struct NeuromorphicEvent {
 }
 
 impl NeuromorphicEvent {
-    pub fn new(event_type: &str, source: &str, payload: serde_json::Value, priority: EventPriority) -> Self {
+    pub fn new(
+        event_type: &str,
+        source: &str,
+        payload: serde_json::Value,
+        priority: EventPriority,
+    ) -> Self {
         Self {
             id: uuid::Uuid::new_v4().to_string(),
             event_type: event_type.to_string(),
@@ -53,7 +58,9 @@ impl NeuromorphicEvent {
     }
 
     pub fn age_us(&self) -> i64 {
-        (Utc::now() - self.timestamp).num_microseconds().unwrap_or(0)
+        (Utc::now() - self.timestamp)
+            .num_microseconds()
+            .unwrap_or(0)
     }
 }
 
@@ -143,7 +150,10 @@ impl EventBus {
     }
 
     pub async fn unsubscribe(&self, subscription_id: &str) {
-        self.subscriptions.write().await.retain(|s| s.id != subscription_id);
+        self.subscriptions
+            .write()
+            .await
+            .retain(|s| s.id != subscription_id);
     }
 
     pub async fn publish(&self, event: NeuromorphicEvent) {
@@ -156,8 +166,14 @@ impl EventBus {
         {
             let mut metrics = self.metrics.write().await;
             metrics.total_published += 1;
-            *metrics.events_by_type.entry(event.event_type.clone()).or_insert(0) += 1;
-            *metrics.events_by_priority.entry(format!("{:?}", event.priority)).or_insert(0) += 1;
+            *metrics
+                .events_by_type
+                .entry(event.event_type.clone())
+                .or_insert(0) += 1;
+            *metrics
+                .events_by_priority
+                .entry(format!("{:?}", event.priority))
+                .or_insert(0) += 1;
         }
 
         let mut pq = self.priority_queue.lock().await;
@@ -165,8 +181,11 @@ impl EventBus {
             if let Some(lowest) = pq.iter().min_by_key(|e| &e.priority) {
                 if lowest.priority < event.priority {
                     let lowest_id = lowest.id.clone();
-                    let items: Vec<NeuromorphicEvent> = pq.drain().filter(|e| e.id != lowest_id).collect();
-                    for item in items { pq.push(item); }
+                    let items: Vec<NeuromorphicEvent> =
+                        pq.drain().filter(|e| e.id != lowest_id).collect();
+                    for item in items {
+                        pq.push(item);
+                    }
                     pq.push(event);
                     self.metrics.write().await.total_dropped += 1;
                 } else {
@@ -233,7 +252,9 @@ impl EventBus {
                 .cloned()
                 .collect();
 
-            let start_us = (Utc::now() - event.timestamp).num_microseconds().unwrap_or(0);
+            let start_us = (Utc::now() - event.timestamp)
+                .num_microseconds()
+                .unwrap_or(0);
 
             for sub in subs {
                 let e = event.clone();
@@ -247,8 +268,7 @@ impl EventBus {
             let mut metrics = self.metrics.write().await;
             metrics.total_processed += 1;
             let n = metrics.total_processed as f64;
-            metrics.avg_latency_us =
-                (metrics.avg_latency_us * (n - 1.0) + latency_us) / n;
+            metrics.avg_latency_us = (metrics.avg_latency_us * (n - 1.0) + latency_us) / n;
         }
 
         if processed > 0 {
@@ -288,9 +308,27 @@ mod tests {
     async fn test_priority_ordering() {
         let bus = EventBus::new(1000);
 
-        bus.publish(NeuromorphicEvent::new("low", "src", serde_json::json!({}), EventPriority::Low)).await;
-        bus.publish(NeuromorphicEvent::new("critical", "src", serde_json::json!({}), EventPriority::Critical)).await;
-        bus.publish(NeuromorphicEvent::new("normal", "src", serde_json::json!({}), EventPriority::Normal)).await;
+        bus.publish(NeuromorphicEvent::new(
+            "low",
+            "src",
+            serde_json::json!({}),
+            EventPriority::Low,
+        ))
+        .await;
+        bus.publish(NeuromorphicEvent::new(
+            "critical",
+            "src",
+            serde_json::json!({}),
+            EventPriority::Critical,
+        ))
+        .await;
+        bus.publish(NeuromorphicEvent::new(
+            "normal",
+            "src",
+            serde_json::json!({}),
+            EventPriority::Normal,
+        ))
+        .await;
 
         let first = bus.poll().await.unwrap();
         assert_eq!(first.event_type, "critical");
@@ -299,7 +337,12 @@ mod tests {
     #[tokio::test]
     async fn test_lane_publish() {
         let bus = EventBus::new(100);
-        let e = NeuromorphicEvent::new("gpio", "pin_3", serde_json::json!({"state": 1}), EventPriority::Interrupt);
+        let e = NeuromorphicEvent::new(
+            "gpio",
+            "pin_3",
+            serde_json::json!({"state": 1}),
+            EventPriority::Interrupt,
+        );
         bus.publish_to("hardware", e).await;
         let polled = bus.poll_lane("hardware").await;
         assert!(polled.is_some());

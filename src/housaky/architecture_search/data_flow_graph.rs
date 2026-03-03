@@ -25,7 +25,7 @@ pub struct GraphNode {
 /// Directed graph representing data flow between cognitive modules.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct DataFlowGraph {
-    pub nodes: HashMap<String, GraphNode>,       // module_id → node
+    pub nodes: HashMap<String, GraphNode>, // module_id → node
     pub connections: HashMap<String, ModuleConnection>, // conn_id → connection
 }
 
@@ -81,11 +81,8 @@ impl DataFlowGraph {
 
     /// Kahn's algorithm for topological ordering and depth assignment.
     fn compute_depths(&mut self) {
-        let mut in_degree: HashMap<String, usize> = self
-            .nodes
-            .keys()
-            .map(|id| (id.clone(), 0))
-            .collect();
+        let mut in_degree: HashMap<String, usize> =
+            self.nodes.keys().map(|id| (id.clone(), 0)).collect();
 
         for conn in self.connections.values() {
             *in_degree.entry(conn.to.clone()).or_insert(0) += 1;
@@ -112,11 +109,14 @@ impl DataFlowGraph {
                 vec![]
             };
             for next_id in outgoing {
-                depths.entry(next_id.clone()).and_modify(|d| {
-                    if depth + 1 > *d {
-                        *d = depth + 1;
-                    }
-                }).or_insert(depth + 1);
+                depths
+                    .entry(next_id.clone())
+                    .and_modify(|d| {
+                        if depth + 1 > *d {
+                            *d = depth + 1;
+                        }
+                    })
+                    .or_insert(depth + 1);
                 let deg = in_degree.entry(next_id.clone()).or_insert(1);
                 *deg = deg.saturating_sub(1);
                 if *deg == 0 {
@@ -244,11 +244,7 @@ impl DataFlowGraph {
             has_cycles: self.has_cycles(),
             connectivity_score: self.connectivity_score(),
             isolated_modules: self.isolated_module_count(),
-            critical_path_length: self
-                .nodes
-                .values()
-                .filter(|n| n.is_critical)
-                .count(),
+            critical_path_length: self.nodes.values().filter(|n| n.is_critical).count(),
         }
     }
 }

@@ -22,11 +22,11 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
-use tokio::sync::broadcast;
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
+use tokio::sync::broadcast;
 use tower_http::limit::RequestBodyLimitLayer;
 use tower_http::timeout::TimeoutLayer;
 use uuid::Uuid;
@@ -190,9 +190,17 @@ pub struct AppState {
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum GatewayEvent {
-    Paired { client_key: String },
-    WebhookReceived { client_key: String, message_preview: String },
-    WebhookResponded { model: String, success: bool },
+    Paired {
+        client_key: String,
+    },
+    WebhookReceived {
+        client_key: String,
+        message_preview: String,
+    },
+    WebhookResponded {
+        model: String,
+        success: bool,
+    },
 }
 
 /// Run the HTTP gateway using axum with proper HTTP/1.1 compliance.
@@ -415,9 +423,9 @@ async fn handle_pair(State(state): State<AppState>, headers: HeaderMap) -> impl 
     match state.pairing.try_pair(code) {
         Ok(Some(token)) => {
             tracing::info!("🔐 New client paired successfully");
-            let _ = state
-                .events
-                .send(GatewayEvent::Paired { client_key: client_key.clone() });
+            let _ = state.events.send(GatewayEvent::Paired {
+                client_key: client_key.clone(),
+            });
             let body = serde_json::json!({
                 "paired": true,
                 "token": token,
@@ -585,16 +593,16 @@ async fn handle_events(State(state): State<AppState>, headers: HeaderMap) -> imp
     }
 
     let mut rx = state.events.subscribe();
-    let stream = tokio_stream::iter(std::iter::from_fn(move || {
-        match rx.try_recv() {
-            Ok(ev) => {
-                let json = serde_json::to_string(&ev).unwrap_or_else(|_| "{}".to_string());
-                Some(Ok::<Event, std::convert::Infallible>(Event::default().data(json)))
-            }
-            Err(tokio::sync::broadcast::error::TryRecvError::Empty) => None,
-            Err(tokio::sync::broadcast::error::TryRecvError::Closed) => None,
-            Err(tokio::sync::broadcast::error::TryRecvError::Lagged(_)) => None,
+    let stream = tokio_stream::iter(std::iter::from_fn(move || match rx.try_recv() {
+        Ok(ev) => {
+            let json = serde_json::to_string(&ev).unwrap_or_else(|_| "{}".to_string());
+            Some(Ok::<Event, std::convert::Infallible>(
+                Event::default().data(json),
+            ))
         }
+        Err(tokio::sync::broadcast::error::TryRecvError::Empty) => None,
+        Err(tokio::sync::broadcast::error::TryRecvError::Closed) => None,
+        Err(tokio::sync::broadcast::error::TryRecvError::Lagged(_)) => None,
     }));
 
     Sse::new(stream)

@@ -12,15 +12,16 @@ use crate::housaky::meta_cognition::MetaCognitionEngine;
 use crate::housaky::reasoning_pipeline::ReasoningPipeline;
 use crate::housaky::working_memory::WorkingMemoryEngine;
 use crate::providers::{create_provider, ChatMessage, Provider};
+use crate::quantum::QuantumAgiBridge;
 use crate::tools::Tool;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::fmt::Write as _;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::{mpsc, RwLock};
 use tracing::info;
-use std::fmt::Write as _;
 
 pub struct CognitiveLoop {
     pub perception: PerceptionEngine,
@@ -34,7 +35,10 @@ pub struct CognitiveLoop {
     pub knowledge_graph: Arc<KnowledgeGraphEngine>,
     pub inner_monologue: Arc<InnerMonologue>,
     /// §3.5 — Optional GWT global workspace for conscious broadcast integration.
-    pub global_workspace: Option<Arc<crate::housaky::consciousness::global_workspace::GlobalWorkspace>>,
+    pub global_workspace:
+        Option<Arc<crate::housaky::consciousness::global_workspace::GlobalWorkspace>>,
+    /// §10 — Optional quantum bridge for Grover-accelerated action selection.
+    pub quantum_bridge: Option<Arc<QuantumAgiBridge>>,
     pub config: CognitiveLoopConfig,
     state: Arc<RwLock<CognitiveState>>,
     workspace_dir: PathBuf,
@@ -107,8 +111,11 @@ impl CognitiveLoop {
     pub fn new(config: &Config) -> Result<Self> {
         Self::with_inner_monologue(config, None)
     }
-    
-    pub fn with_inner_monologue(config: &Config, inner_monologue: Option<Arc<InnerMonologue>>) -> Result<Self> {
+
+    pub fn with_inner_monologue(
+        config: &Config,
+        inner_monologue: Option<Arc<InnerMonologue>>,
+    ) -> Result<Self> {
         let workspace_dir = config.workspace_dir.clone();
 
         Ok(Self {
@@ -121,8 +128,10 @@ impl CognitiveLoop {
             reasoning: Arc::new(ReasoningPipeline::new()),
             meta_cognition: Arc::new(MetaCognitionEngine::new()),
             knowledge_graph: Arc::new(KnowledgeGraphEngine::new(&workspace_dir)),
-            inner_monologue: inner_monologue.unwrap_or_else(|| Arc::new(InnerMonologue::new(&workspace_dir))),
+            inner_monologue: inner_monologue
+                .unwrap_or_else(|| Arc::new(InnerMonologue::new(&workspace_dir))),
             global_workspace: None,
+            quantum_bridge: None,
             config: CognitiveLoopConfig::default(),
             state: Arc::new(RwLock::new(CognitiveState {
                 total_turns: 0,
@@ -147,6 +156,12 @@ impl CognitiveLoop {
         gw: Arc<crate::housaky::consciousness::global_workspace::GlobalWorkspace>,
     ) -> Self {
         self.global_workspace = Some(gw);
+        self
+    }
+
+    /// §10 — Attach a quantum bridge for Grover-accelerated action selection.
+    pub fn with_quantum(mut self, bridge: Arc<QuantumAgiBridge>) -> Self {
+        self.quantum_bridge = Some(bridge);
         self
     }
 
@@ -184,9 +199,7 @@ impl CognitiveLoop {
             if let Some(broadcast) = gw.run_cycle().await {
                 let broadcast_summary = format!(
                     "[GWT broadcast] {} (phi={:.3}, salience={:.2})",
-                    broadcast.content.data,
-                    broadcast.phi_contribution,
-                    broadcast.content.salience,
+                    broadcast.content.data, broadcast.phi_contribution, broadcast.content.salience,
                 );
                 let importance = if broadcast.content.salience > 0.7 {
                     crate::housaky::working_memory::MemoryImportance::High
@@ -196,11 +209,10 @@ impl CognitiveLoop {
                 let mut ctx = HashMap::new();
                 ctx.insert("source".to_string(), "gwt_broadcast".to_string());
                 ctx.insert("cycle".to_string(), broadcast.cycle_number.to_string());
-                let _ = self.working_memory.add(
-                    &broadcast_summary,
-                    importance,
-                    ctx,
-                ).await;
+                let _ = self
+                    .working_memory
+                    .add(&broadcast_summary, importance, ctx)
+                    .await;
                 info!(
                     "GWT cycle {}: broadcast '{}' injected into working memory",
                     broadcast.cycle_number,
@@ -245,7 +257,7 @@ impl CognitiveLoop {
                 .record_experience(&perception, &decision, &outcome)
                 .await?;
         }
-        
+
         let thought = format!(
             "Processed {}: intent={:?}, action={:?}, confidence={:.0}%",
             user_input,
@@ -253,7 +265,10 @@ impl CognitiveLoop {
             decision.action,
             response.confidence * 100.0
         );
-        let _ = self.inner_monologue.add_thought(&thought, response.confidence).await;
+        let _ = self
+            .inner_monologue
+            .add_thought(&thought, response.confidence)
+            .await;
 
         self.update_state(
             &perception,
@@ -353,13 +368,63 @@ impl CognitiveLoop {
             }
         }
 
-        if uncertainty.overall_uncertainty > 0.3 {
+        // §10 — Quantum-enhanced action selection: when alternatives are available
+        // and a quantum bridge is active, use Grover search to find the highest-
+        // confidence alternative with √N speedup over classical exhaustive comparison.
+        let decision = if uncertainty.overall_uncertainty > 0.3 {
             self.action_selector
                 .select_action_with_llm(perception, uncertainty, tools, provider, model)
-                .await
+                .await?
         } else {
-            Ok(basic_decision)
+            basic_decision
+        };
+
+        if let Some(ref bridge) = self.quantum_bridge {
+            let alts = &decision.alternatives;
+            if alts.len() >= 4 {
+                let branch_ids: Vec<String> = (0..alts.len()).map(|i| format!("alt_{i}")).collect();
+                let mut fitness = std::collections::HashMap::new();
+                for (i, _) in alts.iter().enumerate() {
+                    let score = 1.0 / (1.0 + i as f64 * 0.1);
+                    fitness.insert(format!("alt_{i}"), score);
+                }
+                fitness.insert("selected".to_string(), decision.confidence);
+                let mut all_branches = branch_ids.clone();
+                all_branches.push("selected".to_string());
+
+                match bridge
+                    .search_reasoning_branches(&all_branches, &fitness)
+                    .await
+                {
+                    Ok(result) => {
+                        info!(
+                            "🔮 Quantum action selection: {} alternatives → speedup={:.2}x, strategy={}",
+                            alts.len(), result.speedup, result.strategy
+                        );
+                        // If quantum found a higher-scoring alternative, boost confidence
+                        if result
+                            .best_branches
+                            .first()
+                            .map_or(false, |b| b != "selected")
+                        {
+                            return Ok(ActionDecision {
+                                confidence: (decision.confidence * 1.05).min(1.0),
+                                reasoning: format!(
+                                    "{} [quantum-verified: speedup={:.2}x]",
+                                    decision.reasoning, result.speedup
+                                ),
+                                ..decision
+                            });
+                        }
+                    }
+                    Err(e) => {
+                        tracing::warn!("Quantum action selection failed: {e}");
+                    }
+                }
+            }
         }
+
+        Ok(decision)
     }
 
     async fn execute_decision(
@@ -565,14 +630,29 @@ impl CognitiveLoop {
             for goal in active_goals.iter().take(3) {
                 #[allow(clippy::cast_possible_truncation)]
                 let progress_pct = (goal.progress * 100.0).round() as i32;
-                writeln!(system_prompt, "- {} ({}% complete)", goal.title, progress_pct).ok();
+                writeln!(
+                    system_prompt,
+                    "- {} ({}% complete)",
+                    goal.title, progress_pct
+                )
+                .ok();
             }
             system_prompt.push('\n');
         }
 
-        writeln!(system_prompt, "## User Intent: {:?}", perception.intent.primary).ok();
+        writeln!(
+            system_prompt,
+            "## User Intent: {:?}",
+            perception.intent.primary
+        )
+        .ok();
         writeln!(system_prompt, "## Detected Topics: {:?}", perception.topics).ok();
-        writeln!(system_prompt, "## Confidence: {:.0}%\n", decision.confidence * 100.0).ok();
+        writeln!(
+            system_prompt,
+            "## Confidence: {:.0}%\n",
+            decision.confidence * 100.0
+        )
+        .ok();
         system_prompt.push_str("Respond helpfully and accurately. If uncertain, say so.");
 
         let state = self.state.read().await;

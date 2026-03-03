@@ -216,19 +216,13 @@ impl HookRegistry {
                 Ok(result) => {
                     messages.extend(result.messages);
                     if !result.should_continue {
-                        debug!(
-                            "Hook '{}' signaled stop for event '{}'",
-                            hook_id, full_key
-                        );
+                        debug!("Hook '{}' signaled stop for event '{}'", hook_id, full_key);
                         should_continue = false;
                         break;
                     }
                 }
                 Err(e) => {
-                    error!(
-                        "Hook '{}' failed for event '{}': {}",
-                        hook_id, full_key, e
-                    );
+                    error!("Hook '{}' failed for event '{}': {}", hook_id, full_key, e);
                 }
             }
         }
@@ -286,9 +280,7 @@ impl HookRegistry {
 
         let specific_hooks = self.specific_hooks.read().await;
         let prefix = format!("{}:", event_type.as_str());
-        specific_hooks
-            .keys()
-            .any(|k| k.starts_with(&prefix))
+        specific_hooks.keys().any(|k| k.starts_with(&prefix))
     }
 
     /// Get the count of registered hooks.

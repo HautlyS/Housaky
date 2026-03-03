@@ -64,7 +64,10 @@ impl AudioChunk {
     }
 
     pub fn peak_amplitude(&self) -> f64 {
-        self.samples.iter().map(|&s| s.abs() as f64).fold(0.0_f64, f64::max)
+        self.samples
+            .iter()
+            .map(|&s| s.abs() as f64)
+            .fold(0.0_f64, f64::max)
     }
 }
 
@@ -199,7 +202,10 @@ pub struct SpectralAnalyzer {
 
 impl SpectralAnalyzer {
     pub fn new(sample_rate: u32, fft_size: usize) -> Self {
-        Self { sample_rate, fft_size }
+        Self {
+            sample_rate,
+            fft_size,
+        }
     }
 
     /// Compute zero-crossing rate — a simple discriminant between speech and noise.
@@ -251,10 +257,7 @@ impl SpectralAnalyzer {
         let (primary, probs) = if energy < 1e-4 {
             (
                 AudioEventType::Silence,
-                vec![
-                    ("silence".to_string(), 0.95),
-                    ("noise".to_string(), 0.05),
-                ],
+                vec![("silence".to_string(), 0.95), ("noise".to_string(), 0.05)],
             )
         } else if zcr > 0.1 && centroid > 2000.0 {
             (
@@ -422,7 +425,8 @@ impl AudioPipeline {
         }
 
         let total_duration_ms: u64 = buffer.iter().map(|c| c.duration_ms).sum();
-        let total_energy: f64 = buffer.iter().map(|c| c.rms_energy()).sum::<f64>() / buffer.len() as f64;
+        let total_energy: f64 =
+            buffer.iter().map(|c| c.rms_energy()).sum::<f64>() / buffer.len() as f64;
 
         // In production this calls Whisper/Vosk/etc. via ONNX Runtime or HTTP.
         // Here we produce a placeholder reflecting real signal characteristics.

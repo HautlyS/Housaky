@@ -20,8 +20,8 @@ use std::path::PathBuf;
 use std::process::Stdio;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::net::{TcpListener, TcpStream};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::{TcpListener, TcpStream};
 use tokio::process::Command;
 use tokio::sync::oneshot;
 use tracing::debug;
@@ -135,7 +135,11 @@ impl BrowserBridge {
         active.as_ref().and_then(|name| profiles.get(name).cloned())
     }
 
-    pub fn save_cookies(&self, profile_name: &str, cookies: Vec<CookieData>) -> anyhow::Result<PathBuf> {
+    pub fn save_cookies(
+        &self,
+        profile_name: &str,
+        cookies: Vec<CookieData>,
+    ) -> anyhow::Result<PathBuf> {
         let storage_path = self.cookie_storage_path.read();
         let base_path = storage_path
             .as_ref()
@@ -253,7 +257,9 @@ async fn handle_bridge_connection(
     let n = stream.read(&mut buffer).await?;
     let request = String::from_utf8_lossy(&buffer[..n]);
 
-    let response = if let Some((method, path)) = request.lines().next().and_then(|l| l.split_once(' ')) {
+    let response = if let Some((method, path)) =
+        request.lines().next().and_then(|l| l.split_once(' '))
+    {
         match (method, path) {
             ("GET", "/profiles") => {
                 let profiles = profiles.read();
@@ -294,9 +300,7 @@ async fn handle_bridge_connection(
                     "HTTP/1.1 500 Internal Server Error\r\nContent-Length: 0\r\n\r\n".to_string()
                 }
             }
-            _ => {
-                "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n".to_string()
-            }
+            _ => "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n".to_string(),
         }
     } else {
         "HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\n\r\n".to_string()
@@ -491,10 +495,7 @@ impl BrowserTool {
         )
     }
 
-    pub fn from_config(
-        security: Arc<SecurityPolicy>,
-        config: &BrowserConfig,
-    ) -> Self {
+    pub fn from_config(security: Arc<SecurityPolicy>, config: &BrowserConfig) -> Self {
         let bridge = BrowserBridge::with_profiles(
             config.profiles.clone(),
             config.default_profile.clone(),
@@ -580,7 +581,11 @@ impl BrowserTool {
         self.bridge.get_active_profile()
     }
 
-    pub fn save_cookies(&self, profile_name: &str, cookies: Vec<CookieData>) -> anyhow::Result<std::path::PathBuf> {
+    pub fn save_cookies(
+        &self,
+        profile_name: &str,
+        cookies: Vec<CookieData>,
+    ) -> anyhow::Result<std::path::PathBuf> {
         self.bridge.save_cookies(profile_name, cookies)
     }
 
@@ -1864,7 +1869,8 @@ mod native_backend {
             _chrome_path: Option<&str>,
         ) -> Result<()> {
             if self.client.is_none() {
-                let mut builder = ClientBuilder::rustls().context("Failed to create rustls connector")?;
+                let mut builder =
+                    ClientBuilder::rustls().context("Failed to create rustls connector")?;
 
                 if headless {
                     // Chrome options structure accepted by webdriver.
@@ -1883,8 +1889,9 @@ mod native_backend {
                 }
 
                 let webdriver_url = webdriver_url.trim_end_matches('/');
-                let client = builder.connect(webdriver_url).await
-                    .with_context(|| format!("Failed to connect to WebDriver at {webdriver_url}"))?;
+                let client = builder.connect(webdriver_url).await.with_context(|| {
+                    format!("Failed to connect to WebDriver at {webdriver_url}")
+                })?;
 
                 self.client = Some(client);
             }
@@ -1983,7 +1990,9 @@ mod native_backend {
             "#,
             interactive_only,
             compact,
-            depth.map(|d| d.to_string()).unwrap_or_else(|| "null".to_string())
+            depth
+                .map(|d| d.to_string())
+                .unwrap_or_else(|| "null".to_string())
         )
     }
 
@@ -2109,20 +2118,35 @@ mod native_backend {
         let host = host.to_lowercase();
         allowlist.iter().any(|domain| {
             let domain = domain.to_lowercase();
-            domain == host
-                || host.ends_with(&format!(".{}", domain))
-                || domain == "*"
+            domain == host || host.ends_with(&format!(".{}", domain)) || domain == "*"
         })
     }
 
     fn is_supported_browser_action(action: &str) -> bool {
         matches!(
             action,
-            "open" | "snapshot" | "click" | "fill" | "type" | "get_text"
-                | "get_title" | "get_url" | "screenshot" | "wait" | "press"
-                | "hover" | "scroll" | "is_visible" | "close" | "find"
-                | "mouse_move" | "mouse_click" | "mouse_drag" | "key_type"
-                | "key_press" | "screen_capture"
+            "open"
+                | "snapshot"
+                | "click"
+                | "fill"
+                | "type"
+                | "get_text"
+                | "get_title"
+                | "get_url"
+                | "screenshot"
+                | "wait"
+                | "press"
+                | "hover"
+                | "scroll"
+                | "is_visible"
+                | "close"
+                | "find"
+                | "mouse_move"
+                | "mouse_click"
+                | "mouse_drag"
+                | "key_type"
+                | "key_press"
+                | "screen_capture"
         )
     }
 }
@@ -2134,7 +2158,11 @@ mod native_backend {
     pub struct NativeBrowserState;
 
     impl NativeBrowserState {
-        pub fn is_available(_headless: bool, _webdriver_url: &str, _chrome_path: Option<&str>) -> bool {
+        pub fn is_available(
+            _headless: bool,
+            _webdriver_url: &str,
+            _chrome_path: Option<&str>,
+        ) -> bool {
             false
         }
 
@@ -2230,19 +2258,34 @@ fn host_matches_allowlist(host: &str, allowlist: &[String]) -> bool {
     let host = host.to_lowercase();
     allowlist.iter().any(|domain| {
         let domain = domain.to_lowercase();
-        domain == host
-            || host.ends_with(&format!(".{}", domain))
-            || domain == "*"
+        domain == host || host.ends_with(&format!(".{}", domain)) || domain == "*"
     })
 }
 
 fn is_supported_browser_action(action: &str) -> bool {
     matches!(
         action,
-        "open" | "snapshot" | "click" | "fill" | "type" | "get_text"
-            | "get_title" | "get_url" | "screenshot" | "wait" | "press"
-            | "hover" | "scroll" | "is_visible" | "close" | "find"
-            | "mouse_move" | "mouse_click" | "mouse_drag" | "key_type"
-            | "key_press" | "screen_capture"
+        "open"
+            | "snapshot"
+            | "click"
+            | "fill"
+            | "type"
+            | "get_text"
+            | "get_title"
+            | "get_url"
+            | "screenshot"
+            | "wait"
+            | "press"
+            | "hover"
+            | "scroll"
+            | "is_visible"
+            | "close"
+            | "find"
+            | "mouse_move"
+            | "mouse_click"
+            | "mouse_drag"
+            | "key_type"
+            | "key_press"
+            | "screen_capture"
     )
 }

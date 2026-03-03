@@ -9,8 +9,8 @@ pub mod matrix;
 pub mod slack;
 pub mod telegram;
 pub mod traits;
-pub mod whatsapp;
 pub mod voice;
+pub mod whatsapp;
 
 pub mod agi_processor;
 
@@ -26,23 +26,23 @@ pub use matrix::MatrixChannel;
 pub use slack::SlackChannel;
 pub use telegram::TelegramChannel;
 pub use traits::Channel;
-pub use whatsapp::WhatsAppChannel;
 pub use voice::voice_channel::VoiceChannel;
-pub use voice::VoiceEngine;
 pub use voice::VoiceConfig;
+pub use voice::VoiceEngine;
+pub use whatsapp::WhatsAppChannel;
 
 use crate::agent::loop_::{build_tool_instructions, run_tool_call_loop};
 use crate::config::Config;
 use crate::identity;
 use crate::memory::{self, Memory};
 use crate::observability::{self, Observer};
-use chrono::Datelike;
 use crate::providers::{self, ChatMessage, Provider};
 use crate::runtime;
 use crate::security::SecurityPolicy;
 use crate::tools::{self, Tool};
 use crate::util::truncate_with_ellipsis;
 use anyhow::Result;
+use chrono::Datelike;
 use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::fmt::Write;
@@ -206,10 +206,7 @@ async fn process_channel_message(ctx: Arc<ChannelRuntimeContext>, msg: traits::C
     if content.starts_with('/') {
         // /running
         if content == "/running" {
-            let running = ctx
-                .running_registry
-                .read_current()
-                .unwrap_or_default();
+            let running = ctx.running_registry.read_current().unwrap_or_default();
 
             let now = chrono::Local::now();
             let mut lines = Vec::new();
@@ -219,12 +216,13 @@ async fn process_channel_message(ctx: Arc<ChannelRuntimeContext>, msg: traits::C
                 lines.push("(none)".to_string());
             } else {
                 for rec in running.agents.values() {
-                    let (age_secs, age_label) = chrono::DateTime::parse_from_rfc3339(&rec.last_heartbeat_ts)
-                        .ok()
-                        .map(|ts| now.signed_duration_since(ts.with_timezone(&chrono::Local)))
-                        .map(|d| d.num_seconds().max(0))
-                        .map(|secs| (secs, format!("{}s", secs)))
-                        .unwrap_or_else(|| (i64::MAX, "?".to_string()));
+                    let (age_secs, age_label) =
+                        chrono::DateTime::parse_from_rfc3339(&rec.last_heartbeat_ts)
+                            .ok()
+                            .map(|ts| now.signed_duration_since(ts.with_timezone(&chrono::Local)))
+                            .map(|d| d.num_seconds().max(0))
+                            .map(|secs| (secs, format!("{}s", secs)))
+                            .unwrap_or_else(|| (i64::MAX, "?".to_string()));
                     let stale = age_secs > 10;
                     let stale_tag = if stale { " ⚠️STALE" } else { "" };
 
@@ -265,8 +263,7 @@ async fn process_channel_message(ctx: Arc<ChannelRuntimeContext>, msg: traits::C
             let day_folder = format!("{:02}{}{}", now.day(), month, now.year());
             let logs_path = format!(
                 "{}/.housaky/logs/days/{}",
-                ctx
-                    .running_registry
+                ctx.running_registry
                     .read_current()
                     .ok()
                     .and_then(|_| std::env::var("HOUSAKY_WORKSPACE").ok())
@@ -276,10 +273,7 @@ async fn process_channel_message(ctx: Arc<ChannelRuntimeContext>, msg: traits::C
 
             if let Some(channel) = target_channel.as_ref() {
                 let _ = channel
-                    .send(
-                        &format!("📁 Logs today:\n`{}`", logs_path),
-                        &msg.sender,
-                    )
+                    .send(&format!("📁 Logs today:\n`{}`", logs_path), &msg.sender)
                     .await;
             }
             return;
@@ -392,7 +386,7 @@ async fn process_channel_message(ctx: Arc<ChannelRuntimeContext>, msg: traits::C
         }
 
         let (status_tx, mut status_rx) = tokio::sync::mpsc::channel::<String>(16);
-        
+
         let channel_clone = target_channel.clone();
         let sender_clone = msg.sender.clone();
         let status_task = tokio::spawn(async move {
@@ -405,8 +399,10 @@ async fn process_channel_message(ctx: Arc<ChannelRuntimeContext>, msg: traits::C
 
         println!("  🧠 [AGI Processing] Processing with reasoning, goals, and thoughts...");
 
-        let result = agi_processor.process_with_agi_with_status(&msg, Some(status_tx)).await;
-        
+        let result = agi_processor
+            .process_with_agi_with_status(&msg, Some(status_tx))
+            .await;
+
         let _ = status_task.await;
 
         if let Some(channel) = target_channel.as_ref() {
@@ -1358,9 +1354,9 @@ pub async fn start_channels(config: Config) -> Result<()> {
 
     println!("  🚦 In-flight message limit: {max_in_flight_messages}");
 
-    let running_registry = Arc::new(crate::observability::running_registry::RunningRegistry::new(
-        &config.workspace_dir,
-    ));
+    let running_registry = Arc::new(
+        crate::observability::running_registry::RunningRegistry::new(&config.workspace_dir),
+    );
     let channels_agent_id = format!("channels/pid{}", std::process::id());
     let _ = running_registry
         .register_start(
@@ -1615,7 +1611,9 @@ mod tests {
             message_timeout_secs: 300,
             send_progress_updates: false,
             flight_journal: None,
-            running_registry: Arc::new(crate::observability::running_registry::RunningRegistry::new(".")),
+            running_registry: Arc::new(
+                crate::observability::running_registry::RunningRegistry::new("."),
+            ),
         });
 
         process_channel_message(
@@ -1712,7 +1710,9 @@ mod tests {
             message_timeout_secs: 300,
             send_progress_updates: false,
             flight_journal: None,
-            running_registry: Arc::new(crate::observability::running_registry::RunningRegistry::new(".")),
+            running_registry: Arc::new(
+                crate::observability::running_registry::RunningRegistry::new("."),
+            ),
         });
 
         let (tx, rx) = tokio::sync::mpsc::channel::<traits::ChannelMessage>(4);

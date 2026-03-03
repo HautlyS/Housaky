@@ -5,9 +5,7 @@ use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{
-        Block, Borders, Clear, Gauge, List, ListItem, Paragraph, Wrap,
-    },
+    widgets::{Block, Borders, Clear, Gauge, List, ListItem, Paragraph, Wrap},
     Frame,
 };
 use std::path::PathBuf;
@@ -25,18 +23,18 @@ pub enum SkillSource {
 impl SkillSource {
     fn label(&self) -> &'static str {
         match self {
-            SkillSource::Local          => "local",
-            SkillSource::OpenClaw       => "openclaw",
+            SkillSource::Local => "local",
+            SkillSource::OpenClaw => "openclaw",
             SkillSource::ClaudeOfficial => "claude",
-            SkillSource::Config         => "config",
+            SkillSource::Config => "config",
         }
     }
     fn color(&self) -> Color {
         match self {
-            SkillSource::Local          => Color::Cyan,
-            SkillSource::OpenClaw       => Color::Green,
+            SkillSource::Local => Color::Cyan,
+            SkillSource::OpenClaw => Color::Green,
             SkillSource::ClaudeOfficial => Color::Yellow,
-            SkillSource::Config         => Color::Gray,
+            SkillSource::Config => Color::Gray,
         }
     }
 }
@@ -55,10 +53,18 @@ pub struct MarketSkill {
 
 impl MarketSkill {
     fn status_color(&self) -> Color {
-        if self.enabled { Color::Green } else { Color::DarkGray }
+        if self.enabled {
+            Color::Green
+        } else {
+            Color::DarkGray
+        }
     }
     fn status_icon(&self) -> &'static str {
-        if self.enabled { "●" } else { "○" }
+        if self.enabled {
+            "●"
+        } else {
+            "○"
+        }
     }
 }
 
@@ -72,17 +78,31 @@ enum SkillTab {
 }
 
 impl SkillTab {
-    fn all() -> &'static [SkillTab] { &[SkillTab::All, SkillTab::Enabled, SkillTab::Available] }
+    fn all() -> &'static [SkillTab] {
+        &[SkillTab::All, SkillTab::Enabled, SkillTab::Available]
+    }
     fn label(&self) -> &'static str {
         match self {
-            SkillTab::All       => "All",
-            SkillTab::Enabled   => "Enabled",
+            SkillTab::All => "All",
+            SkillTab::Enabled => "Enabled",
             SkillTab::Available => "Available",
         }
     }
-    fn index(&self) -> usize { Self::all().iter().position(|t| t == self).unwrap_or(0) }
-    fn next(&self) -> SkillTab { let a = Self::all(); a[(self.index() + 1) % a.len()] }
-    fn prev(&self) -> SkillTab { let a = Self::all(); a[if self.index() == 0 { a.len()-1 } else { self.index()-1 }] }
+    fn index(&self) -> usize {
+        Self::all().iter().position(|t| t == self).unwrap_or(0)
+    }
+    fn next(&self) -> SkillTab {
+        let a = Self::all();
+        a[(self.index() + 1) % a.len()]
+    }
+    fn prev(&self) -> SkillTab {
+        let a = Self::all();
+        a[if self.index() == 0 {
+            a.len() - 1
+        } else {
+            self.index() - 1
+        }]
+    }
 }
 
 pub struct SkillsMarketApp {
@@ -129,13 +149,19 @@ impl SkillsMarketApp {
         if let Ok(rd) = std::fs::read_dir(&skills_dir) {
             for entry in rd.flatten() {
                 let path = entry.path();
-                if !path.is_dir() { continue; }
+                if !path.is_dir() {
+                    continue;
+                }
                 let name = entry.file_name().to_string_lossy().to_string();
                 let enabled = path.join("enabled").exists() || path.join("SKILL.toml").exists();
                 let readme_path = path.join("SKILL.md");
                 let readme = std::fs::read_to_string(&readme_path).ok();
-                let description = readme.as_deref()
-                    .and_then(|r| r.lines().find(|l| !l.trim().is_empty() && !l.starts_with('#')))
+                let description = readme
+                    .as_deref()
+                    .and_then(|r| {
+                        r.lines()
+                            .find(|l| !l.trim().is_empty() && !l.starts_with('#'))
+                    })
                     .unwrap_or("No description available")
                     .trim()
                     .chars()
@@ -238,23 +264,29 @@ impl SkillsMarketApp {
         }
 
         self.status = format!("{} skills loaded", self.items.len());
-        if self.selected >= self.items.len() { self.selected = 0; }
+        if self.selected >= self.items.len() {
+            self.selected = 0;
+        }
         self.list_state.select(Some(self.selected));
     }
 
     fn filtered_indices(&self) -> Vec<usize> {
         let q = self.filter.to_lowercase();
-        self.items.iter().enumerate()
+        self.items
+            .iter()
+            .enumerate()
             .filter(|(_, s)| {
                 let tab_ok = match self.tab {
-                    SkillTab::All       => true,
-                    SkillTab::Enabled   => s.enabled,
+                    SkillTab::All => true,
+                    SkillTab::Enabled => s.enabled,
                     SkillTab::Available => !s.enabled,
                 };
-                let filter_ok = if q.is_empty() { true } else {
-                    s.name.to_lowercase().contains(&q) ||
-                    s.description.to_lowercase().contains(&q) ||
-                    s.tags.iter().any(|t| t.to_lowercase().contains(&q))
+                let filter_ok = if q.is_empty() {
+                    true
+                } else {
+                    s.name.to_lowercase().contains(&q)
+                        || s.description.to_lowercase().contains(&q)
+                        || s.tags.iter().any(|t| t.to_lowercase().contains(&q))
                 };
                 tab_ok && filter_ok
             })
@@ -336,7 +368,9 @@ impl SkillsMarketApp {
                 self.list_state.select(Some(0));
             }
             (_, KeyCode::PageUp) => {
-                if self.detail_scroll > 0 { self.detail_scroll -= 1; }
+                if self.detail_scroll > 0 {
+                    self.detail_scroll -= 1;
+                }
             }
             (_, KeyCode::PageDown) => {
                 self.detail_scroll += 1;
@@ -353,8 +387,12 @@ impl SkillsMarketApp {
                 self.selected = 0;
                 self.list_state.select(Some(0));
             }
-            KeyCode::Char(c) => { self.filter.push(c); }
-            KeyCode::Backspace => { self.filter.pop(); }
+            KeyCode::Char(c) => {
+                self.filter.push(c);
+            }
+            KeyCode::Backspace => {
+                self.filter.pop();
+            }
             _ => {}
         }
         Ok(())
@@ -365,16 +403,18 @@ impl SkillsMarketApp {
 
         // Tick notification expiry
         if let Some((_, t)) = &self.notification {
-            if t.elapsed().as_secs() > 4 { self.notification = None; }
+            if t.elapsed().as_secs() > 4 {
+                self.notification = None;
+            }
         }
 
         let layout = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Length(2),  // header
-                Constraint::Length(2),  // tabs
-                Constraint::Min(5),     // content
-                Constraint::Length(1),  // footer
+                Constraint::Length(2), // header
+                Constraint::Length(2), // tabs
+                Constraint::Min(5),    // content
+                Constraint::Length(1), // footer
             ])
             .split(area);
 
@@ -393,13 +433,30 @@ impl SkillsMarketApp {
         let total = self.items.len();
 
         let left = Line::from(vec![
-            Span::styled(" 🧩 HOUSAKY ", Style::default().fg(Color::Black).bg(Color::Cyan).add_modifier(Modifier::BOLD)),
-            Span::styled(" Skills Marketplace ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                " 🧩 HOUSAKY ",
+                Style::default()
+                    .fg(Color::Black)
+                    .bg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(
+                " Skills Marketplace ",
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            ),
         ]);
         let right = Line::from(vec![
-            Span::styled(format!(" {}/{} enabled ", enabled_count, total), Style::default().fg(Color::Green)),
+            Span::styled(
+                format!(" {}/{} enabled ", enabled_count, total),
+                Style::default().fg(Color::Green),
+            ),
             if !self.filter.is_empty() {
-                Span::styled(format!("  filter: \"{}\" ", self.filter), Style::default().fg(Color::Yellow))
+                Span::styled(
+                    format!("  filter: \"{}\" ", self.filter),
+                    Style::default().fg(Color::Yellow),
+                )
             } else {
                 Span::raw("")
             },
@@ -413,24 +470,35 @@ impl SkillsMarketApp {
     }
 
     fn draw_tabs(&self, f: &mut Frame, area: Rect) {
-        let tab_titles: Vec<Span> = SkillTab::all().iter().map(|t| {
-            let count = match t {
-                SkillTab::All       => self.items.len(),
-                SkillTab::Enabled   => self.items.iter().filter(|s| s.enabled).count(),
-                SkillTab::Available => self.items.iter().filter(|s| !s.enabled).count(),
-            };
-            let label = format!(" {} ({}) ", t.label(), count);
-            if *t == self.tab {
-                Span::styled(label, Style::default().fg(Color::Black).bg(Color::Cyan).add_modifier(Modifier::BOLD))
-            } else {
-                Span::styled(label, Style::default().fg(Color::DarkGray))
-            }
-        }).collect();
+        let tab_titles: Vec<Span> = SkillTab::all()
+            .iter()
+            .map(|t| {
+                let count = match t {
+                    SkillTab::All => self.items.len(),
+                    SkillTab::Enabled => self.items.iter().filter(|s| s.enabled).count(),
+                    SkillTab::Available => self.items.iter().filter(|s| !s.enabled).count(),
+                };
+                let label = format!(" {} ({}) ", t.label(), count);
+                if *t == self.tab {
+                    Span::styled(
+                        label,
+                        Style::default()
+                            .fg(Color::Black)
+                            .bg(Color::Cyan)
+                            .add_modifier(Modifier::BOLD),
+                    )
+                } else {
+                    Span::styled(label, Style::default().fg(Color::DarkGray))
+                }
+            })
+            .collect();
 
         let filter_hint = if self.filter_active {
             Span::styled(
                 format!(" /{}| ", self.filter),
-                Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
             )
         } else if !self.filter.is_empty() {
             Span::styled(
@@ -466,7 +534,9 @@ impl SkillsMarketApp {
             .border_style(Style::default().fg(Color::Cyan))
             .title(Span::styled(
                 format!(" Skills ({}) ", filtered.len()),
-                Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
             ));
         let inner = block.inner(area);
         f.render_widget(block, area);
@@ -478,35 +548,54 @@ impl SkillsMarketApp {
                 "No skills match the filter."
             };
             f.render_widget(
-                Paragraph::new(Span::styled(format!("  {}", msg), Style::default().fg(Color::DarkGray))),
+                Paragraph::new(Span::styled(
+                    format!("  {}", msg),
+                    Style::default().fg(Color::DarkGray),
+                )),
                 inner,
             );
             return;
         }
 
-        let items: Vec<ListItem> = filtered.iter().enumerate().map(|(display_idx, &real_idx)| {
-            let skill = &self.items[real_idx];
-            let selected = display_idx == self.selected;
-            let row_bg = if selected { Color::Rgb(20, 40, 50) } else { Color::Reset };
-            let row_mod = if selected { Modifier::BOLD } else { Modifier::empty() };
+        let items: Vec<ListItem> = filtered
+            .iter()
+            .enumerate()
+            .map(|(display_idx, &real_idx)| {
+                let skill = &self.items[real_idx];
+                let selected = display_idx == self.selected;
+                let row_bg = if selected {
+                    Color::Rgb(20, 40, 50)
+                } else {
+                    Color::Reset
+                };
+                let row_mod = if selected {
+                    Modifier::BOLD
+                } else {
+                    Modifier::empty()
+                };
 
-            ListItem::new(vec![
-                Line::from(vec![
+                ListItem::new(vec![Line::from(vec![
                     Span::styled(
                         format!("{} ", skill.status_icon()),
                         Style::default().fg(skill.status_color()),
                     ),
                     Span::styled(
                         format!("{:22}", skill.name),
-                        Style::default().fg(Color::White).bg(row_bg).add_modifier(row_mod),
+                        Style::default()
+                            .fg(Color::White)
+                            .bg(row_bg)
+                            .add_modifier(row_mod),
                     ),
                     Span::styled(
                         format!(" [{}]", skill.source.label()),
-                        Style::default().fg(skill.source.color()).bg(row_bg).add_modifier(Modifier::DIM),
+                        Style::default()
+                            .fg(skill.source.color())
+                            .bg(row_bg)
+                            .add_modifier(Modifier::DIM),
                     ),
-                ]),
-            ])
-        }).collect();
+                ])])
+            })
+            .collect();
 
         let mut list_state = ratatui::widgets::ListState::default();
         list_state.select(Some(self.selected));
@@ -529,7 +618,12 @@ impl SkillsMarketApp {
         let block = Block::default()
             .borders(Borders::ALL)
             .border_style(Style::default().fg(Color::Magenta))
-            .title(Span::styled(title, Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD)));
+            .title(Span::styled(
+                title,
+                Style::default()
+                    .fg(Color::Magenta)
+                    .add_modifier(Modifier::BOLD),
+            ));
         let inner = block.inner(area);
         f.render_widget(block, area);
 
@@ -537,7 +631,10 @@ impl SkillsMarketApp {
             Some(s) => s,
             None => {
                 f.render_widget(
-                    Paragraph::new(Span::styled("Select a skill", Style::default().fg(Color::DarkGray))),
+                    Paragraph::new(Span::styled(
+                        "Select a skill",
+                        Style::default().fg(Color::DarkGray),
+                    )),
                     inner,
                 );
                 return;
@@ -547,9 +644,9 @@ impl SkillsMarketApp {
         let layout = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Length(7),  // info
-                Constraint::Length(3),  // gauge
-                Constraint::Min(0),     // readme / description
+                Constraint::Length(7), // info
+                Constraint::Length(3), // gauge
+                Constraint::Min(0),    // readme / description
             ])
             .split(inner);
 
@@ -563,16 +660,26 @@ impl SkillsMarketApp {
         let info_lines = vec![
             Line::from(Span::styled(
                 skill.name.clone(),
-                Style::default().fg(Color::White).add_modifier(Modifier::BOLD),
+                Style::default()
+                    .fg(Color::White)
+                    .add_modifier(Modifier::BOLD),
             )),
             Line::from(""),
             Line::from(vec![
                 Span::styled("Status:   ", Style::default().fg(Color::DarkGray)),
-                Span::styled(status_label, Style::default().fg(status_color).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    status_label,
+                    Style::default()
+                        .fg(status_color)
+                        .add_modifier(Modifier::BOLD),
+                ),
             ]),
             Line::from(vec![
                 Span::styled("Source:   ", Style::default().fg(Color::DarkGray)),
-                Span::styled(skill.source.label(), Style::default().fg(skill.source.color())),
+                Span::styled(
+                    skill.source.label(),
+                    Style::default().fg(skill.source.color()),
+                ),
             ]),
             Line::from(vec![
                 Span::styled("Version:  ", Style::default().fg(Color::DarkGray)),
@@ -587,52 +694,89 @@ impl SkillsMarketApp {
 
         // Enabled ratio gauge
         let enabled_total = self.items.iter().filter(|s| s.enabled).count();
-        let ratio = if self.items.is_empty() { 0.0 } else {
+        let ratio = if self.items.is_empty() {
+            0.0
+        } else {
             enabled_total as f64 / self.items.len() as f64
         };
         let gauge = Gauge::default()
-            .block(Block::default()
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::DarkGray))
-                .title(Span::styled(" Marketplace Activation ", Style::default().fg(Color::DarkGray))))
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(Color::DarkGray))
+                    .title(Span::styled(
+                        " Marketplace Activation ",
+                        Style::default().fg(Color::DarkGray),
+                    )),
+            )
             .gauge_style(Style::default().fg(Color::Cyan).bg(Color::DarkGray))
             .ratio(ratio)
             .label(format!("{}/{} enabled", enabled_total, self.items.len()));
         f.render_widget(gauge, layout[2].clone());
         // We borrow layout[2] below so use layout[1] for gauge and layout[2] for readme
         let gauge2 = Gauge::default()
-            .block(Block::default()
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::DarkGray))
-                .title(Span::styled(" Activation ", Style::default().fg(Color::DarkGray))))
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(Color::DarkGray))
+                    .title(Span::styled(
+                        " Activation ",
+                        Style::default().fg(Color::DarkGray),
+                    )),
+            )
             .gauge_style(Style::default().fg(Color::Cyan).bg(Color::DarkGray))
             .ratio(ratio)
             .label(format!("{}/{}", enabled_total, self.items.len()));
         f.render_widget(gauge2, layout[1]);
 
         // Readme / description
-        let content = skill.readme.clone().unwrap_or_else(|| skill.description.clone());
-        let lines: Vec<Line> = content.lines().skip(self.detail_scroll).map(|l| {
-            if l.starts_with("# ") {
-                Line::from(Span::styled(l.to_string(), Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)))
-            } else if l.starts_with("## ") {
-                Line::from(Span::styled(l.to_string(), Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)))
-            } else if l.starts_with("- ") || l.starts_with("* ") {
-                Line::from(vec![
-                    Span::styled("  • ", Style::default().fg(Color::Green)),
-                    Span::raw(l[2..].to_string()),
-                ])
-            } else if l.starts_with("```") {
-                Line::from(Span::styled(l.to_string(), Style::default().fg(Color::DarkGray).bg(Color::Rgb(30, 30, 30))))
-            } else {
-                Line::from(Span::raw(l.to_string()))
-            }
-        }).collect();
+        let content = skill
+            .readme
+            .clone()
+            .unwrap_or_else(|| skill.description.clone());
+        let lines: Vec<Line> = content
+            .lines()
+            .skip(self.detail_scroll)
+            .map(|l| {
+                if l.starts_with("# ") {
+                    Line::from(Span::styled(
+                        l.to_string(),
+                        Style::default()
+                            .fg(Color::Cyan)
+                            .add_modifier(Modifier::BOLD),
+                    ))
+                } else if l.starts_with("## ") {
+                    Line::from(Span::styled(
+                        l.to_string(),
+                        Style::default()
+                            .fg(Color::Yellow)
+                            .add_modifier(Modifier::BOLD),
+                    ))
+                } else if l.starts_with("- ") || l.starts_with("* ") {
+                    Line::from(vec![
+                        Span::styled("  • ", Style::default().fg(Color::Green)),
+                        Span::raw(l[2..].to_string()),
+                    ])
+                } else if l.starts_with("```") {
+                    Line::from(Span::styled(
+                        l.to_string(),
+                        Style::default()
+                            .fg(Color::DarkGray)
+                            .bg(Color::Rgb(30, 30, 30)),
+                    ))
+                } else {
+                    Line::from(Span::raw(l.to_string()))
+                }
+            })
+            .collect();
 
         let readme_block = Block::default()
             .borders(Borders::ALL)
             .border_style(Style::default().fg(Color::DarkGray))
-            .title(Span::styled(" Description / README ", Style::default().fg(Color::DarkGray)));
+            .title(Span::styled(
+                " Description / README ",
+                Style::default().fg(Color::DarkGray),
+            ));
         let readme_inner = readme_block.inner(layout[2]);
         f.render_widget(readme_block, layout[2]);
         f.render_widget(
@@ -658,7 +802,11 @@ impl SkillsMarketApp {
         let area = Rect::new(f.area().width.saturating_sub(width + 1), 1, width, 3);
         let toast = Paragraph::new(msg)
             .style(Style::default().fg(Color::Black).bg(Color::Cyan))
-            .block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(Color::Cyan)));
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(Color::Cyan)),
+            );
         f.render_widget(Clear, area);
         f.render_widget(toast, area);
     }

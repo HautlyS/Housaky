@@ -73,7 +73,10 @@ impl CapabilityGrowthTracker {
             ("knowledge_depth", 0.85),
             ("tool_mastery", 0.9),
             ("adaptability", 0.8),
-        ].into_iter().map(|(k, v)| (k.to_string(), v)).collect();
+        ]
+        .into_iter()
+        .map(|(k, v)| (k.to_string(), v))
+        .collect();
 
         Self {
             history: Arc::new(RwLock::new(VecDeque::new())),
@@ -85,21 +88,27 @@ impl CapabilityGrowthTracker {
         }
     }
 
-    pub async fn record_capabilities(&self, capabilities: &HashMap<String, f64>) -> Vec<GrowthMilestone> {
+    pub async fn record_capabilities(
+        &self,
+        capabilities: &HashMap<String, f64>,
+    ) -> Vec<GrowthMilestone> {
         let mut new_milestones = Vec::new();
 
         let previous = self.history.read().await;
-        let prev_caps = previous.front().map(|s| s.capabilities.clone()).unwrap_or_default();
-        
+        let prev_caps = previous
+            .front()
+            .map(|s| s.capabilities.clone())
+            .unwrap_or_default();
+
         for (cap, current_level) in capabilities {
             let previous_level = prev_caps.get(cap).copied().unwrap_or(0.0);
             let current = *current_level;
-            
+
             if current > previous_level {
                 let threshold = self.thresholds.get(cap).copied().unwrap_or(0.9);
-                
+
                 let crossed_threshold = previous_level < threshold && current >= threshold;
-                
+
                 if crossed_threshold {
                     let milestone = GrowthMilestone {
                         id: format!("milestone_{}", uuid::Uuid::new_v4()),
@@ -111,7 +120,7 @@ impl CapabilityGrowthTracker {
                         impact: current_level - previous_level,
                     };
                     new_milestones.push(milestone.clone());
-                    
+
                     self.milestones.write().await.push(milestone);
                 }
             }
@@ -153,7 +162,9 @@ impl CapabilityGrowthTracker {
             ("problem_solving", 0.15),
             ("knowledge_depth", 0.15),
             ("adaptability", 0.1),
-        ].into_iter().collect();
+        ]
+        .into_iter()
+        .collect();
 
         let mut weighted_sum = 0.0;
         let mut total_weight = 0.0;
@@ -183,7 +194,7 @@ impl CapabilityGrowthTracker {
 
     pub async fn project_growth(&self, capability: &str, _cycles_ahead: u32) -> GrowthProjection {
         let history = self.history.read().await;
-        
+
         let samples: Vec<f64> = history
             .iter()
             .take(100)
@@ -191,11 +202,11 @@ impl CapabilityGrowthTracker {
             .collect();
 
         let current = samples.first().copied().unwrap_or(0.5);
-        
+
         let growth_rate = if samples.len() >= 2 {
             let mut total_rate = 0.0;
             for i in 1..samples.len() {
-                total_rate += samples[i] - samples[i-1];
+                total_rate += samples[i] - samples[i - 1];
             }
             total_rate / (samples.len() - 1) as f64
         } else {
@@ -215,7 +226,7 @@ impl CapabilityGrowthTracker {
         };
 
         let mut limiting_factors = Vec::new();
-        
+
         if growth_rate < 0.001 {
             limiting_factors.push("Slow improvement rate".to_string());
         }
@@ -234,17 +245,28 @@ impl CapabilityGrowthTracker {
             limiting_factors,
         };
 
-        self.projections.write().await.insert(capability.to_string(), projection.clone());
+        self.projections
+            .write()
+            .await
+            .insert(capability.to_string(), projection.clone());
 
         projection
     }
 
     pub async fn project_all_capabilities(&self) -> Vec<GrowthProjection> {
-        let caps = ["reasoning", "learning", "meta_cognition", "creativity", 
-                    "self_awareness", "knowledge_depth", "tool_mastery", "adaptability"];
-        
+        let caps = [
+            "reasoning",
+            "learning",
+            "meta_cognition",
+            "creativity",
+            "self_awareness",
+            "knowledge_depth",
+            "tool_mastery",
+            "adaptability",
+        ];
+
         let mut projections = Vec::new();
-        
+
         for cap in caps {
             let projection = self.project_growth(cap, 100).await;
             projections.push(projection);
@@ -257,10 +279,14 @@ impl CapabilityGrowthTracker {
         let projections = self.project_all_capabilities().await;
 
         let mut agi_ready_cycles = u32::MAX;
-        
+
         for proj in &projections {
-            let threshold = self.thresholds.get(proj.capability.as_str()).copied().unwrap_or(0.9);
-            
+            let threshold = self
+                .thresholds
+                .get(proj.capability.as_str())
+                .copied()
+                .unwrap_or(0.9);
+
             if proj.current >= threshold {
                 continue;
             }
@@ -278,7 +304,8 @@ impl CapabilityGrowthTracker {
         let milestones = vec![
             MilestonePrediction {
                 milestone: "Reasoning at 90%".to_string(),
-                estimated_cycles: projections.iter()
+                estimated_cycles: projections
+                    .iter()
                     .find(|p| p.capability == "reasoning")
                     .map(|p| ((0.9 - p.current) / p.growth_rate.max(0.001)) as u32)
                     .unwrap_or(100),
@@ -287,7 +314,8 @@ impl CapabilityGrowthTracker {
             },
             MilestonePrediction {
                 milestone: "Self-awareness at 70%".to_string(),
-                estimated_cycles: projections.iter()
+                estimated_cycles: projections
+                    .iter()
                     .find(|p| p.capability == "self_awareness")
                     .map(|p| ((0.7 - p.current) / p.growth_rate.max(0.001)) as u32)
                     .unwrap_or(100),
@@ -296,7 +324,8 @@ impl CapabilityGrowthTracker {
             },
             MilestonePrediction {
                 milestone: "Full meta-cognition".to_string(),
-                estimated_cycles: projections.iter()
+                estimated_cycles: projections
+                    .iter()
                     .find(|p| p.capability == "meta_cognition")
                     .map(|p| ((0.8 - p.current) / p.growth_rate.max(0.001)) as u32)
                     .unwrap_or(150),
@@ -313,7 +342,11 @@ impl CapabilityGrowthTracker {
                 risk_factors.extend(proj.limiting_factors.clone());
             }
             if proj.growth_rate > 0.01 {
-                acceleration_factors.push(format!("{}: {:.1}%/cycle", proj.capability, proj.growth_rate * 100.0));
+                acceleration_factors.push(format!(
+                    "{}: {:.1}%/cycle",
+                    proj.capability,
+                    proj.growth_rate * 100.0
+                ));
             }
         }
 
@@ -328,7 +361,10 @@ impl CapabilityGrowthTracker {
 
     pub async fn get_growth_rate(&self, capability: &str) -> f64 {
         let projection = self.projections.read().await;
-        projection.get(capability).map(|p| p.growth_rate).unwrap_or(0.0)
+        projection
+            .get(capability)
+            .map(|p| p.growth_rate)
+            .unwrap_or(0.0)
     }
 
     pub async fn get_milestones(&self) -> Vec<GrowthMilestone> {
@@ -337,7 +373,7 @@ impl CapabilityGrowthTracker {
 
     pub async fn get_current_intelligence(&self) -> (f64, f64) {
         let history = self.history.read().await;
-        
+
         if let Some(latest) = history.front() {
             (latest.overall_intelligence, latest.consciousness_level)
         } else {
@@ -347,23 +383,27 @@ impl CapabilityGrowthTracker {
 
     pub async fn analyze_convergence(&self) -> ConvergenceAnalysis {
         let history = self.history.read().await;
-        
+
         let recent: Vec<_> = history.iter().take(20).collect();
-        
+
         let mut convergence_scores = HashMap::new();
-        
+
         if recent.len() >= 2 {
             for cap in ["reasoning", "learning", "meta_cognition", "self_awareness"] {
                 let values: Vec<f64> = recent
                     .iter()
                     .filter_map(|s| s.capabilities.get(cap).copied())
                     .collect();
-                
+
                 if values.len() >= 2 {
                     let variance = self.calculate_variance(&values);
                     let mean = values.iter().sum::<f64>() / values.len() as f64;
-                    let cv = if mean > 0.0 { variance.sqrt() / mean } else { 0.0 };
-                    
+                    let cv = if mean > 0.0 {
+                        variance.sqrt() / mean
+                    } else {
+                        0.0
+                    };
+
                     convergence_scores.insert(cap.to_string(), 1.0 - cv.min(1.0));
                 }
             }
@@ -397,12 +437,10 @@ impl CapabilityGrowthTracker {
         if values.is_empty() {
             return 0.0;
         }
-        
+
         let mean = values.iter().sum::<f64>() / values.len() as f64;
-        let variance = values.iter()
-            .map(|v| (v - mean).powi(2))
-            .sum::<f64>() / values.len() as f64;
-        
+        let variance = values.iter().map(|v| (v - mean).powi(2)).sum::<f64>() / values.len() as f64;
+
         variance
     }
 }

@@ -2,9 +2,9 @@
 //!
 //! CRDT-inspired merge operations for conflict-free replication.
 
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use chrono::{DateTime, Utc};
 
 /// Last-Writer-Wins Register for conflict-free merging.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -68,7 +68,9 @@ pub struct VectorClock {
 
 impl VectorClock {
     pub fn new() -> Self {
-        Self { clocks: HashMap::new() }
+        Self {
+            clocks: HashMap::new(),
+        }
     }
 
     pub fn tick(&mut self, peer_id: &str) {

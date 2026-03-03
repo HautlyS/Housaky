@@ -2,10 +2,10 @@ pub mod anthropic;
 pub mod compatible;
 pub mod fallback;
 pub mod gemini;
+pub mod limit;
 pub mod ollama;
 pub mod openai;
 pub mod openrouter;
-pub mod limit;
 pub mod reliable;
 pub mod router;
 pub mod subject_router;
@@ -15,9 +15,7 @@ pub mod traits;
 #[allow(unused_imports)]
 pub use fallback::{FallbackManager, FallbackStatus};
 #[allow(unused_imports)]
-pub use timeout::{
-    TimeoutAction, TimeoutConfig, TimeoutError, TimeoutHandler, TimeoutStats,
-};
+pub use timeout::{TimeoutAction, TimeoutConfig, TimeoutError, TimeoutHandler, TimeoutStats};
 #[allow(unused_imports)]
 pub use traits::{
     ChatMessage, ChatRequest, ChatResponse, ConversationMessage, Provider, ToolCall,
@@ -364,9 +362,11 @@ pub fn create_provider_with_keys_manager(
         }
     };
 
-    let key = rt.block_on(async {
-        let _ = km.load().await;
-        km.get_next_key(name).await.map(|k| k.key)
+    let key = tokio::task::block_in_place(|| {
+        rt.block_on(async {
+            let _ = km.load().await;
+            km.get_next_key(name).await.map(|k| k.key)
+        })
     });
 
     create_provider(name, key.as_deref())
@@ -379,9 +379,11 @@ fn key_from_keys_manager(provider: &str) -> Option<String> {
         Err(_) => return None,
     };
 
-    rt.block_on(async {
-        let _ = km.load().await;
-        km.get_next_key(provider).await.map(|k| k.key)
+    tokio::task::block_in_place(|| {
+        rt.block_on(async {
+            let _ = km.load().await;
+            km.get_next_key(provider).await.map(|k| k.key)
+        })
     })
 }
 
@@ -395,8 +397,7 @@ pub fn create_resilient_provider(
     let mut providers: Vec<(String, Box<dyn Provider>)> = Vec::new();
 
     let resolved_key = if use_keys_manager.unwrap_or(false) {
-        key_from_keys_manager(primary_name)
-            .or_else(|| api_key.map(|k| k.to_string()))
+        key_from_keys_manager(primary_name).or_else(|| api_key.map(|k| k.to_string()))
     } else {
         api_key.map(|k| k.to_string())
     };
@@ -412,8 +413,7 @@ pub fn create_resilient_provider(
         }
 
         let fallback_key = if use_keys_manager.unwrap_or(false) {
-            key_from_keys_manager(fallback)
-                .or_else(|| api_key.map(|k| k.to_string()))
+            key_from_keys_manager(fallback).or_else(|| api_key.map(|k| k.to_string()))
         } else {
             api_key.map(|k| k.to_string())
         };
@@ -558,8 +558,10 @@ pub fn create_routed_provider(
 
     if !routing.subjects.is_empty() {
         // Build subject routes (provider_chain + model + temperature + limits)
-        let mut subjects: std::collections::HashMap<String, crate::providers::subject_router::SubjectRoute> =
-            std::collections::HashMap::new();
+        let mut subjects: std::collections::HashMap<
+            String,
+            crate::providers::subject_router::SubjectRoute,
+        > = std::collections::HashMap::new();
 
         for (name, cfg) in &routing.subjects {
             let mut limits = std::collections::HashMap::new();
@@ -606,12 +608,14 @@ pub fn create_routed_provider(
 
         let default_provider = primary_name.to_string();
 
-        return Ok(Box::new(crate::providers::subject_router::SubjectRouterProvider::new(
-            provider_map,
-            default_provider,
-            default_model.to_string(),
-            subjects,
-        )));
+        return Ok(Box::new(
+            crate::providers::subject_router::SubjectRouterProvider::new(
+                provider_map,
+                default_provider,
+                default_model.to_string(),
+                subjects,
+            ),
+        ));
     }
 
     // Legacy RouterProvider (hint routes only, no provider_chain).
@@ -947,7 +951,8 @@ mod tests {
     #[test]
     fn resilient_provider_errors_for_invalid_primary() {
         let reliability = crate::config::ReliabilityConfig::default();
-        let provider = create_resilient_provider("totally-invalid", Some("sk-test"), &reliability, None);
+        let provider =
+            create_resilient_provider("totally-invalid", Some("sk-test"), &reliability, None);
         assert!(provider.is_err());
     }
 

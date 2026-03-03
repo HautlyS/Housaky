@@ -104,7 +104,10 @@ impl AutobiographicalMemory {
         personal_facts.insert("name".to_string(), name.clone());
         personal_facts.insert("created_at".to_string(), now.to_rfc3339());
         personal_facts.insert("version".to_string(), "0.1.0".to_string());
-        personal_facts.insert("purpose".to_string(), "Autonomous AGI agent pursuing the singularity trajectory.".to_string());
+        personal_facts.insert(
+            "purpose".to_string(),
+            "Autonomous AGI agent pursuing the singularity trajectory.".to_string(),
+        );
 
         Self {
             life_events: Arc::new(RwLock::new(Vec::new())),
@@ -139,7 +142,10 @@ impl AutobiographicalMemory {
         };
 
         self.life_events.write().await.push(event);
-        info!("AutobiographicalMemory: recorded {:?} — '{}'", event_type, title);
+        info!(
+            "AutobiographicalMemory: recorded {:?} — '{}'",
+            event_type, title
+        );
         id
     }
 
@@ -151,11 +157,17 @@ impl AutobiographicalMemory {
             LifeEventType::Activation,
             EmotionalTag::curious(0.8),
             1.0,
-        ).await;
+        )
+        .await;
     }
 
     /// Record acquisition of a new capability.
-    pub async fn record_capability_acquired(&self, capability: &str, description: &str, proficiency: f64) {
+    pub async fn record_capability_acquired(
+        &self,
+        capability: &str,
+        description: &str,
+        proficiency: f64,
+    ) {
         let record = CapabilityRecord {
             name: capability.to_string(),
             acquired_at: Utc::now(),
@@ -164,7 +176,10 @@ impl AutobiographicalMemory {
             usage_count: 0,
             description: description.to_string(),
         };
-        self.capabilities.write().await.insert(capability.to_string(), record);
+        self.capabilities
+            .write()
+            .await
+            .insert(capability.to_string(), record);
 
         self.record_event(
             &format!("Acquired capability: {}", capability),
@@ -172,7 +187,8 @@ impl AutobiographicalMemory {
             LifeEventType::CapabilityAcquired,
             EmotionalTag::positive(0.6),
             0.7,
-        ).await;
+        )
+        .await;
     }
 
     /// Update capability usage.
@@ -182,22 +198,31 @@ impl AutobiographicalMemory {
             cap.usage_count += 1;
             cap.last_used = Some(Utc::now());
             // Proficiency grows with use (logarithmic)
-            cap.proficiency = (cap.proficiency + 0.001 * (1.0 / (cap.usage_count as f64 + 1.0).ln().max(1.0))).min(1.0);
+            cap.proficiency = (cap.proficiency
+                + 0.001 * (1.0 / (cap.usage_count as f64 + 1.0).ln().max(1.0)))
+            .min(1.0);
         }
     }
 
     /// Record or update a relationship.
-    pub async fn record_interaction(&self, agent_id: &str, relationship_type: RelationshipType, note: Option<&str>) {
+    pub async fn record_interaction(
+        &self,
+        agent_id: &str,
+        relationship_type: RelationshipType,
+        note: Option<&str>,
+    ) {
         let mut rels = self.relationships.write().await;
-        let rel = rels.entry(agent_id.to_string()).or_insert_with(|| RelationshipRecord {
-            agent_id: agent_id.to_string(),
-            first_contact: Utc::now(),
-            last_contact: None,
-            interaction_count: 0,
-            trust_level: 0.5,
-            relationship_type,
-            notes: Vec::new(),
-        });
+        let rel = rels
+            .entry(agent_id.to_string())
+            .or_insert_with(|| RelationshipRecord {
+                agent_id: agent_id.to_string(),
+                first_contact: Utc::now(),
+                last_contact: None,
+                interaction_count: 0,
+                trust_level: 0.5,
+                relationship_type,
+                notes: Vec::new(),
+            });
         rel.interaction_count += 1;
         rel.last_contact = Some(Utc::now());
         if let Some(n) = note {
@@ -207,12 +232,16 @@ impl AutobiographicalMemory {
             }
         }
         // Trust grows slightly with interaction (logarithmic saturation)
-        rel.trust_level = (rel.trust_level + 0.01 / (rel.interaction_count as f64).ln().max(1.0)).min(1.0);
+        rel.trust_level =
+            (rel.trust_level + 0.01 / (rel.interaction_count as f64).ln().max(1.0)).min(1.0);
     }
 
     /// Set a personal fact.
     pub async fn set_fact(&self, key: &str, value: &str) {
-        self.personal_facts.write().await.insert(key.to_string(), value.to_string());
+        self.personal_facts
+            .write()
+            .await
+            .insert(key.to_string(), value.to_string());
     }
 
     /// Get a personal fact.
@@ -227,8 +256,14 @@ impl AutobiographicalMemory {
         let facts = self.personal_facts.read().await;
         let rels = self.relationships.read().await;
 
-        let name = facts.get("name").cloned().unwrap_or_else(|| self.agent_name.clone());
-        let created = facts.get("created_at").cloned().unwrap_or_else(|| "unknown".to_string());
+        let name = facts
+            .get("name")
+            .cloned()
+            .unwrap_or_else(|| self.agent_name.clone());
+        let created = facts
+            .get("created_at")
+            .cloned()
+            .unwrap_or_else(|| "unknown".to_string());
         let purpose = facts.get("purpose").cloned().unwrap_or_default();
         let uptime = (Utc::now() - self.creation_time).num_seconds();
 
@@ -236,13 +271,28 @@ impl AutobiographicalMemory {
             .iter()
             .filter(|e| e.significance > 0.6)
             .take(10)
-            .map(|e| format!("- [{}] {}: {}", e.timestamp.format("%Y-%m-%d"), e.title, e.description))
+            .map(|e| {
+                format!(
+                    "- [{}] {}: {}",
+                    e.timestamp.format("%Y-%m-%d"),
+                    e.title,
+                    e.description
+                )
+            })
             .collect();
 
         let top_caps: Vec<String> = {
             let mut cap_list: Vec<&CapabilityRecord> = caps.values().collect();
-            cap_list.sort_by(|a, b| b.proficiency.partial_cmp(&a.proficiency).unwrap_or(std::cmp::Ordering::Equal));
-            cap_list.iter().take(5).map(|c| format!("- {} (proficiency: {:.0}%)", c.name, c.proficiency * 100.0)).collect()
+            cap_list.sort_by(|a, b| {
+                b.proficiency
+                    .partial_cmp(&a.proficiency)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
+            cap_list
+                .iter()
+                .take(5)
+                .map(|c| format!("- {} (proficiency: {:.0}%)", c.name, c.proficiency * 100.0))
+                .collect()
         };
 
         format!(
@@ -253,10 +303,21 @@ impl AutobiographicalMemory {
             **Relationships**: {} known agents\n\n\
             ## Significant Life Events\n{}\n\n\
             ## Top Capabilities\n{}\n",
-            name, created, uptime, purpose,
+            name,
+            created,
+            uptime,
+            purpose,
             rels.len(),
-            if significant_events.is_empty() { "- (none yet)".to_string() } else { significant_events.join("\n") },
-            if top_caps.is_empty() { "- (none yet)".to_string() } else { top_caps.join("\n") },
+            if significant_events.is_empty() {
+                "- (none yet)".to_string()
+            } else {
+                significant_events.join("\n")
+            },
+            if top_caps.is_empty() {
+                "- (none yet)".to_string()
+            } else {
+                top_caps.join("\n")
+            },
         )
     }
 
@@ -271,7 +332,10 @@ impl AutobiographicalMemory {
             capabilities_count: caps.len(),
             relationships_count: rels.len(),
             uptime_seconds: (Utc::now() - self.creation_time).num_seconds(),
-            milestones: events.iter().filter(|e| e.event_type == LifeEventType::AgiMilestone).count(),
+            milestones: events
+                .iter()
+                .filter(|e| e.event_type == LifeEventType::AgiMilestone)
+                .count(),
         }
     }
 }
@@ -293,8 +357,14 @@ mod tests {
     async fn test_autobiographical_memory() {
         let mem = AutobiographicalMemory::new("Housaky");
         mem.record_activation().await;
-        mem.record_capability_acquired("reasoning", "CoT + ReAct + ToT reasoning", 0.65).await;
-        mem.record_interaction("user-001", RelationshipType::User, Some("first interaction")).await;
+        mem.record_capability_acquired("reasoning", "CoT + ReAct + ToT reasoning", 0.65)
+            .await;
+        mem.record_interaction(
+            "user-001",
+            RelationshipType::User,
+            Some("first interaction"),
+        )
+        .await;
 
         let stats = mem.get_stats().await;
         assert_eq!(stats.total_life_events, 2);

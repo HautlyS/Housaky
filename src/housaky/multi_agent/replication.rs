@@ -3,8 +3,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
-use tokio::sync::RwLock;
 use tokio::process::Command;
+use tokio::sync::RwLock;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChildAgent {
@@ -121,8 +121,7 @@ impl AgentReplicator {
         };
 
         // Locate the current binary — fall back to "housaky" on $PATH
-        let binary = std::env::current_exe()
-            .unwrap_or_else(|_| PathBuf::from("housaky"));
+        let binary = std::env::current_exe().unwrap_or_else(|_| PathBuf::from("housaky"));
 
         // Build the agent command: `housaky agent --workspace <dir> --message <goals>`
         let goals_str = request.specialization.goals.join("; ");
@@ -162,22 +161,17 @@ impl AgentReplicator {
                 tokio::spawn(async move {
                     let deadline = tokio::time::Instant::now()
                         + tokio::time::Duration::from_secs(max_secs.max(60));
-                    let result = tokio::time::timeout_at(
-                        deadline,
-                        handle.wait(),
-                    ).await;
+                    let result = tokio::time::timeout_at(deadline, handle.wait()).await;
 
                     let new_status = match result {
                         Ok(Ok(exit)) if exit.success() => ChildAgentStatus::Completed,
-                        Ok(Ok(exit)) => ChildAgentStatus::Failed(
-                            format!("exited with code {:?}", exit.code())
-                        ),
+                        Ok(Ok(exit)) => {
+                            ChildAgentStatus::Failed(format!("exited with code {:?}", exit.code()))
+                        }
                         Ok(Err(e)) => ChildAgentStatus::Failed(e.to_string()),
                         Err(_) => {
                             let _ = handle.kill().await;
-                            ChildAgentStatus::Failed(
-                                format!("exceeded max duration {}s", max_secs)
-                            )
+                            ChildAgentStatus::Failed(format!("exceeded max duration {}s", max_secs))
                         }
                     };
 
@@ -209,48 +203,48 @@ impl AgentReplicator {
 
     pub async fn collect_results(&self, child_id: &str) -> Result<TaskResult> {
         let child = self.get_child(child_id).await;
-        
+
         match child {
-            Some(c) => {
-                match c.status {
-                    ChildAgentStatus::Completed => Ok(TaskResult {
-                        child_id: child_id.to_string(),
-                        success: true,
-                        output: "Task completed".to_string(),
-                        error: None,
-                        duration_secs: 0.0,
-                    }),
-                    ChildAgentStatus::Failed(e) => Ok(TaskResult {
-                        child_id: child_id.to_string(),
-                        success: false,
-                        output: String::new(),
-                        error: Some(e),
-                        duration_secs: 0.0,
-                    }),
-                    _ => anyhow::bail!("Child agent {} is still running", child_id),
-                }
-            }
+            Some(c) => match c.status {
+                ChildAgentStatus::Completed => Ok(TaskResult {
+                    child_id: child_id.to_string(),
+                    success: true,
+                    output: "Task completed".to_string(),
+                    error: None,
+                    duration_secs: 0.0,
+                }),
+                ChildAgentStatus::Failed(e) => Ok(TaskResult {
+                    child_id: child_id.to_string(),
+                    success: false,
+                    output: String::new(),
+                    error: Some(e),
+                    duration_secs: 0.0,
+                }),
+                _ => anyhow::bail!("Child agent {} is still running", child_id),
+            },
             None => anyhow::bail!("Child agent {} not found", child_id),
         }
     }
 
     pub async fn merge_knowledge(&self, child_id: &str) -> Result<HashMap<String, String>> {
-        let child = self.get_child(child_id).await
+        let child = self
+            .get_child(child_id)
+            .await
             .ok_or_else(|| anyhow::anyhow!("Child agent {} not found", child_id))?;
 
         let mut knowledge = HashMap::new();
         knowledge.insert("child_id".to_string(), child.id);
         knowledge.insert("specialization".to_string(), child.specialization.name);
         knowledge.insert("focus_area".to_string(), child.specialization.focus_area);
-        
+
         tracing::info!("Merged knowledge from child agent: {}", child_id);
-        
+
         Ok(knowledge)
     }
 
     pub async fn terminate_child(&self, child_id: &str) -> Result<()> {
         let mut children = self.children.write().await;
-        
+
         if let Some(child) = children.iter_mut().find(|c| c.id == child_id) {
             child.status = ChildAgentStatus::Terminated;
             tracing::info!("Terminated child agent: {}", child_id);
@@ -266,8 +260,14 @@ impl AgentReplicator {
 
     pub async fn get_active_count(&self) -> usize {
         let children = self.children.read().await;
-        children.iter()
-            .filter(|c| matches!(c.status, ChildAgentStatus::Starting | ChildAgentStatus::Running))
+        children
+            .iter()
+            .filter(|c| {
+                matches!(
+                    c.status,
+                    ChildAgentStatus::Starting | ChildAgentStatus::Running
+                )
+            })
             .count()
     }
 }
@@ -279,7 +279,7 @@ mod tests {
     #[tokio::test]
     async fn test_fork_creates_child() {
         let replicator = AgentReplicator::new(PathBuf::from("/tmp/test"), 5);
-        
+
         let request = ForkRequest {
             specialization: Specialization {
                 name: "coder".to_string(),
@@ -294,7 +294,7 @@ mod tests {
         };
 
         let child = replicator.fork(request).await.unwrap();
-        
+
         assert!(child.id.starts_with("child-coder-"));
         assert_eq!(child.specialization.focus_area, "rust");
     }
@@ -302,7 +302,7 @@ mod tests {
     #[tokio::test]
     async fn test_max_children_limit() {
         let replicator = AgentReplicator::new(PathBuf::from("/tmp/test"), 2);
-        
+
         let request = ForkRequest {
             specialization: Specialization {
                 name: "test".to_string(),
@@ -318,7 +318,7 @@ mod tests {
 
         replicator.fork(request.clone()).await.unwrap();
         replicator.fork(request.clone()).await.unwrap();
-        
+
         let result = replicator.fork(request).await;
         assert!(result.is_err());
     }

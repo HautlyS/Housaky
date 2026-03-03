@@ -244,10 +244,14 @@ impl ConversationSession {
         conversation_id: &Mutex<Option<String>>,
     ) {
         match event {
-            AgentEvent::AgentResponse { agent_response_event } => {
+            AgentEvent::AgentResponse {
+                agent_response_event,
+            } => {
                 (callbacks.on_agent_response)(agent_response_event.agent_response);
             }
-            AgentEvent::UserTranscript { user_transcription_event } => {
+            AgentEvent::UserTranscript {
+                user_transcription_event,
+            } => {
                 (callbacks.on_user_transcript)(user_transcription_event.user_transcript);
             }
             AgentEvent::Audio { audio_event } => {

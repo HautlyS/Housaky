@@ -132,8 +132,14 @@ impl AGIDashboard {
         self.status_message = "Processing...".to_string();
 
         // Try to get provider from heartbeat, then call the AGI core
-        let provider_arc = self.heartbeat.as_ref().and_then(|hb| hb.provider().cloned());
-        let model = self.heartbeat.as_ref().map(|hb| hb.model().to_string())
+        let provider_arc = self
+            .heartbeat
+            .as_ref()
+            .and_then(|hb| hb.provider().cloned());
+        let model = self
+            .heartbeat
+            .as_ref()
+            .map(|hb| hb.model().to_string())
             .unwrap_or_else(|| self.model_name.clone());
 
         if let (Some(provider), Some(core)) = (provider_arc, self.core.as_ref()) {
@@ -142,12 +148,10 @@ impl AGIDashboard {
 
             // Use a blocking spawn to call the async cognitive loop
             let result = std::thread::scope(|_| {
-                let rt = tokio::runtime::Handle::try_current()
-                    .ok()
-                    .or_else(|| {
-                        // If no runtime is active, we can't proceed async
-                        None
-                    });
+                let rt = tokio::runtime::Handle::try_current().ok().or_else(|| {
+                    // If no runtime is active, we can't proceed async
+                    None
+                });
 
                 if let Some(handle) = rt {
                     handle.block_on(async {
@@ -157,7 +161,8 @@ impl AGIDashboard {
                             provider.as_ref(),
                             &model,
                             &tools,
-                        ).await
+                        )
+                        .await
                     })
                 } else {
                     Err(anyhow::anyhow!("No async runtime available"))
@@ -175,10 +180,8 @@ impl AGIDashboard {
                     };
 
                     self.messages.push(ChatMessage::assistant(&content));
-                    self.status_message = format!(
-                        "Done (confidence: {:.0}%)",
-                        response.confidence * 100.0
-                    );
+                    self.status_message =
+                        format!("Done (confidence: {:.0}%)", response.confidence * 100.0);
 
                     // Update thoughts from response
                     for t in &response.thoughts {
@@ -207,14 +210,24 @@ impl AGIDashboard {
 
     pub fn update(&mut self) {
         if let Some(core) = &self.core {
-            let rt = tokio::runtime::Handle::current();
-            let metrics = rt.block_on(async { core.get_dashboard_metrics().await });
+            let core_clone = core.clone();
+            // Spawn on a fresh OS thread so block_on doesn't conflict with the
+            // outer Tokio runtime that owns this call-stack.
+            let (metrics, goals, thoughts) = std::thread::spawn(move || {
+                let rt = tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                    .expect("dashboard update runtime");
+                let metrics = rt.block_on(core_clone.get_dashboard_metrics());
+                let goals = rt.block_on(core_clone.goal_engine.get_active_goals());
+                let thoughts = rt.block_on(core_clone.inner_monologue.get_recent(20));
+                (metrics, goals, thoughts)
+            })
+            .join()
+            .unwrap_or_else(|_| (DashboardMetrics::default(), Vec::new(), Vec::new()));
+
             self.metrics = Some(metrics);
-
-            let goals = rt.block_on(async { core.goal_engine.get_active_goals().await });
             self.goals = goals;
-
-            let thoughts = rt.block_on(async { core.inner_monologue.get_recent(20).await });
             self.thoughts = thoughts;
         }
     }

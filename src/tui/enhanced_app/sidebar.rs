@@ -1,3 +1,8 @@
+use crate::tui::enhanced_app::state::SessionMetrics;
+use crate::tui::enhanced_app::theme::{
+    render_gauge_bar, style_border, style_dim, style_error, style_muted, style_success,
+    style_tag_goal, style_tag_skill, style_tag_thought, style_tag_tool, style_title, Palette,
+};
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::Modifier,
@@ -5,18 +10,12 @@ use ratatui::{
     widgets::{Block, Borders, Paragraph, Wrap},
     Frame,
 };
-use crate::tui::enhanced_app::theme::{
-    Palette, render_gauge_bar, style_border, style_dim, style_error, style_muted,
-    style_success, style_tag_goal, style_tag_skill, style_tag_thought, style_tag_tool,
-    style_title,
-};
-use crate::tui::enhanced_app::state::SessionMetrics;
 
 // ── Goal entry ────────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone)]
 pub struct SidebarGoal {
-    pub title:    String,
+    pub title: String,
     pub progress: f64,
     pub priority: GoalPriority,
 }
@@ -33,17 +32,17 @@ impl GoalPriority {
     pub fn color(&self) -> ratatui::style::Color {
         match self {
             GoalPriority::Critical => Palette::ERROR,
-            GoalPriority::High     => Palette::WARNING,
-            GoalPriority::Medium   => Palette::ASSISTANT,
-            GoalPriority::Low      => Palette::TEXT_DIM,
+            GoalPriority::High => Palette::WARNING,
+            GoalPriority::Medium => Palette::ASSISTANT,
+            GoalPriority::Low => Palette::TEXT_DIM,
         }
     }
     pub fn icon(&self) -> &'static str {
         match self {
             GoalPriority::Critical => "◈",
-            GoalPriority::High     => "◆",
-            GoalPriority::Medium   => "◇",
-            GoalPriority::Low      => "○",
+            GoalPriority::High => "◆",
+            GoalPriority::Medium => "◇",
+            GoalPriority::Low => "○",
         }
     }
 }
@@ -52,9 +51,9 @@ impl GoalPriority {
 
 #[derive(Debug, Clone)]
 pub struct ActivityEntry {
-    pub kind:    ActivityKind,
+    pub kind: ActivityKind,
     pub message: String,
-    pub time:    String,
+    pub time: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -69,11 +68,11 @@ pub enum ActivityKind {
 impl ActivityKind {
     pub fn icon(&self) -> &'static str {
         match self {
-            ActivityKind::Tool    => "⚙",
-            ActivityKind::Skill   => "◈",
+            ActivityKind::Tool => "⚙",
+            ActivityKind::Skill => "◈",
             ActivityKind::Thought => "💭",
-            ActivityKind::Goal    => "◆",
-            ActivityKind::System  => "●",
+            ActivityKind::Goal => "◆",
+            ActivityKind::System => "●",
         }
     }
 }
@@ -81,20 +80,20 @@ impl ActivityKind {
 // ── Sidebar state ─────────────────────────────────────────────────────────────
 
 pub struct Sidebar {
-    pub goals:      Vec<SidebarGoal>,
-    pub activity:   Vec<ActivityEntry>,
-    pub thoughts:   Vec<String>,
-    pub scroll:     usize,
-    pub goal_scroll:usize,
+    pub goals: Vec<SidebarGoal>,
+    pub activity: Vec<ActivityEntry>,
+    pub thoughts: Vec<String>,
+    pub scroll: usize,
+    pub goal_scroll: usize,
 }
 
 impl Sidebar {
     pub fn new() -> Self {
         Self {
-            goals:       Vec::new(),
-            activity:    Vec::new(),
-            thoughts:    Vec::new(),
-            scroll:      0,
+            goals: Vec::new(),
+            activity: Vec::new(),
+            thoughts: Vec::new(),
+            scroll: 0,
             goal_scroll: 0,
         }
     }
@@ -152,7 +151,11 @@ impl Sidebar {
         let inner = block.inner(area);
         f.render_widget(block, area);
 
-        let error_style = if m.total_errors > 0 { style_error() } else { style_success() };
+        let error_style = if m.total_errors > 0 {
+            style_error()
+        } else {
+            style_success()
+        };
 
         let lines = vec![
             Line::from(vec![
@@ -161,7 +164,10 @@ impl Sidebar {
             ]),
             Line::from(vec![
                 Span::styled("  Messages   ", style_muted()),
-                Span::styled(format!("{}", m.total_messages), ratatui::style::Style::default().fg(Palette::TEXT)),
+                Span::styled(
+                    format!("{}", m.total_messages),
+                    ratatui::style::Style::default().fg(Palette::TEXT),
+                ),
             ]),
             Line::from(vec![
                 Span::styled("  Tokens In  ", style_muted()),
@@ -173,7 +179,10 @@ impl Sidebar {
             ]),
             Line::from(vec![
                 Span::styled("  Requests   ", style_muted()),
-                Span::styled(format!("{}", m.total_requests), ratatui::style::Style::default().fg(Palette::TEXT)),
+                Span::styled(
+                    format!("{}", m.total_requests),
+                    ratatui::style::Style::default().fg(Palette::TEXT),
+                ),
             ]),
             Line::from(vec![
                 Span::styled("  Errors     ", style_muted()),
@@ -211,10 +220,7 @@ impl Sidebar {
 
         if self.goals.is_empty() {
             f.render_widget(
-                Paragraph::new(Span::styled(
-                    "  No active goals",
-                    style_muted(),
-                )),
+                Paragraph::new(Span::styled("  No active goals", style_muted())),
                 inner,
             );
             return;
@@ -238,10 +244,7 @@ impl Sidebar {
             lines.push(Line::from(vec![
                 Span::styled("   ", style_muted()),
                 Span::styled(bar, ratatui::style::Style::default().fg(Palette::CYAN_DIM)),
-                Span::styled(
-                    format!(" {:.0}%", goal.progress * 100.0),
-                    style_dim(),
-                ),
+                Span::styled(format!(" {:.0}%", goal.progress * 100.0), style_dim()),
             ]));
         }
 
@@ -274,11 +277,11 @@ impl Sidebar {
         let mut lines: Vec<Line> = Vec::new();
         for entry in self.activity.iter().skip(start).take(visible) {
             let icon_style = match entry.kind {
-                ActivityKind::Tool    => style_tag_tool(),
-                ActivityKind::Skill   => style_tag_skill(),
+                ActivityKind::Tool => style_tag_tool(),
+                ActivityKind::Skill => style_tag_skill(),
                 ActivityKind::Thought => style_tag_thought(),
-                ActivityKind::Goal    => style_tag_goal(),
-                ActivityKind::System  => style_dim(),
+                ActivityKind::Goal => style_tag_goal(),
+                ActivityKind::System => style_dim(),
             };
             lines.push(Line::from(vec![
                 Span::styled(format!(" {} ", entry.kind.icon()), icon_style),
@@ -295,7 +298,9 @@ impl Sidebar {
 }
 
 impl Default for Sidebar {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 // ── Helper ────────────────────────────────────────────────────────────────────
@@ -304,7 +309,11 @@ fn truncate(s: &str, max: usize) -> String {
     if s.chars().count() <= max {
         s.to_owned()
     } else {
-        let end = s.char_indices().nth(max.saturating_sub(1)).map(|(i, _)| i).unwrap_or(s.len());
+        let end = s
+            .char_indices()
+            .nth(max.saturating_sub(1))
+            .map(|(i, _)| i)
+            .unwrap_or(s.len());
         format!("{}…", &s[..end])
     }
 }

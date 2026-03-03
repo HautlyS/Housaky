@@ -3,6 +3,7 @@ use crate::housaky::memory::episodic::EpisodicMemory;
 use crate::housaky::memory::hierarchical::{
     Episode, HierarchicalMemory, ProcedureStep, TriggerCondition,
 };
+use crate::quantum::QuantumAgiBridge;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -15,6 +16,8 @@ pub struct MemoryConsolidator {
     memory: Arc<HierarchicalMemory>,
     agent_memory: Arc<AgentMemoryStore>,
     episodic_memory: Option<Arc<EpisodicMemory>>,
+    /// §10.4 — Optional quantum bridge for annealing-based graph optimization.
+    quantum_bridge: Option<Arc<QuantumAgiBridge>>,
     workspace_dir: PathBuf,
     consolidation_interval: std::time::Duration,
     last_consolidation: Arc<RwLock<chrono::DateTime<chrono::Utc>>>,
@@ -48,15 +51,15 @@ impl Default for ConsolidationStats {
 
 impl MemoryConsolidator {
     pub fn new(memory: Arc<HierarchicalMemory>, workspace_dir: &PathBuf) -> Self {
-        let agent_memory = AgentMemoryStore::open(workspace_dir)
-            .unwrap_or_else(|e| {
-                warn!("Failed to open AgentMemoryStore: {e} — using in-memory fallback");
-                AgentMemoryStore::open(&std::env::temp_dir()).expect("fallback AgentMemoryStore")
-            });
+        let agent_memory = AgentMemoryStore::open(workspace_dir).unwrap_or_else(|e| {
+            warn!("Failed to open AgentMemoryStore: {e} — using in-memory fallback");
+            AgentMemoryStore::open(&std::env::temp_dir()).expect("fallback AgentMemoryStore")
+        });
         Self {
             memory,
             agent_memory: Arc::new(agent_memory),
             episodic_memory: None,
+            quantum_bridge: None,
             workspace_dir: workspace_dir.clone(),
             consolidation_interval: std::time::Duration::from_secs(300),
             last_consolidation: Arc::new(RwLock::new(chrono::Utc::now())),
@@ -71,24 +74,112 @@ impl MemoryConsolidator {
         self
     }
 
+    /// §10.4 — Attach a quantum bridge for annealing-based knowledge graph
+    /// optimization during memory consolidation cycles.
+    pub fn with_quantum(mut self, bridge: Arc<QuantumAgiBridge>) -> Self {
+        self.quantum_bridge = Some(bridge);
+        self
+    }
+
     pub async fn run_periodic_consolidation(&self) -> Result<()> {
         info!("Starting memory consolidation cycle...");
 
         let mut stats = self.consolidation_stats.write().await;
         stats.total_consolidations += 1;
         stats.last_consolidation = chrono::Utc::now();
+        drop(stats);
 
         self.decay_memories()?;
         self.consolidate_episodes().await?;
         self.consolidate_episodic_memories().await?;
         self.extract_procedures().await?;
         self.promote_skills().await?;
+
+        // §10.4 — Quantum annealing pass: optimise the in-memory knowledge graph
+        // cluster structure to improve retrieval quality.
+        self.run_quantum_graph_optimization().await;
+
         self.save_consolidation_state().await?;
 
         *self.last_consolidation.write().await = chrono::Utc::now();
 
         info!("Memory consolidation complete");
         Ok(())
+    }
+
+    /// §10.4 — Use quantum annealing to cluster memories and prune weak links.
+    /// Operates on the top-N high-importance records to keep circuit size bounded.
+    async fn run_quantum_graph_optimization(&self) {
+        let bridge = match &self.quantum_bridge {
+            Some(b) => b,
+            None => return,
+        };
+
+        // Collect high-importance memory records as graph nodes.
+        let mut node_ids: Vec<String> = Vec::new();
+        let mut edges: Vec<(String, String, f64)> = Vec::new();
+
+        for kind in &[
+            MemoryKind::Fact,
+            MemoryKind::Pattern,
+            MemoryKind::Skill,
+            MemoryKind::Insight,
+        ] {
+            let records = self
+                .agent_memory
+                .recall_by_kind(kind, 20)
+                .unwrap_or_default();
+            for r in &records {
+                node_ids.push(r.id.clone());
+            }
+            // Build weak edges between records of the same kind (co-occurrence proxy).
+            for (i, a) in records.iter().enumerate() {
+                for b in records.iter().skip(i + 1) {
+                    let weight = (a.importance + b.importance) / 2.0;
+                    if weight > 0.4 {
+                        edges.push((a.id.clone(), b.id.clone(), weight));
+                    }
+                }
+            }
+        }
+
+        if node_ids.len() < bridge.config.quantum_threshold {
+            return;
+        }
+
+        match bridge.optimize_memory_graph(&node_ids, &edges).await {
+            Ok(result) => {
+                info!(
+                    "🔮 MemoryConsolidator quantum optimization: {} nodes → {} clusters, energy={:.4}, strategy={}",
+                    node_ids.len(), result.clusters.len(), result.energy, result.strategy
+                );
+                // Boost access count for nodes in high-value clusters (strengthen).
+                for (from_id, to_id, _w) in &result.strengthen_edges {
+                    for id in [from_id, to_id] {
+                        for kind in &[
+                            MemoryKind::Fact,
+                            MemoryKind::Pattern,
+                            MemoryKind::Skill,
+                            MemoryKind::Insight,
+                        ] {
+                            let records = self
+                                .agent_memory
+                                .recall_by_kind(kind, 200)
+                                .unwrap_or_default();
+                            for r in records.iter().filter(|r| &r.id == id) {
+                                let mut updated = r.clone();
+                                updated.access_count += 1;
+                                updated.accessed_at = chrono::Utc::now();
+                                let _ = self.agent_memory.store(&updated);
+                            }
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                warn!("Quantum memory graph optimization failed: {e}");
+            }
+        }
     }
 
     /// §4.9 — Importance-weighted memory decay with catastrophic-forgetting
@@ -142,7 +233,11 @@ impl MemoryConsolidator {
     /// memories get their access_count bumped so they remain protected from decay.
     pub fn rehearse_critical_memories(&self, top_n: usize) -> usize {
         let mut rehearsed = 0;
-        for kind in &[MemoryKind::Skill, MemoryKind::Pattern, MemoryKind::Procedure] {
+        for kind in &[
+            MemoryKind::Skill,
+            MemoryKind::Pattern,
+            MemoryKind::Procedure,
+        ] {
             let records = self
                 .agent_memory
                 .recall_by_kind(kind, top_n)
@@ -157,7 +252,10 @@ impl MemoryConsolidator {
             }
         }
         if rehearsed > 0 {
-            info!("Rehearsed {} critical memories to prevent forgetting", rehearsed);
+            info!(
+                "Rehearsed {} critical memories to prevent forgetting",
+                rehearsed
+            );
         }
         rehearsed
     }
@@ -175,7 +273,8 @@ impl MemoryConsolidator {
                 content: pattern.description.clone(),
                 source: "consolidation".to_string(),
                 confidence: pattern.success_rate,
-                importance: pattern.success_rate * (pattern.occurrence_count as f64 / 10.0).min(1.0),
+                importance: pattern.success_rate
+                    * (pattern.occurrence_count as f64 / 10.0).min(1.0),
                 tags: vec![format!("{:?}", pattern.pattern_type)],
                 created_at: chrono::Utc::now(),
                 accessed_at: chrono::Utc::now(),
@@ -215,7 +314,12 @@ impl MemoryConsolidator {
                 .take(5)
                 .map(|e| {
                     let outcome = e.outcome.as_deref().unwrap_or("?");
-                    format!("{:?}: {} → {}", e.event_type, e.description.chars().take(80).collect::<String>(), outcome)
+                    format!(
+                        "{:?}: {} → {}",
+                        e.event_type,
+                        e.description.chars().take(80).collect::<String>(),
+                        outcome
+                    )
                 })
                 .collect::<Vec<_>>()
                 .join("; ");
@@ -232,9 +336,14 @@ impl MemoryConsolidator {
             );
 
             // Determine the memory kind from the episode's dominant event type.
-            let kind = if ep.events.iter().any(|e| e.event_type == crate::housaky::memory::episodic::EpisodicEventType::ErrorEncountered) {
+            let kind = if ep.events.iter().any(|e| {
+                e.event_type
+                    == crate::housaky::memory::episodic::EpisodicEventType::ErrorEncountered
+            }) {
                 MemoryKind::Pattern // errors → patterns to avoid
-            } else if ep.events.iter().any(|e| e.event_type == crate::housaky::memory::episodic::EpisodicEventType::InsightGained) {
+            } else if ep.events.iter().any(|e| {
+                e.event_type == crate::housaky::memory::episodic::EpisodicEventType::InsightGained
+            }) {
                 MemoryKind::Insight
             } else {
                 MemoryKind::Experience
@@ -280,7 +389,10 @@ impl MemoryConsolidator {
         let patterns = self.analyze_patterns(&episodes);
         let mut extracted = 0u64;
 
-        for pattern in patterns.iter().filter(|p| p.success_rate > 0.7 && p.occurrence_count >= 3) {
+        for pattern in patterns
+            .iter()
+            .filter(|p| p.success_rate > 0.7 && p.occurrence_count >= 3)
+        {
             let steps_text: String = pattern
                 .description
                 .split(" -> ")
@@ -324,11 +436,17 @@ impl MemoryConsolidator {
             .unwrap_or_default();
 
         let mut promoted = 0u64;
-        for proc in procedures.iter().filter(|p| p.access_count >= 3 && p.confidence >= 0.8) {
+        for proc in procedures
+            .iter()
+            .filter(|p| p.access_count >= 3 && p.confidence >= 0.8)
+        {
             let record = AgentMemoryRecord {
                 id: uuid::Uuid::new_v4().to_string(),
                 kind: MemoryKind::Skill,
-                content: format!("Skill promoted from procedure: {}", proc.content.chars().take(200).collect::<String>()),
+                content: format!(
+                    "Skill promoted from procedure: {}",
+                    proc.content.chars().take(200).collect::<String>()
+                ),
                 source: "skill_promotion".to_string(),
                 confidence: proc.confidence,
                 importance: (proc.importance + 0.1).min(1.0),

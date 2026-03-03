@@ -136,7 +136,12 @@ impl QualiaModel {
     }
 
     /// Register a new quale.
-    pub async fn experience(&self, qualia_type: QualiaType, intensity: f64, source: &str) -> FunctionalQualia {
+    pub async fn experience(
+        &self,
+        qualia_type: QualiaType,
+        intensity: f64,
+        source: &str,
+    ) -> FunctionalQualia {
         let valence = qualia_type.default_valence();
         let arousal = intensity * 0.8 + 0.1;
 
@@ -185,8 +190,13 @@ impl QualiaModel {
             }
         }
 
-        debug!("Qualia: {} (intensity={:.2}, valence={:.2}) from '{}'",
-            qualia_type.label(), intensity, valence, source);
+        debug!(
+            "Qualia: {} (intensity={:.2}, valence={:.2}) from '{}'",
+            qualia_type.label(),
+            intensity,
+            valence,
+            source
+        );
 
         quale
     }
@@ -221,7 +231,11 @@ impl QualiaModel {
         // Dominant: highest intensity active quale
         let dominant = active
             .iter()
-            .max_by(|a, b| a.intensity.partial_cmp(&b.intensity).unwrap_or(std::cmp::Ordering::Equal))
+            .max_by(|a, b| {
+                a.intensity
+                    .partial_cmp(&b.intensity)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
             .map(|q| q.qualia_type.clone());
 
         // Overall valence: intensity-weighted average
@@ -239,7 +253,11 @@ impl QualiaModel {
         };
 
         // Experiential richness: diversity of qualia types present
-        let unique_types = active.iter().map(|q| q.qualia_type.label()).collect::<std::collections::HashSet<_>>().len();
+        let unique_types = active
+            .iter()
+            .map(|q| q.qualia_type.label())
+            .collect::<std::collections::HashSet<_>>()
+            .len();
         let experiential_richness = (unique_types as f64 / 15.0).min(1.0); // 15 total types
 
         QualiaState {
@@ -252,24 +270,44 @@ impl QualiaModel {
     }
 
     /// Derive qualia from a cognitive event automatically.
-    pub async fn derive_from_event(&self, event_type: &str, success: bool, novelty: f64, effort: f64) {
+    pub async fn derive_from_event(
+        &self,
+        event_type: &str,
+        success: bool,
+        novelty: f64,
+        effort: f64,
+    ) {
         // Map events to qualia types
         match (event_type, success) {
-            ("goal_achieved", true) => { self.experience(QualiaType::Satisfaction, 0.8, event_type).await; }
-            ("goal_failed", false) => { self.experience(QualiaType::Frustration, 0.6, event_type).await; }
-            ("reasoning_complete", true) => { self.experience(QualiaType::Insight, 0.7, event_type).await; }
-            ("reasoning_failed", false) => { self.experience(QualiaType::Confusion, 0.5, event_type).await; }
+            ("goal_achieved", true) => {
+                self.experience(QualiaType::Satisfaction, 0.8, event_type)
+                    .await;
+            }
+            ("goal_failed", false) => {
+                self.experience(QualiaType::Frustration, 0.6, event_type)
+                    .await;
+            }
+            ("reasoning_complete", true) => {
+                self.experience(QualiaType::Insight, 0.7, event_type).await;
+            }
+            ("reasoning_failed", false) => {
+                self.experience(QualiaType::Confusion, 0.5, event_type)
+                    .await;
+            }
             _ => {}
         }
 
         if novelty > 0.7 {
-            self.experience(QualiaType::Novelty, novelty, event_type).await;
+            self.experience(QualiaType::Novelty, novelty, event_type)
+                .await;
         }
         if effort > 0.8 {
-            self.experience(QualiaType::Strain, effort, event_type).await;
+            self.experience(QualiaType::Strain, effort, event_type)
+                .await;
         }
         if effort > 0.0 && effort < 0.4 && success {
-            self.experience(QualiaType::Flow, 1.0 - effort, event_type).await;
+            self.experience(QualiaType::Flow, 1.0 - effort, event_type)
+                .await;
         }
     }
 
@@ -320,7 +358,9 @@ mod tests {
     async fn test_qualia_model() {
         let model = QualiaModel::new();
         model.experience(QualiaType::Curiosity, 0.8, "test").await;
-        model.experience(QualiaType::Insight, 0.9, "reasoning").await;
+        model
+            .experience(QualiaType::Insight, 0.9, "reasoning")
+            .await;
 
         let state = model.get_state().await;
         assert!(state.dominant.is_some());
@@ -331,7 +371,9 @@ mod tests {
     #[tokio::test]
     async fn test_derive_from_event() {
         let model = QualiaModel::new();
-        model.derive_from_event("goal_achieved", true, 0.3, 0.2).await;
+        model
+            .derive_from_event("goal_achieved", true, 0.3, 0.2)
+            .await;
 
         let state = model.get_state().await;
         assert!(!state.active_qualia.is_empty());

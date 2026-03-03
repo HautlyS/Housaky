@@ -15,7 +15,12 @@ pub struct BoundingRect {
 
 impl BoundingRect {
     pub fn new(x: f64, y: f64, width: f64, height: f64) -> Self {
-        Self { x, y, width, height }
+        Self {
+            x,
+            y,
+            width,
+            height,
+        }
     }
 
     pub fn area(&self) -> f64 {
@@ -34,7 +39,11 @@ impl BoundingRect {
         }
         let intersection = ix * iy;
         let union = self.area() + other.area() - intersection;
-        if union <= 0.0 { 0.0 } else { intersection / union }
+        if union <= 0.0 {
+            0.0
+        } else {
+            intersection / union
+        }
     }
 }
 
@@ -101,7 +110,9 @@ impl SceneGraph {
     }
 
     pub fn find_node(&self, label: &str) -> Option<&SceneNode> {
-        self.nodes.iter().find(|n| n.label.eq_ignore_ascii_case(label))
+        self.nodes
+            .iter()
+            .find(|n| n.label.eq_ignore_ascii_case(label))
     }
 }
 
@@ -152,7 +163,11 @@ pub struct ObjectTrack {
 }
 
 impl ObjectTrack {
-    pub fn new(track_id: impl Into<String>, label: impl Into<String>, initial: BoundingRect) -> Self {
+    pub fn new(
+        track_id: impl Into<String>,
+        label: impl Into<String>,
+        initial: BoundingRect,
+    ) -> Self {
         let now = Utc::now();
         let mut history = VecDeque::new();
         history.push_back((initial, now));
@@ -224,7 +239,11 @@ impl VisionPipeline {
     }
 
     /// Process a video frame: run detection + scene graph construction + tracking.
-    pub async fn process_frame(&self, frame: VideoFrame, detections: Vec<Detection>) -> ProcessedFrame {
+    pub async fn process_frame(
+        &self,
+        frame: VideoFrame,
+        detections: Vec<Detection>,
+    ) -> ProcessedFrame {
         let t0 = std::time::Instant::now();
 
         let filtered: Vec<Detection> = detections
@@ -294,7 +313,9 @@ impl VisionPipeline {
                 let (ax, ay) = a.bounding_box.center();
                 let (bx, by) = b.bounding_box.center();
 
-                if let Some(relation) = self.infer_relation(ax, ay, bx, by, &a.bounding_box, &b.bounding_box) {
+                if let Some(relation) =
+                    self.infer_relation(ax, ay, bx, by, &a.bounding_box, &b.bounding_box)
+                {
                     if let Some(node) = graph.nodes.iter_mut().find(|n| n.object_id == a.id) {
                         node.relations.push(SceneRelation {
                             relation_type: relation,
@@ -429,11 +450,12 @@ impl VisionPipeline {
     }
 
     pub async fn find_object(&self, label: &str) -> Option<Detection> {
-        self.frame_history
-            .read()
-            .await
-            .back()
-            .and_then(|f| f.detections.iter().find(|d| d.label.eq_ignore_ascii_case(label)).cloned())
+        self.frame_history.read().await.back().and_then(|f| {
+            f.detections
+                .iter()
+                .find(|d| d.label.eq_ignore_ascii_case(label))
+                .cloned()
+        })
     }
 
     pub async fn pipeline_stats(&self) -> VisionPipelineStats {
@@ -441,12 +463,22 @@ impl VisionPipeline {
         let avg_ms = if history.is_empty() {
             0.0
         } else {
-            history.iter().map(|f| f.processing_time_ms as f64).sum::<f64>() / history.len() as f64
+            history
+                .iter()
+                .map(|f| f.processing_time_ms as f64)
+                .sum::<f64>()
+                / history.len() as f64
         };
 
         VisionPipelineStats {
             frames_processed: *self.frame_counter.read().await,
-            active_tracks: self.active_tracks.read().await.values().filter(|t| t.active).count(),
+            active_tracks: self
+                .active_tracks
+                .read()
+                .await
+                .values()
+                .filter(|t| t.active)
+                .count(),
             history_size: history.len(),
             avg_processing_ms: avg_ms,
             model_name: self.model_name.clone(),

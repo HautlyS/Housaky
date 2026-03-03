@@ -1,3 +1,6 @@
+use crate::tui::enhanced_app::theme::{
+    style_border_focus, style_dim, style_muted, style_title, Palette,
+};
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::Modifier,
@@ -5,7 +8,6 @@ use ratatui::{
     widgets::{Block, Borders, Clear, List, ListItem, Paragraph},
     Frame,
 };
-use crate::tui::enhanced_app::theme::{Palette, style_border_focus, style_dim, style_muted, style_title};
 
 // ── Command action ────────────────────────────────────────────────────────────
 
@@ -26,6 +28,7 @@ pub enum PaletteAction {
     GotoGoals,
     GotoMetrics,
     GotoConfig,
+    GotoDoctor,
     // AGI
     Reflect,
     AddGoal(String),
@@ -40,64 +43,173 @@ pub enum PaletteAction {
 // ── Command definition ────────────────────────────────────────────────────────
 
 struct PaletteCommand {
-    name:     &'static str,
+    name: &'static str,
     shortcut: Option<&'static str>,
-    desc:     &'static str,
+    desc: &'static str,
     category: &'static str,
-    action:   PaletteAction,
+    action: PaletteAction,
 }
 
 static COMMANDS: &[PaletteCommand] = &[
     // ── Chat ─────────────────────────────────────────────────────────────────
-    PaletteCommand { name: "Clear chat",           shortcut: Some("Ctrl+U"), desc: "Erase all messages",            category: "Chat",    action: PaletteAction::ClearChat },
-    PaletteCommand { name: "Export chat",          shortcut: Some("s"),      desc: "Save as markdown file",         category: "Chat",    action: PaletteAction::ExportChat },
-    PaletteCommand { name: "Copy last response",   shortcut: Some("c"),      desc: "Copy assistant reply",          category: "Chat",    action: PaletteAction::CopyLastResponse },
-    PaletteCommand { name: "Toggle auto-scroll",   shortcut: Some("a"),      desc: "Lock scroll to latest",         category: "Chat",    action: PaletteAction::ToggleAutoScroll },
+    PaletteCommand {
+        name: "Clear chat",
+        shortcut: Some("Ctrl+U"),
+        desc: "Erase all messages",
+        category: "Chat",
+        action: PaletteAction::ClearChat,
+    },
+    PaletteCommand {
+        name: "Export chat",
+        shortcut: Some("s"),
+        desc: "Save as markdown file",
+        category: "Chat",
+        action: PaletteAction::ExportChat,
+    },
+    PaletteCommand {
+        name: "Copy last response",
+        shortcut: Some("c"),
+        desc: "Copy assistant reply",
+        category: "Chat",
+        action: PaletteAction::CopyLastResponse,
+    },
+    PaletteCommand {
+        name: "Toggle auto-scroll",
+        shortcut: Some("a"),
+        desc: "Lock scroll to latest",
+        category: "Chat",
+        action: PaletteAction::ToggleAutoScroll,
+    },
     // ── View ──────────────────────────────────────────────────────────────────
-    PaletteCommand { name: "Cycle view mode",      shortcut: Some("v"),      desc: "Full / Split / Dashboard",      category: "View",    action: PaletteAction::CycleView },
-    PaletteCommand { name: "Toggle sidebar",       shortcut: Some("b"),      desc: "Show/hide right panel",         category: "View",    action: PaletteAction::ToggleSidebar },
+    PaletteCommand {
+        name: "Cycle view mode",
+        shortcut: Some("v"),
+        desc: "Full / Split / Dashboard",
+        category: "View",
+        action: PaletteAction::CycleView,
+    },
+    PaletteCommand {
+        name: "Toggle sidebar",
+        shortcut: Some("b"),
+        desc: "Show/hide right panel",
+        category: "View",
+        action: PaletteAction::ToggleSidebar,
+    },
     // ── Tabs ──────────────────────────────────────────────────────────────────
-    PaletteCommand { name: "Go to Chat",           shortcut: Some("1"),      desc: "Switch to Chat tab",            category: "Tab",     action: PaletteAction::GotoChat },
-    PaletteCommand { name: "Go to Skills",         shortcut: Some("2"),      desc: "Browse & enable skills",        category: "Tab",     action: PaletteAction::GotoSkills },
-    PaletteCommand { name: "Go to Tools",          shortcut: Some("3"),      desc: "Tool execution log",            category: "Tab",     action: PaletteAction::GotoTools },
-    PaletteCommand { name: "Go to Goals",          shortcut: Some("4"),      desc: "Active AGI goals",              category: "Tab",     action: PaletteAction::GotoGoals },
-    PaletteCommand { name: "Go to Metrics",        shortcut: Some("5"),      desc: "Session statistics",            category: "Tab",     action: PaletteAction::GotoMetrics },
-    PaletteCommand { name: "Config editor",         shortcut: Some("6"),      desc: "Edit ~/.housaky/config.toml",    category: "Tab",     action: PaletteAction::GotoConfig },
+    PaletteCommand {
+        name: "Go to Chat",
+        shortcut: Some("1"),
+        desc: "Switch to Chat tab",
+        category: "Tab",
+        action: PaletteAction::GotoChat,
+    },
+    PaletteCommand {
+        name: "Go to Skills",
+        shortcut: Some("2"),
+        desc: "Browse & enable skills",
+        category: "Tab",
+        action: PaletteAction::GotoSkills,
+    },
+    PaletteCommand {
+        name: "Go to Tools",
+        shortcut: Some("3"),
+        desc: "Tool execution log",
+        category: "Tab",
+        action: PaletteAction::GotoTools,
+    },
+    PaletteCommand {
+        name: "Go to Goals",
+        shortcut: Some("4"),
+        desc: "Active AGI goals",
+        category: "Tab",
+        action: PaletteAction::GotoGoals,
+    },
+    PaletteCommand {
+        name: "Go to Metrics",
+        shortcut: Some("5"),
+        desc: "Session statistics",
+        category: "Tab",
+        action: PaletteAction::GotoMetrics,
+    },
+    PaletteCommand {
+        name: "Config editor",
+        shortcut: Some("7"),
+        desc: "Edit ~/.housaky/config.toml",
+        category: "Tab",
+        action: PaletteAction::GotoConfig,
+    },
+    PaletteCommand {
+        name: "Doctor / Health",
+        shortcut: Some("8"),
+        desc: "System diagnostics & security",
+        category: "Tab",
+        action: PaletteAction::GotoDoctor,
+    },
     // ── AGI ───────────────────────────────────────────────────────────────────
-    PaletteCommand { name: "Reflect",              shortcut: None,           desc: "Meta-cognition cycle",          category: "AGI",     action: PaletteAction::Reflect },
-    PaletteCommand { name: "Add goal: productivity", shortcut: None,         desc: "Add productivity goal",         category: "AGI",     action: PaletteAction::AddGoalStatic("Improve productivity and execution speed") },
-    PaletteCommand { name: "Add goal: learn skill",  shortcut: None,         desc: "Add skill-learning goal",       category: "AGI",     action: PaletteAction::AddGoalStatic("Learn and integrate a new skill") },
+    PaletteCommand {
+        name: "Reflect",
+        shortcut: None,
+        desc: "Meta-cognition cycle",
+        category: "AGI",
+        action: PaletteAction::Reflect,
+    },
+    PaletteCommand {
+        name: "Add goal: productivity",
+        shortcut: None,
+        desc: "Add productivity goal",
+        category: "AGI",
+        action: PaletteAction::AddGoalStatic("Improve productivity and execution speed"),
+    },
+    PaletteCommand {
+        name: "Add goal: learn skill",
+        shortcut: None,
+        desc: "Add skill-learning goal",
+        category: "AGI",
+        action: PaletteAction::AddGoalStatic("Learn and integrate a new skill"),
+    },
     // ── System ────────────────────────────────────────────────────────────────
-    PaletteCommand { name: "Help",                 shortcut: Some("?"),      desc: "Keyboard shortcuts reference",  category: "System",  action: PaletteAction::OpenHelp },
-    PaletteCommand { name: "Quit",                 shortcut: Some("q"),      desc: "Exit Housaky TUI",              category: "System",  action: PaletteAction::Quit },
+    PaletteCommand {
+        name: "Help",
+        shortcut: Some("?"),
+        desc: "Keyboard shortcuts reference",
+        category: "System",
+        action: PaletteAction::OpenHelp,
+    },
+    PaletteCommand {
+        name: "Quit",
+        shortcut: Some("q"),
+        desc: "Exit Housaky TUI",
+        category: "System",
+        action: PaletteAction::Quit,
+    },
 ];
 
 fn cat_color(cat: &str) -> ratatui::style::Color {
     match cat {
-        "Chat"   => Palette::CYAN,
-        "View"   => Palette::TEXT_DIM,
-        "Tab"    => Palette::ASSISTANT,
-        "AGI"    => Palette::VIOLET,
+        "Chat" => Palette::CYAN,
+        "View" => Palette::TEXT_DIM,
+        "Tab" => Palette::ASSISTANT,
+        "AGI" => Palette::VIOLET,
         "System" => Palette::WARNING,
-        _        => Palette::TEXT_DIM,
+        _ => Palette::TEXT_DIM,
     }
 }
 
 // ── Palette state ─────────────────────────────────────────────────────────────
 
 pub struct CommandPalette {
-    pub active:   bool,
-    pub input:    String,
-    filtered:     Vec<usize>,
-    selected:     usize,
+    pub active: bool,
+    pub input: String,
+    filtered: Vec<usize>,
+    selected: usize,
 }
 
 impl CommandPalette {
     pub fn new() -> Self {
         let filtered: Vec<usize> = (0..COMMANDS.len()).collect();
         Self {
-            active:   false,
-            input:    String::new(),
+            active: false,
+            input: String::new(),
             filtered,
             selected: 0,
         }
@@ -151,7 +263,9 @@ impl CommandPalette {
         let q = self.input.to_lowercase();
         self.filtered = (0..COMMANDS.len())
             .filter(|&i| {
-                if q.is_empty() { return true; }
+                if q.is_empty() {
+                    return true;
+                }
                 let cmd = &COMMANDS[i];
                 let hay = format!(
                     "{} {} {} {}",
@@ -169,7 +283,9 @@ impl CommandPalette {
     // ── Draw ──────────────────────────────────────────────────────────────────
 
     pub fn draw(&self, f: &mut Frame) {
-        if !self.active { return; }
+        if !self.active {
+            return;
+        }
 
         let area = f.area();
         let max_items = 14usize;
@@ -214,11 +330,18 @@ impl CommandPalette {
             .map(|(di, &ci)| {
                 let cmd = &COMMANDS[ci];
                 let is_sel = di == self.selected;
-                let bg = if is_sel { Palette::BG_SELECTED } else { Palette::BG_PANEL };
+                let bg = if is_sel {
+                    Palette::BG_SELECTED
+                } else {
+                    Palette::BG_PANEL
+                };
                 let row_style = ratatui::style::Style::default().bg(bg);
 
                 let prefix = if is_sel {
-                    Span::styled(" ▶ ", ratatui::style::Style::default().fg(Palette::CYAN).bg(bg))
+                    Span::styled(
+                        " ▶ ",
+                        ratatui::style::Style::default().fg(Palette::CYAN).bg(bg),
+                    )
                 } else {
                     Span::styled("   ", row_style)
                 };
@@ -234,22 +357,40 @@ impl CommandPalette {
                 let name_span = Span::styled(
                     format!("{:28}", cmd.name),
                     ratatui::style::Style::default()
-                        .fg(if is_sel { Palette::TEXT_BRIGHT } else { Palette::TEXT })
+                        .fg(if is_sel {
+                            Palette::TEXT_BRIGHT
+                        } else {
+                            Palette::TEXT
+                        })
                         .bg(bg)
-                        .add_modifier(if is_sel { Modifier::BOLD } else { Modifier::empty() }),
+                        .add_modifier(if is_sel {
+                            Modifier::BOLD
+                        } else {
+                            Modifier::empty()
+                        }),
                 );
 
                 let desc_span = Span::styled(
                     format!("  {}", truncate(cmd.desc, 18)),
-                    ratatui::style::Style::default().fg(Palette::TEXT_DIM).bg(bg),
+                    ratatui::style::Style::default()
+                        .fg(Palette::TEXT_DIM)
+                        .bg(bg),
                 );
 
-                let mut spans = vec![prefix, cat_span, Span::styled(" ", row_style), name_span, desc_span];
+                let mut spans = vec![
+                    prefix,
+                    cat_span,
+                    Span::styled(" ", row_style),
+                    name_span,
+                    desc_span,
+                ];
 
                 if let Some(sc) = cmd.shortcut {
                     spans.push(Span::styled(
                         format!("  [{}]", sc),
-                        ratatui::style::Style::default().fg(Palette::CYAN_DIM).bg(bg),
+                        ratatui::style::Style::default()
+                            .fg(Palette::CYAN_DIM)
+                            .bg(bg),
                     ));
                 }
 
@@ -257,26 +398,27 @@ impl CommandPalette {
             })
             .collect();
 
-        let list = List::new(items)
-            .block(
-                Block::default()
-                    .borders(Borders::ALL)
-                    .border_style(style_dim())
-                    .title(Span::styled(
-                        format!(
-                            "  {} results  ↑↓ navigate  Enter execute  Esc close ",
-                            self.filtered.len()
-                        ),
-                        style_muted(),
-                    )),
-            );
+        let list = List::new(items).block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(style_dim())
+                .title(Span::styled(
+                    format!(
+                        "  {} results  ↑↓ navigate  Enter execute  Esc close ",
+                        self.filtered.len()
+                    ),
+                    style_muted(),
+                )),
+        );
 
         f.render_widget(list, layout[1]);
     }
 }
 
 impl Default for CommandPalette {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -295,7 +437,11 @@ fn truncate(s: &str, max: usize) -> String {
     if s.chars().count() <= max {
         s.to_owned()
     } else {
-        let end = s.char_indices().nth(max.saturating_sub(1)).map(|(i, _)| i).unwrap_or(s.len());
+        let end = s
+            .char_indices()
+            .nth(max.saturating_sub(1))
+            .map(|(i, _)| i)
+            .unwrap_or(s.len());
         format!("{}…", &s[..end])
     }
 }

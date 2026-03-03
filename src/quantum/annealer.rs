@@ -132,11 +132,19 @@ impl QuantumAnnealer {
             if let Some(existing) = all_reads.iter_mut().find(|r| r.spins == spins) {
                 existing.occurrence += 1;
             } else {
-                all_reads.push(AnnealingRead { spins, energy, occurrence: 1 });
+                all_reads.push(AnnealingRead {
+                    spins,
+                    energy,
+                    occurrence: 1,
+                });
             }
         }
 
-        all_reads.sort_by(|a, b| a.energy.partial_cmp(&b.energy).unwrap_or(std::cmp::Ordering::Equal));
+        all_reads.sort_by(|a, b| {
+            a.energy
+                .partial_cmp(&b.energy)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         Ok(AnnealingResult {
             best_spins,
@@ -180,9 +188,9 @@ impl QuantumAnnealer {
         let n = self.config.steps;
 
         match &self.config.annealing_schedule {
-            AnnealingSchedule::Linear => {
-                (0..n).map(|k| t_i + (t_f - t_i) * k as f64 / n as f64).collect()
-            }
+            AnnealingSchedule::Linear => (0..n)
+                .map(|k| t_i + (t_f - t_i) * k as f64 / n as f64)
+                .collect(),
             AnnealingSchedule::Geometric => {
                 let ratio = (t_f / t_i).powf(1.0 / n as f64);
                 let mut temps = Vec::with_capacity(n);

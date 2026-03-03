@@ -50,7 +50,7 @@ pub struct ResearchTopic {
     pub id: String,
     pub name: String,
     pub description: String,
-    pub current_mastery: f64,       // 0.0 – 1.0
+    pub current_mastery: f64, // 0.0 – 1.0
     pub target_mastery: f64,
     pub priority: f64,
     pub related_topics: Vec<String>,
@@ -151,7 +151,11 @@ impl ResearchPipeline {
     }
 
     pub fn enqueue_papers_sorted(&mut self, mut papers: Vec<PaperReference>) {
-        papers.sort_by(|a, b| b.priority.partial_cmp(&a.priority).unwrap_or(std::cmp::Ordering::Equal));
+        papers.sort_by(|a, b| {
+            b.priority
+                .partial_cmp(&a.priority)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         for p in papers {
             self.enqueue_paper(p);
         }
@@ -171,7 +175,10 @@ impl ResearchPipeline {
         // Update mastery for relevant topics
         for topic in &mut self.active_topics {
             if paper.topics.iter().any(|t| t == &topic.name)
-                || paper.topics.iter().any(|t| topic.keywords.iter().any(|k| t.contains(k.as_str())))
+                || paper
+                    .topics
+                    .iter()
+                    .any(|t| topic.keywords.iter().any(|k| t.contains(k.as_str())))
             {
                 let delta = 0.05 * paper.priority;
                 topic.current_mastery = (topic.current_mastery + delta).min(1.0);
@@ -197,7 +204,9 @@ impl ResearchPipeline {
         topics.sort_by(|a, b| {
             let score_a = a.mastery_gap() * a.priority;
             let score_b = b.mastery_gap() * b.priority;
-            score_b.partial_cmp(&score_a).unwrap_or(std::cmp::Ordering::Equal)
+            score_b
+                .partial_cmp(&score_a)
+                .unwrap_or(std::cmp::Ordering::Equal)
         });
         topics
     }
@@ -214,11 +223,18 @@ impl ResearchPipeline {
             papers_in_queue: self.paper_queue.len(),
             papers_completed: self.completed_papers.len(),
             syntheses_produced: self.synthesis_buffer.len(),
-            mastered_topics: self.active_topics.iter().filter(|t| t.is_mastered()).count(),
+            mastered_topics: self
+                .active_topics
+                .iter()
+                .filter(|t| t.is_mastered())
+                .count(),
             average_mastery: if self.active_topics.is_empty() {
                 0.0
             } else {
-                self.active_topics.iter().map(|t| t.current_mastery).sum::<f64>()
+                self.active_topics
+                    .iter()
+                    .map(|t| t.current_mastery)
+                    .sum::<f64>()
                     / self.active_topics.len() as f64
             },
         }
@@ -320,7 +336,11 @@ impl ResearchPipeline {
         };
 
         let mut synthesis = KnowledgeSynthesis::new(
-            &paper.topics.first().cloned().unwrap_or_else(|| paper.title.clone()),
+            &paper
+                .topics
+                .first()
+                .cloned()
+                .unwrap_or_else(|| paper.title.clone()),
             &summary,
             vec![paper.id.clone()],
         );

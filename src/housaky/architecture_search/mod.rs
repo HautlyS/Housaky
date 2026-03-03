@@ -105,10 +105,7 @@ impl ArchitectureSearchEngine {
 
         // Seed + evaluate baseline
         let baseline_result = self.evaluator.evaluate(&current)?;
-        info!(
-            "Baseline fitness: {:.4}",
-            baseline_result.fitness.overall
-        );
+        info!("Baseline fitness: {:.4}", baseline_result.fitness.overall);
 
         // Seed population
         let mut pop = self.searcher.seed_population(&current);
@@ -137,11 +134,7 @@ impl ArchitectureSearchEngine {
 
             // Track global best
             if let Some(candidate) = pop.best() {
-                let candidate_fit = candidate
-                    .fitness
-                    .as_ref()
-                    .map(|f| f.overall)
-                    .unwrap_or(0.0);
+                let candidate_fit = candidate.fitness.as_ref().map(|f| f.overall).unwrap_or(0.0);
                 if candidate_fit > best_result.fitness.overall {
                     best_result = self.evaluator.evaluate(candidate)?;
                     best_genome = candidate.clone();
@@ -170,11 +163,7 @@ impl ArchitectureSearchEngine {
                 best_result.fitness.overall, baseline_result.fitness.overall
             );
 
-            let plan = self
-                .migrator
-                .read()
-                .await
-                .plan(&current, &best_genome);
+            let plan = self.migrator.read().await.plan(&current, &best_genome);
 
             let record = self
                 .migrator

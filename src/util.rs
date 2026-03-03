@@ -165,12 +165,12 @@ pub async fn write_toml_file<T: Serialize>(path: &Path, value: &T) -> Result<()>
         tokio::fs::create_dir_all(parent).await?;
     }
     let toml_str = to_toml(value)?;
-    
+
     // Atomic write: write to temp file, then rename
     let temp_path = path.with_extension("toml.tmp");
     tokio::fs::write(&temp_path, &toml_str).await?;
     tokio::fs::rename(&temp_path, path).await?;
-    
+
     Ok(())
 }
 
@@ -197,12 +197,12 @@ pub async fn write_msgpack_file<T: Serialize>(path: &Path, value: &T) -> Result<
         tokio::fs::create_dir_all(parent).await?;
     }
     let bytes = to_msgpack(value)?;
-    
+
     // Atomic write: write to temp file, then rename
     let temp_path = path.with_extension("msgpack.tmp");
     tokio::fs::write(&temp_path, &bytes).await?;
     tokio::fs::rename(&temp_path, path).await?;
-    
+
     Ok(())
 }
 
@@ -222,13 +222,19 @@ pub enum MsgpackFormat {}
 pub enum JsonFormat {}
 
 impl StorageFormat for TomlFormat {
-    fn extension(&self) -> &'static str { "toml" }
+    fn extension(&self) -> &'static str {
+        "toml"
+    }
 }
 
 impl StorageFormat for MsgpackFormat {
-    fn extension(&self) -> &'static str { "msgpack" }
+    fn extension(&self) -> &'static str {
+        "msgpack"
+    }
 }
 
 impl StorageFormat for JsonFormat {
-    fn extension(&self) -> &'static str { "json" }
+    fn extension(&self) -> &'static str {
+        "json"
+    }
 }

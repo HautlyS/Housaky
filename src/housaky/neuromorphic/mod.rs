@@ -7,8 +7,10 @@ pub mod spike_network;
 pub use event_bus::{EventBus, EventBusMetrics, EventPriority, NeuromorphicEvent};
 pub use habituation::{HabituationConfig, HabituationSystem};
 pub use reflex_arc::{
-    HardwareAction, HardwareActionType, ReflexArc, ReflexArcSystem, ReflexCondition,
-    SensorEvent, SensorType,
+    HardwareAction, HardwareActionType, ReflexArc, ReflexArcSystem, ReflexCondition, SensorEvent,
+    SensorType,
 };
-pub use sensory_fusion::{FusedPercept, FusionMethod, KalmanState, SensoryFusionEngine, SensorReading};
+pub use sensory_fusion::{
+    FusedPercept, FusionMethod, KalmanState, SensorReading, SensoryFusionEngine,
+};
 pub use spike_network::{Neuron, NeuronType, SpikeNetwork, Synapse, SynapseType};

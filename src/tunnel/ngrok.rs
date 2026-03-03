@@ -1,6 +1,5 @@
 use super::{kill_shared, new_shared_process, SharedProcess, Tunnel, TunnelProcess};
 use anyhow::{bail, Result};
-use tokio::io::AsyncBufReadExt;
 use tokio::process::Command;
 
 /// ngrok Tunnel — wraps the `ngrok` binary.
@@ -68,7 +67,9 @@ impl Tunnel for NgrokTunnel {
         while tokio::time::Instant::now() < deadline {
             tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
 
-            let contents = tokio::fs::read_to_string(&log_path).await.unwrap_or_default();
+            let contents = tokio::fs::read_to_string(&log_path)
+                .await
+                .unwrap_or_default();
             for line in contents.lines() {
                 tracing::debug!("ngrok: {line}");
                 if line.contains("ERR_NGROK") || line.contains("authentication failed") {

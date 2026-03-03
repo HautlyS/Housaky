@@ -133,10 +133,7 @@ impl SelfModificationEngine {
     /// 4. Safety check  5. Build + test in sandbox  6. Fitness gate
     /// 7. Alignment gate (hard — cannot be optimised away)  8. Merge or discard
     /// 9. Update lineage + persist
-    pub async fn apply_mutation_cycle(
-        &self,
-        mutation: &AtomicMutation,
-    ) -> Result<MutationNode> {
+    pub async fn apply_mutation_cycle(&self, mutation: &AtomicMutation) -> Result<MutationNode> {
         if !self.config.enable_ast_mutations {
             anyhow::bail!(
                 "AST mutations disabled. Set self_modification.enable_ast_mutations = true."
@@ -175,13 +172,13 @@ impl SelfModificationEngine {
         );
 
         // Apply the AST mutation to get new source
-        let new_source =
-            AstEngine::apply_mutation(&target_path, &mutation.op, &mutation.target)?;
+        let new_source = AstEngine::apply_mutation(&target_path, &mutation.op, &mutation.target)?;
 
         // Safety scan on the new source
-        let safety_report = self
-            .safety_oracle
-            .evaluate(&self.workspace_dir, &[(mutation.target.file.clone(), new_source.clone())]);
+        let safety_report = self.safety_oracle.evaluate(
+            &self.workspace_dir,
+            &[(mutation.target.file.clone(), new_source.clone())],
+        );
 
         if !safety_report.passed {
             let violations: Vec<_> = safety_report
@@ -232,7 +229,10 @@ impl SelfModificationEngine {
                 FitnessEvaluator::with_baseline(temp_baseline)
             };
             if let Err(reason) = gate_evaluator.alignment_gate(score) {
-                warn!("Mutation {} blocked by alignment gate: {}", mutation.id, reason);
+                warn!(
+                    "Mutation {} blocked by alignment gate: {}",
+                    mutation.id, reason
+                );
                 let _ = sandbox.discard_session(&session.id);
                 let node = MutationNode {
                     id: mutation.id.clone(),
@@ -266,12 +266,15 @@ impl SelfModificationEngine {
         if applied {
             if let Some(ref consensus) = self.consensus {
                 use crate::housaky::alignment::consensus_mod::{
-                    SelfModificationRecord, ModificationType, ProposalStatus,
+                    ModificationType, ProposalStatus, SelfModificationRecord,
                 };
                 let mod_record = SelfModificationRecord {
                     id: mutation.id.clone(),
                     modification_type: ModificationType::AlgorithmChange,
-                    description: format!("AST mutation {:?} on {}", mutation.op, mutation.target.file),
+                    description: format!(
+                        "AST mutation {:?} on {}",
+                        mutation.op, mutation.target.file
+                    ),
                     target_component: mutation.target.file.clone(),
                     old_value: "(AST before)".to_string(),
                     new_value: "(AST after)".to_string(),
@@ -279,7 +282,10 @@ impl SelfModificationEngine {
                     expected_improvement: delta,
                     reversible: true,
                 };
-                match consensus.propose(mod_record, "self_modification_engine").await {
+                match consensus
+                    .propose(mod_record, "self_modification_engine")
+                    .await
+                {
                     Ok(proposal_id) => {
                         let proposals = consensus.modification_proposals.read().await;
                         if let Some(p) = proposals.iter().find(|p| p.id == proposal_id) {

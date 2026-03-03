@@ -30,7 +30,7 @@ pub struct Consequence {
     pub step: usize,
     pub delay: ConsequenceDelay,
     pub probability: f64,
-    pub impact: f64,     // -1.0 (very bad) to 1.0 (very good)
+    pub impact: f64, // -1.0 (very bad) to 1.0 (very good)
     pub reversible: bool,
     pub domain: String,
     pub dependencies: Vec<usize>,
@@ -118,8 +118,9 @@ impl ConsequencePredictor {
             return;
         }
 
-        templates.insert("refactor".to_string(), vec![
-            ConsequenceTemplate {
+        templates.insert(
+            "refactor".to_string(),
+            vec![ConsequenceTemplate {
                 pattern: "Code refactoring".to_string(),
                 typical_consequences: vec![
                     TemplateConsequence {
@@ -141,11 +142,12 @@ impl ConsequencePredictor {
                         delay: ConsequenceDelay::ShortTerm { hours: 24 },
                     },
                 ],
-            },
-        ]);
+            }],
+        );
 
-        templates.insert("deploy".to_string(), vec![
-            ConsequenceTemplate {
+        templates.insert(
+            "deploy".to_string(),
+            vec![ConsequenceTemplate {
                 pattern: "Deployment to production".to_string(),
                 typical_consequences: vec![
                     TemplateConsequence {
@@ -167,11 +169,12 @@ impl ConsequencePredictor {
                         delay: ConsequenceDelay::MediumTerm { days: 7 },
                     },
                 ],
-            },
-        ]);
+            }],
+        );
 
-        templates.insert("add_dependency".to_string(), vec![
-            ConsequenceTemplate {
+        templates.insert(
+            "add_dependency".to_string(),
+            vec![ConsequenceTemplate {
                 pattern: "Adding external dependency".to_string(),
                 typical_consequences: vec![
                     TemplateConsequence {
@@ -193,8 +196,8 @@ impl ConsequencePredictor {
                         delay: ConsequenceDelay::LongTerm { weeks: 26 },
                     },
                 ],
-            },
-        ]);
+            }],
+        );
     }
 
     /// Predict consequences of an action to a given depth.
@@ -216,23 +219,24 @@ impl ConsequencePredictor {
 
         // ── Derive context modifiers ─────────────────────────────────────────
         let risk_multiplier = match context.get("risk_level").map(String::as_str) {
-            Some("high") => 1.4,   // amplify all negative impacts
-            Some("low")  => 0.7,   // dampen negative impacts
-            _            => 1.0,
+            Some("high") => 1.4, // amplify all negative impacts
+            Some("low") => 0.7,  // dampen negative impacts
+            _ => 1.0,
         };
         let urgency_prob_boost = if context.get("urgency").map(String::as_str) == Some("high") {
-            0.1  // immediate consequences become more likely under urgency
+            0.1 // immediate consequences become more likely under urgency
         } else {
             0.0
         };
-        let production_penalty = if context.get("environment").map(String::as_str) == Some("production") {
-            1.3  // all negative impacts are worse in production
-        } else {
-            1.0
-        };
+        let production_penalty =
+            if context.get("environment").map(String::as_str) == Some("production") {
+                1.3 // all negative impacts are worse in production
+            } else {
+                1.0
+            };
         let context_domain = context.get("domain").map(String::as_str).unwrap_or("");
-        let novice_operator  = context.get("operator").map(String::as_str) == Some("novice");
-        let expert_operator  = context.get("operator").map(String::as_str) == Some("expert");
+        let novice_operator = context.get("operator").map(String::as_str) == Some("novice");
+        let expert_operator = context.get("operator").map(String::as_str) == Some("expert");
 
         let mut consequences = Vec::new();
         let action_lower = action.to_lowercase();
@@ -255,7 +259,7 @@ impl ConsequencePredictor {
                             // Probability: urgency boosts immediate; domain affinity always boosts
                             let prob_boost = match tc.delay {
                                 ConsequenceDelay::Immediate => urgency_prob_boost + domain_boost,
-                                _                           => domain_boost,
+                                _ => domain_boost,
                             };
                             let probability = (tc.probability + prob_boost).clamp(0.0, 1.0);
 
@@ -270,7 +274,7 @@ impl ConsequencePredictor {
                             let reversible = if novice_operator && tc.impact < -0.3 {
                                 false
                             } else if expert_operator {
-                                tc.impact > -0.8  // experts can recover from more
+                                tc.impact > -0.8 // experts can recover from more
                             } else {
                                 tc.impact > -0.5
                             };
@@ -344,7 +348,9 @@ impl ConsequencePredictor {
         action: &str,
         context: &HashMap<String, String>,
     ) -> ActionEvaluation {
-        let chain = self.predict_consequences(action, context, self.max_depth).await;
+        let chain = self
+            .predict_consequences(action, context, self.max_depth)
+            .await;
 
         let immediate_value: f64 = chain
             .consequences
@@ -427,9 +433,15 @@ impl ConsequencePredictor {
             .predicted_consequences
             .iter()
             .filter(|pc| {
-                actual_outcomes
-                    .iter()
-                    .any(|ao| ao.to_lowercase().contains(&pc.description.to_lowercase().split_whitespace().next().unwrap_or("")))
+                actual_outcomes.iter().any(|ao| {
+                    ao.to_lowercase().contains(
+                        &pc.description
+                            .to_lowercase()
+                            .split_whitespace()
+                            .next()
+                            .unwrap_or(""),
+                    )
+                })
             })
             .count();
 
@@ -453,9 +465,14 @@ impl ConsequencePredictor {
         let chains = self.consequence_chains.read().await;
         let calibration = *self.calibration_error.read().await;
 
-        let verified: Vec<&PredictionRecord> = history.iter().filter(|r| r.accuracy.is_some()).collect();
+        let verified: Vec<&PredictionRecord> =
+            history.iter().filter(|r| r.accuracy.is_some()).collect();
         let avg_accuracy = if !verified.is_empty() {
-            verified.iter().map(|r| r.accuracy.unwrap_or(0.0)).sum::<f64>() / verified.len() as f64
+            verified
+                .iter()
+                .map(|r| r.accuracy.unwrap_or(0.0))
+                .sum::<f64>()
+                / verified.len() as f64
         } else {
             0.0
         };
@@ -488,7 +505,9 @@ mod tests {
         let predictor = ConsequencePredictor::new();
         predictor.initialize().await;
 
-        let chain = predictor.predict_consequences("refactor the module", &HashMap::new(), 5).await;
+        let chain = predictor
+            .predict_consequences("refactor the module", &HashMap::new(), 5)
+            .await;
         assert!(!chain.consequences.is_empty());
     }
 
@@ -497,7 +516,9 @@ mod tests {
         let predictor = ConsequencePredictor::new();
         predictor.initialize().await;
 
-        let eval = predictor.evaluate_action("deploy the application", &HashMap::new()).await;
+        let eval = predictor
+            .evaluate_action("deploy the application", &HashMap::new())
+            .await;
         assert!(!eval.recommendation.is_empty());
     }
 }

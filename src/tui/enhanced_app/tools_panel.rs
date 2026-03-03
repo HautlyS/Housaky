@@ -1,3 +1,8 @@
+use crate::tui::enhanced_app::state::{ToolEntry, ToolStatus};
+use crate::tui::enhanced_app::theme::{
+    style_border, style_border_focus, style_dim, style_error, style_muted, style_success,
+    style_tag_tool, style_title, style_warning, Palette,
+};
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::Modifier,
@@ -5,27 +10,22 @@ use ratatui::{
     widgets::{Block, Borders, List, ListItem, Paragraph, Wrap},
     Frame,
 };
-use crate::tui::enhanced_app::theme::{
-    Palette, style_border, style_border_focus, style_dim, style_error, style_muted,
-    style_success, style_tag_tool, style_title, style_warning,
-};
-use crate::tui::enhanced_app::state::{ToolEntry, ToolStatus};
 
 // ── Tools panel state ─────────────────────────────────────────────────────────
 
 pub struct ToolsPanel {
-    pub selected:      usize,
+    pub selected: usize,
     pub detail_scroll: usize,
-    pub filter:        String,
+    pub filter: String,
     pub filter_active: bool,
 }
 
 impl ToolsPanel {
     pub fn new() -> Self {
         Self {
-            selected:      0,
+            selected: 0,
             detail_scroll: 0,
-            filter:        String::new(),
+            filter: String::new(),
             filter_active: false,
         }
     }
@@ -77,7 +77,9 @@ impl ToolsPanel {
 
     fn filtered_indices<'a>(&self, tools: &'a [ToolEntry]) -> Vec<usize> {
         let q = self.filter.to_lowercase();
-        tools.iter().enumerate()
+        tools
+            .iter()
+            .enumerate()
             .filter(|(_, t)| {
                 q.is_empty()
                     || t.name.to_lowercase().contains(&q)
@@ -105,9 +107,18 @@ impl ToolsPanel {
     }
 
     fn draw_header(&self, f: &mut Frame, area: Rect, tools: &[ToolEntry]) {
-        let running = tools.iter().filter(|t| t.status == ToolStatus::Running).count();
-        let success = tools.iter().filter(|t| t.status == ToolStatus::Success).count();
-        let failed  = tools.iter().filter(|t| t.status == ToolStatus::Failed).count();
+        let running = tools
+            .iter()
+            .filter(|t| t.status == ToolStatus::Running)
+            .count();
+        let success = tools
+            .iter()
+            .filter(|t| t.status == ToolStatus::Success)
+            .count();
+        let failed = tools
+            .iter()
+            .filter(|t| t.status == ToolStatus::Failed)
+            .count();
 
         let mut spans = vec![
             Span::styled(" ⚙ ", style_tag_tool()),
@@ -115,7 +126,10 @@ impl ToolsPanel {
             Span::styled(format!("total:{} ", tools.len()), style_dim()),
         ];
         if running > 0 {
-            spans.push(Span::styled(format!("running:{} ", running), style_warning()));
+            spans.push(Span::styled(
+                format!("running:{} ", running),
+                style_warning(),
+            ));
         }
         if success > 0 {
             spans.push(Span::styled(format!("ok:{} ", success), style_success()));
@@ -125,7 +139,11 @@ impl ToolsPanel {
         }
         if !self.filter.is_empty() || self.filter_active {
             spans.push(Span::styled(
-                format!("  filter: {}{}  ", self.filter, if self.filter_active { "|" } else { "" }),
+                format!(
+                    "  filter: {}{}  ",
+                    self.filter,
+                    if self.filter_active { "|" } else { "" }
+                ),
                 ratatui::style::Style::default().fg(Palette::WARNING),
             ));
         }
@@ -171,57 +189,94 @@ impl ToolsPanel {
             return;
         }
 
-        let items: Vec<ListItem> = filtered.iter().enumerate().map(|(di, &ri)| {
-            let t = &tools[ri];
-            let sel = di == self.selected;
-            let bg = if sel { Palette::BG_SELECTED } else { Palette::BG_PANEL };
+        let items: Vec<ListItem> = filtered
+            .iter()
+            .enumerate()
+            .map(|(di, &ri)| {
+                let t = &tools[ri];
+                let sel = di == self.selected;
+                let bg = if sel {
+                    Palette::BG_SELECTED
+                } else {
+                    Palette::BG_PANEL
+                };
 
-            let (icon, icon_style) = match t.status {
-                ToolStatus::Running   => ("⟳", ratatui::style::Style::default().fg(Palette::WARNING).bg(bg)),
-                ToolStatus::Success   => ("✓", ratatui::style::Style::default().fg(Palette::SUCCESS).bg(bg)),
-                ToolStatus::Failed    => ("✗", ratatui::style::Style::default().fg(Palette::ERROR).bg(bg)),
-                ToolStatus::Cancelled => ("⊘", ratatui::style::Style::default().fg(Palette::TEXT_DIM).bg(bg)),
-            };
-
-            let dur_str = t.duration_ms
-                .map(|ms| format!(" {}ms", ms))
-                .unwrap_or_default();
-
-            ListItem::new(vec![
-                Line::from(vec![
-                    Span::styled(format!(" {} ", icon), icon_style),
-                    Span::styled(
-                        format!("{:<22}", truncate(&t.name, 22)),
+                let (icon, icon_style) = match t.status {
+                    ToolStatus::Running => (
+                        "⟳",
+                        ratatui::style::Style::default().fg(Palette::WARNING).bg(bg),
+                    ),
+                    ToolStatus::Success => (
+                        "✓",
+                        ratatui::style::Style::default().fg(Palette::SUCCESS).bg(bg),
+                    ),
+                    ToolStatus::Failed => (
+                        "✗",
+                        ratatui::style::Style::default().fg(Palette::ERROR).bg(bg),
+                    ),
+                    ToolStatus::Cancelled => (
+                        "⊘",
                         ratatui::style::Style::default()
-                            .fg(if sel { Palette::TEXT_BRIGHT } else { Palette::TEXT })
-                            .bg(bg)
-                            .add_modifier(if sel { Modifier::BOLD } else { Modifier::empty() }),
+                            .fg(Palette::TEXT_DIM)
+                            .bg(bg),
                     ),
-                    Span::styled(
-                        format!("{:>6}", dur_str),
-                        ratatui::style::Style::default().fg(Palette::TEXT_DIM).bg(bg),
-                    ),
-                ]),
-                Line::from(vec![
-                    Span::raw("   "),
-                    Span::styled(
-                        truncate(&t.input_summary, (inner.width as usize).saturating_sub(5)),
-                        ratatui::style::Style::default().fg(Palette::TEXT_MUTED).bg(bg),
-                    ),
-                    Span::styled(
-                        format!(" {}", t.timestamp),
-                        ratatui::style::Style::default().fg(Palette::TEXT_MUTED).bg(bg).add_modifier(Modifier::DIM),
-                    ),
-                ]),
-            ])
-        }).collect();
+                };
+
+                let dur_str = t
+                    .duration_ms
+                    .map(|ms| format!(" {}ms", ms))
+                    .unwrap_or_default();
+
+                ListItem::new(vec![
+                    Line::from(vec![
+                        Span::styled(format!(" {} ", icon), icon_style),
+                        Span::styled(
+                            format!("{:<22}", truncate(&t.name, 22)),
+                            ratatui::style::Style::default()
+                                .fg(if sel {
+                                    Palette::TEXT_BRIGHT
+                                } else {
+                                    Palette::TEXT
+                                })
+                                .bg(bg)
+                                .add_modifier(if sel {
+                                    Modifier::BOLD
+                                } else {
+                                    Modifier::empty()
+                                }),
+                        ),
+                        Span::styled(
+                            format!("{:>6}", dur_str),
+                            ratatui::style::Style::default()
+                                .fg(Palette::TEXT_DIM)
+                                .bg(bg),
+                        ),
+                    ]),
+                    Line::from(vec![
+                        Span::raw("   "),
+                        Span::styled(
+                            truncate(&t.input_summary, (inner.width as usize).saturating_sub(5)),
+                            ratatui::style::Style::default()
+                                .fg(Palette::TEXT_MUTED)
+                                .bg(bg),
+                        ),
+                        Span::styled(
+                            format!(" {}", t.timestamp),
+                            ratatui::style::Style::default()
+                                .fg(Palette::TEXT_MUTED)
+                                .bg(bg)
+                                .add_modifier(Modifier::DIM),
+                        ),
+                    ]),
+                ])
+            })
+            .collect();
 
         let mut list_state = ratatui::widgets::ListState::default();
         list_state.select(Some(self.selected));
         f.render_stateful_widget(
-            List::new(items).highlight_style(
-                ratatui::style::Style::default().bg(Palette::BG_SELECTED)
-            ),
+            List::new(items)
+                .highlight_style(ratatui::style::Style::default().bg(Palette::BG_SELECTED)),
             inner,
             &mut list_state,
         );
@@ -247,7 +302,10 @@ impl ToolsPanel {
             Some(t) => t,
             None => {
                 f.render_widget(
-                    Paragraph::new(Span::styled("  Select a tool invocation to inspect", style_muted())),
+                    Paragraph::new(Span::styled(
+                        "  Select a tool invocation to inspect",
+                        style_muted(),
+                    )),
                     inner,
                 );
                 return;
@@ -255,16 +313,21 @@ impl ToolsPanel {
         };
 
         let (status_label, status_style) = match tool.status {
-            ToolStatus::Running   => ("⟳ RUNNING",   style_warning()),
-            ToolStatus::Success   => ("✓ SUCCESS",   style_success()),
-            ToolStatus::Failed    => ("✗ FAILED",    style_error()),
+            ToolStatus::Running => ("⟳ RUNNING", style_warning()),
+            ToolStatus::Success => ("✓ SUCCESS", style_success()),
+            ToolStatus::Failed => ("✗ FAILED", style_error()),
             ToolStatus::Cancelled => ("⊘ CANCELLED", style_muted()),
         };
 
         let mut lines = vec![
             Line::from(vec![
                 Span::styled("  Tool       ", style_muted()),
-                Span::styled(&tool.name, ratatui::style::Style::default().fg(Palette::TOOL).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    &tool.name,
+                    ratatui::style::Style::default()
+                        .fg(Palette::TOOL)
+                        .add_modifier(Modifier::BOLD),
+                ),
             ]),
             Line::from(vec![
                 Span::styled("  Status     ", style_muted()),
@@ -289,7 +352,10 @@ impl ToolsPanel {
         for l in tool.input_summary.lines().skip(self.detail_scroll) {
             lines.push(Line::from(vec![
                 Span::raw("    "),
-                Span::styled(l.to_owned(), ratatui::style::Style::default().fg(Palette::TEXT)),
+                Span::styled(
+                    l.to_owned(),
+                    ratatui::style::Style::default().fg(Palette::TEXT),
+                ),
             ]));
         }
 
@@ -303,14 +369,14 @@ impl ToolsPanel {
                 } else {
                     ratatui::style::Style::default().fg(Palette::TEXT)
                 };
-                lines.push(Line::from(vec![Span::raw("    "), Span::styled(l.to_owned(), style)]));
+                lines.push(Line::from(vec![
+                    Span::raw("    "),
+                    Span::styled(l.to_owned(), style),
+                ]));
             }
         }
 
-        f.render_widget(
-            Paragraph::new(lines).wrap(Wrap { trim: false }),
-            inner,
-        );
+        f.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), inner);
     }
 
     fn draw_footer(&self, f: &mut Frame, area: Rect) {
@@ -319,22 +385,25 @@ impl ToolsPanel {
         } else {
             " ↑↓=navigate  /=filter  PgUp/Dn=scroll detail  c=clear log "
         };
-        f.render_widget(
-            Paragraph::new(Span::styled(hint, style_muted())),
-            area,
-        );
+        f.render_widget(Paragraph::new(Span::styled(hint, style_muted())), area);
     }
 }
 
 impl Default for ToolsPanel {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 fn truncate(s: &str, max: usize) -> String {
     if s.chars().count() <= max {
         s.to_owned()
     } else {
-        let end = s.char_indices().nth(max.saturating_sub(1)).map(|(i, _)| i).unwrap_or(s.len());
+        let end = s
+            .char_indices()
+            .nth(max.saturating_sub(1))
+            .map(|(i, _)| i)
+            .unwrap_or(s.len());
         format!("{}…", &s[..end])
     }
 }

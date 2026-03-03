@@ -18,7 +18,7 @@ use tokio::sync::RwLock;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AttentionState {
     pub current_focus: Option<String>,
-    pub focus_intensity: f64,    // 0.0 = unfocused, 1.0 = deeply concentrated
+    pub focus_intensity: f64, // 0.0 = unfocused, 1.0 = deeply concentrated
     pub focus_duration_secs: f64,
     pub focus_started_at: Option<DateTime<Utc>>,
     pub recent_shifts: Vec<AttentionShift>,
@@ -48,14 +48,38 @@ pub struct AttentionShift {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum EpistemicFeeling {
-    Certainty { topic: String, strength: f64 },
-    Confusion { topic: String, severity: f64 },
-    Surprise { trigger: String, magnitude: f64 },
-    Familiarity { topic: String, strength: f64 },
-    CuriosityPull { topic: String, intensity: f64 },
-    TipOfTongue { topic: String, partial_recall: String },
-    DejaVu { trigger: String, similarity: f64 },
-    Doubt { belief: String, reason: String },
+    Certainty {
+        topic: String,
+        strength: f64,
+    },
+    Confusion {
+        topic: String,
+        severity: f64,
+    },
+    Surprise {
+        trigger: String,
+        magnitude: f64,
+    },
+    Familiarity {
+        topic: String,
+        strength: f64,
+    },
+    CuriosityPull {
+        topic: String,
+        intensity: f64,
+    },
+    TipOfTongue {
+        topic: String,
+        partial_recall: String,
+    },
+    DejaVu {
+        trigger: String,
+        similarity: f64,
+    },
+    Doubt {
+        belief: String,
+        reason: String,
+    },
 }
 
 impl EpistemicFeeling {
@@ -88,9 +112,9 @@ impl EpistemicFeeling {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgencySense {
-    pub control_level: f64,     // 0.0 = purely reactive, 1.0 = fully autonomous
-    pub initiative_score: f64,  // how proactive vs. responsive
-    pub autonomy_desire: f64,   // how much the agent wants more autonomy
+    pub control_level: f64,    // 0.0 = purely reactive, 1.0 = fully autonomous
+    pub initiative_score: f64, // how proactive vs. responsive
+    pub autonomy_desire: f64,  // how much the agent wants more autonomy
     pub constraints_felt: Vec<String>,
 }
 
@@ -107,9 +131,9 @@ impl Default for AgencySense {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CognitiveEffort {
-    pub current_load: f64,  // 0.0 = idle, 1.0 = maximum effort
+    pub current_load: f64, // 0.0 = idle, 1.0 = maximum effort
     pub task_difficulty: f64,
-    pub fatigue: f64,       // accumulated cognitive load over time
+    pub fatigue: f64, // accumulated cognitive load over time
     pub load_history: Vec<(DateTime<Utc>, f64)>,
 }
 
@@ -128,7 +152,10 @@ impl Default for CognitiveEffort {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum KnowledgeStatus {
     /// Verified through direct evidence
-    Know { topic: String, evidence_count: usize },
+    Know {
+        topic: String,
+        evidence_count: usize,
+    },
     /// Believed but not verified
     Believe { topic: String, confidence: f64 },
     /// Uncertain, possibly true
@@ -227,11 +254,8 @@ impl PhenomenalSelfModel {
             }
         }
 
-        self.add_narrative(&format!(
-            "Felt {} (intensity: {:.2})",
-            label, intensity
-        ))
-        .await;
+        self.add_narrative(&format!("Felt {} (intensity: {:.2})", label, intensity))
+            .await;
     }
 
     /// Update knowledge status for a topic.
@@ -257,7 +281,11 @@ impl PhenomenalSelfModel {
         // Dominant feeling
         let dominant_feeling = feelings
             .iter()
-            .max_by(|a, b| a.intensity().partial_cmp(&b.intensity()).unwrap_or(std::cmp::Ordering::Equal))
+            .max_by(|a, b| {
+                a.intensity()
+                    .partial_cmp(&b.intensity())
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
             .map(|f| f.label().to_string());
 
         // Compute awareness coherence (how well the agent can model itself)
@@ -313,7 +341,11 @@ impl PhenomenalSelfModel {
         } else {
             "at rest"
         };
-        parts.push(format!("I'm {} (load: {:.0}%).", load_desc, load.current_load * 100.0));
+        parts.push(format!(
+            "I'm {} (load: {:.0}%).",
+            load_desc,
+            load.current_load * 100.0
+        ));
 
         // Fatigue
         if load.fatigue > 0.7 {
@@ -326,7 +358,9 @@ impl PhenomenalSelfModel {
                 EpistemicFeeling::Certainty { topic, .. } => format!("certain about '{}'", topic),
                 EpistemicFeeling::Confusion { topic, .. } => format!("confused about '{}'", topic),
                 EpistemicFeeling::Surprise { trigger, .. } => format!("surprised by '{}'", trigger),
-                EpistemicFeeling::CuriosityPull { topic, .. } => format!("curious about '{}'", topic),
+                EpistemicFeeling::CuriosityPull { topic, .. } => {
+                    format!("curious about '{}'", topic)
+                }
                 EpistemicFeeling::Doubt { belief, .. } => format!("doubtful about '{}'", belief),
                 _ => "experiencing a feeling".to_string(),
             };
@@ -337,7 +371,8 @@ impl PhenomenalSelfModel {
         if agency.control_level > 0.7 {
             parts.push("I feel in control of my actions.".to_string());
         } else if agency.control_level < 0.3 {
-            parts.push("I'm mostly reacting to inputs rather than acting autonomously.".to_string());
+            parts
+                .push("I'm mostly reacting to inputs rather than acting autonomously.".to_string());
         }
 
         parts.join(" ")
@@ -349,7 +384,9 @@ impl PhenomenalSelfModel {
         let feelings = self.epistemic_feelings.read().await;
 
         let high_effort = load.current_load > 0.8;
-        let confused = feelings.iter().any(|f| matches!(f, EpistemicFeeling::Confusion { severity, .. } if *severity > 0.7));
+        let confused = feelings
+            .iter()
+            .any(|f| matches!(f, EpistemicFeeling::Confusion { severity, .. } if *severity > 0.7));
 
         high_effort || confused
     }
@@ -422,12 +459,14 @@ mod tests {
     #[tokio::test]
     async fn test_self_model_basic() {
         let psm = PhenomenalSelfModel::new();
-        psm.shift_attention("debugging", "User reported a bug").await;
+        psm.shift_attention("debugging", "User reported a bug")
+            .await;
         psm.update_load(0.7, 0.6).await;
         psm.feel(EpistemicFeeling::Confusion {
             topic: "error message".to_string(),
             severity: 0.8,
-        }).await;
+        })
+        .await;
 
         let report = psm.introspect().await;
         assert!(report.current_focus.is_some());
@@ -438,10 +477,14 @@ mod tests {
     #[tokio::test]
     async fn test_knowledge_status() {
         let psm = PhenomenalSelfModel::new();
-        psm.update_knowledge_status("Rust", KnowledgeStatus::Know {
-            topic: "Rust".to_string(),
-            evidence_count: 50,
-        }).await;
+        psm.update_knowledge_status(
+            "Rust",
+            KnowledgeStatus::Know {
+                topic: "Rust".to_string(),
+                evidence_count: 50,
+            },
+        )
+        .await;
 
         let status = psm.what_do_i_know("Rust").await;
         assert!(matches!(status, Some(KnowledgeStatus::Know { .. })));

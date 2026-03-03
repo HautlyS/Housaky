@@ -5,9 +5,7 @@ use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{
-        Block, Borders, Clear, Gauge, List, ListItem, Paragraph,
-    },
+    widgets::{Block, Borders, Clear, Gauge, List, ListItem, Paragraph},
     Frame,
 };
 use std::io;
@@ -84,22 +82,25 @@ impl KeysTui {
     async fn reload(&mut self, manager: &KeysManager) {
         let _ = manager.load().await;
         let providers = manager.get_providers().await;
-        self.providers = providers.iter().map(|p| {
-            let enabled = p.keys.iter().filter(|k| k.enabled).count();
-            let total: u64 = p.keys.iter().map(|k| k.usage.total_requests).sum();
-            let failed: u64 = p.keys.iter().map(|k| k.usage.failed_requests).sum();
-            let rl: u64 = p.keys.iter().map(|k| k.usage.rate_limited_count).sum();
-            ProviderRow {
-                name: p.name.clone(),
-                key_count: p.keys.len(),
-                enabled_count: enabled,
-                priority: p.priority as u32,
-                default_model: p.default_model.clone(),
-                total_requests: total,
-                failed_requests: failed,
-                rate_limited: rl,
-            }
-        }).collect();
+        self.providers = providers
+            .iter()
+            .map(|p| {
+                let enabled = p.keys.iter().filter(|k| k.enabled).count();
+                let total: u64 = p.keys.iter().map(|k| k.usage.total_requests).sum();
+                let failed: u64 = p.keys.iter().map(|k| k.usage.failed_requests).sum();
+                let rl: u64 = p.keys.iter().map(|k| k.usage.rate_limited_count).sum();
+                ProviderRow {
+                    name: p.name.clone(),
+                    key_count: p.keys.len(),
+                    enabled_count: enabled,
+                    priority: p.priority as u32,
+                    default_model: p.default_model.clone(),
+                    total_requests: total,
+                    failed_requests: failed,
+                    rate_limited: rl,
+                }
+            })
+            .collect();
     }
 
     fn notify(&mut self, msg: &str) {
@@ -108,7 +109,9 @@ impl KeysTui {
 
     fn tick(&mut self) {
         if let Some((_, t)) = &self.notification {
-            if t.elapsed().as_secs() > 4 { self.notification = None; }
+            if t.elapsed().as_secs() > 4 {
+                self.notification = None;
+            }
         }
     }
 
@@ -126,10 +129,10 @@ impl KeysTui {
         self.draw_header(f, layout[0]);
 
         match self.view {
-            KeysView::List      => self.draw_list_view(f, layout[1]),
-            KeysView::Detail    => self.draw_detail_view(f, layout[1]),
+            KeysView::List => self.draw_list_view(f, layout[1]),
+            KeysView::Detail => self.draw_detail_view(f, layout[1]),
             KeysView::AddProvider => self.draw_add_provider_form(f, layout[1]),
-            KeysView::AddKey    => self.draw_add_key_form(f, layout[1]),
+            KeysView::AddKey => self.draw_add_key_form(f, layout[1]),
         }
 
         self.draw_footer(f, layout[2]);
@@ -141,12 +144,24 @@ impl KeysTui {
 
     fn draw_header(&self, f: &mut Frame, area: Rect) {
         let left = Line::from(vec![
-            Span::styled(" 🔑 HOUSAKY ", Style::default().fg(Color::Black).bg(Color::Yellow).add_modifier(Modifier::BOLD)),
-            Span::styled(" Keys Manager ", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                " 🔑 HOUSAKY ",
+                Style::default()
+                    .fg(Color::Black)
+                    .bg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(
+                " Keys Manager ",
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
+            ),
         ]);
-        let right = Line::from(vec![
-            Span::styled(format!(" {} providers ", self.providers.len()), Style::default().fg(Color::DarkGray)),
-        ]);
+        let right = Line::from(vec![Span::styled(
+            format!(" {} providers ", self.providers.len()),
+            Style::default().fg(Color::DarkGray),
+        )]);
         let splits = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([Constraint::Min(10), Constraint::Length(20)])
@@ -178,42 +193,77 @@ impl KeysTui {
         let block = Block::default()
             .borders(Borders::ALL)
             .border_style(Style::default().fg(Color::Yellow))
-            .title(Span::styled(" Providers ", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)));
+            .title(Span::styled(
+                " Providers ",
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
+            ));
         let inner = block.inner(cols[0]);
         f.render_widget(block, cols[0]);
 
         if self.providers.is_empty() {
             let lines = vec![
                 Line::from(""),
-                Line::from(Span::styled("  No providers configured.", Style::default().fg(Color::DarkGray))),
+                Line::from(Span::styled(
+                    "  No providers configured.",
+                    Style::default().fg(Color::DarkGray),
+                )),
                 Line::from(""),
-                Line::from(Span::styled("  Press a to add a provider.", Style::default().fg(Color::Gray))),
+                Line::from(Span::styled(
+                    "  Press a to add a provider.",
+                    Style::default().fg(Color::Gray),
+                )),
                 Line::from(""),
-                Line::from(Span::styled("  Or from CLI:", Style::default().fg(Color::DarkGray))),
-                Line::from(Span::styled("    housaky keys manager add-provider", Style::default().fg(Color::Cyan))),
+                Line::from(Span::styled(
+                    "  Or from CLI:",
+                    Style::default().fg(Color::DarkGray),
+                )),
+                Line::from(Span::styled(
+                    "    housaky keys manager add-provider",
+                    Style::default().fg(Color::Cyan),
+                )),
             ];
             f.render_widget(Paragraph::new(lines), inner);
         } else {
-            let items: Vec<ListItem> = self.providers.iter().enumerate().map(|(i, p)| {
-                let health_color = if p.enabled_count > 0 { Color::Green } else { Color::Red };
-                let selected = i == self.selected;
-                let row_bg = if selected { Color::Rgb(30, 30, 50) } else { Color::Reset };
-                let row_mod = if selected { Modifier::BOLD } else { Modifier::empty() };
+            let items: Vec<ListItem> = self
+                .providers
+                .iter()
+                .enumerate()
+                .map(|(i, p)| {
+                    let health_color = if p.enabled_count > 0 {
+                        Color::Green
+                    } else {
+                        Color::Red
+                    };
+                    let selected = i == self.selected;
+                    let row_bg = if selected {
+                        Color::Rgb(30, 30, 50)
+                    } else {
+                        Color::Reset
+                    };
+                    let row_mod = if selected {
+                        Modifier::BOLD
+                    } else {
+                        Modifier::empty()
+                    };
 
-                ListItem::new(vec![
-                    Line::from(vec![
+                    ListItem::new(vec![Line::from(vec![
                         Span::styled("● ", Style::default().fg(health_color)),
                         Span::styled(
                             format!("{:22}", p.name),
-                            Style::default().fg(Color::White).bg(row_bg).add_modifier(row_mod),
+                            Style::default()
+                                .fg(Color::White)
+                                .bg(row_bg)
+                                .add_modifier(row_mod),
                         ),
                         Span::styled(
                             format!(" {}/{}", p.enabled_count, p.key_count),
                             Style::default().fg(Color::Gray).bg(row_bg),
                         ),
-                    ]),
-                ])
-            }).collect();
+                    ])])
+                })
+                .collect();
 
             let mut state = ratatui::widgets::ListState::default();
             state.select(Some(self.selected));
@@ -232,27 +282,49 @@ impl KeysTui {
         let block = Block::default()
             .borders(Borders::ALL)
             .border_style(Style::default().fg(Color::Cyan))
-            .title(Span::styled(" Provider Details ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)));
+            .title(Span::styled(
+                " Provider Details ",
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            ));
         let inner = block.inner(area);
         f.render_widget(block, area);
 
         if let Some(p) = self.providers.get(self.selected) {
             let success_rate = if p.total_requests > 0 {
                 (p.total_requests - p.failed_requests) as f64 / p.total_requests as f64
-            } else { 1.0 };
+            } else {
+                1.0
+            };
 
             let sections = Layout::default()
                 .direction(Direction::Vertical)
-                .constraints([Constraint::Length(8), Constraint::Length(3), Constraint::Min(0)])
+                .constraints([
+                    Constraint::Length(8),
+                    Constraint::Length(3),
+                    Constraint::Min(0),
+                ])
                 .split(inner);
 
             let info_lines = vec![
-                Line::from(Span::styled(p.name.clone(), Style::default().fg(Color::White).add_modifier(Modifier::BOLD))),
+                Line::from(Span::styled(
+                    p.name.clone(),
+                    Style::default()
+                        .fg(Color::White)
+                        .add_modifier(Modifier::BOLD),
+                )),
                 Line::from(""),
                 Line::from(vec![
                     Span::styled("  Keys:         ", Style::default().fg(Color::DarkGray)),
-                    Span::styled(format!("{} total", p.key_count), Style::default().fg(Color::White)),
-                    Span::styled(format!("  ({} enabled)", p.enabled_count), Style::default().fg(Color::Green)),
+                    Span::styled(
+                        format!("{} total", p.key_count),
+                        Style::default().fg(Color::White),
+                    ),
+                    Span::styled(
+                        format!("  ({} enabled)", p.enabled_count),
+                        Style::default().fg(Color::Green),
+                    ),
                 ]),
                 Line::from(vec![
                     Span::styled("  Priority:     ", Style::default().fg(Color::DarkGray)),
@@ -267,28 +339,53 @@ impl KeysTui {
                 ]),
                 Line::from(vec![
                     Span::styled("  Requests:     ", Style::default().fg(Color::DarkGray)),
-                    Span::styled(format!("{} total", p.total_requests), Style::default().fg(Color::White)),
-                    Span::styled(format!("  {} failed", p.failed_requests), Style::default().fg(if p.failed_requests > 0 { Color::Red } else { Color::Green })),
+                    Span::styled(
+                        format!("{} total", p.total_requests),
+                        Style::default().fg(Color::White),
+                    ),
+                    Span::styled(
+                        format!("  {} failed", p.failed_requests),
+                        Style::default().fg(if p.failed_requests > 0 {
+                            Color::Red
+                        } else {
+                            Color::Green
+                        }),
+                    ),
                 ]),
                 Line::from(vec![
                     Span::styled("  Rate limited: ", Style::default().fg(Color::DarkGray)),
-                    Span::styled(p.rate_limited.to_string(), Style::default().fg(if p.rate_limited > 0 { Color::Yellow } else { Color::Green })),
+                    Span::styled(
+                        p.rate_limited.to_string(),
+                        Style::default().fg(if p.rate_limited > 0 {
+                            Color::Yellow
+                        } else {
+                            Color::Green
+                        }),
+                    ),
                 ]),
             ];
             f.render_widget(Paragraph::new(info_lines), sections[0]);
 
             let gauge = Gauge::default()
-                .block(Block::default()
-                    .borders(Borders::ALL)
-                    .border_style(Style::default().fg(Color::DarkGray))
-                    .title(Span::styled(" Success Rate ", Style::default().fg(Color::Green))))
+                .block(
+                    Block::default()
+                        .borders(Borders::ALL)
+                        .border_style(Style::default().fg(Color::DarkGray))
+                        .title(Span::styled(
+                            " Success Rate ",
+                            Style::default().fg(Color::Green),
+                        )),
+                )
                 .gauge_style(Style::default().fg(Color::Green).bg(Color::DarkGray))
                 .ratio(success_rate.clamp(0.0, 1.0))
                 .label(format!("{:.1}%", success_rate * 100.0));
             f.render_widget(gauge, sections[1]);
         } else {
             f.render_widget(
-                Paragraph::new(Span::styled("  Select a provider from the list.", Style::default().fg(Color::DarkGray))),
+                Paragraph::new(Span::styled(
+                    "  Select a provider from the list.",
+                    Style::default().fg(Color::DarkGray),
+                )),
                 inner,
             );
         }
@@ -300,8 +397,16 @@ impl KeysTui {
             .borders(Borders::ALL)
             .border_style(Style::default().fg(Color::Yellow))
             .title(Span::styled(
-                format!(" {} — Full Details ", self.providers.get(self.selected).map(|p| p.name.as_str()).unwrap_or("?")),
-                Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
+                format!(
+                    " {} — Full Details ",
+                    self.providers
+                        .get(self.selected)
+                        .map(|p| p.name.as_str())
+                        .unwrap_or("?")
+                ),
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
             ));
         let inner = block.inner(area);
         f.render_widget(block, area);
@@ -322,7 +427,12 @@ impl KeysTui {
         let block = Block::default()
             .borders(Borders::ALL)
             .border_style(Style::default().fg(Color::Cyan))
-            .title(Span::styled(" Add Provider ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)));
+            .title(Span::styled(
+                " Add Provider ",
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            ));
         let inner = block.inner(popup);
         f.render_widget(block, popup);
 
@@ -338,33 +448,51 @@ impl KeysTui {
             ])
             .split(inner);
 
-        f.render_widget(Paragraph::new(Span::styled("Fill in the provider details:", Style::default().fg(Color::Gray))), fields[0]);
+        f.render_widget(
+            Paragraph::new(Span::styled(
+                "Fill in the provider details:",
+                Style::default().fg(Color::Gray),
+            )),
+            fields[0],
+        );
 
         let field_data = [
             ("Provider name", &self.form_name, 0),
-            ("Template (openai/anthropic/google/custom)", &self.form_template, 1),
+            (
+                "Template (openai/anthropic/google/custom)",
+                &self.form_template,
+                1,
+            ),
             ("API key", &self.form_key, 2),
             ("Priority (0-100, higher=preferred)", &self.form_priority, 3),
         ];
 
         for (idx, (label, value, field_idx)) in field_data.iter().enumerate() {
             let is_active = self.form_field == *field_idx;
-            let border_color = if is_active { Color::Yellow } else { Color::DarkGray };
+            let border_color = if is_active {
+                Color::Yellow
+            } else {
+                Color::DarkGray
+            };
             let display = if is_active {
                 format!("{}|", value)
             } else {
                 (*value).clone()
             };
-            let widget = Paragraph::new(display.as_str())
-                .block(Block::default()
+            let widget = Paragraph::new(display.as_str()).block(
+                Block::default()
                     .borders(Borders::ALL)
                     .border_style(Style::default().fg(border_color))
-                    .title(Span::styled(*label, Style::default().fg(border_color))));
+                    .title(Span::styled(*label, Style::default().fg(border_color))),
+            );
             f.render_widget(widget, fields[idx + 1]);
         }
 
         f.render_widget(
-            Paragraph::new(Span::styled("Tab=next field  Enter=submit  Esc=cancel", Style::default().fg(Color::DarkGray))),
+            Paragraph::new(Span::styled(
+                "Tab=next field  Enter=submit  Esc=cancel",
+                Style::default().fg(Color::DarkGray),
+            )),
             fields[5],
         );
     }
@@ -383,7 +511,12 @@ impl KeysTui {
         let block = Block::default()
             .borders(Borders::ALL)
             .border_style(Style::default().fg(Color::Green))
-            .title(Span::styled(" Add API Key to Provider ", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)));
+            .title(Span::styled(
+                " Add API Key to Provider ",
+                Style::default()
+                    .fg(Color::Green)
+                    .add_modifier(Modifier::BOLD),
+            ));
         let inner = block.inner(popup);
         f.render_widget(block, popup);
 
@@ -397,7 +530,13 @@ impl KeysTui {
             ])
             .split(inner);
 
-        f.render_widget(Paragraph::new(Span::styled("Enter provider name and API key:", Style::default().fg(Color::Gray))), fields[0]);
+        f.render_widget(
+            Paragraph::new(Span::styled(
+                "Enter provider name and API key:",
+                Style::default().fg(Color::Gray),
+            )),
+            fields[0],
+        );
 
         let field_data = [
             ("Provider name", &self.addkey_provider, 0),
@@ -405,17 +544,29 @@ impl KeysTui {
         ];
         for (idx, (label, value, field_idx)) in field_data.iter().enumerate() {
             let is_active = self.addkey_field == *field_idx;
-            let border_color = if is_active { Color::Yellow } else { Color::DarkGray };
-            let display = if is_active { format!("{}|", value) } else { (*value).clone() };
-            let widget = Paragraph::new(display.as_str())
-                .block(Block::default()
+            let border_color = if is_active {
+                Color::Yellow
+            } else {
+                Color::DarkGray
+            };
+            let display = if is_active {
+                format!("{}|", value)
+            } else {
+                (*value).clone()
+            };
+            let widget = Paragraph::new(display.as_str()).block(
+                Block::default()
                     .borders(Borders::ALL)
                     .border_style(Style::default().fg(border_color))
-                    .title(Span::styled(*label, Style::default().fg(border_color))));
+                    .title(Span::styled(*label, Style::default().fg(border_color))),
+            );
             f.render_widget(widget, fields[idx + 1]);
         }
         f.render_widget(
-            Paragraph::new(Span::styled("Tab=next field  Enter=submit  Esc=cancel", Style::default().fg(Color::DarkGray))),
+            Paragraph::new(Span::styled(
+                "Tab=next field  Enter=submit  Esc=cancel",
+                Style::default().fg(Color::DarkGray),
+            )),
             fields[3],
         );
     }
@@ -425,7 +576,11 @@ impl KeysTui {
         let area = Rect::new(f.area().width.saturating_sub(width + 1), 1, width, 3);
         let toast = Paragraph::new(msg)
             .style(Style::default().fg(Color::Black).bg(Color::Yellow))
-            .block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(Color::Yellow)));
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(Color::Yellow)),
+            );
         f.render_widget(Clear, area);
         f.render_widget(toast, area);
     }
@@ -435,10 +590,10 @@ impl KeysTui {
 
 pub async fn run_keys_tui(manager: &KeysManager) -> Result<()> {
     use crossterm::{
+        event::DisableMouseCapture,
+        event::EnableMouseCapture,
         execute,
         terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
-        event::EnableMouseCapture,
-        event::DisableMouseCapture,
     };
 
     enable_raw_mode()?;
@@ -478,14 +633,19 @@ async fn run_keys_loop(
                     KeysView::List => {
                         handle_list_key(app, key, manager).await?;
                     }
-                    KeysView::Detail => {
-                        match key.code {
-                            KeyCode::Esc | KeyCode::Char('q') => { app.view = KeysView::List; }
-                            KeyCode::Char('R') => { rotate_selected(app, manager).await; }
-                            KeyCode::Char('s') => { manager.save().await?; app.notify("Saved."); }
-                            _ => {}
+                    KeysView::Detail => match key.code {
+                        KeyCode::Esc | KeyCode::Char('q') => {
+                            app.view = KeysView::List;
                         }
-                    }
+                        KeyCode::Char('R') => {
+                            rotate_selected(app, manager).await;
+                        }
+                        KeyCode::Char('s') => {
+                            manager.save().await?;
+                            app.notify("Saved.");
+                        }
+                        _ => {}
+                    },
                     KeysView::AddProvider => {
                         handle_add_provider_key(app, key, manager).await?;
                     }
@@ -496,7 +656,9 @@ async fn run_keys_loop(
             }
         }
 
-        if app.should_quit { break; }
+        if app.should_quit {
+            break;
+        }
     }
     Ok(())
 }
@@ -511,19 +673,29 @@ async fn handle_list_key(
             app.should_quit = true;
         }
         (_, KeyCode::Up) => {
-            if app.selected > 0 { app.selected -= 1; }
+            if app.selected > 0 {
+                app.selected -= 1;
+            }
         }
         (_, KeyCode::Char('k')) if key.modifiers == KeyModifiers::NONE => {
-            if app.selected > 0 { app.selected -= 1; }
+            if app.selected > 0 {
+                app.selected -= 1;
+            }
         }
         (_, KeyCode::Down) => {
-            if app.selected + 1 < app.providers.len() { app.selected += 1; }
+            if app.selected + 1 < app.providers.len() {
+                app.selected += 1;
+            }
         }
         (_, KeyCode::Char('j')) => {
-            if app.selected + 1 < app.providers.len() { app.selected += 1; }
+            if app.selected + 1 < app.providers.len() {
+                app.selected += 1;
+            }
         }
         (_, KeyCode::Enter) | (_, KeyCode::Char('d')) => {
-            if !app.providers.is_empty() { app.view = KeysView::Detail; }
+            if !app.providers.is_empty() {
+                app.view = KeysView::Detail;
+            }
         }
         (_, KeyCode::Char('a')) => {
             app.form_name.clear();
@@ -534,7 +706,11 @@ async fn handle_list_key(
             app.view = KeysView::AddProvider;
         }
         (_, KeyCode::Char('K')) => {
-            app.addkey_provider = app.providers.get(app.selected).map(|p| p.name.clone()).unwrap_or_default();
+            app.addkey_provider = app
+                .providers
+                .get(app.selected)
+                .map(|p| p.name.clone())
+                .unwrap_or_default();
             app.addkey_value.clear();
             app.addkey_field = 0;
             app.view = KeysView::AddKey;
@@ -565,9 +741,19 @@ async fn handle_add_provider_key(
     manager: &KeysManager,
 ) -> Result<()> {
     match key.code {
-        KeyCode::Esc => { app.view = KeysView::List; }
-        KeyCode::Tab => { app.form_field = (app.form_field + 1) % 4; }
-        KeyCode::BackTab => { app.form_field = if app.form_field == 0 { 3 } else { app.form_field - 1 }; }
+        KeyCode::Esc => {
+            app.view = KeysView::List;
+        }
+        KeyCode::Tab => {
+            app.form_field = (app.form_field + 1) % 4;
+        }
+        KeyCode::BackTab => {
+            app.form_field = if app.form_field == 0 {
+                3
+            } else {
+                app.form_field - 1
+            };
+        }
         KeyCode::Enter => {
             if app.form_field < 3 {
                 app.form_field += 1;
@@ -583,16 +769,26 @@ async fn handle_add_provider_key(
                     return Ok(());
                 }
                 use crate::keys_manager::manager::ProviderPriority;
-                let priority = ProviderPriority::from_str(&priority_val.to_string()).unwrap_or_default();
-                let keys = if key_val.is_empty() { vec![] } else { vec![key_val] };
-                match manager.add_provider_with_template(&name, &template, keys, priority).await {
+                let priority =
+                    ProviderPriority::from_str(&priority_val.to_string()).unwrap_or_default();
+                let keys = if key_val.is_empty() {
+                    vec![]
+                } else {
+                    vec![key_val]
+                };
+                match manager
+                    .add_provider_with_template(&name, &template, keys, priority)
+                    .await
+                {
                     Ok(_) => {
                         manager.save().await?;
                         app.reload(manager).await;
                         app.notify(&format!("Added provider: {}", name));
                         app.view = KeysView::List;
                     }
-                    Err(e) => { app.notify(&format!("Error: {}", e)); }
+                    Err(e) => {
+                        app.notify(&format!("Error: {}", e));
+                    }
                 }
             }
         }
@@ -627,9 +823,15 @@ async fn handle_add_key_key(
     manager: &KeysManager,
 ) -> Result<()> {
     match key.code {
-        KeyCode::Esc => { app.view = KeysView::List; }
-        KeyCode::Tab => { app.addkey_field = (app.addkey_field + 1) % 2; }
-        KeyCode::BackTab => { app.addkey_field = if app.addkey_field == 0 { 1 } else { 0 }; }
+        KeyCode::Esc => {
+            app.view = KeysView::List;
+        }
+        KeyCode::Tab => {
+            app.addkey_field = (app.addkey_field + 1) % 2;
+        }
+        KeyCode::BackTab => {
+            app.addkey_field = if app.addkey_field == 0 { 1 } else { 0 };
+        }
         KeyCode::Enter => {
             if app.addkey_field == 0 {
                 app.addkey_field = 1;
@@ -647,17 +849,25 @@ async fn handle_add_key_key(
                         app.notify(&format!("Added key to {}", provider));
                         app.view = KeysView::List;
                     }
-                    Err(e) => { app.notify(&format!("Error: {}", e)); }
+                    Err(e) => {
+                        app.notify(&format!("Error: {}", e));
+                    }
                 }
             }
         }
         KeyCode::Backspace => {
-            if app.addkey_field == 0 { app.addkey_provider.pop(); }
-            else { app.addkey_value.pop(); }
+            if app.addkey_field == 0 {
+                app.addkey_provider.pop();
+            } else {
+                app.addkey_value.pop();
+            }
         }
         KeyCode::Char(c) => {
-            if app.addkey_field == 0 { app.addkey_provider.push(c); }
-            else { app.addkey_value.push(c); }
+            if app.addkey_field == 0 {
+                app.addkey_provider.push(c);
+            } else {
+                app.addkey_value.push(c);
+            }
         }
         _ => {}
     }

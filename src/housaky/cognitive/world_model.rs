@@ -1,3 +1,4 @@
+use crate::quantum::QuantumAgiBridge;
 use crate::util::{read_msgpack_file, write_msgpack_file};
 use anyhow::Result;
 use chrono::{DateTime, Utc};
@@ -6,7 +7,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::info;
+use tracing::{info, warn};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct WorldState {
@@ -116,6 +117,8 @@ pub struct WorldModel {
     causal_graph: Arc<RwLock<CausalGraph>>,
     history: Arc<RwLock<Vec<ActionResult>>>,
     storage_path: Option<PathBuf>,
+    /// §10.5 — Optional quantum bridge for VQE-enhanced reward prediction.
+    quantum_bridge: Option<Arc<QuantumAgiBridge>>,
 }
 
 impl WorldModel {
@@ -127,6 +130,7 @@ impl WorldModel {
             causal_graph: Arc::new(RwLock::new(CausalGraph::new())),
             history: Arc::new(RwLock::new(Vec::new())),
             storage_path: None,
+            quantum_bridge: None,
         }
     }
 
@@ -139,7 +143,14 @@ impl WorldModel {
             causal_graph: Arc::new(RwLock::new(CausalGraph::new())),
             history: Arc::new(RwLock::new(Vec::new())),
             storage_path: Some(storage_path),
+            quantum_bridge: None,
         }
+    }
+
+    /// §10.5 — Attach a quantum bridge for VQE-enhanced reward prediction.
+    pub fn with_quantum(mut self, bridge: Arc<QuantumAgiBridge>) -> Self {
+        self.quantum_bridge = Some(bridge);
+        self
     }
 
     pub async fn load(&self) -> Result<()> {
@@ -215,14 +226,58 @@ impl WorldModel {
         let current = self.current_state.read().await.clone();
 
         let predicted_state = self.transition_model.read().await.predict(&current, action);
-
-        let reward = self.reward_model.read().await.predict(&predicted_state);
-
+        let classical_reward = self.reward_model.read().await.predict(&predicted_state);
         let confidence = self.transition_model.read().await.get_confidence(action);
+
+        // §10.5 — Quantum-enhanced reward prediction via VQE fitness landscape.
+        // Features: [risk, duration_norm, resource_pressure, constraint_density]
+        if let Some(ref bridge) = self.quantum_bridge {
+            let features = vec![
+                action.risk_level,
+                (action.estimated_duration_ms as f64 / 10_000.0).min(1.0),
+                current.resources.values().copied().sum::<f64>()
+                    / current.resources.len().max(1) as f64,
+                (current.constraints.len() as f64 / 10.0).min(1.0),
+            ];
+            if features.len() >= 4 {
+                let labels: Vec<String> = (0..features.len())
+                    .map(|i| format!("reward_feature_{i}"))
+                    .collect();
+                match bridge.explore_fitness_landscape(&labels, &features).await {
+                    Ok(result) => {
+                        let quantum_reward = result.best_fitness;
+                        let hybrid_reward = 0.7 * classical_reward + 0.3 * quantum_reward;
+                        let hybrid_conf = (confidence * 0.95).max(0.1);
+                        info!(
+                            "🔮 Quantum reward prediction: action={}, classical={:.3}, \
+                             quantum={:.3}, hybrid={:.3}, strategy={}",
+                            action.action_type,
+                            classical_reward,
+                            quantum_reward,
+                            hybrid_reward,
+                            result.strategy
+                        );
+                        return PredictedOutcome {
+                            state: predicted_state,
+                            reward: hybrid_reward,
+                            confidence: hybrid_conf,
+                            reasoning: format!(
+                                "Hybrid quantum-classical reward for {} \
+                                 (classical={:.3}, quantum={:.3})",
+                                action.action_type, classical_reward, quantum_reward
+                            ),
+                        };
+                    }
+                    Err(e) => {
+                        warn!("Quantum reward prediction failed (classical fallback): {e}");
+                    }
+                }
+            }
+        }
 
         PredictedOutcome {
             state: predicted_state,
-            reward,
+            reward: classical_reward,
             confidence,
             reasoning: format!("Predicted outcome of {} action", action.action_type),
         }
@@ -265,6 +320,12 @@ impl WorldModel {
 
         paths.sort_by(|a, b| b.total_reward.partial_cmp(&a.total_reward).unwrap());
         paths
+    }
+
+    /// Return candidate actions available from the current world state.
+    pub async fn get_candidate_actions(&self) -> Vec<Action> {
+        let state = self.current_state.read().await.clone();
+        self.get_possible_actions(&state)
     }
 
     fn get_possible_actions(&self, state: &WorldState) -> Vec<Action> {
@@ -448,7 +509,11 @@ impl TransitionModel {
         // §2.5 — learn effect distributions from actual observed context changes.
         for (key, val) in &actual.context {
             let effect_key = format!("{}={}", key, val.chars().take(32).collect::<String>());
-            let count = pattern.effect_distribution.get(&effect_key).copied().unwrap_or(0.0);
+            let count = pattern
+                .effect_distribution
+                .get(&effect_key)
+                .copied()
+                .unwrap_or(0.0);
             pattern.effect_distribution.insert(effect_key, count + 1.0);
         }
 

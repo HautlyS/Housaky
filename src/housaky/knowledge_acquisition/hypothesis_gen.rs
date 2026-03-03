@@ -27,7 +27,7 @@ pub struct Hypothesis {
     pub id: String,
     pub statement: String,
     pub domain: String,
-    pub generated_from: Vec<String>,  // observation / knowledge gap IDs
+    pub generated_from: Vec<String>, // observation / knowledge gap IDs
     pub prior_probability: f64,
     pub posterior_probability: f64,
     pub status: HypothesisStatus,
@@ -350,11 +350,31 @@ impl HypothesisGenerator {
         let total = self.hypotheses.len();
         HypothesisStats {
             total_hypotheses: total,
-            proposed: self.hypotheses.iter().filter(|h| h.status == HypothesisStatus::Proposed).count(),
-            testing: self.hypotheses.iter().filter(|h| h.status == HypothesisStatus::Testing).count(),
-            supported: self.hypotheses.iter().filter(|h| h.status == HypothesisStatus::Supported).count(),
-            refuted: self.hypotheses.iter().filter(|h| h.status == HypothesisStatus::Refuted).count(),
-            inconclusive: self.hypotheses.iter().filter(|h| h.status == HypothesisStatus::Inconclusive).count(),
+            proposed: self
+                .hypotheses
+                .iter()
+                .filter(|h| h.status == HypothesisStatus::Proposed)
+                .count(),
+            testing: self
+                .hypotheses
+                .iter()
+                .filter(|h| h.status == HypothesisStatus::Testing)
+                .count(),
+            supported: self
+                .hypotheses
+                .iter()
+                .filter(|h| h.status == HypothesisStatus::Supported)
+                .count(),
+            refuted: self
+                .hypotheses
+                .iter()
+                .filter(|h| h.status == HypothesisStatus::Refuted)
+                .count(),
+            inconclusive: self
+                .hypotheses
+                .iter()
+                .filter(|h| h.status == HypothesisStatus::Inconclusive)
+                .count(),
             pending_tests: self.pending_tests.len(),
             observations: self.observations.len(),
         }

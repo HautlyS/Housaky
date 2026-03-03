@@ -49,7 +49,12 @@ pub struct SimulatorBackend {
 
 impl SimulatorBackend {
     pub fn new(qubits: usize, shots: u64) -> Self {
-        Self { qubits, shots, noise: None, seed: None }
+        Self {
+            qubits,
+            shots,
+            noise: None,
+            seed: None,
+        }
     }
 
     pub fn with_noise(mut self, noise: NoiseModel) -> Self {
@@ -159,6 +164,13 @@ impl SimulatorBackend {
                         let q0 = gate.qubits[1];
                         let q1 = gate.qubits[2];
                         self.apply_fredkin(&mut state, ctrl, q0, q1, n);
+                    }
+                }
+                GateType::CP(theta) => {
+                    if gate.qubits.len() >= 2 {
+                        let ctrl = gate.qubits[0];
+                        let tgt = gate.qubits[1];
+                        self.apply_cp(&mut state, ctrl, tgt, n, *theta);
                     }
                 }
                 GateType::Measure | GateType::Barrier | GateType::Reset => {}
@@ -330,6 +342,21 @@ impl SimulatorBackend {
         }
     }
 
+    fn apply_cp(&self, state: &mut Vec<f64>, ctrl: usize, tgt: usize, n: usize, theta: f64) {
+        // CP applies e^(i·theta) to |11⟩ component only.
+        let cos = theta.cos();
+        let sin = theta.sin();
+        let dim = 1 << n;
+        for i in 0..dim {
+            if (i >> ctrl) & 1 == 1 && (i >> tgt) & 1 == 1 {
+                let re = state[2 * i];
+                let im = state[2 * i + 1];
+                state[2 * i] = cos * re - sin * im;
+                state[2 * i + 1] = cos * im + sin * re;
+            }
+        }
+    }
+
     fn sample(&self, probs: &[f64]) -> String {
         let mut rng = rand::thread_rng();
         let r: f64 = rng.gen();
@@ -390,9 +417,12 @@ impl QuantumBackend for SimulatorBackend {
             max_qubits: self.qubits,
             max_shots: 1_000_000,
             supported_gates: vec![
-                "H", "X", "Y", "Z", "CNOT", "CZ", "Rx", "Ry", "Rz", "S", "Sdg",
-                "T", "Tdg", "U1", "U2", "U3", "Swap", "Toffoli", "Fredkin", "Measure",
-            ].into_iter().map(|s| s.to_string()).collect(),
+                "H", "X", "Y", "Z", "CNOT", "CZ", "CP", "Rx", "Ry", "Rz", "S", "Sdg", "T", "Tdg",
+                "U1", "U2", "U3", "Swap", "Toffoli", "Fredkin", "Measure",
+            ]
+            .into_iter()
+            .map(|s| s.to_string())
+            .collect(),
             noise_model: self.noise.clone(),
             online: true,
             queue_depth: 0,
@@ -406,12 +436,26 @@ impl QuantumBackend for SimulatorBackend {
 
     fn supported_gates(&self) -> Vec<GateType> {
         vec![
-            GateType::H, GateType::X, GateType::Y, GateType::Z,
-            GateType::CNOT, GateType::CZ,
-            GateType::Rx(0.0), GateType::Ry(0.0), GateType::Rz(0.0),
-            GateType::S, GateType::Sdg, GateType::T, GateType::Tdg,
-            GateType::U1(0.0), GateType::U2(0.0, 0.0), GateType::U3(0.0, 0.0, 0.0),
-            GateType::Swap, GateType::Toffoli, GateType::Fredkin,
+            GateType::H,
+            GateType::X,
+            GateType::Y,
+            GateType::Z,
+            GateType::CNOT,
+            GateType::CZ,
+            GateType::CP(0.0),
+            GateType::Rx(0.0),
+            GateType::Ry(0.0),
+            GateType::Rz(0.0),
+            GateType::S,
+            GateType::Sdg,
+            GateType::T,
+            GateType::Tdg,
+            GateType::U1(0.0),
+            GateType::U2(0.0, 0.0),
+            GateType::U3(0.0, 0.0, 0.0),
+            GateType::Swap,
+            GateType::Toffoli,
+            GateType::Fredkin,
             GateType::Measure,
         ]
     }
@@ -464,7 +508,26 @@ impl BraketDeviceCatalog {
                 device_type: BraketDeviceType::Simulator,
                 max_qubits: 34,
                 max_shots: 100_000,
-                native_gates: vec!["H","X","Y","Z","CNOT","CZ","Rx","Ry","Rz","S","T","Swap","CCNot","CSwap","PhaseShift"].into_iter().map(String::from).collect(),
+                native_gates: vec![
+                    "H",
+                    "X",
+                    "Y",
+                    "Z",
+                    "CNOT",
+                    "CZ",
+                    "Rx",
+                    "Ry",
+                    "Rz",
+                    "S",
+                    "T",
+                    "Swap",
+                    "CCNot",
+                    "CSwap",
+                    "PhaseShift",
+                ]
+                .into_iter()
+                .map(String::from)
+                .collect(),
                 connectivity: BraketConnectivity::FullyConnected,
                 cost_per_task_usd: 0.075,
                 cost_per_shot_usd: 0.0,
@@ -476,7 +539,12 @@ impl BraketDeviceCatalog {
                 device_type: BraketDeviceType::Simulator,
                 max_qubits: 50,
                 max_shots: 999,
-                native_gates: vec!["H","X","Y","Z","CNOT","CZ","Rx","Ry","Rz","S","T","Swap"].into_iter().map(String::from).collect(),
+                native_gates: vec![
+                    "H", "X", "Y", "Z", "CNOT", "CZ", "Rx", "Ry", "Rz", "S", "T", "Swap",
+                ]
+                .into_iter()
+                .map(String::from)
+                .collect(),
                 connectivity: BraketConnectivity::FullyConnected,
                 cost_per_task_usd: 0.275,
                 cost_per_shot_usd: 0.0,
@@ -488,7 +556,26 @@ impl BraketDeviceCatalog {
                 device_type: BraketDeviceType::Simulator,
                 max_qubits: 17,
                 max_shots: 100_000,
-                native_gates: vec!["H","X","Y","Z","CNOT","CZ","Rx","Ry","Rz","S","T","Swap","Depolarizing","BitFlip","PhaseFlip"].into_iter().map(String::from).collect(),
+                native_gates: vec![
+                    "H",
+                    "X",
+                    "Y",
+                    "Z",
+                    "CNOT",
+                    "CZ",
+                    "Rx",
+                    "Ry",
+                    "Rz",
+                    "S",
+                    "T",
+                    "Swap",
+                    "Depolarizing",
+                    "BitFlip",
+                    "PhaseFlip",
+                ]
+                .into_iter()
+                .map(String::from)
+                .collect(),
                 connectivity: BraketConnectivity::FullyConnected,
                 cost_per_task_usd: 0.075,
                 cost_per_shot_usd: 0.0,
@@ -501,7 +588,10 @@ impl BraketDeviceCatalog {
                 device_type: BraketDeviceType::QPU,
                 max_qubits: 25,
                 max_shots: 100_000,
-                native_gates: vec!["GPi","GPi2","MS"].into_iter().map(String::from).collect(),
+                native_gates: vec!["GPi", "GPi2", "MS"]
+                    .into_iter()
+                    .map(String::from)
+                    .collect(),
                 connectivity: BraketConnectivity::FullyConnected,
                 cost_per_task_usd: 0.30,
                 cost_per_shot_usd: 0.01,
@@ -513,7 +603,10 @@ impl BraketDeviceCatalog {
                 device_type: BraketDeviceType::QPU,
                 max_qubits: 36,
                 max_shots: 100_000,
-                native_gates: vec!["GPi","GPi2","MS"].into_iter().map(String::from).collect(),
+                native_gates: vec!["GPi", "GPi2", "MS"]
+                    .into_iter()
+                    .map(String::from)
+                    .collect(),
                 connectivity: BraketConnectivity::FullyConnected,
                 cost_per_task_usd: 0.30,
                 cost_per_shot_usd: 0.01,
@@ -526,7 +619,7 @@ impl BraketDeviceCatalog {
                 device_type: BraketDeviceType::QPU,
                 max_qubits: 20,
                 max_shots: 100_000,
-                native_gates: vec!["PRx","CZ"].into_iter().map(String::from).collect(),
+                native_gates: vec!["PRx", "CZ"].into_iter().map(String::from).collect(),
                 connectivity: BraketConnectivity::Grid,
                 cost_per_task_usd: 0.30,
                 cost_per_shot_usd: 0.00145,
@@ -539,7 +632,10 @@ impl BraketDeviceCatalog {
                 device_type: BraketDeviceType::QPU,
                 max_qubits: 84,
                 max_shots: 100_000,
-                native_gates: vec!["Rx","Rz","CZ","iSwap"].into_iter().map(String::from).collect(),
+                native_gates: vec!["Rx", "Rz", "CZ", "iSwap"]
+                    .into_iter()
+                    .map(String::from)
+                    .collect(),
                 connectivity: BraketConnectivity::Grid,
                 cost_per_task_usd: 0.30,
                 cost_per_shot_usd: 0.00035,
@@ -549,7 +645,9 @@ impl BraketDeviceCatalog {
 
     /// Look up a device by ARN (partial match on the device suffix).
     pub fn find_by_arn(arn: &str) -> Option<Self> {
-        Self::all_devices().into_iter().find(|d| arn.contains(&d.name.replace(' ', "-")) || d.arn == arn)
+        Self::all_devices()
+            .into_iter()
+            .find(|d| arn.contains(&d.name.replace(' ', "-")) || d.arn == arn)
     }
 
     /// Estimate cost for a task with the given number of shots.
@@ -659,7 +757,10 @@ impl AmazonBraketBackend {
     fn circuit_to_action_json(&self, circuit: &QuantumCircuit) -> String {
         let qasm = self.circuit_to_openqasm(circuit);
         // Escape inner quotes / newlines for embedding in JSON string value.
-        let escaped = qasm.replace('\\', "\\\\").replace('"', "\\\"").replace('\n', "\\n");
+        let escaped = qasm
+            .replace('\\', "\\\\")
+            .replace('"', "\\\"")
+            .replace('\n', "\\n");
         format!(
             r#"{{"braketSchemaHeader":{{"name":"braket.ir.openqasm.program","version":"1"}},"source":"{escaped}","inputs":{{}}}}"#
         )
@@ -672,31 +773,63 @@ impl AmazonBraketBackend {
 
         for gate in &circuit.gates {
             match &gate.gate_type {
-                GateType::H    => qasm.push_str(&format!("h q[{}];\n", gate.qubits[0])),
-                GateType::X    => qasm.push_str(&format!("x q[{}];\n", gate.qubits[0])),
-                GateType::Y    => qasm.push_str(&format!("y q[{}];\n", gate.qubits[0])),
-                GateType::Z    => qasm.push_str(&format!("z q[{}];\n", gate.qubits[0])),
-                GateType::S    => qasm.push_str(&format!("s q[{}];\n", gate.qubits[0])),
-                GateType::Sdg  => qasm.push_str(&format!("si q[{}];\n", gate.qubits[0])),
-                GateType::T    => qasm.push_str(&format!("t q[{}];\n", gate.qubits[0])),
-                GateType::Tdg  => qasm.push_str(&format!("ti q[{}];\n", gate.qubits[0])),
-                GateType::CNOT => qasm.push_str(&format!("cnot q[{}], q[{}];\n", gate.qubits[0], gate.qubits[1])),
-                GateType::CZ   => qasm.push_str(&format!("cz q[{}], q[{}];\n", gate.qubits[0], gate.qubits[1])),
-                GateType::Swap => qasm.push_str(&format!("swap q[{}], q[{}];\n", gate.qubits[0], gate.qubits[1])),
-                GateType::Rx(theta) => qasm.push_str(&format!("rx({}) q[{}];\n", theta, gate.qubits[0])),
-                GateType::Ry(theta) => qasm.push_str(&format!("ry({}) q[{}];\n", theta, gate.qubits[0])),
-                GateType::Rz(theta) => qasm.push_str(&format!("rz({}) q[{}];\n", theta, gate.qubits[0])),
-                GateType::U1(lam)           => qasm.push_str(&format!("phaseshift({}) q[{}];\n", lam, gate.qubits[0])),
-                GateType::U2(phi, lam)      => qasm.push_str(&format!("u(pi/2,{},{}) q[{}];\n", phi, lam, gate.qubits[0])),
-                GateType::U3(th, phi, lam)  => qasm.push_str(&format!("u({},{},{}) q[{}];\n", th, phi, lam, gate.qubits[0])),
-                GateType::Toffoli          => qasm.push_str(&format!("ccnot q[{}], q[{}], q[{}];\n", gate.qubits[0], gate.qubits[1], gate.qubits[2])),
-                GateType::Fredkin          => qasm.push_str(&format!("cswap q[{}], q[{}], q[{}];\n", gate.qubits[0], gate.qubits[1], gate.qubits[2])),
+                GateType::H => qasm.push_str(&format!("h q[{}];\n", gate.qubits[0])),
+                GateType::X => qasm.push_str(&format!("x q[{}];\n", gate.qubits[0])),
+                GateType::Y => qasm.push_str(&format!("y q[{}];\n", gate.qubits[0])),
+                GateType::Z => qasm.push_str(&format!("z q[{}];\n", gate.qubits[0])),
+                GateType::S => qasm.push_str(&format!("s q[{}];\n", gate.qubits[0])),
+                GateType::Sdg => qasm.push_str(&format!("si q[{}];\n", gate.qubits[0])),
+                GateType::T => qasm.push_str(&format!("t q[{}];\n", gate.qubits[0])),
+                GateType::Tdg => qasm.push_str(&format!("ti q[{}];\n", gate.qubits[0])),
+                GateType::CNOT => qasm.push_str(&format!(
+                    "cnot q[{}], q[{}];\n",
+                    gate.qubits[0], gate.qubits[1]
+                )),
+                GateType::CZ => qasm.push_str(&format!(
+                    "cz q[{}], q[{}];\n",
+                    gate.qubits[0], gate.qubits[1]
+                )),
+                GateType::Swap => qasm.push_str(&format!(
+                    "swap q[{}], q[{}];\n",
+                    gate.qubits[0], gate.qubits[1]
+                )),
+                GateType::Rx(theta) => {
+                    qasm.push_str(&format!("rx({}) q[{}];\n", theta, gate.qubits[0]))
+                }
+                GateType::Ry(theta) => {
+                    qasm.push_str(&format!("ry({}) q[{}];\n", theta, gate.qubits[0]))
+                }
+                GateType::Rz(theta) => {
+                    qasm.push_str(&format!("rz({}) q[{}];\n", theta, gate.qubits[0]))
+                }
+                GateType::U1(lam) => {
+                    qasm.push_str(&format!("phaseshift({}) q[{}];\n", lam, gate.qubits[0]))
+                }
+                GateType::U2(phi, lam) => {
+                    qasm.push_str(&format!("u(pi/2,{},{}) q[{}];\n", phi, lam, gate.qubits[0]))
+                }
+                GateType::U3(th, phi, lam) => qasm.push_str(&format!(
+                    "u({},{},{}) q[{}];\n",
+                    th, phi, lam, gate.qubits[0]
+                )),
+                GateType::CP(theta) => qasm.push_str(&format!(
+                    "cphaseshift({}) q[{}], q[{}];\n",
+                    theta, gate.qubits[0], gate.qubits[1]
+                )),
+                GateType::Toffoli => qasm.push_str(&format!(
+                    "ccnot q[{}], q[{}], q[{}];\n",
+                    gate.qubits[0], gate.qubits[1], gate.qubits[2]
+                )),
+                GateType::Fredkin => qasm.push_str(&format!(
+                    "cswap q[{}], q[{}], q[{}];\n",
+                    gate.qubits[0], gate.qubits[1], gate.qubits[2]
+                )),
                 GateType::Measure => {
                     let q = gate.qubits.get(0).copied().unwrap_or(0);
                     let c = gate.classical_bits.get(0).copied().unwrap_or(q);
                     qasm.push_str(&format!("c[{}] = measure q[{}];\n", c, q));
                 }
-                GateType::Reset  => qasm.push_str(&format!("reset q[{}];\n", gate.qubits[0])),
+                GateType::Reset => qasm.push_str(&format!("reset q[{}];\n", gate.qubits[0])),
                 GateType::Barrier => {} // no-op in OpenQASM 3 for Braket
             }
         }
@@ -714,7 +847,8 @@ impl AmazonBraketBackend {
         const MAX_POLL_MS: u64 = 30_000;
 
         loop {
-            let output = self.client
+            let output = self
+                .client
                 .get_quantum_task()
                 .quantum_task_arn(task_arn)
                 .send()
@@ -733,7 +867,10 @@ impl AmazonBraketBackend {
                     );
 
                     // Download and parse the real result JSON from S3.
-                    match self.download_result_from_s3(output_s3_dir, task_arn, n_qubits, shots).await {
+                    match self
+                        .download_result_from_s3(output_s3_dir, task_arn, n_qubits, shots)
+                        .await
+                    {
                         Ok(mut result) => {
                             result.execution_time_ms = elapsed_ms;
                             result.backend_id = task_arn.to_string();
@@ -809,7 +946,8 @@ impl AmazonBraketBackend {
 
         debug!("Downloading Braket results from s3://{}/{}", bucket, key);
 
-        let resp = self.s3_client
+        let resp = self
+            .s3_client
             .get_object()
             .bucket(&bucket)
             .key(&key)
@@ -832,9 +970,10 @@ impl AmazonBraketBackend {
         // Also parse raw measurements array if present.
         if !result_json.measurements.is_empty() {
             for measurement in &result_json.measurements {
-                let bitstring: String = measurement.iter().map(|&b| {
-                    if b == 0 { '0' } else { '1' }
-                }).collect();
+                let bitstring: String = measurement
+                    .iter()
+                    .map(|&b| if b == 0 { '0' } else { '1' })
+                    .collect();
                 raw_bitstrings.push(bitstring.clone());
                 // If measurement_counts wasn't provided, build counts from raw measurements.
                 if result_json.measurement_counts.is_none() {
@@ -858,10 +997,7 @@ impl AmazonBraketBackend {
         // Final fallback — at least indicate the task completed.
         if counts.is_empty() {
             warn!("No measurement data found in S3 result for {}", task_arn);
-            counts.insert(
-                format!("{:0>width$}", 0, width = n_qubits),
-                shots,
-            );
+            counts.insert(format!("{:0>width$}", 0, width = n_qubits), shots);
         }
 
         info!(
@@ -874,7 +1010,7 @@ impl AmazonBraketBackend {
             counts,
             shots,
             raw_bitstrings,
-            execution_time_ms: 0, // filled in by caller
+            execution_time_ms: 0,      // filled in by caller
             backend_id: String::new(), // filled in by caller
         })
     }
@@ -902,7 +1038,8 @@ impl AmazonBraketBackend {
 
     /// Query the real device status from the Braket API.
     pub async fn get_device_status(&self) -> Result<(bool, String)> {
-        let output = self.client
+        let output = self
+            .client
             .get_device()
             .device_arn(&self.device_arn)
             .send()
@@ -914,28 +1051,31 @@ impl AmazonBraketBackend {
 
     /// Search recent tasks by status.
     pub async fn list_recent_tasks(&self, max_results: i32) -> Result<Vec<BraketTaskSummary>> {
-        let output = self.client
+        let output = self
+            .client
             .search_quantum_tasks()
             .filters(
                 aws_sdk_braket::types::SearchQuantumTasksFilter::builder()
                     .name("deviceArn")
                     .operator(aws_sdk_braket::types::SearchQuantumTasksFilterOperator::Equal)
                     .values(&self.device_arn)
-                    .build()?
+                    .build()?,
             )
             .max_results(max_results)
             .send()
             .await?;
 
-        let summaries = output.quantum_tasks().iter().map(|t| {
-            BraketTaskSummary {
+        let summaries = output
+            .quantum_tasks()
+            .iter()
+            .map(|t| BraketTaskSummary {
                 task_arn: t.quantum_task_arn().to_string(),
                 status: format!("{:?}", t.status()),
                 device_arn: t.device_arn().to_string(),
                 shots: t.shots(),
                 created_at: t.created_at().to_string(),
-            }
-        }).collect();
+            })
+            .collect();
 
         Ok(summaries)
     }
@@ -957,7 +1097,8 @@ impl QuantumBackend for AmazonBraketBackend {
         if circuit.qubits > self.max_qubits {
             anyhow::bail!(
                 "Circuit requires {} qubits but device supports at most {}",
-                circuit.qubits, self.max_qubits
+                circuit.qubits,
+                self.max_qubits
             );
         }
 
@@ -967,7 +1108,8 @@ impl QuantumBackend for AmazonBraketBackend {
         // Idempotency token — use a UUID so retries are safe
         let client_token = uuid::Uuid::new_v4().to_string();
 
-        let output = self.client
+        let output = self
+            .client
             .create_quantum_task()
             .client_token(&client_token)
             .device_arn(&self.device_arn)
@@ -978,18 +1120,26 @@ impl QuantumBackend for AmazonBraketBackend {
             .send()
             .await?;
 
-        self.wait_for_task(&output.quantum_task_arn, circuit.qubits).await
+        self.wait_for_task(&output.quantum_task_arn, circuit.qubits)
+            .await
     }
 
     async fn get_backend_info(&self) -> BackendInfo {
-        let (online, _status) = self.get_device_status().await.unwrap_or((false, "UNKNOWN".into()));
+        let (online, _status) = self
+            .get_device_status()
+            .await
+            .unwrap_or((false, "UNKNOWN".into()));
 
         let (gates, max_shots) = if let Some(ref cat) = self.device_catalog {
             (cat.native_gates.clone(), cat.max_shots)
         } else {
             (
-                vec!["H","X","Y","Z","CNOT","CZ","Rx","Ry","Rz","S","T","Swap"]
-                    .into_iter().map(String::from).collect(),
+                vec![
+                    "H", "X", "Y", "Z", "CNOT", "CZ", "Rx", "Ry", "Rz", "S", "T", "Swap",
+                ]
+                .into_iter()
+                .map(String::from)
+                .collect(),
                 100_000,
             )
         };
@@ -1013,10 +1163,19 @@ impl QuantumBackend for AmazonBraketBackend {
 
     fn supported_gates(&self) -> Vec<GateType> {
         vec![
-            GateType::H, GateType::X, GateType::Y, GateType::Z,
-            GateType::CNOT, GateType::CZ, GateType::Swap,
-            GateType::Rx(0.0), GateType::Ry(0.0), GateType::Rz(0.0),
-            GateType::S, GateType::T, GateType::Measure,
+            GateType::H,
+            GateType::X,
+            GateType::Y,
+            GateType::Z,
+            GateType::CNOT,
+            GateType::CZ,
+            GateType::Swap,
+            GateType::Rx(0.0),
+            GateType::Ry(0.0),
+            GateType::Rz(0.0),
+            GateType::S,
+            GateType::T,
+            GateType::Measure,
         ]
     }
 
@@ -1162,7 +1321,9 @@ mod tests {
         assert!(p000 > 0.4 && p000 < 0.6, "p000={p000}");
         assert!(p111 > 0.4 && p111 < 0.6, "p111={p111}");
         // No other bitstrings should appear in a perfect GHZ state
-        let other: f64 = result.counts.iter()
+        let other: f64 = result
+            .counts
+            .iter()
             .filter(|(k, _)| k.as_str() != "000" && k.as_str() != "111")
             .map(|(_, v)| *v as f64 / result.shots as f64)
             .sum();
@@ -1189,7 +1350,10 @@ mod tests {
             device_catalog: BraketDeviceCatalog::find_by_arn(&cfg.braket_device_arn),
         };
         let json = backend.circuit_to_action_json(&bell_circuit());
-        assert!(json.contains("braket.ir.openqasm.program"), "missing schema header");
+        assert!(
+            json.contains("braket.ir.openqasm.program"),
+            "missing schema header"
+        );
         assert!(json.contains("OPENQASM"), "missing OPENQASM source");
         assert!(json.contains("cnot"), "missing CNOT gate");
     }
@@ -1208,9 +1372,12 @@ mod tests {
             return;
         }
         let cfg = QuantumConfig::braket_default();
-        let backend = AmazonBraketBackend::from_config(&cfg).await
+        let backend = AmazonBraketBackend::from_config(&cfg)
+            .await
             .expect("failed to build Braket backend");
-        let result = backend.execute_circuit(&bell_circuit()).await
+        let result = backend
+            .execute_circuit(&bell_circuit())
+            .await
             .expect("Braket task failed");
         println!("Task ARN : {}", result.backend_id);
         println!("Shots    : {}", result.shots);
@@ -1227,9 +1394,12 @@ mod tests {
             return;
         }
         let cfg = QuantumConfig::braket_default();
-        let backend = AmazonBraketBackend::from_config(&cfg).await
+        let backend = AmazonBraketBackend::from_config(&cfg)
+            .await
             .expect("failed to build Braket backend");
-        let result = backend.execute_circuit(&ghz3_circuit()).await
+        let result = backend
+            .execute_circuit(&ghz3_circuit())
+            .await
             .expect("Braket GHZ task failed");
         println!("GHZ3 Task ARN : {}", result.backend_id);
         println!("Shots         : {}", result.shots);
@@ -1243,7 +1413,8 @@ mod tests {
             return;
         }
         let cfg = QuantumConfig::braket_default();
-        let backend = AmazonBraketBackend::from_config(&cfg).await
+        let backend = AmazonBraketBackend::from_config(&cfg)
+            .await
             .expect("failed to build backend");
         let info = backend.get_backend_info().await;
         println!("Device  : {}", info.id);

@@ -256,9 +256,7 @@ impl CMAESOptimizer {
         }
 
         // Weighted mean update
-        let weights: Vec<f64> = (0..elite.len())
-            .map(|i| 1.0 / (i as f64 + 1.0))
-            .collect();
+        let weights: Vec<f64> = (0..elite.len()).map(|i| 1.0 / (i as f64 + 1.0)).collect();
         let weight_sum: f64 = weights.iter().sum();
 
         let dim = ParameterGenome::dim();
@@ -295,8 +293,7 @@ impl CMAESOptimizer {
                 })
                 .sum::<f64>()
                 / elite.len() as f64;
-            self.covariance_diagonal[j] =
-                0.9 * self.covariance_diagonal[j] + 0.1 * var.max(1e-6);
+            self.covariance_diagonal[j] = 0.9 * self.covariance_diagonal[j] + 0.1 * var.max(1e-6);
         }
 
         let mean_fitness = elite.iter().map(|(_, f)| f).sum::<f64>() / elite.len() as f64;
@@ -383,11 +380,7 @@ impl GradientFreeLoop {
         Ok(last)
     }
 
-    fn evaluate_genome_on_tasks(
-        &self,
-        genome: &ParameterGenome,
-        tasks: &[&TaskRecord],
-    ) -> f64 {
+    fn evaluate_genome_on_tasks(&self, genome: &ParameterGenome, tasks: &[&TaskRecord]) -> f64 {
         if tasks.is_empty() {
             return 0.0;
         }
@@ -397,8 +390,7 @@ impl GradientFreeLoop {
             // Use genome parameters to weight the fitness components
             let speed_score =
                 1.0 / (1.0 + task.speed_ms as f64 / (10_000.0 * genome.attention_decay.max(0.01)));
-            let cost_score =
-                1.0 / (1.0 + task.cost_tokens as f64 * genome.learning_rate);
+            let cost_score = 1.0 / (1.0 + task.cost_tokens as f64 * genome.learning_rate);
             let fitness = self.fitness_fn.evaluate(
                 task.completion_score,
                 speed_score,

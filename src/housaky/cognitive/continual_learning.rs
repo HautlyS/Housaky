@@ -115,7 +115,7 @@ impl ContinualLearner {
             curriculum: Arc::new(RwLock::new(LearningCurriculum::default())),
             protection_registry: Arc::new(RwLock::new(HashMap::new())),
             usage_tracker: Arc::new(RwLock::new(HashMap::new())),
-            replay_interval_secs: 3600,    // 1 hour
+            replay_interval_secs: 3600, // 1 hour
             max_replay_buffer_size: 10_000,
             protection_threshold: 0.7,
         }
@@ -128,15 +128,18 @@ impl ContinualLearner {
 
         let importance = weights.get(memory_id).copied().unwrap_or(0.0);
 
-        let usage_score = usage.get(memory_id).map(|u| {
-            let total = u.access_count.max(1) as f64;
-            let success_rate = u.success_count as f64 / total;
-            let recency = {
-                let age = (Utc::now() - u.last_accessed).num_hours() as f64;
-                1.0 / (1.0 + age / 24.0) // decay over days
-            };
-            success_rate * 0.6 + recency * 0.4
-        }).unwrap_or(0.0);
+        let usage_score = usage
+            .get(memory_id)
+            .map(|u| {
+                let total = u.access_count.max(1) as f64;
+                let success_rate = u.success_count as f64 / total;
+                let recency = {
+                    let age = (Utc::now() - u.last_accessed).num_hours() as f64;
+                    1.0 / (1.0 + age / 24.0) // decay over days
+                };
+                success_rate * 0.6 + recency * 0.4
+            })
+            .unwrap_or(0.0);
 
         let combined_score = importance * 0.5 + usage_score * 0.5;
         combined_score > self.protection_threshold
@@ -175,13 +178,15 @@ impl ContinualLearner {
     /// Record usage of a memory/skill.
     pub async fn record_usage(&self, memory_id: &str, success: bool) {
         let mut tracker = self.usage_tracker.write().await;
-        let record = tracker.entry(memory_id.to_string()).or_insert_with(|| UsageRecord {
-            access_count: 0,
-            last_accessed: Utc::now(),
-            first_accessed: Utc::now(),
-            success_count: 0,
-            failure_count: 0,
-        });
+        let record = tracker
+            .entry(memory_id.to_string())
+            .or_insert_with(|| UsageRecord {
+                access_count: 0,
+                last_accessed: Utc::now(),
+                first_accessed: Utc::now(),
+                success_count: 0,
+                failure_count: 0,
+            });
 
         record.access_count += 1;
         record.last_accessed = Utc::now();
@@ -195,10 +200,13 @@ impl ContinualLearner {
     /// Get usage frequency for a memory item.
     async fn get_usage_frequency(&self, memory_id: &str) -> f64 {
         let tracker = self.usage_tracker.read().await;
-        tracker.get(memory_id).map(|u| {
-            let age_hours = (Utc::now() - u.first_accessed).num_hours().max(1) as f64;
-            u.access_count as f64 / age_hours
-        }).unwrap_or(0.0)
+        tracker
+            .get(memory_id)
+            .map(|u| {
+                let age_hours = (Utc::now() - u.first_accessed).num_hours().max(1) as f64;
+                u.access_count as f64 / age_hours
+            })
+            .unwrap_or(0.0)
     }
 
     /// Add an episode to the replay buffer.
@@ -252,8 +260,8 @@ impl ContinualLearner {
                     })
                     .unwrap_or(0.0);
 
-                let priority = ep.importance * (1.0 - recency_penalty)
-                    / (1.0 + ep.replay_count as f64 * 0.1);
+                let priority =
+                    ep.importance * (1.0 - recency_penalty) / (1.0 + ep.replay_count as f64 * 0.1);
                 (i, priority)
             })
             .collect();
@@ -292,8 +300,8 @@ impl ContinualLearner {
         let consolidation_score = if buffer.is_empty() {
             0.0
         } else {
-            let avg_importance = buffer.iter().map(|e| e.importance).sum::<f64>()
-                / buffer.len() as f64;
+            let avg_importance =
+                buffer.iter().map(|e| e.importance).sum::<f64>() / buffer.len() as f64;
             let replay_coverage = replays_to_do as f64 / buffer.len() as f64;
             avg_importance * 0.5 + replay_coverage * 0.5
         };
@@ -315,10 +323,7 @@ impl ContinualLearner {
     }
 
     /// Order learning items from simple to complex (curriculum learning).
-    pub async fn order_curriculum(
-        &self,
-        new_items: Vec<LearningItem>,
-    ) -> Vec<LearningItem> {
+    pub async fn order_curriculum(&self, new_items: Vec<LearningItem>) -> Vec<LearningItem> {
         let items = new_items;
 
         // Topological sort based on prerequisites, then by complexity
@@ -331,10 +336,7 @@ impl ContinualLearner {
             let mut added_any = false;
 
             remaining.retain(|item| {
-                let prereqs_met = item
-                    .prerequisites
-                    .iter()
-                    .all(|p| satisfied.contains(p));
+                let prereqs_met = item.prerequisites.iter().all(|p| satisfied.contains(p));
 
                 if prereqs_met {
                     satisfied.insert(item.id.clone());
@@ -396,11 +398,7 @@ impl ContinualLearner {
     }
 
     /// Mark a learning item as practiced/mastered.
-    pub async fn mark_practiced(
-        &self,
-        item_id: &str,
-        mastery_gained: f64,
-    ) {
+    pub async fn mark_practiced(&self, item_id: &str, mastery_gained: f64) {
         let mut curriculum = self.curriculum.write().await;
 
         if let Some(item) = curriculum.items.iter_mut().find(|i| i.id == item_id) {

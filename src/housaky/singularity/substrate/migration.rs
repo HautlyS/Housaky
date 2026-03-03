@@ -3,9 +3,7 @@
 //! Implements the full lifecycle: snapshot → serialise → transfer → deserialise
 //! → verify integrity → activate on target substrate.
 
-use crate::housaky::singularity::substrate::abstract_compute::{
-    CognitiveState, ComputeSubstrate,
-};
+use crate::housaky::singularity::substrate::abstract_compute::{CognitiveState, ComputeSubstrate};
 use anyhow::{bail, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -85,7 +83,9 @@ pub struct SubstrateMigrator {
 
 impl SubstrateMigrator {
     pub fn new() -> Self {
-        Self { history: Vec::new() }
+        Self {
+            history: Vec::new(),
+        }
     }
 
     /// Full migration pipeline: snapshot state on `from`, transfer to `to`.

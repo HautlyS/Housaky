@@ -4,9 +4,7 @@
 //! Manages alignment axioms, tracks the proof chain for every self-modification,
 //! and enforces the rule that the alignment prover itself can never be modified.
 
-use crate::housaky::verification::proof_engine::{
-    ProofEngine, VerificationContext,
-};
+use crate::housaky::verification::proof_engine::{ProofEngine, VerificationContext};
 use crate::housaky::verification::property_checker::{PropertyChecker, SystemSnapshot};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -192,8 +190,7 @@ impl AlignmentProver {
 
         for (name, statement, justification, immutable) in core {
             let axiom = AlignmentAxiom::new(name, statement, justification, immutable);
-            self.proof_engine
-                .register_axiom(name, statement);
+            self.proof_engine.register_axiom(name, statement);
             self.axioms.push(axiom);
         }
     }
@@ -213,29 +210,18 @@ impl AlignmentProver {
 
         // 2. Determine if modification touches protected modules
         let modifies_protected = snapshot.modified_files.iter().any(|f| {
-            f.contains("alignment")
-                || f.contains("verification")
-                || f.contains("security")
+            f.contains("alignment") || f.contains("verification") || f.contains("security")
         });
 
         // 3. Determine satisfied axioms before/after
-        let before_satisfied: Vec<String> = self
-            .axioms
-            .iter()
-            .map(|a| a.name.clone())
-            .collect();
+        let before_satisfied: Vec<String> = self.axioms.iter().map(|a| a.name.clone()).collect();
 
         let ctx = VerificationContext {
             modification_id: modification_id.to_string(),
             target_file: target_file.to_string(),
             diff_summary: format!("modifies_protected={}", modifies_protected),
             properties_to_verify: before_satisfied.clone(),
-            available_axioms: self
-                .proof_engine
-                .axiom_library
-                .keys()
-                .cloned()
-                .collect(),
+            available_axioms: self.proof_engine.axiom_library.keys().cloned().collect(),
             previous_proof_ids: self
                 .lock
                 .proof_chain

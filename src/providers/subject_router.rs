@@ -175,7 +175,10 @@ impl Provider for SubjectRouterProvider {
                 "provider_delegate_attempt"
             );
 
-            match provider.chat_with_history(messages, &route.model, temp).await {
+            match provider
+                .chat_with_history(messages, &route.model, temp)
+                .await
+            {
                 Ok(resp) => {
                     tracing::info!(
                         route = model,

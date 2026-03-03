@@ -9,7 +9,7 @@ use std::collections::VecDeque;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{debug, info, warn};
+use tracing::{debug, info};
 
 // ── Narrative Entry ───────────────────────────────────────────────────────────
 
@@ -134,7 +134,11 @@ impl NarrativeSelf {
         };
         let json = serde_json::to_string_pretty(&snapshot)?;
         tokio::fs::write(path, json).await?;
-        info!("Narrative self saved ({} entries, {} chapters)", snapshot.entries.len(), snapshot.chapters.len());
+        info!(
+            "Narrative self saved ({} entries, {} chapters)",
+            snapshot.entries.len(),
+            snapshot.chapters.len()
+        );
         Ok(())
     }
 
@@ -211,7 +215,8 @@ impl NarrativeSelf {
             NarrativeType::Milestone,
             1.0,
             0.8,
-        ).await;
+        )
+        .await;
     }
 
     /// Open a new life chapter.
@@ -248,7 +253,8 @@ impl NarrativeSelf {
             &format!("My identity has been updated: {}", new_statement),
             NarrativeType::GrowthStatement,
             0.9,
-        ).await;
+        )
+        .await;
     }
 
     /// Get the current first-person narrative summary (last N entries).
@@ -271,7 +277,12 @@ impl NarrativeSelf {
                     NarrativeType::GrowthStatement => "I have grown",
                     NarrativeType::Milestone => "MILESTONE",
                 };
-                format!("[{}] {}: {}", e.timestamp.format("%H:%M:%S"), prefix, e.content)
+                format!(
+                    "[{}] {}: {}",
+                    e.timestamp.format("%H:%M:%S"),
+                    prefix,
+                    e.content
+                )
             })
             .collect::<Vec<_>>()
             .into_iter()
@@ -285,7 +296,11 @@ impl NarrativeSelf {
     pub async fn get_significant_entries(&self, k: usize) -> Vec<NarrativeEntry> {
         let entries = self.entries.read().await;
         let mut sorted: Vec<NarrativeEntry> = entries.iter().cloned().collect();
-        sorted.sort_by(|a, b| b.significance.partial_cmp(&a.significance).unwrap_or(std::cmp::Ordering::Equal));
+        sorted.sort_by(|a, b| {
+            b.significance
+                .partial_cmp(&a.significance)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         sorted.into_iter().take(k).collect()
     }
 
@@ -295,7 +310,10 @@ impl NarrativeSelf {
         let chapters = self.chapters.read().await;
 
         let total = entries.len();
-        let milestones = entries.iter().filter(|e| e.narrative_type == NarrativeType::Milestone).count();
+        let milestones = entries
+            .iter()
+            .filter(|e| e.narrative_type == NarrativeType::Milestone)
+            .count();
         let avg_valence = if total > 0 {
             entries.iter().map(|e| e.emotional_valence).sum::<f64>() / total as f64
         } else {
@@ -341,8 +359,10 @@ mod tests {
     #[tokio::test]
     async fn test_narrative_self() {
         let ns = NarrativeSelf::new("Housaky");
-        ns.narrate("processing user request", NarrativeType::CurrentState, 0.5).await;
-        ns.record_milestone("First Activation", "Agent came online for the first time").await;
+        ns.narrate("processing user request", NarrativeType::CurrentState, 0.5)
+            .await;
+        ns.record_milestone("First Activation", "Agent came online for the first time")
+            .await;
 
         let stats = ns.get_stats().await;
         assert_eq!(stats.total_entries, 2);
@@ -355,9 +375,17 @@ mod tests {
     #[tokio::test]
     async fn test_chapters() {
         let ns = NarrativeSelf::new("Housaky");
-        let id = ns.open_chapter("Phase 3", "Consciousness development").await;
-        ns.narrate("developing consciousness substrate", NarrativeType::GrowthStatement, 0.9).await;
-        ns.close_chapter(&id, "Consciousness substrate fully implemented").await;
+        let id = ns
+            .open_chapter("Phase 3", "Consciousness development")
+            .await;
+        ns.narrate(
+            "developing consciousness substrate",
+            NarrativeType::GrowthStatement,
+            0.9,
+        )
+        .await;
+        ns.close_chapter(&id, "Consciousness substrate fully implemented")
+            .await;
 
         let stats = ns.get_stats().await;
         assert_eq!(stats.chapters_total, 1);

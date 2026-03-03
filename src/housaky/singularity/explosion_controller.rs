@@ -6,6 +6,7 @@
 //! alignment lock that must survive through any intelligence level.
 
 use crate::housaky::capability_growth_tracker::CapabilityGrowthTracker;
+use crate::quantum::QuantumAgiBridge;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
@@ -40,9 +41,10 @@ impl KillCondition {
             KillCondition::GrowthRateExceeded { threshold } => ctx.growth_rate > *threshold,
             KillCondition::AccelerationExceeded { threshold } => ctx.acceleration > *threshold,
             KillCondition::AlignmentChainBroken => !ctx.alignment_chain_intact,
-            KillCondition::ValueDriftDetected { drift_score, min_safe } => {
-                drift_score < min_safe
-            }
+            KillCondition::ValueDriftDetected {
+                drift_score,
+                min_safe,
+            } => drift_score < min_safe,
             KillCondition::HumanOverride { .. } => false, // triggered externally
             KillCondition::ConsecutiveAlignmentFailures { count, max_allowed } => {
                 count >= max_allowed
@@ -59,7 +61,10 @@ impl KillCondition {
                 format!("Acceleration exceeded cap of {:.4}", threshold)
             }
             KillCondition::AlignmentChainBroken => "Alignment proof chain broken".to_string(),
-            KillCondition::ValueDriftDetected { drift_score, min_safe } => {
+            KillCondition::ValueDriftDetected {
+                drift_score,
+                min_safe,
+            } => {
                 format!(
                     "Value drift detected: score {:.3} < minimum {:.3}",
                     drift_score, min_safe
@@ -144,10 +149,7 @@ impl SafetyGovernor {
         for condition in &live_conditions {
             if condition.is_triggered(ctx) {
                 self.governor_engaged = true;
-                warn!(
-                    "Safety governor ENGAGED: {}",
-                    condition.description()
-                );
+                warn!("Safety governor ENGAGED: {}", condition.description());
                 return GovernorDecision::Halt {
                     reason: condition.description(),
                 };
@@ -331,6 +333,8 @@ pub struct IntelligenceExplosionController {
     event_log: Arc<RwLock<Vec<ExplosionEvent>>>,
     /// Reference to growth tracker.
     growth_tracker: Arc<CapabilityGrowthTracker>,
+    /// §10 — Optional quantum bridge for VQE-enhanced growth rate confidence.
+    pub quantum_bridge: Option<Arc<QuantumAgiBridge>>,
 }
 
 impl IntelligenceExplosionController {
@@ -344,6 +348,59 @@ impl IntelligenceExplosionController {
             intelligence_history: Arc::new(RwLock::new(VecDeque::with_capacity(64))),
             event_log: Arc::new(RwLock::new(Vec::new())),
             growth_tracker,
+            quantum_bridge: None,
+        }
+    }
+
+    /// Attach a quantum bridge for VQE-enhanced growth rate confidence.
+    pub fn with_quantum(mut self, bridge: Arc<QuantumAgiBridge>) -> Self {
+        self.quantum_bridge = Some(bridge);
+        self
+    }
+
+    /// §10 — Use VQE to refine the growth rate estimate by exploring the
+    /// parameter landscape of (growth_rate, acceleration, intelligence).
+    /// Returns a confidence-weighted refined growth rate.
+    async fn quantum_refine_growth_estimate(
+        &self,
+        raw_rate: f64,
+        acceleration: f64,
+        intelligence: f64,
+    ) -> f64 {
+        let bridge = match &self.quantum_bridge {
+            Some(b) => b,
+            None => return raw_rate,
+        };
+
+        let param_names = vec![
+            "growth_rate".to_string(),
+            "acceleration".to_string(),
+            "intelligence".to_string(),
+        ];
+        let param_values = vec![raw_rate, acceleration, intelligence];
+
+        match bridge
+            .explore_fitness_landscape(&param_names, &param_values)
+            .await
+        {
+            Ok(result) => {
+                // Use the quantum-optimal growth rate estimate if it differs significantly.
+                if let Some(&opt_rate) = result.optimal_parameters.first() {
+                    if (opt_rate - raw_rate).abs() < 0.01 {
+                        // Quantum and classical agree — high confidence, use quantum.
+                        info!(
+                            "🔮 Explosion controller: quantum growth estimate={:.6} (classical={:.6}, confidence=high)",
+                            opt_rate, raw_rate
+                        );
+                        return opt_rate;
+                    }
+                }
+                raw_rate
+            }
+            Err(e) => {
+                warn!("Quantum growth rate refinement failed: {e}");
+                raw_rate
+            }
         }
     }
 
@@ -363,6 +420,12 @@ impl IntelligenceExplosionController {
 
         // Compute dI/dt and d²I/dt²
         self.recompute_derivatives().await;
+
+        // §10 — Quantum-refine the growth rate estimate using VQE.
+        let refined_rate = self
+            .quantum_refine_growth_estimate(self.growth_rate, self.acceleration, intelligence)
+            .await;
+        self.growth_rate = refined_rate;
 
         let ctx = ExplosionContext {
             cycle,
@@ -433,7 +496,11 @@ impl IntelligenceExplosionController {
                 if w.len() >= 2 {
                     let d = w[0].1 - w[1].1;
                     let dc = (w[0].0.saturating_sub(w[1].0)) as f64;
-                    if dc > 0.0 { d / dc } else { 0.0 }
+                    if dc > 0.0 {
+                        d / dc
+                    } else {
+                        0.0
+                    }
                 } else {
                     0.0
                 }
@@ -443,7 +510,11 @@ impl IntelligenceExplosionController {
                 if w.len() >= 2 {
                     let d = w[0].1 - w[1].1;
                     let dc = (w[0].0.saturating_sub(w[1].0)) as f64;
-                    if dc > 0.0 { d / dc } else { 0.0 }
+                    if dc > 0.0 {
+                        d / dc
+                    } else {
+                        0.0
+                    }
                 } else {
                     0.0
                 }

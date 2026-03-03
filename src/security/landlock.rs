@@ -4,7 +4,9 @@
 //! This module uses the pure-Rust `landlock` crate for filesystem access control.
 
 #[cfg(all(feature = "sandbox-landlock", target_os = "linux"))]
-use landlock::{path_beneath_rules, Access, AccessFs, Ruleset, RulesetAttr, RulesetCreatedAttr, ABI};
+use landlock::{
+    path_beneath_rules, Access, AccessFs, Ruleset, RulesetAttr, RulesetCreatedAttr, ABI,
+};
 
 use crate::security::traits::Sandbox;
 use std::path::Path;
@@ -69,7 +71,10 @@ impl LandlockSandbox {
 
         // Allow /tmp for general operations
         created = created
-            .add_rules(path_beneath_rules([Path::new("/tmp")], AccessFs::from_all(abi)))
+            .add_rules(path_beneath_rules(
+                [Path::new("/tmp")],
+                AccessFs::from_all(abi),
+            ))
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
 
         // Allow /usr and /bin for executing commands (read only)

@@ -670,13 +670,16 @@ pub(crate) async fn run_tool_call_loop_with_agi(
     agi_context: &AGIContext,
 ) -> Result<String> {
     let turn_number = agi_context.increment_turn().await;
-    
+
     if agi_context.should_reflect().await {
-        if let Some(summary) = agi_context.run_reflection(&format!("Periodic reflection at turn {}", turn_number)).await {
+        if let Some(summary) = agi_context
+            .run_reflection(&format!("Periodic reflection at turn {}", turn_number))
+            .await
+        {
             tracing::info!("AGI Reflection: {}", summary);
         }
     }
-    
+
     if agi_context.should_check_drift().await {
         let warnings = agi_context.check_value_alignment().await;
         for warning in &warnings {
@@ -741,16 +744,18 @@ pub(crate) async fn run_tool_call_loop_with_agi(
             observer.record_event(&ObserverEvent::ToolCallStart {
                 tool: call.name.clone(),
             });
-            
-            let decision_id = agi_context.record_decision(
-                &format!("Tool execution: {}", call.name),
-                &call.name,
-                &format!("Arguments: {:?}", call.arguments),
-                0.8,
-                None,
-                Some(&call.name),
-            ).await;
-            
+
+            let decision_id = agi_context
+                .record_decision(
+                    &format!("Tool execution: {}", call.name),
+                    &call.name,
+                    &format!("Arguments: {:?}", call.arguments),
+                    0.8,
+                    None,
+                    Some(&call.name),
+                )
+                .await;
+
             let start = Instant::now();
             let result = if let Some(tool) = find_tool(tools_registry, &call.name) {
                 match tool.execute(call.arguments.clone()).await {
@@ -760,26 +765,26 @@ pub(crate) async fn run_tool_call_loop_with_agi(
                             duration: start.elapsed(),
                             success: r.success,
                         });
-                        
-                        agi_context.record_tool_feedback(
-                            &call.name,
-                            r.success,
-                            {
+
+                        agi_context
+                            .record_tool_feedback(&call.name, r.success, {
                                 let mut ctx = HashMap::new();
                                 ctx.insert("iteration".to_string(), iteration.to_string());
                                 ctx.insert("turn".to_string(), turn_number.to_string());
                                 ctx
-                            },
-                        ).await;
-                        
+                            })
+                            .await;
+
                         if let Some(ref id) = decision_id {
-                            agi_context.record_decision_outcome(
-                                id,
-                                r.success,
-                                &r.output.chars().take(200).collect::<String>(),
-                            ).await;
+                            agi_context
+                                .record_decision_outcome(
+                                    id,
+                                    r.success,
+                                    &r.output.chars().take(200).collect::<String>(),
+                                )
+                                .await;
                         }
-                        
+
                         if r.success {
                             r.output
                         } else {
@@ -792,21 +797,21 @@ pub(crate) async fn run_tool_call_loop_with_agi(
                             duration: start.elapsed(),
                             success: false,
                         });
-                        
-                        agi_context.record_tool_feedback(
-                            &call.name,
-                            false,
-                            {
+
+                        agi_context
+                            .record_tool_feedback(&call.name, false, {
                                 let mut ctx = HashMap::new();
                                 ctx.insert("error".to_string(), e.to_string());
                                 ctx
-                            },
-                        ).await;
-                        
+                            })
+                            .await;
+
                         if let Some(ref id) = decision_id {
-                            agi_context.record_decision_outcome(id, false, &e.to_string()).await;
+                            agi_context
+                                .record_decision_outcome(id, false, &e.to_string())
+                                .await;
                         }
-                        
+
                         format!("Error executing {}: {e}", call.name)
                     }
                 }
@@ -1445,7 +1450,10 @@ pub async fn process_message(config: Config, message: &str) -> Result<String> {
         &mut history,
         &tools_registry,
         observer.as_ref(),
-        Some(Arc::new(FlightJournal::new(&config.workspace_dir, "agent/process_message"))),
+        Some(Arc::new(FlightJournal::new(
+            &config.workspace_dir,
+            "agent/process_message",
+        ))),
         provider_name,
         &model_name,
         config.default_temperature,

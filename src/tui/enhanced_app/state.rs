@@ -43,6 +43,7 @@ pub enum MainTab {
     Metrics = 4,
     Logs = 5,
     Config = 6,
+    Doctor = 7,
 }
 
 impl MainTab {
@@ -54,6 +55,7 @@ impl MainTab {
         MainTab::Metrics,
         MainTab::Logs,
         MainTab::Config,
+        MainTab::Doctor,
     ];
 
     pub fn label(&self) -> &'static str {
@@ -65,6 +67,7 @@ impl MainTab {
             MainTab::Metrics => " Metrics ",
             MainTab::Logs => " Logs ",
             MainTab::Config => " Config ",
+            MainTab::Doctor => " Doctor ",
         }
     }
 
@@ -81,6 +84,7 @@ impl MainTab {
             4 => MainTab::Metrics,
             5 => MainTab::Logs,
             6 => MainTab::Config,
+            7 => MainTab::Doctor,
             _ => MainTab::Chat,
         }
     }
@@ -244,6 +248,7 @@ pub struct AppState {
     pub show_command_palette: bool,
     pub show_search: bool,
     pub sidebar_visible: bool,
+    pub nav_history: Vec<MainTab>,
 }
 
 impl AppState {
@@ -265,6 +270,7 @@ impl AppState {
             show_command_palette: false,
             show_search: false,
             sidebar_visible: true,
+            nav_history: Vec::new(),
         }
     }
 
@@ -292,6 +298,21 @@ impl AppState {
             timestamp: Local::now().format("%H:%M:%S").to_string(),
         });
         id
+    }
+
+    pub fn push_nav(&mut self, tab: MainTab) {
+        if self.nav_history.len() >= 20 {
+            self.nav_history.remove(0);
+        }
+        self.nav_history.push(tab);
+    }
+
+    pub fn pop_nav(&mut self) -> Option<MainTab> {
+        self.nav_history.pop()
+    }
+
+    pub fn clear_nav(&mut self) {
+        self.nav_history.clear();
     }
 
     pub fn finish_tool(

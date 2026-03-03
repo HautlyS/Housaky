@@ -275,10 +275,8 @@ impl Curriculum {
             // Sync objectives
             for obj in &mut self.learning_objectives {
                 if obj.topic == session.topic {
-                    obj.current_mastery = *self
-                        .knowledge_frontier
-                        .get(&session.topic)
-                        .unwrap_or(&0.0);
+                    obj.current_mastery =
+                        *self.knowledge_frontier.get(&session.topic).unwrap_or(&0.0);
                     if obj.current_mastery >= obj.target_mastery {
                         obj.completed = true;
                     }
@@ -302,7 +300,11 @@ impl Curriculum {
         if total == 0 {
             return 1.0;
         }
-        let completed = self.learning_objectives.iter().filter(|o| o.completed).count();
+        let completed = self
+            .learning_objectives
+            .iter()
+            .filter(|o| o.completed)
+            .count();
         completed as f64 / total as f64
     }
 }

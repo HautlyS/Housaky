@@ -116,13 +116,7 @@ impl TelegramChannel {
             "https://api.telegram.org/file/bot{}/{}",
             self.bot_token, file_path
         );
-        let bytes = self
-            .client
-            .get(&download_url)
-            .send()
-            .await?
-            .bytes()
-            .await?;
+        let bytes = self.client.get(&download_url).send().await?.bytes().await?;
 
         Ok(bytes.to_vec())
     }
@@ -141,9 +135,7 @@ impl TelegramChannel {
             .file_name("voice.ogg")
             .mime_str("audio/ogg")?;
 
-        let form = Form::new()
-            .text("model_id", "scribe_v1")
-            .part("file", part);
+        let form = Form::new().text("model_id", "scribe_v1").part("file", part);
 
         let resp: serde_json::Value = self
             .client
@@ -789,7 +781,9 @@ impl Channel for TelegramChannel {
                                         Some(transcript)
                                     }
                                     Ok(_) => {
-                                        tracing::warn!("Telegram voice transcription returned empty text");
+                                        tracing::warn!(
+                                            "Telegram voice transcription returned empty text"
+                                        );
                                         None
                                     }
                                     Err(e) => {

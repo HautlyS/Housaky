@@ -8,7 +8,6 @@ use super::backend::{BraketConnectivity, BraketDeviceCatalog};
 use super::circuit::{Gate, GateType, QuantumCircuit};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use tracing::{debug, info};
 
 // ── Transpiler Config ────────────────────────────────────────────────────────
@@ -96,19 +95,38 @@ impl NativeGateSet {
             Self::BraketSimulator => true, // simulators accept everything
             Self::IonQNative => matches!(
                 gate,
-                GateType::Rx(_) | GateType::Ry(_) | GateType::Rz(_) | GateType::Measure | GateType::Barrier
+                GateType::Rx(_)
+                    | GateType::Ry(_)
+                    | GateType::Rz(_)
+                    | GateType::Measure
+                    | GateType::Barrier
             ),
             Self::IqmNative => matches!(
                 gate,
-                GateType::Rx(_) | GateType::Ry(_) | GateType::CZ | GateType::Measure | GateType::Barrier
+                GateType::Rx(_)
+                    | GateType::Ry(_)
+                    | GateType::CZ
+                    | GateType::Measure
+                    | GateType::Barrier
             ),
             Self::RigettiNative => matches!(
                 gate,
-                GateType::Rx(_) | GateType::Rz(_) | GateType::CZ | GateType::Swap | GateType::Measure | GateType::Barrier
+                GateType::Rx(_)
+                    | GateType::Rz(_)
+                    | GateType::CZ
+                    | GateType::Swap
+                    | GateType::Measure
+                    | GateType::Barrier
             ),
             Self::Universal => matches!(
                 gate,
-                GateType::H | GateType::CNOT | GateType::Rx(_) | GateType::Ry(_) | GateType::Rz(_) | GateType::Measure | GateType::Barrier
+                GateType::H
+                    | GateType::CNOT
+                    | GateType::Rx(_)
+                    | GateType::Ry(_)
+                    | GateType::Rz(_)
+                    | GateType::Measure
+                    | GateType::Barrier
             ),
         }
     }
@@ -124,12 +142,20 @@ pub struct CircuitTranspiler {
 
 impl CircuitTranspiler {
     pub fn new(config: TranspilerConfig) -> Self {
-        let native_gate_set = config.target_device.as_deref()
+        let native_gate_set = config
+            .target_device
+            .as_deref()
             .map(NativeGateSet::from_device_arn)
             .unwrap_or(NativeGateSet::Universal);
-        let device_catalog = config.target_device.as_deref()
+        let device_catalog = config
+            .target_device
+            .as_deref()
             .and_then(BraketDeviceCatalog::find_by_arn);
-        Self { config, native_gate_set, device_catalog }
+        Self {
+            config,
+            native_gate_set,
+            device_catalog,
+        }
     }
 
     /// Create a transpiler targeting a specific Braket device.
@@ -141,7 +167,10 @@ impl CircuitTranspiler {
     }
 
     /// Transpile a circuit: decompose non-native gates + optimize.
-    pub fn transpile(&self, circuit: &QuantumCircuit) -> Result<(QuantumCircuit, TranspilationReport)> {
+    pub fn transpile(
+        &self,
+        circuit: &QuantumCircuit,
+    ) -> Result<(QuantumCircuit, TranspilationReport)> {
         let original_gates = circuit.gate_count();
         let original_depth = circuit.depth();
 
@@ -192,16 +221,32 @@ impl CircuitTranspiler {
         let transpiled_depth = working.depth();
         let gates_removed = original_gates.saturating_sub(transpiled_gates);
 
-        let target_name = self.device_catalog.as_ref()
+        let target_name = self
+            .device_catalog
+            .as_ref()
             .map(|c| c.name.clone())
             .unwrap_or_else(|| "universal".to_string());
-        let native_gates = self.device_catalog.as_ref()
+        let native_gates = self
+            .device_catalog
+            .as_ref()
             .map(|c| c.native_gates.clone())
-            .unwrap_or_else(|| vec!["H".into(), "CNOT".into(), "Rx".into(), "Ry".into(), "Rz".into()]);
+            .unwrap_or_else(|| {
+                vec![
+                    "H".into(),
+                    "CNOT".into(),
+                    "Rx".into(),
+                    "Ry".into(),
+                    "Rz".into(),
+                ]
+            });
 
         info!(
             "Transpiled: {} → {} gates, depth {} → {}, {} passes",
-            original_gates, transpiled_gates, original_depth, transpiled_depth, passes_applied.len()
+            original_gates,
+            transpiled_gates,
+            original_depth,
+            transpiled_depth,
+            passes_applied.len()
         );
 
         let report = TranspilationReport {
@@ -228,7 +273,9 @@ impl CircuitTranspiler {
             if circuit.qubits > cat.max_qubits {
                 anyhow::bail!(
                     "Circuit requires {} qubits but {} supports at most {}",
-                    circuit.qubits, cat.name, cat.max_qubits
+                    circuit.qubits,
+                    cat.name,
+                    cat.max_qubits
                 );
             }
         }
@@ -284,7 +331,9 @@ impl CircuitTranspiler {
                 GateType::H => {
                     let q = gate.qubits[0];
                     match self.native_gate_set {
-                        NativeGateSet::IonQNative | NativeGateSet::IqmNative | NativeGateSet::RigettiNative => {
+                        NativeGateSet::IonQNative
+                        | NativeGateSet::IqmNative
+                        | NativeGateSet::RigettiNative => {
                             result.add_gate(Gate::rz(q, std::f64::consts::PI));
                             result.add_gate(Gate::ry(q, std::f64::consts::FRAC_PI_2));
                         }
@@ -452,7 +501,9 @@ impl CircuitTranspiler {
         let mut skip = vec![false; gates.len()];
 
         for i in 0..gates.len().saturating_sub(1) {
-            if skip[i] { continue; }
+            if skip[i] {
+                continue;
+            }
 
             let g1 = &gates[i];
             let g2 = &gates[i + 1];
@@ -461,7 +512,12 @@ impl CircuitTranspiler {
                 skip[i] = true;
                 skip[i + 1] = true;
                 cancelled += 2;
-                debug!("Cancelled inverse pair: {:?} at positions {},{}", g1.gate_type, i, i + 1);
+                debug!(
+                    "Cancelled inverse pair: {:?} at positions {},{}",
+                    g1.gate_type,
+                    i,
+                    i + 1
+                );
             }
         }
 
@@ -508,7 +564,9 @@ impl CircuitTranspiler {
         let mut skip = vec![false; gates.len()];
 
         for i in 0..gates.len().saturating_sub(1) {
-            if skip[i] { continue; }
+            if skip[i] {
+                continue;
+            }
 
             let g1 = &gates[i];
             let g2 = &gates[i + 1];
@@ -575,7 +633,8 @@ impl CircuitTranspiler {
             let is_identity = match &gate.gate_type {
                 GateType::Rx(a) | GateType::Ry(a) | GateType::Rz(a) => {
                     let normalized = a.rem_euclid(2.0 * std::f64::consts::PI);
-                    normalized.abs() < 1e-10 || (normalized - 2.0 * std::f64::consts::PI).abs() < 1e-10
+                    normalized.abs() < 1e-10
+                        || (normalized - 2.0 * std::f64::consts::PI).abs() < 1e-10
                 }
                 GateType::U1(a) => a.abs() < 1e-10,
                 _ => false,
@@ -614,7 +673,10 @@ mod tests {
 
         let (result, report) = transpiler.transpile(&c).unwrap();
         assert!(result.gate_count() < c.gate_count(), "HH should cancel");
-        assert!(report.passes_applied.iter().any(|p| p.contains("cancellation")));
+        assert!(report
+            .passes_applied
+            .iter()
+            .any(|p| p.contains("cancellation")));
     }
 
     #[test]
@@ -628,7 +690,11 @@ mod tests {
         let (result, report) = transpiler.transpile(&c).unwrap();
         assert!(report.rotations_merged > 0);
         // Should have merged into a single Rz(0.8).
-        let rz_gates: Vec<_> = result.gates.iter().filter(|g| matches!(g.gate_type, GateType::Rz(_))).collect();
+        let rz_gates: Vec<_> = result
+            .gates
+            .iter()
+            .filter(|g| matches!(g.gate_type, GateType::Rz(_)))
+            .collect();
         assert_eq!(rz_gates.len(), 1, "two Rz should merge into one");
     }
 
@@ -641,12 +707,16 @@ mod tests {
         c.measure_all();
 
         let (result, _report) = transpiler.transpile(&c).unwrap();
-        assert!(!result.gates.iter().any(|g| matches!(g.gate_type, GateType::Rz(a) if a.abs() < 1e-10)));
+        assert!(!result
+            .gates
+            .iter()
+            .any(|g| matches!(g.gate_type, GateType::Rz(a) if a.abs() < 1e-10)));
     }
 
     #[test]
     fn test_toffoli_decomposition() {
-        let transpiler = CircuitTranspiler::for_device("arn:aws:braket:eu-north-1::device/qpu/iqm/Garnet");
+        let transpiler =
+            CircuitTranspiler::for_device("arn:aws:braket:eu-north-1::device/qpu/iqm/Garnet");
         let mut c = QuantumCircuit::new(3);
         c.add_gate(Gate::toffoli(0, 1, 2));
         c.measure_all();
@@ -654,12 +724,16 @@ mod tests {
         let (result, report) = transpiler.transpile(&c).unwrap();
         assert!(report.gates_decomposed > 0);
         // No Toffoli gates should remain.
-        assert!(!result.gates.iter().any(|g| matches!(g.gate_type, GateType::Toffoli)));
+        assert!(!result
+            .gates
+            .iter()
+            .any(|g| matches!(g.gate_type, GateType::Toffoli)));
     }
 
     #[test]
     fn test_cnot_to_cz_decomposition() {
-        let transpiler = CircuitTranspiler::for_device("arn:aws:braket:eu-north-1::device/qpu/iqm/Garnet");
+        let transpiler =
+            CircuitTranspiler::for_device("arn:aws:braket:eu-north-1::device/qpu/iqm/Garnet");
         let mut c = QuantumCircuit::new(2);
         c.add_gate(Gate::cnot(0, 1));
         c.measure_all();
@@ -667,12 +741,16 @@ mod tests {
         let (result, report) = transpiler.transpile(&c).unwrap();
         assert!(report.gates_decomposed > 0);
         // Should contain CZ gates now.
-        assert!(result.gates.iter().any(|g| matches!(g.gate_type, GateType::CZ)));
+        assert!(result
+            .gates
+            .iter()
+            .any(|g| matches!(g.gate_type, GateType::CZ)));
     }
 
     #[test]
     fn test_simulator_passthrough() {
-        let transpiler = CircuitTranspiler::for_device("arn:aws:braket:::device/quantum-simulator/amazon/sv1");
+        let transpiler =
+            CircuitTranspiler::for_device("arn:aws:braket:::device/quantum-simulator/amazon/sv1");
         let mut c = QuantumCircuit::new(2);
         c.add_gate(Gate::h(0));
         c.add_gate(Gate::cnot(0, 1));

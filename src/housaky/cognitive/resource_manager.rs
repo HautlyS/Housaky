@@ -86,9 +86,7 @@ impl CognitiveBudget {
             max_reasoning_depth: (self.max_reasoning_depth as f64 * factor).ceil() as u32,
             max_tool_invocations: (self.max_tool_invocations as f64 * factor).ceil() as u32,
             max_tokens: (self.max_tokens as f64 * factor).ceil() as u64,
-            max_duration: Duration::from_secs_f64(
-                self.max_duration.as_secs_f64() * factor,
-            ),
+            max_duration: Duration::from_secs_f64(self.max_duration.as_secs_f64() * factor),
             escalation_allowed: self.escalation_allowed,
             priority_level: self.priority_level.clone(),
         }
@@ -194,9 +192,21 @@ impl DifficultyEstimator {
 
         // Factor 2: Technical indicators
         let technical_terms = [
-            "implement", "architect", "optimize", "refactor", "debug",
-            "concurrent", "distributed", "algorithm", "protocol", "security",
-            "database", "migration", "integration", "deployment", "infrastructure",
+            "implement",
+            "architect",
+            "optimize",
+            "refactor",
+            "debug",
+            "concurrent",
+            "distributed",
+            "algorithm",
+            "protocol",
+            "security",
+            "database",
+            "migration",
+            "integration",
+            "deployment",
+            "infrastructure",
         ];
         let tech_score = technical_terms
             .iter()
@@ -212,8 +222,16 @@ impl DifficultyEstimator {
 
         // Factor 3: Multi-step indicators
         let multi_step_terms = [
-            "and then", "after that", "next", "finally", "also",
-            "additionally", "furthermore", "step", "phase", "stage",
+            "and then",
+            "after that",
+            "next",
+            "finally",
+            "also",
+            "additionally",
+            "furthermore",
+            "step",
+            "phase",
+            "stage",
         ];
         let multi_step_score = multi_step_terms
             .iter()
@@ -229,8 +247,15 @@ impl DifficultyEstimator {
 
         // Factor 4: Uncertainty indicators
         let uncertainty_terms = [
-            "might", "maybe", "possibly", "unclear", "ambiguous",
-            "depends", "if possible", "try to", "attempt",
+            "might",
+            "maybe",
+            "possibly",
+            "unclear",
+            "ambiguous",
+            "depends",
+            "if possible",
+            "try to",
+            "attempt",
         ];
         let uncertainty_score = uncertainty_terms
             .iter()
@@ -253,10 +278,7 @@ impl DifficultyEstimator {
         });
 
         // Weighted sum
-        let raw_score: f64 = factors
-            .iter()
-            .map(|f| f.score * f.weight)
-            .sum::<f64>()
+        let raw_score: f64 = factors.iter().map(|f| f.score * f.weight).sum::<f64>()
             / factors.iter().map(|f| f.weight).sum::<f64>();
 
         // Apply calibration bias
@@ -442,9 +464,8 @@ impl ResourceManager {
         cap.current_hour_tokens += tokens;
         cap.current_hour_llm_calls += llm_calls;
 
-        let over_limit =
-            cap.current_hour_tokens > cap.max_total_tokens_per_hour
-                || cap.current_hour_llm_calls > cap.max_total_llm_calls_per_hour;
+        let over_limit = cap.current_hour_tokens > cap.max_total_tokens_per_hour
+            || cap.current_hour_llm_calls > cap.max_total_llm_calls_per_hour;
         drop(cap);
 
         // Check if individual budget is exceeded
@@ -633,7 +654,10 @@ mod tests {
         let over = manager.record_usage("task-1", 1, 500, 1).await.unwrap();
         assert!(!over);
 
-        let execution = manager.complete_task("task-1", true, Some(0.1)).await.unwrap();
+        let execution = manager
+            .complete_task("task-1", true, Some(0.1))
+            .await
+            .unwrap();
         assert!(execution.success);
     }
 }

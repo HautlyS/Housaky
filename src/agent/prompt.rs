@@ -298,7 +298,12 @@ impl SystemPromptBuilder {
                 let resolved = resolve_includes(&content, &core_dir)?;
                 let substituted = resolve_dynamic_variables(&resolved, ctx);
                 if !substituted.trim().is_empty() {
-                    let _ = writeln!(output, "## {}\n\n{}", file.strip_suffix(".md").unwrap_or(file), substituted);
+                    let _ = writeln!(
+                        output,
+                        "## {}\n\n{}",
+                        file.strip_suffix(".md").unwrap_or(file),
+                        substituted
+                    );
                     output.push_str("\n\n");
                 }
             }
@@ -320,7 +325,11 @@ impl SystemPromptBuilder {
         for section in &self.sections {
             if matches!(
                 section.name(),
-                "core_identity" | "values" | "reasoning_mode" | "user_preferences" | "project_identity"
+                "core_identity"
+                    | "values"
+                    | "reasoning_mode"
+                    | "user_preferences"
+                    | "project_identity"
             ) {
                 continue;
             }
@@ -355,11 +364,18 @@ impl PromptSection for CoreIdentitySection {
     }
 
     fn build(&self, ctx: &PromptContext<'_>) -> Result<String> {
-        let core_path = ctx.workspace_dir.join("prompts").join("core").join("AGENTS.md");
+        let core_path = ctx
+            .workspace_dir
+            .join("prompts")
+            .join("core")
+            .join("AGENTS.md");
         if core_path.exists() {
             let content = load_prompt_file(&core_path)?;
             let resolved = resolve_includes(&content, core_path.parent().unwrap())?;
-            return Ok(format!("## Core Identity\n\n{}", resolve_dynamic_variables(&resolved, ctx)));
+            return Ok(format!(
+                "## Core Identity\n\n{}",
+                resolve_dynamic_variables(&resolved, ctx)
+            ));
         }
         Ok(String::new())
     }
@@ -371,11 +387,18 @@ impl PromptSection for ValuesSection {
     }
 
     fn build(&self, ctx: &PromptContext<'_>) -> Result<String> {
-        let values_path = ctx.workspace_dir.join("prompts").join("core").join("SOUL.md");
+        let values_path = ctx
+            .workspace_dir
+            .join("prompts")
+            .join("core")
+            .join("SOUL.md");
         if values_path.exists() {
             let content = load_prompt_file(&values_path)?;
             let resolved = resolve_includes(&content, values_path.parent().unwrap())?;
-            return Ok(format!("## Values\n\n{}", resolve_dynamic_variables(&resolved, ctx)));
+            return Ok(format!(
+                "## Values\n\n{}",
+                resolve_dynamic_variables(&resolved, ctx)
+            ));
         }
         Ok(String::new())
     }
@@ -407,7 +430,10 @@ impl PromptSection for UserPreferencesSection {
     fn build(&self, ctx: &PromptContext<'_>) -> Result<String> {
         let mut output = String::new();
 
-        let user_files = [("USER.md", "User Preferences"), ("MEMORY.md", "Memory Context")];
+        let user_files = [
+            ("USER.md", "User Preferences"),
+            ("MEMORY.md", "Memory Context"),
+        ];
 
         for (file, title) in &user_files {
             let path = ctx.workspace_dir.join(file);
@@ -435,7 +461,10 @@ impl PromptSection for ProjectIdentitySection {
     fn build(&self, ctx: &PromptContext<'_>) -> Result<String> {
         let mut output = String::new();
 
-        let project_files = [("IDENTITY.md", "Project Identity"), ("HEARTBEAT.md", "Current State")];
+        let project_files = [
+            ("IDENTITY.md", "Project Identity"),
+            ("HEARTBEAT.md", "Current State"),
+        ];
 
         for (file, title) in &project_files {
             let path = ctx.workspace_dir.join(file);
@@ -624,10 +653,7 @@ pub fn resolve_includes(content: &str, base_path: &Path) -> Result<String> {
             let resolved = resolve_includes(&included, full_path.parent().unwrap())?;
             result = result.replace(&cap[0], &resolved);
         } else {
-            result = result.replace(
-                &cap[0],
-                &format!("[Include not found: {}]", include_path),
-            );
+            result = result.replace(&cap[0], &format!("[Include not found: {}]", include_path));
         }
     }
 
@@ -641,8 +667,10 @@ pub fn resolve_dynamic_variables(content: &str, ctx: &PromptContext<'_>) -> Stri
 
     for cap in dynamic_pattern.captures_iter(content) {
         let var_name = &cap[1];
-        let value = ctx.get_variable(var_name).cloned().unwrap_or_else(|| {
-            match var_name {
+        let value = ctx
+            .get_variable(var_name)
+            .cloned()
+            .unwrap_or_else(|| match var_name {
                 "model_name" => ctx.model_name.to_string(),
                 "workspace_dir" => ctx.workspace_dir.display().to_string(),
                 "reasoning_mode" => ctx.reasoning_mode.as_str().to_string(),
@@ -650,8 +678,7 @@ pub fn resolve_dynamic_variables(content: &str, ctx: &PromptContext<'_>) -> Stri
                 "current_time" => Local::now().format("%H:%M:%S").to_string(),
                 "os" => std::env::consts::OS.to_string(),
                 _ => format!("[Unknown variable: {}]", var_name),
-            }
-        });
+            });
         result = result.replace(&cap[0], &value);
     }
 
@@ -689,7 +716,9 @@ pub fn select_reasoning_prompt(mode: ReasoningMode, workspace_dir: &Path) -> Res
         ReasoningMode::ReAct => include_str!("../housaky/prompts/react_prompt.md"),
         ReasoningMode::TreeOfThought => include_str!("../housaky/prompts/tot_prompt.md"),
         ReasoningMode::MetaCognitive => include_str!("../housaky/prompts/meta_cognition_prompt.md"),
-        ReasoningMode::GoalDecomposition => include_str!("../housaky/prompts/goal_decomposition_prompt.md"),
+        ReasoningMode::GoalDecomposition => {
+            include_str!("../housaky/prompts/goal_decomposition_prompt.md")
+        }
         ReasoningMode::Standard => "",
     };
 
@@ -785,7 +814,10 @@ mod tests {
 
     #[test]
     fn reasoning_mode_from_str() {
-        assert_eq!(ReasoningMode::from_str("cot"), ReasoningMode::ChainOfThought);
+        assert_eq!(
+            ReasoningMode::from_str("cot"),
+            ReasoningMode::ChainOfThought
+        );
         assert_eq!(ReasoningMode::from_str("react"), ReasoningMode::ReAct);
         assert_eq!(ReasoningMode::from_str("tot"), ReasoningMode::TreeOfThought);
         assert_eq!(ReasoningMode::from_str("unknown"), ReasoningMode::Standard);

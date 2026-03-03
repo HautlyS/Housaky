@@ -8,7 +8,7 @@ pub mod task_market;
 
 pub use collective_memory::{CollectiveMemory, ConflictResolution, SharedMemoryEntry};
 pub use consensus::{ConsensusEngine, ConsensusProtocol, ConsensusResult, Proposal};
-pub use emergence::{EmergenceDetector, EmergentBehavior, EmergenceType, SwarmObservation};
+pub use emergence::{EmergenceDetector, EmergenceType, EmergentBehavior, SwarmObservation};
 pub use pheromone::{PheromoneMap, PheromoneService, PheromoneTrail};
 pub use stigmergy::{MarkType, SharedEnvironment, StigmergyLayer};
 pub use swarm_controller::{SwarmAgent, SwarmConfig, SwarmController, SwarmStats};

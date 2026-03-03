@@ -66,7 +66,10 @@ impl StimulusRecord {
     pub fn dishabituate(&mut self) {
         self.response_strength = 1.0;
         self.habituated = false;
-        debug!("Stimulus '{}' dishabituated (novel/strong stimulus)", self.stimulus_id);
+        debug!(
+            "Stimulus '{}' dishabituated (novel/strong stimulus)",
+            self.stimulus_id
+        );
     }
 
     pub fn habituation_ratio(&self) -> f64 {
@@ -220,8 +223,11 @@ impl HabituationSystem {
         let total_presentations: u64 = records.values().map(|r| r.presentation_count).sum();
         let most_habituated = records
             .values()
-            .max_by(|a, b| a.habituation_ratio().partial_cmp(&b.habituation_ratio())
-                .unwrap_or(std::cmp::Ordering::Equal))
+            .max_by(|a, b| {
+                a.habituation_ratio()
+                    .partial_cmp(&b.habituation_ratio())
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
             .map(|r| r.stimulus_id.clone());
 
         HabituationStats {

@@ -2,11 +2,11 @@ use anyhow::Result;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
+use std::fmt::Write as _;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::info;
-use std::fmt::Write as _;
 
 const MAX_THOUGHTS: usize = 1000;
 const RECENT_CAPACITY: usize = 50;
@@ -144,15 +144,18 @@ impl InnerMonologue {
         stream.total_thoughts += 1;
 
         let thought_content = stream.thoughts.back().unwrap().content.clone();
-        
+
         info!(
             "Added thought: {} (type: {:?}, confidence: {:.2})",
             id,
             stream.thoughts.back().unwrap().thought_type,
             confidence
         );
-        
-        println!("💭 Thought: {}", thought_content.chars().take(120).collect::<String>());
+
+        println!(
+            "💭 Thought: {}",
+            thought_content.chars().take(120).collect::<String>()
+        );
 
         Ok(id)
     }
@@ -360,11 +363,21 @@ impl InnerMonologue {
         reflection_content.push_str("Reflection: ");
 
         if !low_confidence.is_empty() {
-            write!(reflection_content, "{} thoughts have low confidence. ", low_confidence.len()).ok();
+            write!(
+                reflection_content,
+                "{} thoughts have low confidence. ",
+                low_confidence.len()
+            )
+            .ok();
         }
 
         if !unprocessed.is_empty() {
-            write!(reflection_content, "{} thoughts need processing. ", unprocessed.len()).ok();
+            write!(
+                reflection_content,
+                "{} thoughts need processing. ",
+                unprocessed.len()
+            )
+            .ok();
         }
 
         drop(stream);
@@ -504,7 +517,8 @@ impl InnerMonologue {
                 thought.thought_type,
                 thought.content.chars().take(80).collect::<String>(),
                 thought.confidence * 100.0
-            ).ok();
+            )
+            .ok();
         }
 
         summary

@@ -75,7 +75,7 @@ impl NaturalLanguageIntrospector {
 
     pub async fn query(&self, q: &str) -> Result<IntrospectionResponse> {
         let query = self.parse_query(q).await?;
-        
+
         match query.target_subsystem {
             Some(Subsystem::KnowledgeGraph) => self.query_knowledge_graph(q).await,
             Some(Subsystem::Beliefs) => self.query_beliefs(q).await,
@@ -90,7 +90,7 @@ impl NaturalLanguageIntrospector {
 
     async fn parse_query(&self, q: &str) -> Result<IntrospectionQuery> {
         let q_lower = q.to_lowercase();
-        
+
         let subsystem = if q_lower.contains("believe") || q_lower.contains("belief") {
             Some(Subsystem::Beliefs)
         } else if q_lower.contains("goal") || q_lower.contains("plan") {
@@ -168,7 +168,8 @@ impl NaturalLanguageIntrospector {
     async fn query_beliefs(&self, q: &str) -> Result<IntrospectionResponse> {
         Ok(IntrospectionResponse {
             query: q.to_string(),
-            answer: "Belief system is active and tracking multiple beliefs with confidence levels.".to_string(),
+            answer: "Belief system is active and tracking multiple beliefs with confidence levels."
+                .to_string(),
             confidence: 0.7,
             sources: vec!["belief_tracker".to_string()],
             subsystem: Subsystem::Beliefs,
@@ -194,7 +195,8 @@ impl NaturalLanguageIntrospector {
     async fn query_memory(&self, q: &str) -> Result<IntrospectionResponse> {
         Ok(IntrospectionResponse {
             query: q.to_string(),
-            answer: "Memory system is active with working, episodic, and semantic memory stores.".to_string(),
+            answer: "Memory system is active with working, episodic, and semantic memory stores."
+                .to_string(),
             confidence: 0.8,
             sources: vec!["memory".to_string()],
             subsystem: Subsystem::Memory,
@@ -204,7 +206,8 @@ impl NaturalLanguageIntrospector {
     async fn query_reasoning(&self, q: &str) -> Result<IntrospectionResponse> {
         Ok(IntrospectionResponse {
             query: q.to_string(),
-            answer: "Reasoning engine supports CoT, ReAct, ToT, and Reflexion strategies.".to_string(),
+            answer: "Reasoning engine supports CoT, ReAct, ToT, and Reflexion strategies."
+                .to_string(),
             confidence: 0.8,
             sources: vec!["reasoning_engine".to_string()],
             subsystem: Subsystem::Reasoning,
@@ -257,16 +260,22 @@ mod tests {
     #[tokio::test]
     async fn test_parse_query_beliefs() {
         let introspector = NaturalLanguageIntrospector::new();
-        let query = introspector.parse_query("What do I believe about safety?").await.unwrap();
-        
+        let query = introspector
+            .parse_query("What do I believe about safety?")
+            .await
+            .unwrap();
+
         assert!(matches!(query.target_subsystem, Some(Subsystem::Beliefs)));
     }
 
     #[tokio::test]
     async fn test_parse_query_goals() {
         let introspector = NaturalLanguageIntrospector::new();
-        let query = introspector.parse_query("What are my current goals?").await.unwrap();
-        
+        let query = introspector
+            .parse_query("What are my current goals?")
+            .await
+            .unwrap();
+
         assert!(matches!(query.target_subsystem, Some(Subsystem::Goals)));
     }
 
@@ -274,9 +283,12 @@ mod tests {
     async fn test_query_skills() {
         let introspector = NaturalLanguageIntrospector::new()
             .with_skills(vec!["coding".to_string(), "research".to_string()]);
-        
-        let response = introspector.query_skills("What skills do I have?").await.unwrap();
-        
+
+        let response = introspector
+            .query_skills("What skills do I have?")
+            .await
+            .unwrap();
+
         assert!(response.answer.contains("coding"));
         assert!(response.answer.contains("research"));
     }
@@ -288,7 +300,10 @@ mod tests {
             .with_capabilities(vec!["reasoning".to_string()])
             .with_goals(vec!["learn".to_string()]);
 
-        let response = introspector.query_all("Tell me about yourself").await.unwrap();
+        let response = introspector
+            .query_all("Tell me about yourself")
+            .await
+            .unwrap();
 
         assert!(response.sources.len() >= 3);
     }

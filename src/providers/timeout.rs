@@ -138,7 +138,10 @@ impl TimeoutError {
                 "The operation took too long and was cancelled after {:.1} seconds. {}",
                 self.elapsed.as_secs_f64(),
                 if self.retries_attempted > 0 {
-                    format!("We tried {} time(s), but it still didn't complete in time.", self.retries_attempted + 1)
+                    format!(
+                        "We tried {} time(s), but it still didn't complete in time.",
+                        self.retries_attempted + 1
+                    )
                 } else {
                     "Please try again or check your connection.".to_string()
                 }
@@ -339,8 +342,7 @@ impl TimeoutHandler {
                                 "Retrying after failure"
                             );
                             tokio::time::sleep(Duration::from_millis(delay_ms)).await;
-                            delay_ms =
-                                (delay_ms as f64 * self.config.retry_backoff_factor) as u64;
+                            delay_ms = (delay_ms as f64 * self.config.retry_backoff_factor) as u64;
                         }
                         TimeoutAction::Fail => break,
                         TimeoutAction::Extend(added) => {
@@ -359,11 +361,8 @@ impl TimeoutHandler {
                     let mut state = self.state.lock().await;
                     state.total_timeouts += 1;
 
-                    let err = TimeoutError::timeout(
-                        "Operation timed out",
-                        attempt,
-                        start.elapsed(),
-                    );
+                    let err =
+                        TimeoutError::timeout("Operation timed out", attempt, start.elapsed());
 
                     match policy(&err, attempt) {
                         TimeoutAction::Retry => {
@@ -377,8 +376,7 @@ impl TimeoutHandler {
                                 "Retrying after timeout"
                             );
                             tokio::time::sleep(Duration::from_millis(delay_ms)).await;
-                            delay_ms =
-                                (delay_ms as f64 * self.config.retry_backoff_factor) as u64;
+                            delay_ms = (delay_ms as f64 * self.config.retry_backoff_factor) as u64;
                         }
                         TimeoutAction::Fail => break,
                         TimeoutAction::Extend(added) => {
@@ -431,8 +429,8 @@ pub struct TimeoutStats {
     pub total_timeouts: usize,
 }
 
-pub fn default_retry_policy() -> impl Fn(&TimeoutError, usize) -> TimeoutAction + Send + Sync + 'static
-{
+pub fn default_retry_policy(
+) -> impl Fn(&TimeoutError, usize) -> TimeoutAction + Send + Sync + 'static {
     move |err: &TimeoutError, attempt: usize| {
         if err.is_timeout && attempt < 3 {
             TimeoutAction::Extend(Duration::from_secs(30))
@@ -497,7 +495,9 @@ mod tests {
     async fn timeout_handler_execute_success() {
         let handler = TimeoutHandler::new(TimeoutConfig::default());
         let result = handler
-            .execute_with_timeout::<_, String, &str>(Duration::from_secs(1), async { Ok("success".to_string()) })
+            .execute_with_timeout::<_, String, &str>(Duration::from_secs(1), async {
+                Ok("success".to_string())
+            })
             .await;
         assert_eq!(result.unwrap(), "success");
     }
@@ -520,7 +520,9 @@ mod tests {
     async fn timeout_handler_execute_error() {
         let handler = TimeoutHandler::new(TimeoutConfig::default());
         let result = handler
-            .execute_with_timeout::<_, String, &str>(Duration::from_secs(1), async { Err::<String, &str>("failed") })
+            .execute_with_timeout::<_, String, &str>(Duration::from_secs(1), async {
+                Err::<String, &str>("failed")
+            })
             .await;
         assert!(result.is_err());
         let err = result.unwrap_err();

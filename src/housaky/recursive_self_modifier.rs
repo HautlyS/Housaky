@@ -109,7 +109,10 @@ impl RecursiveSelfModifier {
         }
     }
 
-    pub async fn analyze_self_for_modification(&self, capabilities: &HashMap<String, f64>) -> Vec<ModificationOpportunity> {
+    pub async fn analyze_self_for_modification(
+        &self,
+        capabilities: &HashMap<String, f64>,
+    ) -> Vec<ModificationOpportunity> {
         let mut opportunities = Vec::new();
 
         for (capability, level) in capabilities {
@@ -126,7 +129,7 @@ impl RecursiveSelfModifier {
         }
 
         opportunities.sort_by(|a, b| b.estimated_impact.partial_cmp(&a.estimated_impact).unwrap());
-        
+
         opportunities
     }
 
@@ -139,26 +142,24 @@ impl RecursiveSelfModifier {
                     "Upgrade to Monte Carlo Tree Search for complex problems".to_string()
                 }
             }
-            "meta_cognition" => {
-                "Increase reflection frequency and depth".to_string()
-            }
-            "learning" => {
-                "Implement spaced repetition for knowledge retention".to_string()
-            }
-            "creativity" => {
-                "Add divergent thinking patterns to reasoning".to_string()
-            }
-            "adaptability" => {
-                "Enhance context switching speed".to_string()
-            }
+            "meta_cognition" => "Increase reflection frequency and depth".to_string(),
+            "learning" => "Implement spaced repetition for knowledge retention".to_string(),
+            "creativity" => "Add divergent thinking patterns to reasoning".to_string(),
+            "adaptability" => "Enhance context switching speed".to_string(),
             _ => format!("Optimize {} parameters", capability),
         }
     }
 
-    pub async fn generate_parameter_modifications(&self, opportunities: &[ModificationOpportunity]) -> Vec<ParameterModification> {
+    pub async fn generate_parameter_modifications(
+        &self,
+        opportunities: &[ModificationOpportunity],
+    ) -> Vec<ParameterModification> {
         let mut modifications = Vec::new();
 
-        for opp in opportunities.iter().take(self.config.max_modifications_per_cycle) {
+        for opp in opportunities
+            .iter()
+            .take(self.config.max_modifications_per_cycle)
+        {
             if opp.risk <= self.config.risk_tolerance {
                 let param_change = match opp.component.as_str() {
                     "reasoning" => ParameterModification {
@@ -197,7 +198,10 @@ impl RecursiveSelfModifier {
         modifications
     }
 
-    pub async fn apply_parameter_modifications(&self, modifications: &[ParameterModification]) -> Vec<SelfModificationRecord> {
+    pub async fn apply_parameter_modifications(
+        &self,
+        modifications: &[ParameterModification],
+    ) -> Vec<SelfModificationRecord> {
         let mut records = Vec::new();
 
         for mod_req in modifications {
@@ -221,14 +225,17 @@ impl RecursiveSelfModifier {
 
             let mut history = self.modification_history.write().await;
             history.push(record.clone());
-            
+
             let mut rollback = self.rollback_stack.write().await;
             rollback.push(record.clone());
 
             let mut metrics = self.improvement_metrics.write().await;
             *metrics.entry(mod_req.component.clone()).or_insert(0.0) += 0.1;
 
-            info!("Applied modification: {} -> {}", mod_req.parameter, mod_req.new_value);
+            info!(
+                "Applied modification: {} -> {}",
+                mod_req.parameter, mod_req.new_value
+            );
             records.push(record);
         }
 
@@ -267,7 +274,12 @@ impl RecursiveSelfModifier {
                 reason: update.reason.clone(),
                 success: true,
                 impact_assessment: ImpactAssessment {
-                    capability_impact: [("knowledge_accuracy".to_string(), update.confidence_delta)].into_iter().collect(),
+                    capability_impact: [(
+                        "knowledge_accuracy".to_string(),
+                        update.confidence_delta,
+                    )]
+                    .into_iter()
+                    .collect(),
                     overall_improvement: update.confidence_delta,
                     risk_level: 0.05,
                     reversibility: "medium".to_string(),
@@ -282,7 +294,10 @@ impl RecursiveSelfModifier {
         records
     }
 
-    pub async fn generate_reasoning_pattern_updates(&self, error_patterns: &[String]) -> Vec<ReasoningPatternUpdate> {
+    pub async fn generate_reasoning_pattern_updates(
+        &self,
+        error_patterns: &[String],
+    ) -> Vec<ReasoningPatternUpdate> {
         let mut updates = Vec::new();
 
         for pattern in error_patterns {
@@ -299,7 +314,10 @@ impl RecursiveSelfModifier {
         updates
     }
 
-    pub async fn modify_reasoning_engine(&self, updates: &[ReasoningPatternUpdate]) -> Result<Vec<SelfModificationRecord>> {
+    pub async fn modify_reasoning_engine(
+        &self,
+        updates: &[ReasoningPatternUpdate],
+    ) -> Result<Vec<SelfModificationRecord>> {
         let mut records = Vec::new();
 
         for update in updates {
@@ -332,7 +350,7 @@ impl RecursiveSelfModifier {
 
     pub async fn evaluate_modification_impact(&self, record: &SelfModificationRecord) -> f64 {
         let metrics = self.improvement_metrics.read().await;
-        
+
         let mut total_impact = 0.0;
         for (component, impact) in &record.impact_assessment.capability_impact {
             let baseline = metrics.get(component).copied().unwrap_or(0.5);
@@ -345,13 +363,13 @@ impl RecursiveSelfModifier {
 
     pub async fn rollback_last_modification(&self) -> Option<SelfModificationRecord> {
         let mut rollback = self.rollback_stack.write().await;
-        
+
         if let Some(record) = rollback.pop() {
             let mut history = self.modification_history.write().await;
             if let Some(idx) = history.iter().position(|r| r.id == record.id) {
                 history.remove(idx);
             }
-            
+
             let mut metrics = self.improvement_metrics.write().await;
             for (component, impact) in &record.impact_assessment.capability_impact {
                 if let Some(m) = metrics.get_mut(component) {
@@ -362,7 +380,7 @@ impl RecursiveSelfModifier {
             info!("Rolled back modification: {}", record.id);
             return Some(record);
         }
-        
+
         None
     }
 
@@ -374,11 +392,14 @@ impl RecursiveSelfModifier {
         self.improvement_metrics.read().await.clone()
     }
 
-    pub async fn analyze_failure_and_adapt(&self, failure: &str) -> Result<Vec<SelfModificationRecord>> {
+    pub async fn analyze_failure_and_adapt(
+        &self,
+        failure: &str,
+    ) -> Result<Vec<SelfModificationRecord>> {
         let mut records = Vec::new();
 
         let failure_lower = failure.to_lowercase();
-        
+
         if failure_lower.contains("timeout") || failure_lower.contains("too slow") {
             let mod_req = ParameterModification {
                 parameter: "timeout_ms".to_string(),
@@ -389,9 +410,11 @@ impl RecursiveSelfModifier {
             };
             records.extend(self.apply_parameter_modifications(&[mod_req]).await);
         }
-        
+
         if failure_lower.contains("reasoning") || failure_lower.contains("logic") {
-            let updates = self.generate_reasoning_pattern_updates(&[failure.to_string()]).await;
+            let updates = self
+                .generate_reasoning_pattern_updates(&[failure.to_string()])
+                .await;
             records.extend(self.modify_reasoning_engine(&updates).await?);
         }
 

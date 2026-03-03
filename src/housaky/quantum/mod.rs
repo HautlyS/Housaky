@@ -5,8 +5,8 @@
 //! approach would outperform classical — establishing the quantum advantage
 //! frontier for Housaky's problem portfolio.
 
-pub mod hybrid_solver;
 pub mod benchmarks;
+pub mod hybrid_solver;
 
+pub use benchmarks::{BenchmarkResult as QuantumBenchmarkResult, QuantumBenchmarkSuite};
 pub use hybrid_solver::{HybridSolver, SolverBackend, SolverResult};
-pub use benchmarks::{QuantumBenchmarkSuite, BenchmarkResult as QuantumBenchmarkResult};

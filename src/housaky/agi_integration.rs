@@ -1,7 +1,7 @@
 #![allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
 
 use crate::housaky::capability_growth_tracker::CapabilityGrowthTracker;
-use crate::housaky::consciousness::phase3_engine::{Phase3Engine, Phase3Config};
+use crate::housaky::consciousness::phase3_engine::{Phase3Config, Phase3Engine};
 use crate::housaky::goal_engine::{Goal, GoalPriority, GoalStatus};
 use crate::housaky::knowledge_graph::EntityType;
 use crate::housaky::meta_cognition::MetaCognitionEngine;
@@ -183,19 +183,20 @@ impl AGIIntegrationHub {
         let goal_engine = Arc::new(crate::housaky::goal_engine::GoalEngine::new(workspace_dir));
         let tool_creator = Arc::new(ToolCreator::new(workspace_dir));
         let meta_cognition = Arc::new(MetaCognitionEngine::new());
-        let knowledge_graph = Arc::new(crate::housaky::knowledge_graph::KnowledgeGraphEngine::new(workspace_dir));
-        let inner_monologue = Arc::new(crate::housaky::inner_monologue::InnerMonologue::new(workspace_dir));
+        let knowledge_graph = Arc::new(crate::housaky::knowledge_graph::KnowledgeGraphEngine::new(
+            workspace_dir,
+        ));
+        let inner_monologue = Arc::new(crate::housaky::inner_monologue::InnerMonologue::new(
+            workspace_dir,
+        ));
         let growth_tracker = Arc::new(CapabilityGrowthTracker::new());
         let singularity = Arc::new(RwLock::new(SingularityEngine::new(growth_tracker)));
         // Phase3Engine::new is async; use a blocking future here via block_in_place
         // so we can keep new() synchronous.  In practice this is fine as it only
         // allocates in-memory structures.
-        let consciousness = Arc::new(
-            tokio::task::block_in_place(|| {
-                tokio::runtime::Handle::current()
-                    .block_on(Phase3Engine::new(Phase3Config::default()))
-            })
-        );
+        let consciousness = Arc::new(tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current().block_on(Phase3Engine::new(Phase3Config::default()))
+        }));
 
         Self {
             reasoning,
@@ -219,9 +220,7 @@ impl AGIIntegrationHub {
     }
 
     fn state_path(&self) -> PathBuf {
-        self.workspace_dir
-            .join(".housaky")
-            .join(AGI_HUB_STATE_FILE)
+        self.workspace_dir.join(".housaky").join(AGI_HUB_STATE_FILE)
     }
 
     async fn load_state(&self) -> Result<()> {
@@ -251,7 +250,7 @@ impl AGIIntegrationHub {
 
     pub async fn initialize(&self) -> Result<()> {
         info!("Initializing AGI Integration Hub...");
-        
+
         self.goal_engine.load_goals().await?;
         self.knowledge_graph.load_graph().await?;
         self.inner_monologue.load().await?;
@@ -280,7 +279,10 @@ impl AGIIntegrationHub {
 
     pub async fn run_agi_cycle(&self, input: AGICycleInput) -> Result<AGICycleOutput> {
         let start_time = std::time::Instant::now();
-        info!("Starting AGI cycle for query: {}", input.user_query.chars().take(50).collect::<String>());
+        info!(
+            "Starting AGI cycle for query: {}",
+            input.user_query.chars().take(50).collect::<String>()
+        );
 
         let mut actions_taken = Vec::new();
         let mut goals_created = Vec::new();
@@ -296,9 +298,9 @@ impl AGIIntegrationHub {
 
         if let Some(provider) = &input.provider {
             let model = input.model.as_deref().unwrap_or("default");
-            
+
             let tool_names: Vec<&str> = input.available_tools.iter().map(|s| s.as_str()).collect();
-            
+
             let context = crate::housaky::core::TurnContext {
                 user_message: input.user_query.clone(),
                 relevant_memories: input.context.knowledge_context.clone(),
@@ -307,15 +309,25 @@ impl AGIIntegrationHub {
                 working_context: String::new(),
             };
 
-            let result = self.reasoning
-                .reason_react(provider.as_ref(), model, &input.user_query, &tool_names, &context)
+            let result = self
+                .reasoning
+                .reason_react(
+                    provider.as_ref(),
+                    model,
+                    &input.user_query,
+                    &tool_names,
+                    &context,
+                )
                 .await?;
-            
+
             reasoning_result = Some(result.clone());
 
             actions_taken.push(AGIAction {
                 action_type: AGIActionType::Reasoning,
-                description: format!("Reasoning completed with confidence: {:.2}", result.confidence),
+                description: format!(
+                    "Reasoning completed with confidence: {:.2}",
+                    result.confidence
+                ),
                 success: true,
                 details: HashMap::new(),
             });
@@ -327,7 +339,11 @@ impl AGIIntegrationHub {
 
             self.inner_monologue
                 .add_thought(
-                    &format!("Reasoning: {} -> {}", input.user_query.chars().take(30).collect::<String>(), result.summary.chars().take(50).collect::<String>()),
+                    &format!(
+                        "Reasoning: {} -> {}",
+                        input.user_query.chars().take(30).collect::<String>(),
+                        result.summary.chars().take(50).collect::<String>()
+                    ),
                     result.confidence,
                 )
                 .await?;
@@ -346,7 +362,9 @@ impl AGIIntegrationHub {
             }
 
             if self.config.auto_create_tools && !result.suggested_tools.is_empty() {
-                let created_tools = self.connect_reasoning_to_tools(&result, provider.as_ref(), model).await?;
+                let created_tools = self
+                    .connect_reasoning_to_tools(&result, provider.as_ref(), model)
+                    .await?;
                 for tool_id in &created_tools {
                     tools_created.push(tool_id.clone());
                     actions_taken.push(AGIAction {
@@ -360,19 +378,27 @@ impl AGIIntegrationHub {
         }
 
         if !input.context.recent_failures.is_empty() && self.config.enable_feedback_loop {
-            info!("Analyzing {} failures from previous cycles", input.context.recent_failures.len());
-            
+            info!(
+                "Analyzing {} failures from previous cycles",
+                input.context.recent_failures.len()
+            );
+
             let analysis = self.analyze_failure(&input.context.recent_failures).await?;
-            
+
             actions_taken.push(AGIAction {
                 action_type: AGIActionType::Reflection,
                 description: format!("Analyzed {} failures", input.context.recent_failures.len()),
                 success: true,
-                details: [("failures_analyzed".to_string(), input.context.recent_failures.len().to_string())].into_iter().collect(),
+                details: [(
+                    "failures_analyzed".to_string(),
+                    input.context.recent_failures.len().to_string(),
+                )]
+                .into_iter()
+                .collect(),
             });
 
             let improvements = self.improve_from_insights(&analysis).await?;
-            
+
             for improvement in &improvements {
                 actions_taken.push(AGIAction {
                     action_type: AGIActionType::GoalUpdate,
@@ -389,9 +415,7 @@ impl AGIIntegrationHub {
             }
         }
 
-        let reflection = self.meta_cognition
-            .reflect("AGI cycle completed")
-            .await?;
+        let reflection = self.meta_cognition.reflect("AGI cycle completed").await?;
 
         reflections.push(ReflectionSummary {
             observations: reflection.observations.len(),
@@ -408,8 +432,12 @@ impl AGIIntegrationHub {
 
         self.inner_monologue
             .add_thought(
-                &format!("Cycle {} complete: {} actions", 
-                    { let s = self.state.read().await; s.cycles_completed },
+                &format!(
+                    "Cycle {} complete: {} actions",
+                    {
+                        let s = self.state.read().await;
+                        s.cycles_completed
+                    },
                     actions_taken.len()
                 ),
                 0.8,
@@ -511,8 +539,13 @@ impl AGIIntegrationHub {
         }
 
         let cycle_time_ms = start_time.elapsed().as_millis() as u64;
-        info!("AGI cycle completed in {}ms: {} actions, {} goals, {} tools", 
-            cycle_time_ms, actions_taken.len(), goals_created.len(), tools_created.len());
+        info!(
+            "AGI cycle completed in {}ms: {} actions, {} goals, {} tools",
+            cycle_time_ms,
+            actions_taken.len(),
+            goals_created.len(),
+            tools_created.len()
+        );
 
         Ok(AGICycleOutput {
             reasoning_result,
@@ -528,9 +561,11 @@ impl AGIIntegrationHub {
     async fn connect_reasoning_to_goals(&self, reasoning: &ReasoningResult) -> Result<Vec<String>> {
         let mut created_goal_ids = Vec::new();
 
-        if reasoning.conclusion.contains("goal") || reasoning.conclusion.contains("objective") 
-            || reasoning.conclusion.contains("should") || reasoning.conclusion.contains("need to") {
-            
+        if reasoning.conclusion.contains("goal")
+            || reasoning.conclusion.contains("objective")
+            || reasoning.conclusion.contains("should")
+            || reasoning.conclusion.contains("need to")
+        {
             let goal = Goal {
                 id: format!("goal_{}", uuid::Uuid::new_v4()),
                 title: reasoning.conclusion.chars().take(80).collect(),
@@ -563,8 +598,8 @@ impl AGIIntegrationHub {
 
             for insight in &reasoning.insights {
                 let insight_goal = Goal {
-                id: format!("goal_{}", uuid::Uuid::new_v4()),
-                title: insight.chars().take(80).collect(),
+                    id: format!("goal_{}", uuid::Uuid::new_v4()),
+                    title: insight.chars().take(80).collect(),
                     description: format!("From reasoning insight: {}", insight),
                     priority: GoalPriority::Low,
                     status: GoalStatus::Pending,
@@ -603,7 +638,7 @@ impl AGIIntegrationHub {
     }
 
     async fn connect_reasoning_to_tools(
-        &self, 
+        &self,
         reasoning: &ReasoningResult,
         _provider: &dyn Provider,
         _model: &str,
@@ -613,7 +648,10 @@ impl AGIIntegrationHub {
         for tool_suggestion in &reasoning.suggested_tools {
             let request = ToolGenerationRequest {
                 name: tool_suggestion.name.clone(),
-                description: format!("Auto-generated from reasoning: {}", tool_suggestion.reasoning),
+                description: format!(
+                    "Auto-generated from reasoning: {}",
+                    tool_suggestion.reasoning
+                ),
                 kind: ToolKind::Composite,
                 examples: vec![],
                 constraints: vec![],
@@ -623,7 +661,7 @@ impl AGIIntegrationHub {
                 Ok(generated_tool) => {
                     let tool_id = generated_tool.id.clone();
                     created_tool_ids.push(tool_id.clone());
-                    
+
                     self.inner_monologue
                         .add_thought(
                             &format!("Created tool '{}' from reasoning suggestion", tool_id),
@@ -662,7 +700,7 @@ impl AGIIntegrationHub {
             if *count > 1 {
                 patterns.push(format!("{} occurred {} times", error_type, count));
             }
-            
+
             let cause = match error_type.as_str() {
                 "timeout" => "Action took too long - consider optimization or async handling",
                 "authentication" => "Missing or invalid credentials - need to add auth handling",
@@ -681,19 +719,28 @@ impl AGIIntegrationHub {
                     "Failure in '{}': {}. Suggested fix: {}",
                     failure.action,
                     failure.error,
-                    root_causes.first().map(|s| s.as_str()).unwrap_or("Review logic")
+                    root_causes
+                        .first()
+                        .map(|s| s.as_str())
+                        .unwrap_or("Review logic")
                 );
                 recommendations.push(analysis);
             }
         }
 
         if failures.len() >= 3 {
-            recommendations.push("Multiple failures detected - consider a major refactoring or approach change".to_string());
+            recommendations.push(
+                "Multiple failures detected - consider a major refactoring or approach change"
+                    .to_string(),
+            );
         }
 
         self.inner_monologue
             .add_thought(
-                &format!("Failure analysis: {} root causes identified", root_causes.len()),
+                &format!(
+                    "Failure analysis: {} root causes identified",
+                    root_causes.len()
+                ),
                 0.7,
             )
             .await?;
@@ -713,18 +760,33 @@ impl AGIIntegrationHub {
 
     fn categorize_error(error: &str) -> String {
         let error_lower = error.to_lowercase();
-        
+
         if error_lower.contains("timeout") || error_lower.contains("timed out") {
             "timeout".to_string()
-        } else if error_lower.contains("auth") || error_lower.contains("credential") || error_lower.contains("unauthorized") {
+        } else if error_lower.contains("auth")
+            || error_lower.contains("credential")
+            || error_lower.contains("unauthorized")
+        {
             "authentication".to_string()
-        } else if error_lower.contains("permission") || error_lower.contains("denied") || error_lower.contains("forbidden") {
+        } else if error_lower.contains("permission")
+            || error_lower.contains("denied")
+            || error_lower.contains("forbidden")
+        {
             "permission".to_string()
-        } else if error_lower.contains("valid") || error_lower.contains("invalid") || error_lower.contains("parse") {
+        } else if error_lower.contains("valid")
+            || error_lower.contains("invalid")
+            || error_lower.contains("parse")
+        {
             "validation".to_string()
-        } else if error_lower.contains("resource") || error_lower.contains("memory") || error_lower.contains("cpu") {
+        } else if error_lower.contains("resource")
+            || error_lower.contains("memory")
+            || error_lower.contains("cpu")
+        {
             "resource".to_string()
-        } else if error_lower.contains("null") || error_lower.contains("undefined") || error_lower.contains("none") {
+        } else if error_lower.contains("null")
+            || error_lower.contains("undefined")
+            || error_lower.contains("none")
+        {
             "logic".to_string()
         } else {
             "unknown".to_string()
@@ -733,12 +795,14 @@ impl AGIIntegrationHub {
 
     pub async fn improve_from_insights(&self, analysis: &FailureAnalysis) -> Result<Vec<String>> {
         info!("Applying improvements from failure analysis");
-        
+
         let mut improvements = Vec::new();
 
         for recommendation in &analysis.recommendations {
-            if recommendation.contains("refactoring") || recommendation.contains("approach change") {
-                let reflection = self.meta_cognition
+            if recommendation.contains("refactoring") || recommendation.contains("approach change")
+            {
+                let reflection = self
+                    .meta_cognition
                     .reflect("Major improvement needed based on failure analysis")
                     .await?;
 
@@ -747,7 +811,10 @@ impl AGIIntegrationHub {
                         let goal = Goal {
                             id: format!("goal_{}", uuid::Uuid::new_v4()),
                             title: insight.content.chars().take(80).collect(),
-                            description: format!("Improvement from failure analysis: {}", insight.content),
+                            description: format!(
+                                "Improvement from failure analysis: {}",
+                                insight.content
+                            ),
                             priority: GoalPriority::High,
                             status: GoalStatus::Pending,
                             category: crate::housaky::goal_engine::GoalCategory::SystemImprovement,
@@ -772,18 +839,23 @@ impl AGIIntegrationHub {
                         };
 
                         self.goal_engine.add_goal(goal).await?;
-                        improvements.push(format!("Created improvement goal: {}", insight.content.chars().take(50).collect::<String>()));
+                        improvements.push(format!(
+                            "Created improvement goal: {}",
+                            insight.content.chars().take(50).collect::<String>()
+                        ));
                     }
                 }
-            } else if recommendation.contains("validation") || recommendation.contains("error checking") {
+            } else if recommendation.contains("validation")
+                || recommendation.contains("error checking")
+            {
                 improvements.push("Add better input validation".to_string());
-                
+
                 self.inner_monologue
                     .add_thought("Improvement: Add better input validation", 0.7)
                     .await?;
             } else if recommendation.contains("resource") {
                 improvements.push("Improve resource management".to_string());
-                
+
                 self.inner_monologue
                     .add_thought("Improvement: Optimize resource management", 0.7)
                     .await?;
@@ -793,7 +865,8 @@ impl AGIIntegrationHub {
         for pattern in &analysis.patterns {
             self.knowledge_graph
                 .add_entity(
-                    &format!("pattern_{}", pattern.chars().take(20).collect::<String>()).replace(' ', "_"),
+                    &format!("pattern_{}", pattern.chars().take(20).collect::<String>())
+                        .replace(' ', "_"),
                     EntityType::Concept,
                     pattern,
                 )
@@ -810,16 +883,28 @@ impl AGIIntegrationHub {
 
     pub async fn track_singularity_progress(&self) -> Result<SingularityProgress> {
         let state = self.state.read().await;
-        
+
         let mut metrics = HashMap::new();
-        
-        metrics.insert("cycles_completed".to_string(), state.cycles_completed as f64);
+
+        metrics.insert(
+            "cycles_completed".to_string(),
+            state.cycles_completed as f64,
+        );
         metrics.insert("reasoning_calls".to_string(), state.reasoning_calls as f64);
         metrics.insert("goals_created".to_string(), state.goals_created as f64);
         metrics.insert("tools_generated".to_string(), state.tools_generated as f64);
-        metrics.insert("reflections_completed".to_string(), state.reflections_completed as f64);
-        metrics.insert("failures_analyzed".to_string(), state.failures_analyzed as f64);
-        metrics.insert("improvements_applied".to_string(), state.improvements_applied as f64);
+        metrics.insert(
+            "reflections_completed".to_string(),
+            state.reflections_completed as f64,
+        );
+        metrics.insert(
+            "failures_analyzed".to_string(),
+            state.failures_analyzed as f64,
+        );
+        metrics.insert(
+            "improvements_applied".to_string(),
+            state.improvements_applied as f64,
+        );
 
         let reasoning_density = if state.cycles_completed > 0 {
             state.reasoning_calls as f64 / state.cycles_completed as f64
@@ -850,11 +935,13 @@ impl AGIIntegrationHub {
         metrics.insert("improvement_rate".to_string(), improvement_rate);
 
         let singularity_score = self.calculate_singularity_score(&metrics);
-        
+
         let convergence_level = self.calculate_convergence(&metrics);
-        
+
         let improvement_trend = if state.cycles_completed > 10 {
-            let recent_improvements = state.improvements_applied.saturating_sub(state.cycles_completed / 2);
+            let recent_improvements = state
+                .improvements_applied
+                .saturating_sub(state.cycles_completed / 2);
             recent_improvements as f64 / 10.0
         } else {
             state.improvements_applied as f64
@@ -868,7 +955,7 @@ impl AGIIntegrationHub {
         let mut convergence_indicators = current_convergence;
         convergence_indicators.insert("score".to_string(), singularity_score);
         convergence_indicators.insert("convergence".to_string(), convergence_level);
-        
+
         let mut state = self.state.write().await;
         state.singularity_score = singularity_score;
         state.convergence_indicators = convergence_indicators.clone();
@@ -901,13 +988,13 @@ impl AGIIntegrationHub {
     fn calculate_convergence(&self, metrics: &HashMap<String, f64>) -> f64 {
         let cycles = metrics.get("cycles_completed").copied().unwrap_or(0.0);
         let improvements = metrics.get("improvements_applied").copied().unwrap_or(0.0);
-        
+
         if cycles < 10.0 {
             return 0.1;
         }
 
         let improvement_density = improvements / cycles;
-        
+
         let stability_score = if cycles > 50.0 {
             0.3
         } else if cycles > 20.0 {
@@ -926,7 +1013,7 @@ impl AGIIntegrationHub {
     pub async fn get_hub_metrics(&self) -> HubMetrics {
         let state = self.state.read().await;
         let goal_stats = self.goal_engine.get_goal_stats().await;
-        
+
         HubMetrics {
             cycles_completed: state.cycles_completed,
             reasoning_calls: state.reasoning_calls,

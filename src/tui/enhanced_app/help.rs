@@ -19,11 +19,14 @@ const SECTIONS: &[Section] = &[
         title: "Navigation",
         binds: &[
             ("Tab / Shift+Tab", "Cycle tabs forward / backward"),
+            ("← / →", "Go back / forward in tab history"),
+            ("1-7", "Jump directly to tab"),
             ("v", "Cycle view mode (Full / Split / Dashboard)"),
             ("b", "Toggle sidebar"),
             ("Ctrl+P", "Open command palette"),
             ("?  or  F1", "Toggle this help"),
-            ("q  or  Ctrl+C", "Quit Housaky"),
+            ("q  or  Esc", "Quit / Go to Chat"),
+            ("Mouse click", "Switch tabs, select items"),
         ],
     },
     Section {

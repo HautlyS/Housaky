@@ -4,11 +4,10 @@
 //! topologies. Uses evolutionary search with crossover, mutation, and selection
 //! to discover novel high-fitness architectures.
 
-use crate::housaky::architecture_search::module_genome::{
-    ArchitectureGenome, GenomePopulation, ModuleConnection, ModuleSpec,
-    ModuleType, ResourceBudget,
-};
 use crate::housaky::architecture_search::data_flow_graph::DataFlowGraph;
+use crate::housaky::architecture_search::module_genome::{
+    ArchitectureGenome, GenomePopulation, ModuleConnection, ModuleSpec, ModuleType, ResourceBudget,
+};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info};
@@ -54,15 +53,36 @@ impl Default for TopologySearchConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum TopologyMutation {
-    AddModule { spec: ModuleSpec },
-    RemoveModule { module_id: String },
-    AddConnection { connection: ModuleConnection },
-    RemoveConnection { connection_id: String },
-    ModifyConnectionWeight { connection_id: String, new_weight: f64 },
-    ModifyResourceBudget { module_id: String, budget: ResourceBudget },
-    EnableModule { module_id: String },
-    DisableModule { module_id: String },
-    SwapModuleType { module_id: String, new_type: ModuleType },
+    AddModule {
+        spec: ModuleSpec,
+    },
+    RemoveModule {
+        module_id: String,
+    },
+    AddConnection {
+        connection: ModuleConnection,
+    },
+    RemoveConnection {
+        connection_id: String,
+    },
+    ModifyConnectionWeight {
+        connection_id: String,
+        new_weight: f64,
+    },
+    ModifyResourceBudget {
+        module_id: String,
+        budget: ResourceBudget,
+    },
+    EnableModule {
+        module_id: String,
+    },
+    DisableModule {
+        module_id: String,
+    },
+    SwapModuleType {
+        module_id: String,
+        new_type: ModuleType,
+    },
 }
 
 // ── Crossover Result ──────────────────────────────────────────────────────────
@@ -89,10 +109,7 @@ impl TopologySearcher {
     }
 
     /// Seed the initial population from the current (baseline) architecture.
-    pub fn seed_population(
-        &self,
-        baseline: &ArchitectureGenome,
-    ) -> GenomePopulation {
+    pub fn seed_population(&self, baseline: &ArchitectureGenome) -> GenomePopulation {
         let mut pop = GenomePopulation::new();
         pop.add(baseline.clone());
 
@@ -141,7 +158,11 @@ impl TopologySearcher {
                 connection_id,
                 new_weight,
             } => {
-                if let Some(c) = genome.connections.iter_mut().find(|c| c.id == connection_id) {
+                if let Some(c) = genome
+                    .connections
+                    .iter_mut()
+                    .find(|c| c.id == connection_id)
+                {
                     c.weight = new_weight.clamp(0.0, 1.0);
                 }
             }
@@ -175,7 +196,10 @@ impl TopologySearcher {
                     }
                 }
             }
-            TopologyMutation::SwapModuleType { module_id, new_type } => {
+            TopologyMutation::SwapModuleType {
+                module_id,
+                new_type,
+            } => {
                 if !matches!(new_type, ModuleType::Alignment) {
                     if let Some(m) = genome.modules.iter_mut().find(|m| m.id == module_id) {
                         m.module_type = new_type;
@@ -275,7 +299,10 @@ impl TopologySearcher {
             match op {
                 0 => {
                     // Add a new generic module
-                    let name = format!("gen_module_{}", uuid::Uuid::new_v4().to_string()[..8].to_string());
+                    let name = format!(
+                        "gen_module_{}",
+                        uuid::Uuid::new_v4().to_string()[..8].to_string()
+                    );
                     let types = [
                         ModuleType::Reasoning,
                         ModuleType::Memory,

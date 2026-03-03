@@ -82,7 +82,7 @@ impl Default for SubstrateCapabilities {
 pub struct Computation {
     pub id: String,
     pub kind: ComputationKind,
-    pub payload: Vec<u8>,        // serialised input
+    pub payload: Vec<u8>, // serialised input
     pub priority: u8,
     pub deadline_ms: Option<u64>,
     pub metadata: HashMap<String, String>,
@@ -310,8 +310,8 @@ impl ComputeSubstrate for GpuSubstrate {
         // If a GPU script is configured, delegate to it synchronously
         if let Ok(script) = std::env::var("HOUSAKY_GPU_SCRIPT") {
             use base64::Engine as _;
-            let payload_b64 = base64::engine::general_purpose::STANDARD
-                .encode(&computation.payload);
+            let payload_b64 =
+                base64::engine::general_purpose::STANDARD.encode(&computation.payload);
             let out = tokio::process::Command::new(&script)
                 .arg(&computation.id)
                 .arg(format!("{:?}", computation.kind))
@@ -319,11 +319,7 @@ impl ComputeSubstrate for GpuSubstrate {
                 .output()
                 .await?;
             let success = out.status.success();
-            let output = if success {
-                out.stdout
-            } else {
-                out.stderr
-            };
+            let output = if success { out.stdout } else { out.stderr };
             return Ok(ComputeResult {
                 computation_id: computation.id.clone(),
                 substrate: self.substrate_type(),
@@ -331,7 +327,11 @@ impl ComputeSubstrate for GpuSubstrate {
                 duration_ns: start.elapsed().as_nanos() as u64,
                 energy_joules: None,
                 success,
-                error: if success { None } else { Some("GPU script failed".to_string()) },
+                error: if success {
+                    None
+                } else {
+                    Some("GPU script failed".to_string())
+                },
             });
         }
 

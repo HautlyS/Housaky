@@ -51,12 +51,12 @@ impl LocalEmbeddingProvider {
 
     pub async fn initialize(&mut self) -> Result<()> {
         self.is_initialized = true;
-        
+
         tracing::info!(
             "Initialized local embedding provider with model: {}",
             self.config.model_name
         );
-        
+
         Ok(())
     }
 
@@ -66,7 +66,7 @@ impl LocalEmbeddingProvider {
         }
 
         let text_lower = text.to_lowercase();
-        
+
         {
             let cache = self.cache.read().await;
             if let Some(cached) = cache.get(&text_lower) {
@@ -79,7 +79,7 @@ impl LocalEmbeddingProvider {
         }
 
         let embedding = self.generate_embedding(text).await?;
-        
+
         {
             let mut cache = self.cache.write().await;
             cache.insert(text_lower, embedding.clone());
@@ -94,7 +94,7 @@ impl LocalEmbeddingProvider {
 
     pub async fn embed_batch(&self, texts: &[String]) -> Result<Vec<EmbeddingResult>> {
         let mut results = Vec::new();
-        
+
         for text in texts {
             let result = self.embed(text).await?;
             results.push(result);
@@ -142,7 +142,7 @@ impl LocalEmbeddingProvider {
                     (pos as f32 * freq).cos()
                 };
                 // Token hash component
-                let hash_component = ((h.wrapping_add(k as u64 * 2654435761)) % 1_000_000) as f32
+                let hash_component = ((h.wrapping_add(k as u64 * 2_654_435_761)) % 1_000_000) as f32
                     / 1_000_000.0
                     * 2.0
                     - 1.0;
@@ -156,7 +156,7 @@ impl LocalEmbeddingProvider {
             let h = self.djb2_hash(&bigram);
             let idx = (h as usize) % dim;
             let tf_w = 1.0 / n;
-            let val = ((h.wrapping_mul(6364136223846793005)) % 1_000_000) as f32 / 1_000_000.0
+            let val = ((h.wrapping_mul(6_364_136_223_846_793_005)) % 1_000_000) as f32 / 1_000_000.0
                 * 2.0
                 - 1.0;
             embedding[idx] += tf_w * 0.5 * val;
@@ -202,25 +202,20 @@ impl LocalEmbeddingProvider {
 
 pub enum EmbeddingProvider {
     Local(LocalEmbeddingProvider),
-    Api {
-        api_key: String,
-        model: String,
-    },
+    Api { api_key: String, model: String },
 }
 
 impl EmbeddingProvider {
     pub async fn embed(&self, text: &str) -> Result<EmbeddingResult> {
         match self {
             EmbeddingProvider::Local(provider) => provider.embed(text).await,
-            EmbeddingProvider::Api { api_key, model } => {
-                self.api_embed(text, api_key, model).await
-            }
+            EmbeddingProvider::Api { api_key, model } => self.api_embed(text, api_key, model).await,
         }
     }
 
     async fn api_embed(&self, text: &str, api_key: &str, model: &str) -> Result<EmbeddingResult> {
         let client = reqwest::Client::new();
-        
+
         let response = client
             .post("https://api.openai.com/v1/embeddings")
             .header("Authorization", format!("Bearer {}", api_key))
@@ -236,7 +231,7 @@ impl EmbeddingProvider {
         }
 
         let json: serde_json::Value = response.json().await?;
-        
+
         let embedding: Vec<f32> = json["data"][0]["embedding"]
             .as_array()
             .ok_or_else(|| anyhow::anyhow!("Invalid embedding response"))?
@@ -269,7 +264,7 @@ impl LocalEmbeddingManager {
 
     pub async fn initialize(&mut self, api_key: Option<String>) -> Result<()> {
         let mut provider = LocalEmbeddingProvider::new(self.config.clone());
-        
+
         match provider.initialize().await {
             Ok(()) => {
                 self.provider = Some(provider);
@@ -334,11 +329,11 @@ mod tests {
     async fn test_local_embedding_basic() {
         let config = LocalEmbeddingConfig::default();
         let mut provider = LocalEmbeddingProvider::new(config);
-        
+
         provider.initialize().await.unwrap();
-        
+
         let result = provider.embed("hello world").await.unwrap();
-        
+
         assert_eq!(result.embedding.len(), 384);
         assert!(result.confidence > 0.0);
     }
@@ -347,12 +342,12 @@ mod tests {
     async fn test_embedding_caching() {
         let config = LocalEmbeddingConfig::default();
         let mut provider = LocalEmbeddingProvider::new(config);
-        
+
         provider.initialize().await.unwrap();
-        
+
         let result1 = provider.embed("test text").await.unwrap();
         let result2 = provider.embed("test text").await.unwrap();
-        
+
         assert_eq!(result1.embedding, result2.embedding);
     }
 
@@ -360,12 +355,15 @@ mod tests {
     async fn test_embedding_normalization() {
         let config = LocalEmbeddingConfig::default();
         let mut provider = LocalEmbeddingProvider::new(config);
-        
+
         provider.initialize().await.unwrap();
-        
+
         let result = provider.embed("test").await.unwrap();
-        
+
         let magnitude: f32 = result.embedding.iter().map(|x| x * x).sum::<f32>().sqrt();
-        assert!((magnitude - 1.0).abs() < 0.001, "Embedding should be normalized");
+        assert!(
+            (magnitude - 1.0).abs() < 0.001,
+            "Embedding should be normalized"
+        );
     }
 }

@@ -153,7 +153,11 @@ impl InterpretabilityEngine {
         cache.insert(decision.id.clone(), explanation.clone());
         if cache.len() > self.max_cache_size {
             // Remove oldest entries
-            let keys: Vec<String> = cache.keys().take(cache.len() - self.max_cache_size).cloned().collect();
+            let keys: Vec<String> = cache
+                .keys()
+                .take(cache.len() - self.max_cache_size)
+                .cloned()
+                .collect();
             for key in keys {
                 cache.remove(&key);
             }
@@ -179,8 +183,7 @@ impl InterpretabilityEngine {
             ExplanationAudience::User => {
                 format!(
                     "I chose to {} because {}.",
-                    decision.action_taken,
-                    decision.selected_reason
+                    decision.action_taken, decision.selected_reason
                 )
             }
             ExplanationAudience::Developer => {
@@ -216,10 +219,7 @@ impl InterpretabilityEngine {
         }
 
         // User input
-        explanation.push_str(&format!(
-            "**Input:** {}\n\n",
-            decision.context.user_input
-        ));
+        explanation.push_str(&format!("**Input:** {}\n\n", decision.context.user_input));
 
         // Reasoning process
         explanation.push_str("**Reasoning Process:**\n");
@@ -243,10 +243,7 @@ impl InterpretabilityEngine {
             decision.action_taken,
             decision.confidence * 100.0
         ));
-        explanation.push_str(&format!(
-            "**Rationale:** {}\n",
-            decision.selected_reason
-        ));
+        explanation.push_str(&format!("**Rationale:** {}\n", decision.selected_reason));
 
         // Constraints
         if !decision.context.constraints.is_empty() {
@@ -377,8 +374,7 @@ impl InterpretabilityEngine {
         if decision.context.constraints.is_empty() {
             counterfactuals.push(CounterfactualExplanation {
                 condition: "If there were active constraints".to_string(),
-                alternative_outcome:
-                    "I might have chosen a more conservative approach".to_string(),
+                alternative_outcome: "I might have chosen a more conservative approach".to_string(),
                 impact: "Without constraints, I had more freedom in my choice".to_string(),
             });
         }
@@ -424,10 +420,7 @@ impl InterpretabilityEngine {
         factors.push(KeyFactor {
             factor: "Reasoning confidence".to_string(),
             influence: decision.confidence,
-            evidence: format!(
-                "Overall confidence: {:.0}%",
-                decision.confidence * 100.0
-            ),
+            evidence: format!("Overall confidence: {:.0}%", decision.confidence * 100.0),
         });
 
         factors
@@ -469,10 +462,7 @@ impl InterpretabilityEngine {
             total_explanations: history.len(),
             cached_explanations: cache.len(),
             avg_confidence,
-            total_counterfactuals: history
-                .iter()
-                .map(|e| e.counterfactuals.len())
-                .sum(),
+            total_counterfactuals: history.iter().map(|e| e.counterfactuals.len()).sum(),
         }
     }
 }

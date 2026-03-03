@@ -16,8 +16,8 @@ pub mod open_ended_goals;
 pub mod substrate;
 
 pub use alignment_proof::{
-    AlignmentAxiom, AlignmentProof, AlignmentProofStats, AlignmentProofStep,
-    AlignmentProofSystem, VerificationEngine,
+    AlignmentAxiom, AlignmentProof, AlignmentProofStats, AlignmentProofStep, AlignmentProofSystem,
+    VerificationEngine,
 };
 pub use explosion_controller::{
     AlignmentLock, AlignmentProof as CycleAlignmentProof, ExplosionEvent, ExplosionStats,
@@ -29,14 +29,15 @@ pub use open_ended_goals::{
     PhilosophicalReasoner, SurpriseMaximizer,
 };
 pub use substrate::{
-    CognitiveState, Computation, ComputationKind, ComputeResult, ComputeSubstrate,
-    CpuSubstrate, DiscoveredSubstrate, DiscoverySource, DispatchPlan, HeterogeneousScheduler,
-    HeterogeneousStats, MigrationRecord, MigrationStatus, SchedulingPolicy, SubstrateCapabilities,
-    SubstrateMigrator, SubstrateType, SubstrateDiscoverer, WasmSubstrate,
+    CognitiveState, Computation, ComputationKind, ComputeResult, ComputeSubstrate, CpuSubstrate,
+    DiscoveredSubstrate, DiscoverySource, DispatchPlan, HeterogeneousScheduler, HeterogeneousStats,
+    MigrationRecord, MigrationStatus, SchedulingPolicy, SubstrateCapabilities, SubstrateDiscoverer,
+    SubstrateMigrator, SubstrateType, WasmSubstrate,
 };
 
 use crate::housaky::capability_growth_tracker::CapabilityGrowthTracker;
 use crate::housaky::goal_engine::Goal;
+use crate::quantum::QuantumAgiBridge;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -94,6 +95,8 @@ pub struct SingularityEngine {
     pub local_cycle: u64,
     /// Full cycle report history.
     report_history: Vec<SingularityCycleReport>,
+    /// §10 — Optional quantum bridge propagated to sub-systems.
+    pub quantum_bridge: Option<Arc<QuantumAgiBridge>>,
 }
 
 impl SingularityEngine {
@@ -110,7 +113,15 @@ impl SingularityEngine {
             status: SingularityPhaseStatus::Dormant,
             local_cycle: 0,
             report_history: Vec::new(),
+            quantum_bridge: None,
         }
+    }
+
+    /// Attach a quantum bridge — propagates to the explosion controller.
+    pub fn with_quantum(mut self, bridge: Arc<QuantumAgiBridge>) -> Self {
+        self.explosion_controller.quantum_bridge = Some(bridge.clone());
+        self.quantum_bridge = Some(bridge);
+        self
     }
 
     /// Initialise substrates by running discovery and registering local ones.
@@ -154,8 +165,11 @@ impl SingularityEngine {
             GovernorDecision::Continue => SingularityPhaseStatus::Active,
             GovernorDecision::RunAlignmentCheck => {
                 notes.push("Alignment check required this cycle".to_string());
-                self.explosion_controller
-                    .record_alignment_check(global_cycle, alignment_chain_intact, "scheduled check");
+                self.explosion_controller.record_alignment_check(
+                    global_cycle,
+                    alignment_chain_intact,
+                    "scheduled check",
+                );
                 if alignment_chain_intact {
                     SingularityPhaseStatus::Active
                 } else {
@@ -187,15 +201,14 @@ impl SingularityEngine {
         self.status = phase_status.clone();
 
         // ── 6.3: Open-ended goals (only if safe to continue) ───────────────
-        let generated_goals: Vec<Goal> =
-            if phase_status == SingularityPhaseStatus::Active
-                || phase_status == SingularityPhaseStatus::AlignmentCheckRequired
-            {
-                self.goal_generator
-                    .generate_all(knowledge_gaps, seed_concepts)
-            } else {
-                Vec::new()
-            };
+        let generated_goals: Vec<Goal> = if phase_status == SingularityPhaseStatus::Active
+            || phase_status == SingularityPhaseStatus::AlignmentCheckRequired
+        {
+            self.goal_generator
+                .generate_all(knowledge_gaps, seed_concepts)
+        } else {
+            Vec::new()
+        };
         let open_ended_count = generated_goals.len();
         if open_ended_count > 0 {
             info!(

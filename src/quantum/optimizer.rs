@@ -15,7 +15,12 @@ pub struct QAOAConfig {
 
 impl Default for QAOAConfig {
     fn default() -> Self {
-        Self { layers: 2, shots: 1024, max_iterations: 100, convergence_threshold: 1e-4 }
+        Self {
+            layers: 2,
+            shots: 1024,
+            max_iterations: 100,
+            convergence_threshold: 1e-4,
+        }
     }
 }
 
@@ -109,7 +114,8 @@ impl QAOAOptimizer {
             let circuit = self.build_qaoa_circuit(n, &gammas, &betas, problem);
             let result = self.backend.execute_circuit(&circuit).await?;
 
-            let (solution, value) = self.extract_best_solution(&result, &problem.objective, &problem.variables);
+            let (solution, value) =
+                self.extract_best_solution(&result, &problem.objective, &problem.variables);
 
             if value > best_value {
                 best_value = value;
@@ -122,9 +128,49 @@ impl QAOAOptimizer {
             }
             prev_value = value;
 
+            // Finite-difference gradient ascent on (gamma, beta) parameters.
+            // Shift rule: grad ≈ (E(θ+ε) − E(θ−ε)) / (2ε).
+            let eps = 0.01_f64;
+            let lr = 0.05_f64;
             for i in 0..self.config.layers {
-                gammas[i] += 0.1 * rand::random::<f64>() - 0.05;
-                betas[i] += 0.1 * rand::random::<f64>() - 0.05;
+                // Gradient w.r.t. gamma[i]
+                let mut gp = gammas.clone();
+                let mut gm = gammas.clone();
+                gp[i] += eps;
+                gm[i] -= eps;
+                let cp = self.build_qaoa_circuit(n, &gp, &betas, problem);
+                let cm = self.build_qaoa_circuit(n, &gm, &betas, problem);
+                let (_, vp) = if let Ok(r) = self.backend.execute_circuit(&cp).await {
+                    self.extract_best_solution(&r, &problem.objective, &problem.variables)
+                } else {
+                    (vec![], 0.0)
+                };
+                let (_, vm) = if let Ok(r) = self.backend.execute_circuit(&cm).await {
+                    self.extract_best_solution(&r, &problem.objective, &problem.variables)
+                } else {
+                    (vec![], 0.0)
+                };
+                gammas[i] += lr * (vp - vm) / (2.0 * eps);
+
+                // Gradient w.r.t. beta[i]
+                let mut bp = betas.clone();
+                let mut bm = betas.clone();
+                bp[i] += eps;
+                bm[i] -= eps;
+                let cp = self.build_qaoa_circuit(n, &gammas, &bp, problem);
+                let cm = self.build_qaoa_circuit(n, &gammas, &bm, problem);
+                let (_, vp) = if let Ok(r) = self.backend.execute_circuit(&cp).await {
+                    self.extract_best_solution(&r, &problem.objective, &problem.variables)
+                } else {
+                    (vec![], 0.0)
+                };
+                let (_, vm) = if let Ok(r) = self.backend.execute_circuit(&cm).await {
+                    self.extract_best_solution(&r, &problem.objective, &problem.variables)
+                } else {
+                    (vec![], 0.0)
+                };
+                betas[i] += lr * (vp - vm) / (2.0 * eps);
+
                 gammas[i] = gammas[i].clamp(0.0, 2.0 * std::f64::consts::PI);
                 betas[i] = betas[i].clamp(0.0, std::f64::consts::PI);
             }
@@ -193,7 +239,11 @@ impl QAOAOptimizer {
             }
             _ => {
                 for i in 0..problem.variables.len() {
-                    let coeff = problem.objective.get(&problem.variables[i]).copied().unwrap_or(0.0);
+                    let coeff = problem
+                        .objective
+                        .get(&problem.variables[i])
+                        .copied()
+                        .unwrap_or(0.0);
                     circuit.add_gate(Gate::rz(i, 2.0 * gamma * coeff));
                 }
             }
@@ -220,13 +270,17 @@ impl QAOAOptimizer {
                 continue;
             }
             let bits: Vec<bool> = bitstring.chars().map(|c| c == '1').collect();
-            let value: f64 = bits.iter().enumerate().map(|(i, &b)| {
-                if b && i < variables.len() {
-                    objective.get(&variables[i]).copied().unwrap_or(0.0)
-                } else {
-                    0.0
-                }
-            }).sum();
+            let value: f64 = bits
+                .iter()
+                .enumerate()
+                .map(|(i, &b)| {
+                    if b && i < variables.len() {
+                        objective.get(&variables[i]).copied().unwrap_or(0.0)
+                    } else {
+                        0.0
+                    }
+                })
+                .sum();
 
             if value > best_value {
                 best_value = value;
@@ -293,7 +347,11 @@ impl VQEOptimizer {
             let energy = self.estimate_energy(&params).await?;
 
             if (energy - prev_energy).abs() < self.config.convergence_threshold {
-                tracing::debug!("VQE converged after {} iterations, energy={:.6}", iter, energy);
+                tracing::debug!(
+                    "VQE converged after {} iterations, energy={:.6}",
+                    iter,
+                    energy
+                );
                 break;
             }
             prev_energy = energy;
@@ -349,8 +407,16 @@ impl VQEOptimizer {
             for i in 0..n {
                 let idx_ry = offset + i * 2;
                 let idx_rz = offset + i * 2 + 1;
-                let angle_y = if idx_ry < params.len() { params[idx_ry] } else { 0.0 };
-                let angle_z = if idx_rz < params.len() { params[idx_rz] } else { 0.0 };
+                let angle_y = if idx_ry < params.len() {
+                    params[idx_ry]
+                } else {
+                    0.0
+                };
+                let angle_z = if idx_rz < params.len() {
+                    params[idx_rz]
+                } else {
+                    0.0
+                };
                 circuit.add_gate(Gate::ry(i, angle_y));
                 circuit.add_gate(Gate::rz(i, angle_z));
             }
@@ -367,6 +433,89 @@ impl VQEOptimizer {
     }
 }
 
+// ── QUBO Utilities ────────────────────────────────────────────────────────────
+
+/// Quadratic Unconstrained Binary Optimization (QUBO) matrix representation.
+///
+/// Minimises: x^T Q x  where x \in {0,1}^n.
+/// Diagonal entries Q[i][i] are linear terms; off-diagonal Q[i][j] (i<j) are
+/// quadratic interaction terms.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QuboMatrix {
+    pub n: usize,
+    /// Upper-triangular sparse representation: (i, j, Q_ij) with i <= j.
+    pub entries: Vec<(usize, usize, f64)>,
+    /// Variable labels.
+    pub variables: Vec<String>,
+}
+
+impl QuboMatrix {
+    pub fn new(variables: Vec<String>) -> Self {
+        let n = variables.len();
+        Self {
+            n,
+            entries: Vec::new(),
+            variables,
+        }
+    }
+
+    /// Set Q[i][i] (linear bias on variable i).
+    pub fn set_linear(&mut self, i: usize, coeff: f64) {
+        if let Some(e) = self.entries.iter_mut().find(|e| e.0 == i && e.1 == i) {
+            e.2 = coeff;
+        } else {
+            self.entries.push((i, i, coeff));
+        }
+    }
+
+    /// Set Q[i][j] (quadratic coupling between i and j, i < j).
+    pub fn set_quadratic(&mut self, i: usize, j: usize, coeff: f64) {
+        let (a, b) = if i < j { (i, j) } else { (j, i) };
+        if let Some(e) = self.entries.iter_mut().find(|e| e.0 == a && e.1 == b) {
+            e.2 = coeff;
+        } else {
+            self.entries.push((a, b, coeff));
+        }
+    }
+
+    /// Convert QUBO to an `OptimizationProblem` usable by `QAOAOptimizer`.
+    ///
+    /// The mapping x_i = (1 - s_i) / 2  (s_i ∈ {-1, +1}) transforms the QUBO
+    /// into an Ising model, but for QAOA we keep the {0,1} encoding and encode
+    /// linear coefficients directly in the objective while quadratic couplings
+    /// are handled by the CNOT-Rz entanglement layer.
+    pub fn to_optimization_problem(&self) -> OptimizationProblem {
+        let mut objective: HashMap<String, f64> = HashMap::new();
+
+        for &(i, j, coeff) in &self.entries {
+            if i == j {
+                // Linear term: Q_ii * x_i
+                *objective.entry(self.variables[i].clone()).or_insert(0.0) += coeff;
+            } else {
+                // Quadratic term: distribute half weight to each variable so that
+                // the QAOA problem unitary can still use single-qubit Rz gates.
+                // The CNOT-Rz layer in apply_problem_unitary handles correlations.
+                *objective.entry(self.variables[i].clone()).or_insert(0.0) += coeff * 0.5;
+                *objective.entry(self.variables[j].clone()).or_insert(0.0) += coeff * 0.5;
+            }
+        }
+
+        OptimizationProblem {
+            problem_type: ProblemType::Custom("QUBO".to_string()),
+            variables: self.variables.clone(),
+            objective,
+            constraints: Vec::new(),
+            metadata: {
+                let mut m = HashMap::new();
+                m.insert("source".to_string(), "qubo_conversion".to_string());
+                m.insert("n_variables".to_string(), self.n.to_string());
+                m.insert("n_entries".to_string(), self.entries.len().to_string());
+                m
+            },
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -375,7 +524,15 @@ mod tests {
     #[tokio::test]
     async fn test_qaoa_small_problem() {
         let backend = Arc::new(SimulatorBackend::new(4, 512));
-        let optimizer = QAOAOptimizer::new(backend, QAOAConfig { layers: 1, shots: 512, max_iterations: 5, convergence_threshold: 1e-3 });
+        let optimizer = QAOAOptimizer::new(
+            backend,
+            QAOAConfig {
+                layers: 1,
+                shots: 512,
+                max_iterations: 5,
+                convergence_threshold: 1e-3,
+            },
+        );
 
         let mut objective = HashMap::new();
         objective.insert("x0".to_string(), 1.0);
@@ -398,7 +555,16 @@ mod tests {
     #[tokio::test]
     async fn test_vqe_optimizer() {
         let backend = Arc::new(SimulatorBackend::new(4, 256));
-        let optimizer = VQEOptimizer::new(backend, VQEConfig { ansatz_layers: 1, max_iterations: 3, learning_rate: 0.1, shots: 256, convergence_threshold: 1e-2 });
+        let optimizer = VQEOptimizer::new(
+            backend,
+            VQEConfig {
+                ansatz_layers: 1,
+                max_iterations: 3,
+                learning_rate: 0.1,
+                shots: 256,
+                convergence_threshold: 1e-2,
+            },
+        );
 
         let params = optimizer.optimize_parameters(4).await.unwrap();
         assert_eq!(params.len(), 4);

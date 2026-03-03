@@ -108,10 +108,7 @@ pub struct WorldSimulator {
 }
 
 impl WorldSimulator {
-    pub fn new(
-        world_model: Arc<WorldModel>,
-        causal_graph: Arc<CausalInferenceEngine>,
-    ) -> Self {
+    pub fn new(world_model: Arc<WorldModel>, causal_graph: Arc<CausalInferenceEngine>) -> Self {
         Self {
             world_model,
             causal_graph,
@@ -164,7 +161,7 @@ impl WorldSimulator {
                 };
 
                 // Inject slight stochasticity via sample index perturbation
-                let noise = (sample_idx as f64 * 0.618033988749895) % 0.1;
+                let noise = (sample_idx as f64 * 0.618_033_988_749_895) % 0.1;
                 let confidence = (outcome.confidence - noise).max(0.0);
                 let reward = outcome.reward * (1.0 - noise * 0.5);
 
@@ -184,7 +181,11 @@ impl WorldSimulator {
             traces.push(trace);
         }
 
-        traces.sort_by(|a, b| b.total_reward.partial_cmp(&a.total_reward).unwrap_or(std::cmp::Ordering::Equal));
+        traces.sort_by(|a, b| {
+            b.total_reward
+                .partial_cmp(&a.total_reward)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         info!(
             "Simulation: {} traces, best reward={:.4}",
             traces.len(),
@@ -194,12 +195,7 @@ impl WorldSimulator {
     }
 
     /// Monte Carlo Tree Search for optimal action sequence to achieve `goal`.
-    pub async fn mcts_plan(
-        &self,
-        state: &WorldState,
-        goal: &Goal,
-        budget_ms: u64,
-    ) -> Vec<Action> {
+    pub async fn mcts_plan(&self, state: &WorldState, goal: &Goal, budget_ms: u64) -> Vec<Action> {
         let start = std::time::Instant::now();
         let budget = std::time::Duration::from_millis(budget_ms);
 
@@ -291,12 +287,7 @@ impl WorldSimulator {
         }
     }
 
-    async fn expand(
-        &self,
-        tree: &mut Vec<MctsNode>,
-        leaf_idx: usize,
-        goal: &Goal,
-    ) -> usize {
+    async fn expand(&self, tree: &mut Vec<MctsNode>, leaf_idx: usize, goal: &Goal) -> usize {
         if tree[leaf_idx].untried_actions.is_empty() {
             return leaf_idx;
         }
@@ -306,12 +297,7 @@ impl WorldSimulator {
         let child_state = outcome.state;
         let child_actions = self.get_candidate_actions(&child_state, goal);
 
-        let child_node = MctsNode::new(
-            child_state,
-            Some(action),
-            Some(leaf_idx),
-            child_actions,
-        );
+        let child_node = MctsNode::new(child_state, Some(action), Some(leaf_idx), child_actions);
 
         let child_idx = tree.len();
         tree.push(child_node);
@@ -319,12 +305,7 @@ impl WorldSimulator {
         child_idx
     }
 
-    async fn rollout(
-        &self,
-        tree: &[MctsNode],
-        from_idx: usize,
-        goal: &Goal,
-    ) -> f64 {
+    async fn rollout(&self, tree: &[MctsNode], from_idx: usize, goal: &Goal) -> f64 {
         let mut state = tree[from_idx].state.clone();
         let mut total_reward = 0.0;
 
@@ -364,10 +345,7 @@ impl WorldSimulator {
                 break;
             }
             // Follow most-visited child
-            let best = node
-                .children
-                .iter()
-                .max_by_key(|&&c| tree[c].visits);
+            let best = node.children.iter().max_by_key(|&&c| tree[c].visits);
             match best {
                 Some(&child_idx) => {
                     if let Some(ref action) = tree[child_idx].action {
@@ -446,12 +424,7 @@ impl WorldSimulator {
         let goal_keywords: Vec<&str> = goal.description.split_whitespace().take(5).collect();
         let matches = goal_keywords
             .iter()
-            .filter(|kw| {
-                state
-                    .context
-                    .keys()
-                    .any(|k| k.contains(&***kw))
-            })
+            .filter(|kw| state.context.keys().any(|k| k.contains(&***kw)))
             .count();
         matches as f64 / goal_keywords.len().max(1) as f64
     }
@@ -466,14 +439,8 @@ pub struct CausalSimulationPipeline {
 }
 
 impl CausalSimulationPipeline {
-    pub fn new(
-        world_model: Arc<WorldModel>,
-        causal_engine: Arc<CausalInferenceEngine>,
-    ) -> Self {
-        let simulator = WorldSimulator::new(
-            Arc::clone(&world_model),
-            Arc::clone(&causal_engine),
-        );
+    pub fn new(world_model: Arc<WorldModel>, causal_engine: Arc<CausalInferenceEngine>) -> Self {
+        let simulator = WorldSimulator::new(Arc::clone(&world_model), Arc::clone(&causal_engine));
         Self {
             simulator,
             world_model,
@@ -486,11 +453,7 @@ impl CausalSimulationPipeline {
     /// 2. Translate causal edges into action candidates
     /// 3. MCTS plan over causal action space
     /// 4. Return optimal action sequence with causal justification
-    pub async fn causal_plan(
-        &self,
-        goal: &Goal,
-        budget_ms: u64,
-    ) -> Result<CausalPlan> {
+    pub async fn causal_plan(&self, goal: &Goal, budget_ms: u64) -> Result<CausalPlan> {
         let state = self.world_model.get_current_state().await;
 
         // Pull causal relationships from the graph
@@ -500,10 +463,7 @@ impl CausalSimulationPipeline {
         };
 
         // MCTS over the world model
-        let actions = self
-            .simulator
-            .mcts_plan(&state, goal, budget_ms)
-            .await;
+        let actions = self.simulator.mcts_plan(&state, goal, budget_ms).await;
 
         let justifications: Vec<String> = causal_edges
             .iter()

@@ -149,7 +149,13 @@ mod tests {
 
     #[test]
     fn test_label() {
-        let excited = EmotionalTag { valence: 0.8, arousal: 0.8, dominance: 0.7, surprise: 0.0, curiosity: 0.0 };
+        let excited = EmotionalTag {
+            valence: 0.8,
+            arousal: 0.8,
+            dominance: 0.7,
+            surprise: 0.0,
+            curiosity: 0.0,
+        };
         assert_eq!(excited.label(), "excited");
     }
 }

@@ -59,39 +59,38 @@ impl WaveExecutor {
 
     pub async fn compute_waves(&self) -> Vec<Wave> {
         let tasks = self.tasks.read().await;
-        
+
         let mut waves: Vec<Wave> = Vec::new();
         let mut assigned: std::collections::HashSet<String> = std::collections::HashSet::new();
-        
+
         let mut wave_num = 1u32;
         loop {
             let mut wave_tasks: Vec<String> = Vec::new();
-            
+
             for (id, task) in tasks.iter() {
                 if assigned.contains(id) {
                     continue;
                 }
-                
-                let deps_satisfied = task.dependencies.iter()
-                    .all(|dep| assigned.contains(dep));
-                
+
+                let deps_satisfied = task.dependencies.iter().all(|dep| assigned.contains(dep));
+
                 if deps_satisfied {
                     wave_tasks.push(id.clone());
-                    
+
                     if wave_tasks.len() >= self.max_parallel {
                         break;
                     }
                 }
             }
-            
+
             if wave_tasks.is_empty() {
                 break;
             }
-            
+
             for id in &wave_tasks {
                 assigned.insert(id.clone());
             }
-            
+
             waves.push(Wave {
                 number: wave_num,
                 task_ids: wave_tasks,
@@ -99,13 +98,13 @@ impl WaveExecutor {
                 started_at: None,
                 completed_at: None,
             });
-            
+
             wave_num += 1;
         }
-        
+
         let mut store = self.waves.write().await;
         *store = waves.clone();
-        
+
         info!("Computed {} waves for {} tasks", waves.len(), tasks.len());
         waves
     }
@@ -118,14 +117,14 @@ impl WaveExecutor {
     pub async fn get_ready_tasks(&self, wave_num: u32) -> Vec<GSDTask> {
         let waves = self.waves.read().await;
         let tasks = self.tasks.read().await;
-        
+
         let wave = match waves.iter().find(|w| w.number == wave_num) {
             Some(w) => w,
             None => return Vec::new(),
         };
-        
+
         let mut ready = Vec::new();
-        
+
         for task_id in &wave.task_ids {
             if let Some(task) = tasks.get(task_id) {
                 if task.status == GSDTaskStatus::Ready || task.status == GSDTaskStatus::Pending {
@@ -133,7 +132,7 @@ impl WaveExecutor {
                 }
             }
         }
-        
+
         ready
     }
 
@@ -169,10 +168,10 @@ impl WaveExecutor {
         let mut waves = self.waves.write().await;
         if let Some(wave) = waves.iter_mut().find(|w| w.number == wave_num) {
             wave.completed_at = Some(Utc::now());
-            
+
             let success_count = results.iter().filter(|r| r.success).count();
             let total = results.len();
-            
+
             wave.status = if success_count == total {
                 WaveStatus::Completed
             } else if success_count > 0 {
@@ -195,7 +194,8 @@ impl WaveExecutor {
 
     pub async fn get_completed_task_ids(&self) -> Vec<String> {
         let tasks = self.tasks.read().await;
-        tasks.values()
+        tasks
+            .values()
             .filter(|t| matches!(t.status, GSDTaskStatus::Completed | GSDTaskStatus::Verified))
             .map(|t| t.id.clone())
             .collect()
@@ -203,7 +203,10 @@ impl WaveExecutor {
 
     pub async fn get_wave_status(&self, wave_num: u32) -> Option<WaveStatus> {
         let waves = self.waves.read().await;
-        waves.iter().find(|w| w.number == wave_num).map(|w| w.status.clone())
+        waves
+            .iter()
+            .find(|w| w.number == wave_num)
+            .map(|w| w.status.clone())
     }
 
     pub async fn get_execution_order(&self) -> Vec<u32> {
@@ -219,16 +222,20 @@ impl WaveExecutor {
     pub async fn remaining_tasks(&self, wave_num: u32) -> usize {
         let waves = self.waves.read().await;
         let tasks = self.tasks.read().await;
-        
+
         let wave = match waves.iter().find(|w| w.number == wave_num) {
             Some(w) => w,
             None => return 0,
         };
-        
-        wave.task_ids.iter()
+
+        wave.task_ids
+            .iter()
             .filter(|id| {
-                tasks.get(*id)
-                    .map(|t| !matches!(t.status, GSDTaskStatus::Completed | GSDTaskStatus::Verified))
+                tasks
+                    .get(*id)
+                    .map(|t| {
+                        !matches!(t.status, GSDTaskStatus::Completed | GSDTaskStatus::Verified)
+                    })
                     .unwrap_or(false)
             })
             .count()
@@ -237,7 +244,10 @@ impl WaveExecutor {
     pub async fn all_waves_completed(&self) -> bool {
         let waves = self.waves.read().await;
         waves.iter().all(|w| {
-            matches!(w.status, WaveStatus::Completed | WaveStatus::PartiallyCompleted | WaveStatus::Failed)
+            matches!(
+                w.status,
+                WaveStatus::Completed | WaveStatus::PartiallyCompleted | WaveStatus::Failed
+            )
         })
     }
 }

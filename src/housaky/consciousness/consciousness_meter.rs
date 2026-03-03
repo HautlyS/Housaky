@@ -216,7 +216,8 @@ impl ConsciousnessMeter {
         };
 
         // Active modules normalized
-        let active_modules = (active_module_count as f64 / (max_module_count.max(1) as f64)).clamp(0.0, 1.0);
+        let active_modules =
+            (active_module_count as f64 / (max_module_count.max(1) as f64)).clamp(0.0, 1.0);
 
         // Broadcast richness: log-normalized history depth
         let broadcast_richness = (broadcast_history_len as f64 / 100.0).min(1.0);
@@ -272,8 +273,10 @@ impl ConsciousnessMeter {
             return 0.0;
         }
         let recent: Vec<f64> = history.iter().rev().take(window).map(|e| e.phi).collect();
-        let first_half_avg = recent[..recent.len() / 2].iter().sum::<f64>() / (recent.len() / 2).max(1) as f64;
-        let second_half_avg = recent[recent.len() / 2..].iter().sum::<f64>() / (recent.len() / 2).max(1) as f64;
+        let first_half_avg =
+            recent[..recent.len() / 2].iter().sum::<f64>() / (recent.len() / 2).max(1) as f64;
+        let second_half_avg =
+            recent[recent.len() / 2..].iter().sum::<f64>() / (recent.len() / 2).max(1) as f64;
         first_half_avg - second_half_avg
     }
 
@@ -290,7 +293,10 @@ impl ConsciousnessMeter {
             history.iter().map(|e| e.phi).sum::<f64>() / history.len() as f64
         };
 
-        let current_level = history.back().map(|e| e.level.label().to_string()).unwrap_or_else(|| "dormant".to_string());
+        let current_level = history
+            .back()
+            .map(|e| e.level.label().to_string())
+            .unwrap_or_else(|| "dormant".to_string());
 
         ConsciousnessStats {
             total_measurements: *count,
@@ -358,8 +364,14 @@ mod tests {
 
     #[test]
     fn test_level_from_phi() {
-        assert_eq!(ConsciousnessLevel::from_phi(0.0), ConsciousnessLevel::Dormant);
+        assert_eq!(
+            ConsciousnessLevel::from_phi(0.0),
+            ConsciousnessLevel::Dormant
+        );
         assert_eq!(ConsciousnessLevel::from_phi(0.5), ConsciousnessLevel::Aware);
-        assert_eq!(ConsciousnessLevel::from_phi(0.9), ConsciousnessLevel::Transcendent);
+        assert_eq!(
+            ConsciousnessLevel::from_phi(0.9),
+            ConsciousnessLevel::Transcendent
+        );
     }
 }

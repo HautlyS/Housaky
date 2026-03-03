@@ -260,12 +260,11 @@ impl Agent {
             config,
         );
 
-        let mut existing_names: std::collections::HashSet<String> = tools
-            .iter()
-            .map(|t| t.name().to_string())
-            .collect();
+        let mut existing_names: std::collections::HashSet<String> =
+            tools.iter().map(|t| t.name().to_string()).collect();
 
-        for t in crate::tools::load_active_generated_tools(security.clone(), &config.workspace_dir) {
+        for t in crate::tools::load_active_generated_tools(security.clone(), &config.workspace_dir)
+        {
             let tool_name = sanitize_tool_name(t.name());
             if existing_names.contains(&tool_name) || tool_name != t.name() {
                 continue;

@@ -16,7 +16,10 @@ use tracing::{info, warn};
 pub mod sync;
 pub mod transport;
 
-pub use transport::{FederationTransportLayer, NetworkTransport, NetworkStats, PeerConnection, TransportConfig, TransportMessage, TransportProtocol};
+pub use transport::{
+    FederationTransportLayer, NetworkStats, NetworkTransport, PeerConnection, TransportConfig,
+    TransportMessage, TransportProtocol,
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Peer {
@@ -204,7 +207,9 @@ impl FederationHub {
             if let Some(existing) = knowledge.get(&entry.key) {
                 if entry.version > existing.version {
                     knowledge.insert(entry.key.clone(), entry.clone());
-                } else if entry.version == existing.version && entry.updated_at > existing.updated_at {
+                } else if entry.version == existing.version
+                    && entry.updated_at > existing.updated_at
+                {
                     knowledge.insert(entry.key.clone(), entry.clone());
                     conflicts += 1;
                 } else {
@@ -255,7 +260,10 @@ impl FederationHub {
 
         FederationStats {
             total_peers: peers.len(),
-            online_peers: peers.values().filter(|p| p.status == PeerStatus::Online).count(),
+            online_peers: peers
+                .values()
+                .filter(|p| p.status == PeerStatus::Online)
+                .count(),
             shared_knowledge_items: knowledge.len(),
             total_syncs: history.len(),
             successful_syncs: history.iter().filter(|s| s.success).count(),
@@ -281,7 +289,8 @@ mod tests {
     #[tokio::test]
     async fn test_federation_basic() {
         let hub = FederationHub::new(FederationConfig::default());
-        hub.register_peer("peer-1", "localhost:8081", vec!["reasoning".into()]).await;
+        hub.register_peer("peer-1", "localhost:8081", vec!["reasoning".into()])
+            .await;
         hub.share_knowledge("fact-1", "Rust is fast", 0.95).await;
 
         let knowledge = hub.shared_knowledge.read().await;
@@ -290,7 +299,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_delta_merge() {
-        let hub = FederationHub::new(FederationConfig { require_trust: 0.0, ..Default::default() });
+        let hub = FederationHub::new(FederationConfig {
+            require_trust: 0.0,
+            ..Default::default()
+        });
         let delta = KnowledgeDelta {
             source_peer: "peer-1".to_string(),
             timestamp: Utc::now(),

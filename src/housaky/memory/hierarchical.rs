@@ -3,10 +3,10 @@ use anyhow::Result;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::fmt::Write as _;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::info;
-use std::fmt::Write as _;
 
 pub struct HierarchicalMemory {
     working: Arc<RwLock<WorkingMemoryLayer>>,
@@ -552,7 +552,8 @@ impl HierarchicalMemory {
                 context,
                 "[Episode] {}",
                 episode.context.chars().take(200).collect::<String>()
-            ).ok();
+            )
+            .ok();
             tokens += ep_tokens;
         }
 

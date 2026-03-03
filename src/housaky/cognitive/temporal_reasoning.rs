@@ -101,7 +101,8 @@ impl TimeInterval {
     pub fn relation_to(&self, other: &TimeInterval) -> IntervalRelation {
         let tolerance = Duration::seconds(1);
 
-        let starts_equal = (self.start - other.start).num_seconds().abs() <= tolerance.num_seconds();
+        let starts_equal =
+            (self.start - other.start).num_seconds().abs() <= tolerance.num_seconds();
         let ends_equal = (self.end - other.end).num_seconds().abs() <= tolerance.num_seconds();
         let self_end_meets_other_start =
             (self.end - other.start).num_seconds().abs() <= tolerance.num_seconds();
@@ -184,11 +185,7 @@ impl TemporalIndex {
     }
 
     /// Query events within a time range.
-    pub fn query_range(
-        &self,
-        start: DateTime<Utc>,
-        end: DateTime<Utc>,
-    ) -> Vec<&TemporalEvent> {
+    pub fn query_range(&self, start: DateTime<Utc>, end: DateTime<Utc>) -> Vec<&TemporalEvent> {
         self.events
             .iter()
             .filter(|e| e.interval.start >= start && e.interval.end <= end)
@@ -309,14 +306,8 @@ impl TemporalReasoner {
 
         for existing in &index.events {
             let relation = event.interval.relation_to(&existing.interval);
-            new_relations.push((
-                (event.id.clone(), existing.id.clone()),
-                relation,
-            ));
-            new_relations.push((
-                (existing.id.clone(), event.id.clone()),
-                relation.inverse(),
-            ));
+            new_relations.push(((event.id.clone(), existing.id.clone()), relation));
+            new_relations.push(((existing.id.clone(), event.id.clone()), relation.inverse()));
         }
         drop(index);
 
@@ -381,10 +372,7 @@ impl TemporalReasoner {
             };
         }
 
-        let most_recent = events
-            .iter()
-            .max_by_key(|e| e.interval.end)
-            .unwrap();
+        let most_recent = events.iter().max_by_key(|e| e.interval.end).unwrap();
 
         let elapsed = Utc::now() - most_recent.interval.end;
 
@@ -480,9 +468,8 @@ impl TemporalReasoner {
         if gaps.len() >= 4 {
             let first_half_avg =
                 gaps[..gaps.len() / 2].iter().sum::<i64>() as f64 / (gaps.len() / 2) as f64;
-            let second_half_avg =
-                gaps[gaps.len() / 2..].iter().sum::<i64>() as f64
-                    / (gaps.len() - gaps.len() / 2) as f64;
+            let second_half_avg = gaps[gaps.len() / 2..].iter().sum::<i64>() as f64
+                / (gaps.len() - gaps.len() / 2) as f64;
 
             let ratio = second_half_avg / first_half_avg.max(1.0);
             if ratio < 0.7 {
@@ -601,11 +588,7 @@ impl TemporalReasoner {
     }
 
     /// Get the temporal relation between two events by ID.
-    pub async fn get_relation(
-        &self,
-        event_a: &str,
-        event_b: &str,
-    ) -> Option<IntervalRelation> {
+    pub async fn get_relation(&self, event_a: &str, event_b: &str) -> Option<IntervalRelation> {
         let relations = self.interval_relations.read().await;
         relations
             .get(&(event_a.to_string(), event_b.to_string()))
@@ -613,11 +596,7 @@ impl TemporalReasoner {
     }
 
     /// Get all events that have a specific relation to a given event.
-    pub async fn find_related(
-        &self,
-        event_id: &str,
-        relation: IntervalRelation,
-    ) -> Vec<String> {
+    pub async fn find_related(&self, event_id: &str, relation: IntervalRelation) -> Vec<String> {
         let relations = self.interval_relations.read().await;
         relations
             .iter()
@@ -631,16 +610,8 @@ impl TemporalReasoner {
         let index = self.temporal_index.read().await;
         let relations = self.interval_relations.read().await;
 
-        let earliest = index
-            .events
-            .iter()
-            .map(|e| e.interval.start)
-            .min();
-        let latest = index
-            .events
-            .iter()
-            .map(|e| e.interval.end)
-            .max();
+        let earliest = index.events.iter().map(|e| e.interval.start).min();
+        let latest = index.events.iter().map(|e| e.interval.end).max();
 
         let event_types: Vec<String> = index
             .events
@@ -720,11 +691,7 @@ mod tests {
             Utc::now() - Duration::hours(1),
             "A",
         );
-        let b = TimeInterval::new(
-            Utc::now(),
-            Utc::now() + Duration::hours(1),
-            "B",
-        );
+        let b = TimeInterval::new(Utc::now(), Utc::now() + Duration::hours(1), "B");
         assert_eq!(a.relation_to(&b), IntervalRelation::Before);
     }
 
@@ -758,7 +725,11 @@ mod tests {
 
         index.add_event(TemporalEvent {
             id: "e1".to_string(),
-            interval: TimeInterval::new(now - Duration::hours(2), now - Duration::hours(1), "Event 1"),
+            interval: TimeInterval::new(
+                now - Duration::hours(2),
+                now - Duration::hours(1),
+                "Event 1",
+            ),
             event_type: "test".to_string(),
             description: "Test event 1".to_string(),
             tags: vec!["important".to_string()],
@@ -778,7 +749,11 @@ mod tests {
         reasoner
             .record_event(TemporalEvent {
                 id: "e1".to_string(),
-                interval: TimeInterval::new(now - Duration::hours(2), now - Duration::hours(1), "Coding"),
+                interval: TimeInterval::new(
+                    now - Duration::hours(2),
+                    now - Duration::hours(1),
+                    "Coding",
+                ),
                 event_type: "coding".to_string(),
                 description: "Implemented causal engine".to_string(),
                 tags: vec!["development".to_string()],

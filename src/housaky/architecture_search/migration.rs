@@ -187,15 +187,21 @@ impl ArchitectureMigrator {
             fitness_delta: None,
         };
 
-        self.log(&mut record, LogLevel::Info, format!(
-            "Starting migration {} → {}",
-            plan.from_genome_id, plan.to_genome_id
-        ));
+        self.log(
+            &mut record,
+            LogLevel::Info,
+            format!(
+                "Starting migration {} → {}",
+                plan.from_genome_id, plan.to_genome_id
+            ),
+        );
 
         for (step_idx, step) in plan.steps.iter().enumerate() {
             record.status = MigrationStatus::InProgress { step: step_idx };
 
-            let result = self.execute_step(step, from_genome, to_genome, &mut record).await;
+            let result = self
+                .execute_step(step, from_genome, to_genome, &mut record)
+                .await;
 
             match result {
                 Ok(checkpoint_opt) => {
@@ -250,7 +256,10 @@ impl ArchitectureMigrator {
             ),
         );
 
-        info!("Architecture migration {} → {} COMPLETE", plan.from_genome_id, plan.to_genome_id);
+        info!(
+            "Architecture migration {} → {} COMPLETE",
+            plan.from_genome_id, plan.to_genome_id
+        );
         self.history.push(record.clone());
         Ok(record)
     }
@@ -264,11 +273,7 @@ impl ArchitectureMigrator {
     ) -> Result<Option<MigrationCheckpoint>> {
         match step {
             MigrationStep::SerialiseCurrentState => {
-                let cp = self.create_checkpoint(
-                    &record.plan.id,
-                    0,
-                    from_genome,
-                )?;
+                let cp = self.create_checkpoint(&record.plan.id, 0, from_genome)?;
                 Ok(Some(cp))
             }
             MigrationStep::SpawnSandbox => {
@@ -295,11 +300,7 @@ impl ArchitectureMigrator {
                 Ok(None)
             }
             MigrationStep::HotSwap => {
-                let cp = self.create_checkpoint(
-                    &record.plan.id,
-                    7,
-                    to_genome,
-                )?;
+                let cp = self.create_checkpoint(&record.plan.id, 7, to_genome)?;
                 info!("Hot-swap checkpoint created: {}", cp.id);
                 Ok(Some(cp))
             }
@@ -307,9 +308,7 @@ impl ArchitectureMigrator {
                 info!("Decommissioning {} old modules", module_ids.len());
                 Ok(None)
             }
-            MigrationStep::Verify => {
-                Ok(None)
-            }
+            MigrationStep::Verify => Ok(None),
         }
     }
 

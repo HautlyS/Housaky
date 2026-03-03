@@ -31,7 +31,12 @@ impl SensorReading {
     }
 
     pub fn from_event(event: &SensorEvent) -> Self {
-        Self::new(&event.sensor_id, event.sensor_type.clone(), event.value, 0.1)
+        Self::new(
+            &event.sensor_id,
+            event.sensor_type.clone(),
+            event.value,
+            0.1,
+        )
     }
 
     pub fn information_gain(&self) -> f64 {
@@ -110,11 +115,17 @@ impl SensoryFusionEngine {
     }
 
     pub async fn register_sensor_group(&self, group_name: &str, sensor_ids: Vec<String>) {
-        self.sensor_groups.write().await.insert(group_name.to_string(), sensor_ids);
+        self.sensor_groups
+            .write()
+            .await
+            .insert(group_name.to_string(), sensor_ids);
     }
 
     pub async fn set_attention_weight(&self, sensor_id: &str, weight: f64) {
-        self.attention_weights.write().await.insert(sensor_id.to_string(), weight.clamp(0.0, 10.0));
+        self.attention_weights
+            .write()
+            .await
+            .insert(sensor_id.to_string(), weight.clamp(0.0, 10.0));
     }
 
     pub async fn ingest(&self, reading: SensorReading) {
@@ -167,19 +178,23 @@ impl SensoryFusionEngine {
             fused.pop_front();
         }
         fused.push_back(percept.clone());
-        debug!("SensoryFusion: fused '{}' from {} sensors, confidence={:.3}", group_name, readings.len(), percept.confidence);
+        debug!(
+            "SensoryFusion: fused '{}' from {} sensors, confidence={:.3}",
+            group_name,
+            readings.len(),
+            percept.confidence
+        );
 
         Some(percept)
     }
 
     fn weighted_average(&self, group: &str, readings: &[(SensorReading, f64)]) -> FusedPercept {
         let total_weight: f64 = readings.iter().map(|(_, w)| w).sum();
-        let fused_value: f64 = readings.iter()
-            .map(|(r, w)| r.value * w)
-            .sum::<f64>()
-            / total_weight.max(1e-9);
+        let fused_value: f64 =
+            readings.iter().map(|(r, w)| r.value * w).sum::<f64>() / total_weight.max(1e-9);
 
-        let variance: f64 = readings.iter()
+        let variance: f64 = readings
+            .iter()
             .map(|(r, w)| w * (r.value - fused_value).powi(2))
             .sum::<f64>()
             / total_weight.max(1e-9);
@@ -199,10 +214,10 @@ impl SensoryFusionEngine {
     }
 
     async fn kalman_fuse(&self, group: &str, readings: &[(SensorReading, f64)]) -> FusedPercept {
-        let avg_value: f64 = readings.iter().map(|(r, _)| r.value).sum::<f64>()
-            / readings.len() as f64;
-        let avg_variance: f64 = readings.iter().map(|(r, _)| r.variance).sum::<f64>()
-            / readings.len() as f64;
+        let avg_value: f64 =
+            readings.iter().map(|(r, _)| r.value).sum::<f64>() / readings.len() as f64;
+        let avg_variance: f64 =
+            readings.iter().map(|(r, _)| r.variance).sum::<f64>() / readings.len() as f64;
 
         let mut kalman_states = self.kalman_states.write().await;
         let state = kalman_states
@@ -255,15 +270,18 @@ impl SensoryFusionEngine {
     }
 
     fn maximum_likelihood(&self, group: &str, readings: &[(SensorReading, f64)]) -> FusedPercept {
-        let best = readings.iter()
-            .max_by(|(a, wa), (b, wb)| {
-                let score_a = wa * a.reliability / a.variance.max(1e-9);
-                let score_b = wb * b.reliability / b.variance.max(1e-9);
-                score_a.partial_cmp(&score_b).unwrap_or(std::cmp::Ordering::Equal)
-            });
+        let best = readings.iter().max_by(|(a, wa), (b, wb)| {
+            let score_a = wa * a.reliability / a.variance.max(1e-9);
+            let score_b = wb * b.reliability / b.variance.max(1e-9);
+            score_a
+                .partial_cmp(&score_b)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         let fused_value = best.map(|(r, _)| r.value).unwrap_or(0.0);
-        let confidence = best.map(|(r, w)| (w * r.reliability).min(1.0)).unwrap_or(0.0);
+        let confidence = best
+            .map(|(r, w)| (w * r.reliability).min(1.0))
+            .unwrap_or(0.0);
         let anomaly = self.compute_anomaly_score(readings, fused_value);
 
         FusedPercept {
@@ -284,11 +302,15 @@ impl SensoryFusionEngine {
             exps.iter().map(|e| e / sum.max(1e-9)).collect()
         };
 
-        let fused_value: f64 = readings.iter().zip(softmax_weights.iter())
+        let fused_value: f64 = readings
+            .iter()
+            .zip(softmax_weights.iter())
             .map(|((r, _), sw)| r.value * sw)
             .sum();
 
-        let confidence: f64 = readings.iter().zip(softmax_weights.iter())
+        let confidence: f64 = readings
+            .iter()
+            .zip(softmax_weights.iter())
             .map(|((r, _), sw)| r.reliability * sw)
             .sum();
 
@@ -309,14 +331,17 @@ impl SensoryFusionEngine {
         if readings.is_empty() {
             return 0.0;
         }
-        let max_dev = readings.iter()
+        let max_dev = readings
+            .iter()
             .map(|(r, _)| (r.value - fused).abs() / r.variance.sqrt().max(1e-9))
             .fold(0.0f64, f64::max);
         (1.0 - (-max_dev / 3.0).exp()).min(1.0)
     }
 
     pub async fn latest_percept(&self, group_name: &str) -> Option<FusedPercept> {
-        self.fused_percepts.read().await
+        self.fused_percepts
+            .read()
+            .await
             .iter()
             .rev()
             .find(|p| p.percept_type == group_name)
@@ -324,7 +349,9 @@ impl SensoryFusionEngine {
     }
 
     pub async fn anomalies(&self, threshold: f64) -> Vec<FusedPercept> {
-        self.fused_percepts.read().await
+        self.fused_percepts
+            .read()
+            .await
             .iter()
             .filter(|p| p.anomaly_score > threshold)
             .cloned()
@@ -343,12 +370,21 @@ mod tests {
     #[tokio::test]
     async fn test_weighted_average_fusion() {
         let engine = SensoryFusionEngine::new(100);
-        engine.register_sensor_group("temperature", vec!["t1".into(), "t2".into()]).await;
+        engine
+            .register_sensor_group("temperature", vec!["t1".into(), "t2".into()])
+            .await;
 
-        engine.ingest(SensorReading::new("t1", SensorType::Temperature, 22.5, 0.1)).await;
-        engine.ingest(SensorReading::new("t2", SensorType::Temperature, 23.5, 0.2)).await;
+        engine
+            .ingest(SensorReading::new("t1", SensorType::Temperature, 22.5, 0.1))
+            .await;
+        engine
+            .ingest(SensorReading::new("t2", SensorType::Temperature, 23.5, 0.2))
+            .await;
 
-        let percept = engine.fuse_group("temperature", FusionMethod::WeightedAverage).await.unwrap();
+        let percept = engine
+            .fuse_group("temperature", FusionMethod::WeightedAverage)
+            .await
+            .unwrap();
         assert!(percept.fused_value > 22.0 && percept.fused_value < 24.0);
         assert!(percept.confidence > 0.0);
         assert_eq!(percept.contributing_sensors.len(), 2);
@@ -357,11 +393,22 @@ mod tests {
     #[tokio::test]
     async fn test_kalman_filter_fusion() {
         let engine = SensoryFusionEngine::new(50);
-        engine.register_sensor_group("motion", vec!["m1".into()]).await;
+        engine
+            .register_sensor_group("motion", vec!["m1".into()])
+            .await;
 
         for i in 0..5 {
-            engine.ingest(SensorReading::new("m1", SensorType::Motion, 10.0 + i as f64 * 0.1, 0.5)).await;
-            engine.fuse_group("motion", FusionMethod::KalmanFilter).await;
+            engine
+                .ingest(SensorReading::new(
+                    "m1",
+                    SensorType::Motion,
+                    10.0 + i as f64 * 0.1,
+                    0.5,
+                ))
+                .await;
+            engine
+                .fuse_group("motion", FusionMethod::KalmanFilter)
+                .await;
         }
 
         let percept = engine.latest_percept("motion").await.unwrap();
@@ -371,12 +418,21 @@ mod tests {
     #[tokio::test]
     async fn test_anomaly_detection() {
         let engine = SensoryFusionEngine::new(100);
-        engine.register_sensor_group("pressure", vec!["p1".into(), "p2".into()]).await;
+        engine
+            .register_sensor_group("pressure", vec!["p1".into(), "p2".into()])
+            .await;
 
-        engine.ingest(SensorReading::new("p1", SensorType::Pressure, 1.0, 0.01)).await;
-        engine.ingest(SensorReading::new("p2", SensorType::Pressure, 100.0, 0.01)).await;
+        engine
+            .ingest(SensorReading::new("p1", SensorType::Pressure, 1.0, 0.01))
+            .await;
+        engine
+            .ingest(SensorReading::new("p2", SensorType::Pressure, 100.0, 0.01))
+            .await;
 
-        let percept = engine.fuse_group("pressure", FusionMethod::BayesianFusion).await.unwrap();
+        let percept = engine
+            .fuse_group("pressure", FusionMethod::BayesianFusion)
+            .await
+            .unwrap();
         assert!(percept.anomaly_score > 0.0);
     }
 }

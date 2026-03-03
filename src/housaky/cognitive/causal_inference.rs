@@ -101,8 +101,8 @@ pub struct CounterfactualResult {
 pub struct CausalGraph {
     pub variables: HashMap<String, CausalVariable>,
     pub edges: Vec<CausalEdge>,
-    adjacency: HashMap<String, Vec<String>>,     // cause → [effects]
-    reverse_adj: HashMap<String, Vec<String>>,    // effect → [causes]
+    adjacency: HashMap<String, Vec<String>>, // cause → [effects]
+    reverse_adj: HashMap<String, Vec<String>>, // effect → [causes]
 }
 
 impl CausalGraph {
@@ -135,7 +135,9 @@ impl CausalGraph {
     pub fn do_intervention(&self, variable: &str) -> CausalGraph {
         let mut mutilated = self.clone();
         mutilated.edges.retain(|e| e.effect != variable);
-        mutilated.reverse_adj.insert(variable.to_string(), Vec::new());
+        mutilated
+            .reverse_adj
+            .insert(variable.to_string(), Vec::new());
         for children in mutilated.adjacency.values_mut() {
             children.retain(|_c| {
                 // keep edge only if its destination is NOT leading TO the variable as effect
@@ -315,11 +317,7 @@ impl CausalInferenceEngine {
     }
 
     /// Perform a do-intervention: set variable to a fixed value and predict effects.
-    pub async fn do_intervention(
-        &self,
-        variable: &str,
-        value: f64,
-    ) -> Result<Intervention> {
+    pub async fn do_intervention(&self, variable: &str, value: f64) -> Result<Intervention> {
         let graph = self.causal_graph.read().await;
 
         if !graph.variables.contains_key(variable) {
@@ -330,7 +328,9 @@ impl CausalInferenceEngine {
         let mutilated = graph.do_intervention(variable);
 
         // Propagate the intervention through the mutilated graph
-        let predicted_effects = self.propagate_intervention(&mutilated, variable, value).await;
+        let predicted_effects = self
+            .propagate_intervention(&mutilated, variable, value)
+            .await;
 
         let intervention = Intervention {
             id: uuid::Uuid::new_v4().to_string(),
@@ -342,7 +342,10 @@ impl CausalInferenceEngine {
             prediction_error: None,
         };
 
-        self.intervention_log.write().await.push(intervention.clone());
+        self.intervention_log
+            .write()
+            .await
+            .push(intervention.clone());
 
         info!(
             "Causal intervention: do({} = {}) → predicted {} downstream effects",
@@ -429,19 +432,14 @@ impl CausalInferenceEngine {
 
         // Step 2: Action — apply interventions from evidence
         for (var, val) in evidence {
-            let effects = self
-                .propagate_intervention(&graph, var, *val)
-                .await;
+            let effects = self.propagate_intervention(&graph, var, *val).await;
             for (k, v) in effects {
                 inferred_values.entry(k).or_insert(v);
             }
         }
 
         // Step 3: Prediction — compute target value
-        let hypothetical_value = inferred_values
-            .get(target_variable)
-            .copied()
-            .unwrap_or(0.0);
+        let hypothetical_value = inferred_values.get(target_variable).copied().unwrap_or(0.0);
 
         let actual_value = graph
             .variables
@@ -482,10 +480,7 @@ impl CausalInferenceEngine {
     }
 
     /// Discover causal relations from observational data.
-    pub async fn discover_causes(
-        &self,
-        observations: &[Observation],
-    ) -> Vec<CausalRelation> {
+    pub async fn discover_causes(&self, observations: &[Observation]) -> Vec<CausalRelation> {
         let mut relations = Vec::new();
 
         if observations.len() < 3 {
@@ -576,10 +571,7 @@ impl CausalInferenceEngine {
             return false;
         }
         // Check if cause values at time t predict effect values at time t+1
-        let lagged_pairs: Vec<(f64, f64)> = pairs
-            .windows(2)
-            .map(|w| (w[0].0, w[1].1))
-            .collect();
+        let lagged_pairs: Vec<(f64, f64)> = pairs.windows(2).map(|w| (w[0].0, w[1].1)).collect();
 
         if lagged_pairs.len() < 3 {
             return false;
@@ -593,8 +585,7 @@ impl CausalInferenceEngine {
         let sum_y2: f64 = lagged_pairs.iter().map(|(_, y)| y * y).sum();
 
         let numerator = n * sum_xy - sum_x * sum_y;
-        let denominator =
-            ((n * sum_x2 - sum_x * sum_x) * (n * sum_y2 - sum_y * sum_y)).sqrt();
+        let denominator = ((n * sum_x2 - sum_x * sum_x) * (n * sum_y2 - sum_y * sum_y)).sqrt();
 
         if denominator < 1e-10 {
             return false;
@@ -740,9 +731,11 @@ impl CausalInferenceEngine {
             for (effect_var, &actual_val) in actual {
                 if let Some(predicted_val) = intervention.predicted_effects.get(effect_var) {
                     // Find the edge and adjust strength based on prediction error.
-                    if let Some(edge) = graph.edges.iter_mut().find(|e| {
-                        e.cause == *variable && e.effect == *effect_var
-                    }) {
+                    if let Some(edge) = graph
+                        .edges
+                        .iter_mut()
+                        .find(|e| e.cause == *variable && e.effect == *effect_var)
+                    {
                         let error = actual_val - predicted_val;
                         // Exponential moving average update toward the actual effect ratio.
                         let actual_strength = if intervention.forced_value.abs() > 1e-10 {
@@ -762,7 +755,10 @@ impl CausalInferenceEngine {
         }
 
         if updates > 0 {
-            info!("Causal graph: updated {} edge strengths from intervention results", updates);
+            info!(
+                "Causal graph: updated {} edge strengths from intervention results",
+                updates
+            );
         }
         updates
     }
@@ -782,9 +778,11 @@ impl CausalInferenceEngine {
 
         for rel in relations.iter().filter(|r| r.confidence >= min_confidence) {
             // Check if edge already exists — update strength.
-            if let Some(edge) = graph.edges.iter_mut().find(|e| {
-                e.cause == rel.cause && e.effect == rel.effect
-            }) {
+            if let Some(edge) = graph
+                .edges
+                .iter_mut()
+                .find(|e| e.cause == rel.cause && e.effect == rel.effect)
+            {
                 let alpha = 0.3;
                 edge.strength = edge.strength * (1.0 - alpha) + rel.estimated_strength * alpha;
                 edge.confidence = (edge.confidence + rel.confidence) / 2.0;
@@ -813,7 +811,10 @@ impl CausalInferenceEngine {
                 effect: rel.effect.clone(),
                 strength: rel.estimated_strength,
                 confidence: rel.confidence,
-                mechanism: format!("Discovered via {:?} from {} observations", rel.method, rel.evidence_count),
+                mechanism: format!(
+                    "Discovered via {:?} from {} observations",
+                    rel.method, rel.evidence_count
+                ),
                 discovered_at: Utc::now(),
             });
 
@@ -838,10 +839,12 @@ impl CausalInferenceEngine {
         let obs = self.observation_buffer.read().await;
 
         let avg_prediction_error = if !log.is_empty() {
-            log.iter()
-                .filter_map(|i| i.prediction_error)
-                .sum::<f64>()
-                / log.iter().filter(|i| i.prediction_error.is_some()).count().max(1) as f64
+            log.iter().filter_map(|i| i.prediction_error).sum::<f64>()
+                / log
+                    .iter()
+                    .filter(|i| i.prediction_error.is_some())
+                    .count()
+                    .max(1) as f64
         } else {
             0.0
         };

@@ -129,10 +129,7 @@ impl SubstrateDiscoverer {
                         parallel: true,
                         streaming: false,
                         supports_state_migration: false,
-                        preferred_workloads: vec![
-                            "optimisation".to_string(),
-                            "search".to_string(),
-                        ],
+                        preferred_workloads: vec!["optimisation".to_string(), "search".to_string()],
                     },
                     available: true,
                     display_name: format!("Amazon Braket ({})", &arn[..arn.len().min(40)]),
@@ -164,10 +161,7 @@ impl SubstrateDiscoverer {
                         parallel: true,
                         streaming: false,
                         supports_state_migration: false,
-                        preferred_workloads: vec![
-                            "inference".to_string(),
-                            "search".to_string(),
-                        ],
+                        preferred_workloads: vec!["inference".to_string(), "search".to_string()],
                     },
                     available: true,
                     display_name: format!("{} ({})", provider, &endpoint[..endpoint.len().min(40)]),
@@ -189,9 +183,7 @@ impl SubstrateDiscoverer {
     /// Instantiate concrete `Arc<dyn ComputeSubstrate>` objects for the
     /// locally-constructable substrates (CPU, WASM). Remote substrates
     /// (GPU, quantum, cloud) require feature-specific adapters.
-    pub fn instantiate_local(
-        discovered: &[DiscoveredSubstrate],
-    ) -> Vec<Arc<dyn ComputeSubstrate>> {
+    pub fn instantiate_local(discovered: &[DiscoveredSubstrate]) -> Vec<Arc<dyn ComputeSubstrate>> {
         let mut result: Vec<Arc<dyn ComputeSubstrate>> = Vec::new();
 
         for d in discovered {

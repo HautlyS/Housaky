@@ -80,7 +80,10 @@ impl AdaptiveForgetting {
             }
         }
 
-        debug!("AdaptiveForgetting: time decay applied to {} episodes", decayed);
+        debug!(
+            "AdaptiveForgetting: time decay applied to {} episodes",
+            decayed
+        );
         decayed
     }
 
@@ -88,7 +91,9 @@ impl AdaptiveForgetting {
     pub async fn apply_interference(&self, episodic: &EpisodicMemory) -> usize {
         let episodes_snap: Vec<_> = {
             let eps = episodic.episodes.read().await;
-            eps.iter().map(|e| (e.id.clone(), e.context.goal.clone(), e.vividness)).collect()
+            eps.iter()
+                .map(|e| (e.id.clone(), e.context.goal.clone(), e.vividness))
+                .collect()
         };
 
         let mut interference_events = 0usize;
@@ -102,11 +107,15 @@ impl AdaptiveForgetting {
 
                 let similar = match (goal_a, goal_b) {
                     (Some(ga), Some(gb)) => {
-                        let a_words: std::collections::HashSet<&str> = ga.split_whitespace().collect();
-                        let b_words: std::collections::HashSet<&str> = gb.split_whitespace().collect();
+                        let a_words: std::collections::HashSet<&str> =
+                            ga.split_whitespace().collect();
+                        let b_words: std::collections::HashSet<&str> =
+                            gb.split_whitespace().collect();
                         let intersection = a_words.intersection(&b_words).count();
                         let union = a_words.union(&b_words).count();
-                        union > 0 && (intersection as f64 / union as f64) > self.config.interference_radius
+                        union > 0
+                            && (intersection as f64 / union as f64)
+                                > self.config.interference_radius
                     }
                     _ => false,
                 };
@@ -155,7 +164,11 @@ impl AdaptiveForgetting {
     pub async fn run_forgetting_cycle(&self, episodic: &EpisodicMemory) -> ForgettingReport {
         let avg_before = {
             let eps = episodic.episodes.read().await;
-            if eps.is_empty() { 0.0 } else { eps.iter().map(|e| e.vividness).sum::<f64>() / eps.len() as f64 }
+            if eps.is_empty() {
+                0.0
+            } else {
+                eps.iter().map(|e| e.vividness).sum::<f64>() / eps.len() as f64
+            }
         };
 
         let decayed = self.apply_time_decay(episodic).await;
@@ -164,7 +177,11 @@ impl AdaptiveForgetting {
 
         let avg_after = {
             let eps = episodic.episodes.read().await;
-            if eps.is_empty() { 0.0 } else { eps.iter().map(|e| e.vividness).sum::<f64>() / eps.len() as f64 }
+            if eps.is_empty() {
+                0.0
+            } else {
+                eps.iter().map(|e| e.vividness).sum::<f64>() / eps.len() as f64
+            }
         };
 
         let report = ForgettingReport {
@@ -190,16 +207,20 @@ impl Default for AdaptiveForgetting {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::housaky::memory::episodic::{EpisodicMemory, EpisodicEventType};
     use crate::housaky::memory::emotional_tags::EmotionalTag;
+    use crate::housaky::memory::episodic::{EpisodicEventType, EpisodicMemory};
 
     #[tokio::test]
     async fn test_forgetting_cycle() {
         let episodic = EpisodicMemory::new(100);
         let forgetting = AdaptiveForgetting::default();
 
-        episodic.begin_episode(Some("goal A".to_string()), "test").await;
-        episodic.record_event(EpisodicEventType::GoalSet, "goal A", 0.3).await;
+        episodic
+            .begin_episode(Some("goal A".to_string()), "test")
+            .await;
+        episodic
+            .record_event(EpisodicEventType::GoalSet, "goal A", 0.3)
+            .await;
         episodic.end_episode(EmotionalTag::neutral(), true).await;
 
         let report = forgetting.run_forgetting_cycle(&episodic).await;

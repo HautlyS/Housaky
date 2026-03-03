@@ -76,9 +76,13 @@ impl KnowledgeGuidedGoalSelector {
         }
     }
 
-    pub async fn select_goals(&self, context: GoalSelectionContext, max_goals: usize) -> Result<Vec<GoalScore>> {
+    pub async fn select_goals(
+        &self,
+        context: GoalSelectionContext,
+        max_goals: usize,
+    ) -> Result<Vec<GoalScore>> {
         let pending_goals = self.goal_engine.get_active_goals().await;
-        
+
         let mut scored_goals = Vec::new();
 
         for goal in pending_goals {
@@ -99,16 +103,16 @@ impl KnowledgeGuidedGoalSelector {
         let knowledge_alignment = self.calculate_knowledge_alignment(goal, &context.knowledge_gaps);
         let capability_match = self.calculate_capability_match(goal, &context.capability_levels);
         let priority_bonus = self.calculate_priority_bonus(goal);
-        let resource_availability = self.calculate_resource_availability(goal, &context.available_resources);
+        let resource_availability =
+            self.calculate_resource_availability(goal, &context.available_resources);
 
         let weights = self.knowledge_weights.read().await;
 
-        let score = 
-            (knowledge_alignment * weights.knowledge_alignment) +
-            (capability_match * weights.capability_match) +
-            (priority_bonus * weights.urgency) +
-            (goal.learning_value * weights.learning_value) +
-            (resource_availability * weights.resource_efficiency);
+        let score = (knowledge_alignment * weights.knowledge_alignment)
+            + (capability_match * weights.capability_match)
+            + (priority_bonus * weights.urgency)
+            + (goal.learning_value * weights.learning_value)
+            + (resource_availability * weights.resource_efficiency);
 
         let reasoning = format!(
             "Knowledge alignment: {:.2}, Capability match: {:.2}, Priority: {:?}, Resources: {:.2}",
@@ -128,7 +132,7 @@ impl KnowledgeGuidedGoalSelector {
 
     fn calculate_knowledge_alignment(&self, goal: &Goal, knowledge_gaps: &[String]) -> f64 {
         let goal_lower = goal.title.to_lowercase();
-        
+
         let mut alignment_score: f64 = 0.5;
 
         for gap in knowledge_gaps {
@@ -139,7 +143,10 @@ impl KnowledgeGuidedGoalSelector {
         }
 
         for tag in &goal.tags {
-            if knowledge_gaps.iter().any(|g| g.to_lowercase().contains(&tag.to_lowercase())) {
+            if knowledge_gaps
+                .iter()
+                .any(|g| g.to_lowercase().contains(&tag.to_lowercase()))
+            {
                 alignment_score += 0.1;
             }
         }
@@ -147,7 +154,11 @@ impl KnowledgeGuidedGoalSelector {
         alignment_score.min(1.0)
     }
 
-    fn calculate_capability_match(&self, goal: &Goal, capability_levels: &HashMap<String, f64>) -> f64 {
+    fn calculate_capability_match(
+        &self,
+        goal: &Goal,
+        capability_levels: &HashMap<String, f64>,
+    ) -> f64 {
         let complexity = goal.estimated_complexity;
 
         let avg_capability: f64 = if capability_levels.is_empty() {
@@ -179,7 +190,11 @@ impl KnowledgeGuidedGoalSelector {
         }
     }
 
-    fn calculate_resource_availability(&self, goal: &Goal, available_resources: &HashMap<String, f64>) -> f64 {
+    fn calculate_resource_availability(
+        &self,
+        goal: &Goal,
+        available_resources: &HashMap<String, f64>,
+    ) -> f64 {
         let required_resources = goal.estimated_complexity;
 
         let total_available: f64 = available_resources.values().sum();
@@ -253,7 +268,8 @@ impl KnowledgeGuidedGoalSelector {
         }
 
         if context.capability_levels.iter().any(|(_, v)| *v < 0.7) {
-            let low_caps: Vec<String> = context.capability_levels
+            let low_caps: Vec<String> = context
+                .capability_levels
                 .iter()
                 .filter(|(_, v)| **v < 0.7)
                 .map(|(k, _)| k.clone())

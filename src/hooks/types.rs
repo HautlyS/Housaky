@@ -218,7 +218,11 @@ pub struct HookError {
 impl HookError {
     /// Create a new hook error.
     #[must_use]
-    pub fn new(message: impl Into<String>, event_type: HookEventType, action: impl Into<String>) -> Self {
+    pub fn new(
+        message: impl Into<String>,
+        event_type: HookEventType,
+        action: impl Into<String>,
+    ) -> Self {
         Self {
             message: message.into(),
             event_type,
@@ -358,8 +362,14 @@ mod tests {
 
     #[test]
     fn test_event_type_from_str() {
-        assert_eq!(HookEventType::from_str("command"), Some(HookEventType::Command));
-        assert_eq!(HookEventType::from_str("session"), Some(HookEventType::Session));
+        assert_eq!(
+            HookEventType::from_str("command"),
+            Some(HookEventType::Command)
+        );
+        assert_eq!(
+            HookEventType::from_str("session"),
+            Some(HookEventType::Session)
+        );
         assert_eq!(HookEventType::from_str("invalid"), None);
     }
 

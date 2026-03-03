@@ -111,7 +111,14 @@ impl PhenomenalBinder {
         let unified: String = sorted_streams
             .iter()
             .take(3)
-            .map(|(s, w)| format!("[{}: {} (w={:.2})]", s.source, &s.content.data[..s.content.data.len().min(80)], w))
+            .map(|(s, w)| {
+                format!(
+                    "[{}: {} (w={:.2})]",
+                    s.source,
+                    &s.content.data[..s.content.data.len().min(80)],
+                    w
+                )
+            })
             .collect::<Vec<_>>()
             .join(" | ");
 
@@ -128,7 +135,8 @@ impl PhenomenalBinder {
         let binding_strength = coherence * (1.0 - 1.0 / (streams.len() as f64 + 1.0));
 
         // Gestalt emergence
-        let emergent_properties = self.detect_emergence(&sorted_streams.iter().map(|(s, _)| *s).collect::<Vec<_>>());
+        let emergent_properties =
+            self.detect_emergence(&sorted_streams.iter().map(|(s, _)| *s).collect::<Vec<_>>());
         let figure_ground = self.detect_figure_ground(&sorted_streams);
 
         let gestalt = Gestalt {
@@ -205,12 +213,19 @@ impl PhenomenalBinder {
             .map(|s| format!("{:?}", s.content.modality))
             .collect();
         if modalities.len() > 1 {
-            properties.push(format!("cross-modal integration ({} modalities)", modalities.len()));
+            properties.push(format!(
+                "cross-modal integration ({} modalities)",
+                modalities.len()
+            ));
         }
 
         // Goal-percept alignment
-        let has_goal = streams.iter().any(|s| s.content.content_type == ContentType::Goal);
-        let has_percept = streams.iter().any(|s| s.content.content_type == ContentType::Percept);
+        let has_goal = streams
+            .iter()
+            .any(|s| s.content.content_type == ContentType::Goal);
+        let has_percept = streams
+            .iter()
+            .any(|s| s.content.content_type == ContentType::Percept);
         if has_goal && has_percept {
             properties.push("goal-directed perception".to_string());
         }
@@ -218,7 +233,10 @@ impl PhenomenalBinder {
         // High salience convergence
         let high_salience_count = streams.iter().filter(|s| s.content.salience > 0.7).count();
         if high_salience_count > 1 {
-            properties.push(format!("{} high-salience streams converging", high_salience_count));
+            properties.push(format!(
+                "{} high-salience streams converging",
+                high_salience_count
+            ));
         }
 
         properties
@@ -229,13 +247,18 @@ impl PhenomenalBinder {
             return None;
         }
         let (figure_stream, figure_weight) = &sorted[0];
-        let ground_weight: f64 = sorted[1..].iter().map(|(_, w)| w).sum::<f64>() / (sorted.len() - 1) as f64;
+        let ground_weight: f64 =
+            sorted[1..].iter().map(|(_, w)| w).sum::<f64>() / (sorted.len() - 1) as f64;
         let contrast = (figure_weight - ground_weight).abs();
 
         if contrast > 0.2 {
             Some(FigureGround {
                 figure: figure_stream.source.clone(),
-                ground: sorted[1..].iter().map(|(s, _)| s.source.as_str()).collect::<Vec<_>>().join(", "),
+                ground: sorted[1..]
+                    .iter()
+                    .map(|(s, _)| s.source.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", "),
                 contrast,
             })
         } else {
@@ -252,10 +275,17 @@ impl PhenomenalBinder {
         offsets.sort();
         let diffs: Vec<i64> = offsets.windows(2).map(|w| w[1] - w[0]).collect();
         let mean_diff = diffs.iter().sum::<i64>() as f64 / diffs.len() as f64;
-        let variance = diffs.iter().map(|d| (*d as f64 - mean_diff).powi(2)).sum::<f64>() / diffs.len() as f64;
+        let variance = diffs
+            .iter()
+            .map(|d| (*d as f64 - mean_diff).powi(2))
+            .sum::<f64>()
+            / diffs.len() as f64;
 
         if variance < 100.0 {
-            Some(format!("regular temporal pattern (interval ~{}ms)", mean_diff as i64))
+            Some(format!(
+                "regular temporal pattern (interval ~{}ms)",
+                mean_diff as i64
+            ))
         } else {
             None
         }

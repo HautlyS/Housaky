@@ -191,10 +191,19 @@ impl OutcomeRecord {
 #[async_trait::async_trait]
 pub trait DecisionJournal: Send + Sync {
     async fn record_decision(&self, entry: DecisionEntry) -> Result<(), DecisionJournalError>;
-    async fn query_by_goal(&self, pattern: &str) -> Result<Vec<DecisionEntry>, DecisionJournalError>;
-    async fn query_by_outcome(&self, success: bool) -> Result<Vec<DecisionEntry>, DecisionJournalError>;
+    async fn query_by_goal(
+        &self,
+        pattern: &str,
+    ) -> Result<Vec<DecisionEntry>, DecisionJournalError>;
+    async fn query_by_outcome(
+        &self,
+        success: bool,
+    ) -> Result<Vec<DecisionEntry>, DecisionJournalError>;
     async fn get_learning_dataset(&self) -> Result<Vec<DecisionEntry>, DecisionJournalError>;
-    async fn get_entry(&self, entry_id: &str) -> Result<Option<DecisionEntry>, DecisionJournalError>;
+    async fn get_entry(
+        &self,
+        entry_id: &str,
+    ) -> Result<Option<DecisionEntry>, DecisionJournalError>;
     async fn get_stats(&self) -> Result<JournalStats, DecisionJournalError>;
 }
 
@@ -218,14 +227,14 @@ impl FileDecisionJournal {
     pub fn new(workspace_dir: &PathBuf) -> Result<Self, DecisionJournalError> {
         let journal_path = workspace_dir.join(".housaky").join("decision_journal");
         std::fs::create_dir_all(&journal_path)?;
-        
+
         let journal = Self {
             journal_path,
             entries: Arc::new(RwLock::new(Vec::new())),
             max_entries_per_file: 1000,
             max_total_entries: 10000,
         };
-        
+
         Ok(journal)
     }
 
@@ -245,17 +254,19 @@ impl FileDecisionJournal {
             return Ok(());
         }
 
-        let entries: Vec<DecisionEntry> = read_msgpack_file(&main_file).await.map_err(|e| DecisionJournalError::Other(e.to_string()))?;
-        
+        let entries: Vec<DecisionEntry> = read_msgpack_file(&main_file)
+            .await
+            .map_err(|e| DecisionJournalError::Other(e.to_string()))?;
+
         let mut stored = self.entries.write().await;
         *stored = entries;
-        
+
         Ok(())
     }
 
     async fn save(&self) -> Result<(), DecisionJournalError> {
         let entries = self.entries.read().await;
-        
+
         if entries.len() >= self.max_entries_per_file {
             drop(entries);
             self.rotate().await?;
@@ -263,25 +274,27 @@ impl FileDecisionJournal {
         }
 
         let main_file = self.journal_path.join("decisions.msgpack");
-        
+
         if let Some(parent) = main_file.parent() {
             tokio::fs::create_dir_all(parent).await?;
         }
-        
-        write_msgpack_file(&main_file, &*entries).await.map_err(|e| DecisionJournalError::Other(e.to_string()))?;
-        
+
+        write_msgpack_file(&main_file, &*entries)
+            .await
+            .map_err(|e| DecisionJournalError::Other(e.to_string()))?;
+
         Ok(())
     }
 
     async fn rotate(&self) -> Result<(), DecisionJournalError> {
         let mut entries = self.entries.write().await;
-        
+
         for i in (1..10).rev() {
             let old_name = format!("decisions.{}.msgpack", i);
             let new_name = format!("decisions.{}.msgpack", i + 1);
             let old_path = self.journal_path.join(&old_name);
             let new_path = self.journal_path.join(&new_name);
-            
+
             if old_path.exists() {
                 let _ = tokio::fs::rename(&old_path, &new_path).await;
             }
@@ -289,7 +302,7 @@ impl FileDecisionJournal {
 
         let rotated = self.journal_path.join("decisions.1.msgpack");
         let main_file = self.journal_path.join("decisions.msgpack");
-        
+
         if main_file.exists() {
             let _ = tokio::fs::rename(&main_file, &rotated).await;
         }
@@ -303,9 +316,11 @@ impl FileDecisionJournal {
                 .collect();
             *entries = remaining;
         }
-        
-        write_msgpack_file(&main_file, &*entries).await.map_err(|e| DecisionJournalError::Other(e.to_string()))?;
-        
+
+        write_msgpack_file(&main_file, &*entries)
+            .await
+            .map_err(|e| DecisionJournalError::Other(e.to_string()))?;
+
         Ok(())
     }
 
@@ -313,10 +328,10 @@ impl FileDecisionJournal {
         if pattern.is_empty() {
             return true;
         }
-        
+
         let pattern_lower = pattern.to_lowercase();
         let goal_lower = goal.to_lowercase();
-        
+
         if pattern.contains('*') {
             let parts: Vec<&str> = pattern_lower.split('*').collect();
             if parts.len() == 2 {
@@ -325,7 +340,7 @@ impl FileDecisionJournal {
                 return goal_lower.starts_with(starts) && goal_lower.ends_with(ends);
             }
         }
-        
+
         goal_lower.contains(&pattern_lower)
     }
 }
@@ -336,74 +351,83 @@ impl DecisionJournal for FileDecisionJournal {
         let mut entries = self.entries.write().await;
         entries.push(entry);
         drop(entries);
-        
+
         self.save().await
     }
 
-    async fn query_by_goal(&self, pattern: &str) -> Result<Vec<DecisionEntry>, DecisionJournalError> {
+    async fn query_by_goal(
+        &self,
+        pattern: &str,
+    ) -> Result<Vec<DecisionEntry>, DecisionJournalError> {
         let entries = self.entries.read().await;
-        
+
         let results: Vec<DecisionEntry> = entries
             .iter()
             .filter(|e| Self::matches_pattern(&e.goal, pattern))
             .cloned()
             .collect();
-        
+
         Ok(results)
     }
 
-    async fn query_by_outcome(&self, success: bool) -> Result<Vec<DecisionEntry>, DecisionJournalError> {
+    async fn query_by_outcome(
+        &self,
+        success: bool,
+    ) -> Result<Vec<DecisionEntry>, DecisionJournalError> {
         let entries = self.entries.read().await;
-        
+
         let results: Vec<DecisionEntry> = entries
             .iter()
             .filter(|e| e.outcome.success == success)
             .cloned()
             .collect();
-        
+
         Ok(results)
     }
 
     async fn get_learning_dataset(&self) -> Result<Vec<DecisionEntry>, DecisionJournalError> {
         let entries = self.entries.read().await;
-        
+
         let results: Vec<DecisionEntry> = entries
             .iter()
             .filter(|e| e.outcome.success && e.outcome.score >= 0.5)
             .cloned()
             .collect();
-        
+
         Ok(results)
     }
 
-    async fn get_entry(&self, entry_id: &str) -> Result<Option<DecisionEntry>, DecisionJournalError> {
+    async fn get_entry(
+        &self,
+        entry_id: &str,
+    ) -> Result<Option<DecisionEntry>, DecisionJournalError> {
         let entries = self.entries.read().await;
-        
+
         Ok(entries.iter().find(|e| e.entry_id == entry_id).cloned())
     }
 
     async fn get_stats(&self) -> Result<JournalStats, DecisionJournalError> {
         let entries = self.entries.read().await;
-        
+
         let total = entries.len();
         let successful = entries.iter().filter(|e| e.outcome.success).count();
         let failed = total - successful;
-        
+
         let average_score = if total > 0 {
             entries.iter().map(|e| e.outcome.score).sum::<f64>() / total as f64
         } else {
             0.0
         };
-        
+
         let mut goal_counts: HashMap<String, usize> = HashMap::new();
         for entry in entries.iter() {
             *goal_counts.entry(entry.goal.clone()).or_insert(0) += 1;
         }
-        
+
         let mut top_goals: Vec<(String, usize)> = goal_counts.into_iter().collect();
         top_goals.sort_by(|a, b| b.1.cmp(&a.1));
         top_goals.truncate(10);
-        
+
         Ok(JournalStats {
             total_entries: total,
             successful_decisions: successful,
@@ -517,7 +541,11 @@ mod tests {
     fn decision_entry_builder_pattern() {
         let entry = DecisionEntry::new("test goal".to_string())
             .with_reasoning("test reasoning".to_string())
-            .with_chosen(ChosenOption::new("option1".to_string(), 0.9, "best choice".to_string()));
+            .with_chosen(ChosenOption::new(
+                "option1".to_string(),
+                0.9,
+                "best choice".to_string(),
+            ));
 
         assert_eq!(entry.goal, "test goal");
         assert_eq!(entry.reasoning, "test reasoning");
@@ -551,7 +579,7 @@ mod tests {
     fn outcome_record_new() {
         let mut metrics = HashMap::new();
         metrics.insert("accuracy".to_string(), 0.95);
-        
+
         let record = OutcomeRecord::new(true, 0.9, "Task completed successfully".to_string())
             .with_metrics(metrics.clone());
 
@@ -568,10 +596,22 @@ mod tests {
             .with_tools(vec!["bash".to_string(), "file".to_string()])
             .consider_option(ConsideredOption::new("cache".to_string(), 0.8))
             .consider_option(ConsideredOption::new("parallel".to_string(), 0.7))
-            .choose(ChosenOption::new("cache".to_string(), 0.85, "best tradeoff".to_string()))
+            .choose(ChosenOption::new(
+                "cache".to_string(),
+                0.85,
+                "best tradeoff".to_string(),
+            ))
             .reason("Caching provides immediate gains".to_string())
-            .execute(ExecutionRecord::new("file".to_string(), "write".to_string(), 50))
-            .outcome(OutcomeRecord::new(true, 0.9, "Performance improved by 30%".to_string()))
+            .execute(ExecutionRecord::new(
+                "file".to_string(),
+                "write".to_string(),
+                50,
+            ))
+            .outcome(OutcomeRecord::new(
+                true,
+                0.9,
+                "Performance improved by 30%".to_string(),
+            ))
             .build();
 
         assert_eq!(entry.goal, "optimize performance");
@@ -585,9 +625,12 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let journal = FileDecisionJournal::new(&tmp.path().to_path_buf()).unwrap();
 
-        let entry = DecisionEntry::new("test goal 1".to_string())
-            .with_outcome(OutcomeRecord::new(true, 0.9, "success".to_string()));
-        
+        let entry = DecisionEntry::new("test goal 1".to_string()).with_outcome(OutcomeRecord::new(
+            true,
+            0.9,
+            "success".to_string(),
+        ));
+
         journal.record_decision(entry).await.unwrap();
 
         let results = journal.query_by_goal("test").await.unwrap();
@@ -600,10 +643,16 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let journal = FileDecisionJournal::new(&tmp.path().to_path_buf()).unwrap();
 
-        let entry1 = DecisionEntry::new("goal 1".to_string())
-            .with_outcome(OutcomeRecord::new(true, 0.9, "success".to_string()));
-        let entry2 = DecisionEntry::new("goal 2".to_string())
-            .with_outcome(OutcomeRecord::new(false, 0.3, "failed".to_string()));
+        let entry1 = DecisionEntry::new("goal 1".to_string()).with_outcome(OutcomeRecord::new(
+            true,
+            0.9,
+            "success".to_string(),
+        ));
+        let entry2 = DecisionEntry::new("goal 2".to_string()).with_outcome(OutcomeRecord::new(
+            false,
+            0.3,
+            "failed".to_string(),
+        ));
 
         journal.record_decision(entry1).await.unwrap();
         journal.record_decision(entry2).await.unwrap();
@@ -620,10 +669,16 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let journal = FileDecisionJournal::new(&tmp.path().to_path_buf()).unwrap();
 
-        let good = DecisionEntry::new("good goal".to_string())
-            .with_outcome(OutcomeRecord::new(true, 0.8, "good".to_string()));
-        let bad = DecisionEntry::new("bad goal".to_string())
-            .with_outcome(OutcomeRecord::new(false, 0.2, "bad".to_string()));
+        let good = DecisionEntry::new("good goal".to_string()).with_outcome(OutcomeRecord::new(
+            true,
+            0.8,
+            "good".to_string(),
+        ));
+        let bad = DecisionEntry::new("bad goal".to_string()).with_outcome(OutcomeRecord::new(
+            false,
+            0.2,
+            "bad".to_string(),
+        ));
         let low_score = DecisionEntry::new("low score goal".to_string())
             .with_outcome(OutcomeRecord::new(true, 0.3, "low score".to_string()));
 
@@ -642,8 +697,9 @@ mod tests {
         let journal = FileDecisionJournal::new(&tmp.path().to_path_buf()).unwrap();
 
         for i in 0..5 {
-            let entry = DecisionEntry::new(format!("goal {}", i % 2))
-                .with_outcome(OutcomeRecord::new(i < 3, 0.5 + (f64::from(i) * 0.1), "test".to_string()));
+            let entry = DecisionEntry::new(format!("goal {}", i % 2)).with_outcome(
+                OutcomeRecord::new(i < 3, 0.5 + (f64::from(i) * 0.1), "test".to_string()),
+            );
             journal.record_decision(entry).await.unwrap();
         }
 
@@ -655,8 +711,14 @@ mod tests {
 
     #[test]
     fn matches_pattern_works_correctly() {
-        assert!(FileDecisionJournal::matches_pattern("optimize code", "optimize"));
-        assert!(FileDecisionJournal::matches_pattern("Optimize Code", "optimize"));
+        assert!(FileDecisionJournal::matches_pattern(
+            "optimize code",
+            "optimize"
+        ));
+        assert!(FileDecisionJournal::matches_pattern(
+            "Optimize Code",
+            "optimize"
+        ));
         assert!(FileDecisionJournal::matches_pattern("test goal", "test*"));
         assert!(FileDecisionJournal::matches_pattern("goal test", "*test"));
         assert!(!FileDecisionJournal::matches_pattern("goal", "other"));

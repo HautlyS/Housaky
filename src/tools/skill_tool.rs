@@ -242,10 +242,7 @@ impl Tool for SkillHttpTool {
 
     async fn execute(&self, args: serde_json::Value) -> anyhow::Result<ToolResult> {
         let url = self.render_url(&args);
-        let method = args
-            .get("method")
-            .and_then(|v| v.as_str())
-            .unwrap_or("GET");
+        let method = args.get("method").and_then(|v| v.as_str()).unwrap_or("GET");
         let headers = args.get("headers").cloned().unwrap_or(json!({}));
         let body = args.get("body").and_then(|v| v.as_str());
 

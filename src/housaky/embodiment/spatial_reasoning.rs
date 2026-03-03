@@ -142,10 +142,9 @@ impl OccupancyGrid {
         }
 
         // Bresenham ray tracing to mark free cells
-        if let (Some((sx, sy)), Some((ex, ey))) = (
-            self.world_to_grid(sensor_pos),
-            self.world_to_grid(hit_pos),
-        ) {
+        if let (Some((sx, sy)), Some((ex, ey))) =
+            (self.world_to_grid(sensor_pos), self.world_to_grid(hit_pos))
+        {
             for (gx, gy) in bresenham_line(sx as isize, sy as isize, ex as isize, ey as isize)
                 .iter()
                 .take_while(|&&(x, y)| (x, y) != (ex as isize, ey as isize))
@@ -276,10 +275,18 @@ impl SpatialReasoner {
         let grid = self.occupancy_grid.read().await;
 
         let start_cell = grid.world_to_grid(start).ok_or_else(|| {
-            anyhow::anyhow!("Start position ({:.2}, {:.2}) is outside map", start.x, start.y)
+            anyhow::anyhow!(
+                "Start position ({:.2}, {:.2}) is outside map",
+                start.x,
+                start.y
+            )
         })?;
         let goal_cell = grid.world_to_grid(goal).ok_or_else(|| {
-            anyhow::anyhow!("Goal position ({:.2}, {:.2}) is outside map", goal.x, goal.y)
+            anyhow::anyhow!(
+                "Goal position ({:.2}, {:.2}) is outside map",
+                goal.x,
+                goal.y
+            )
         })?;
 
         if grid.is_occupied(start_cell.0, start_cell.1) {
@@ -324,10 +331,7 @@ impl SpatialReasoner {
                     .map(|&(gx, gy)| grid.grid_to_world(gx, gy))
                     .collect::<Vec<_>>();
 
-                let total_dist: f64 = waypoints
-                    .windows(2)
-                    .map(|w| w[0].distance_to(&w[1]))
-                    .sum();
+                let total_dist: f64 = waypoints.windows(2).map(|w| w[0].distance_to(&w[1])).sum();
 
                 return Ok(Path {
                     waypoints,
@@ -348,11 +352,7 @@ impl SpatialReasoner {
             for &(dx, dy) in dirs {
                 let nx = cx as isize + dx;
                 let ny = cy as isize + dy;
-                if nx < 0
-                    || ny < 0
-                    || nx as usize >= grid.width
-                    || ny as usize >= grid.height
-                {
+                if nx < 0 || ny < 0 || nx as usize >= grid.width || ny as usize >= grid.height {
                     continue;
                 }
                 let (nx, ny) = (nx as usize, ny as usize);
@@ -388,8 +388,7 @@ impl SpatialReasoner {
 
     pub async fn check_collision(&self, position: &Point2D) -> bool {
         let grid = self.occupancy_grid.read().await;
-        let clearance_cells =
-            (self.robot_radius_m / grid.resolution_m).ceil() as usize;
+        let clearance_cells = (self.robot_radius_m / grid.resolution_m).ceil() as usize;
 
         if let Some((cx, cy)) = grid.world_to_grid(position) {
             let lo_x = cx.saturating_sub(clearance_cells);
@@ -455,16 +454,15 @@ impl SpatialReasoner {
         );
     }
 
-    pub async fn update_map_from_lidar(
-        &self,
-        sensor_pos: &Point2D,
-        hit_positions: &[Point2D],
-    ) {
+    pub async fn update_map_from_lidar(&self, sensor_pos: &Point2D, hit_positions: &[Point2D]) {
         let mut grid = self.occupancy_grid.write().await;
         for hit in hit_positions {
             grid.update_from_lidar(sensor_pos, hit);
         }
-        info!("Updated occupancy map with {} lidar hits", hit_positions.len());
+        info!(
+            "Updated occupancy map with {} lidar hits",
+            hit_positions.len()
+        );
     }
 }
 
@@ -494,10 +492,7 @@ fn reconstruct_path(
 fn line_of_sight(a: &Point2D, b: &Point2D, grid: &OccupancyGrid) -> bool {
     if let (Some((ax, ay)), Some((bx, by))) = (grid.world_to_grid(a), grid.world_to_grid(b)) {
         for (x, y) in bresenham_line(ax as isize, ay as isize, bx as isize, by as isize) {
-            if x >= 0
-                && y >= 0
-                && grid.is_occupied(x as usize, y as usize)
-            {
+            if x >= 0 && y >= 0 && grid.is_occupied(x as usize, y as usize) {
                 return false;
             }
         }

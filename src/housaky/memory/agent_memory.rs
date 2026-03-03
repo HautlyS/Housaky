@@ -132,7 +132,11 @@ impl AgentMemoryStore {
     }
 
     /// Retrieve the `limit` most-important records of a given kind.
-    pub fn recall_by_kind(&self, kind: &MemoryKind, limit: usize) -> Result<Vec<AgentMemoryRecord>> {
+    pub fn recall_by_kind(
+        &self,
+        kind: &MemoryKind,
+        limit: usize,
+    ) -> Result<Vec<AgentMemoryRecord>> {
         let conn = self.conn.lock().unwrap();
         let kind_str = kind.to_string();
         let mut stmt = conn.prepare(
@@ -203,17 +207,14 @@ impl AgentMemoryStore {
 
     pub fn record_count(&self) -> Result<u64> {
         let conn = self.conn.lock().unwrap();
-        let n: i64 =
-            conn.query_row("SELECT COUNT(*) FROM agent_memory", [], |r| r.get(0))?;
+        let n: i64 = conn.query_row("SELECT COUNT(*) FROM agent_memory", [], |r| r.get(0))?;
         Ok(n as u64)
     }
 }
 
 fn row_to_record(row: &rusqlite::Row<'_>) -> rusqlite::Result<AgentMemoryRecord> {
     let kind_str: String = row.get(1)?;
-    let kind: MemoryKind = kind_str
-        .parse()
-        .unwrap_or(MemoryKind::Observation);
+    let kind: MemoryKind = kind_str.parse().unwrap_or(MemoryKind::Observation);
 
     let tags_json: String = row.get(6)?;
     let tags: Vec<String> = serde_json::from_str(&tags_json).unwrap_or_default();

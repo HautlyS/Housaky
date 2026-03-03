@@ -19,8 +19,12 @@ pub mod research_agent;
 
 pub use abstraction::{AbstractPrinciple, AbstractionEngine, AbstractionStats, ConcreteExample};
 pub use analogy_engine::{Analogy, AnalogyEngine, AnalogyStats, DomainConcept};
-pub use curriculum::{Curriculum, KnowledgeFrontier, KnowledgeGap, LearningObjective, StudySession};
-pub use hypothesis_gen::{Hypothesis, HypothesisGenerator, HypothesisStatus, HypothesisStats, Observation};
+pub use curriculum::{
+    Curriculum, KnowledgeFrontier, KnowledgeGap, LearningObjective, StudySession,
+};
+pub use hypothesis_gen::{
+    Hypothesis, HypothesisGenerator, HypothesisStats, HypothesisStatus, Observation,
+};
 pub use knowledge_compiler::{
     CompiledForm, CompiledKnowledgeUnit, CompilerStats, KnowledgeCompiler, KnowledgeIndex,
 };
@@ -76,7 +80,11 @@ impl KnowledgeAcquisitionEngine {
 
         // 1. Generate hypotheses
         for domain in domains {
-            let new_h = self.hypotheses.write().await.generate_from_observations(domain);
+            let new_h = self
+                .hypotheses
+                .write()
+                .await
+                .generate_from_observations(domain);
             report.new_hypotheses += new_h.len();
         }
 
@@ -128,7 +136,10 @@ impl KnowledgeAcquisitionEngine {
 
         info!(
             "Knowledge acquisition cycle: {} hypotheses, {} principles, {} analogies, {} compiled",
-            report.new_hypotheses, report.new_principles, report.new_analogies, report.compiled_units
+            report.new_hypotheses,
+            report.new_principles,
+            report.new_analogies,
+            report.compiled_units
         );
 
         Ok(report)
@@ -149,10 +160,10 @@ impl KnowledgeAcquisitionEngine {
             synthesis.topic,
             ids.len()
         );
-        self.pipeline.write().await.mark_paper_read(
-            PaperReference::new(&synthesis.topic, None),
-            Some(synthesis),
-        );
+        self.pipeline
+            .write()
+            .await
+            .mark_paper_read(PaperReference::new(&synthesis.topic, None), Some(synthesis));
     }
 
     pub async fn stats(&self) -> KnowledgeAcquisitionStats {

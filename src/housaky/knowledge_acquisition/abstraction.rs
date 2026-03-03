@@ -47,11 +47,11 @@ pub struct AbstractPrinciple {
     pub statement: String,
     pub domain_of_origin: String,
     pub applicable_domains: Vec<String>,
-    pub supporting_examples: Vec<String>,  // example IDs
+    pub supporting_examples: Vec<String>, // example IDs
     pub confidence: f64,
-    pub generality: f64,                   // 0.0 (narrow) – 1.0 (universal)
+    pub generality: f64, // 0.0 (narrow) – 1.0 (universal)
     pub extracted_at: DateTime<Utc>,
-    pub uses: u64,                         // how many times applied
+    pub uses: u64, // how many times applied
 }
 
 impl AbstractPrinciple {
@@ -91,7 +91,7 @@ pub struct AbstractionConfig {
     pub min_examples_for_principle: usize,
     pub min_confidence_threshold: f64,
     pub max_principles_per_domain: usize,
-    pub cross_domain_threshold: f64,  // similarity score to apply a principle cross-domain
+    pub cross_domain_threshold: f64, // similarity score to apply a principle cross-domain
 }
 
 impl Default for AbstractionConfig {
@@ -111,7 +111,7 @@ pub struct AbstractionEngine {
     pub config: AbstractionConfig,
     pub examples: Vec<ConcreteExample>,
     pub principles: Vec<AbstractPrinciple>,
-    pub domain_index: HashMap<String, Vec<String>>,  // domain → principle IDs
+    pub domain_index: HashMap<String, Vec<String>>, // domain → principle IDs
 }
 
 impl AbstractionEngine {
@@ -233,13 +233,10 @@ impl AbstractionEngine {
                     continue;
                 }
 
-                let general_name =
-                    format!("cross_domain_{}_{}", i, self.principles.len());
+                let general_name = format!("cross_domain_{}_{}", i, self.principles.len());
                 let general_statement = format!(
                     "Cross-domain generalisation (from '{}' and '{}'): {}",
-                    p1.domain_of_origin,
-                    p2.domain_of_origin,
-                    p1.statement
+                    p1.domain_of_origin, p2.domain_of_origin, p1.statement
                 );
 
                 // Check not already present
@@ -247,11 +244,8 @@ impl AbstractionEngine {
                     continue;
                 }
 
-                let mut gen = AbstractPrinciple::new(
-                    &general_name,
-                    &general_statement,
-                    "cross_domain",
-                );
+                let mut gen =
+                    AbstractPrinciple::new(&general_name, &general_statement, "cross_domain");
                 gen.applicable_domains =
                     vec![p1.domain_of_origin.clone(), p2.domain_of_origin.clone()];
                 gen.generality = 0.70 + similarity * 0.20;
@@ -274,8 +268,7 @@ impl AbstractionEngine {
         self.principles
             .iter()
             .filter(|p| {
-                p.domain_of_origin == domain
-                    || p.applicable_domains.iter().any(|d| d == domain)
+                p.domain_of_origin == domain || p.applicable_domains.iter().any(|d| d == domain)
             })
             .filter(|p| p.confidence >= self.config.min_confidence_threshold)
             .collect()
@@ -290,10 +283,7 @@ impl AbstractionEngine {
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    fn find_common_features(
-        &self,
-        examples: &[&&ConcreteExample],
-    ) -> HashMap<String, String> {
+    fn find_common_features(&self, examples: &[&&ConcreteExample]) -> HashMap<String, String> {
         if examples.is_empty() {
             return HashMap::new();
         }

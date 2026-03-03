@@ -1,20 +1,28 @@
-#![allow(clippy::format_push_string, clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+#![allow(
+    clippy::format_push_string,
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss
+)]
 
 use crate::housaky::core::TurnContext;
 use crate::housaky::memory::emotional_tags::EmotionalTag;
 use crate::housaky::meta_cognition::EmotionalState;
 use crate::housaky::reasoning_engine::{ReasoningEngine, ReasoningType};
 use crate::providers::Provider;
+use crate::quantum::QuantumAgiBridge;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::info;
+use tracing::{info, warn};
 
 pub struct ReasoningPipeline {
     engine: Arc<ReasoningEngine>,
     config: ReasoningPipelineConfig,
     history: Arc<RwLock<Vec<ReasoningResult>>>,
+    /// §10 — Optional quantum bridge for Grover-accelerated branch pre-filtering.
+    quantum_bridge: Option<Arc<QuantumAgiBridge>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -84,14 +92,13 @@ pub struct ToolSuggestion {
     pub priority: u32,
 }
 
-
-
 impl ReasoningPipeline {
     pub fn new() -> Self {
         Self {
             engine: Arc::new(ReasoningEngine::new()),
             config: ReasoningPipelineConfig::default(),
             history: Arc::new(RwLock::new(Vec::new())),
+            quantum_bridge: None,
         }
     }
 
@@ -100,7 +107,14 @@ impl ReasoningPipeline {
             engine: Arc::new(ReasoningEngine::new()),
             config,
             history: Arc::new(RwLock::new(Vec::new())),
+            quantum_bridge: None,
         }
+    }
+
+    /// §10 — Attach a quantum bridge for Grover-accelerated branch pre-filtering.
+    pub fn with_quantum(mut self, bridge: Arc<QuantumAgiBridge>) -> Self {
+        self.quantum_bridge = Some(bridge);
+        self
     }
 
     pub async fn reason(
@@ -232,7 +246,55 @@ impl ReasoningPipeline {
             .chat_with_system(Some(&system_prompt), &user_prompt, model, 0.4)
             .await?;
 
-        let parsed = self.parse_tot_response(&response)?;
+        let mut parsed = self.parse_tot_response(&response)?;
+
+        // §10 — Quantum Grover pre-filter: when we have ≥4 ToT alternatives,
+        // use Grover search to identify the highest-value branch before selecting.
+        if let Some(ref bridge) = self.quantum_bridge {
+            let alts = &parsed.alternatives_considered;
+            if alts.len() >= 4 {
+                let branch_ids: Vec<String> =
+                    (0..alts.len()).map(|i| format!("branch_{i}")).collect();
+                let fitness: HashMap<String, f64> = branch_ids
+                    .iter()
+                    .enumerate()
+                    .map(|(i, id)| (id.clone(), 1.0 / (1.0 + i as f64 * 0.15)))
+                    .collect();
+
+                match bridge
+                    .search_reasoning_branches(&branch_ids, &fitness)
+                    .await
+                {
+                    Ok(result) => {
+                        info!(
+                            "🔮 Quantum ToT branch selection: {} branches → speedup={:.2}x, strategy={}",
+                            alts.len(), result.speedup, result.strategy
+                        );
+                        // If quantum found a better branch, promote it to conclusion.
+                        if let Some(best_id) = result.best_branches.first() {
+                            if let Some(idx) = best_id
+                                .strip_prefix("branch_")
+                                .and_then(|s| s.parse::<usize>().ok())
+                            {
+                                if let Some(best_alt) = alts.get(idx) {
+                                    if !parsed.conclusion.contains(best_alt.as_str()) {
+                                        parsed.conclusion = format!(
+                                            "{} [quantum-selected branch {}]",
+                                            best_alt.chars().take(200).collect::<String>(),
+                                            idx
+                                        );
+                                        parsed.confidence = (parsed.confidence * 1.08).min(1.0);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        warn!("Quantum ToT branch selection failed: {e}");
+                    }
+                }
+            }
+        }
 
         self.engine.conclude(&chain_id, &parsed.conclusion).await?;
 
@@ -257,7 +319,7 @@ impl ReasoningPipeline {
             .map(|t| format!("- {}", t))
             .collect::<Vec<_>>()
             .join("\n");
-        
+
         format!("{}\n\n## Available Tools\n\n{}\n", base, tool_list)
     }
 

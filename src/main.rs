@@ -31,7 +31,6 @@
     clippy::unnecessary_wraps,
     dead_code
 )]
-
 #![allow(clippy::all)]
 
 use anyhow::{bail, Result};
@@ -44,11 +43,11 @@ use tracing_subscriber::FmtSubscriber;
 extern crate housaky;
 
 // Use the library modules
+use housaky::daemon::control as daemon_control;
 use housaky::{
     agent, channels, commands, config_editor, cron, daemon, dashboard, doctor, gateway, hardware,
     integrations, migration, onboard, peripherals, service, skills, tui, Config,
 };
-use housaky::daemon::control as daemon_control;
 
 #[derive(Subcommand, Debug)]
 enum DaemonAction {
@@ -73,9 +72,9 @@ enum DaemonAction {
 }
 
 use commands::{
-    ChannelCommands, CronCommands, HardwareCommands, HousakyCommands, IntegrationCommands,
-    KeyCommands, MigrateCommands, ModelCommands, PeripheralCommands, QuantumCommands,
-    ServiceCommands, SkillCommands,
+    ChannelCommands, CollectiveCommands, CronCommands, GSDCommands, GoalCommands, HardwareCommands,
+    HousakyCommands, IntegrationCommands, KeyCommands, MigrateCommands, ModelCommands,
+    PeripheralCommands, QuantumCommands, SelfModCommands, ServiceCommands, SkillCommands,
 };
 
 /// `Housaky` - Zero overhead. Zero compromise. 100% Rust.
@@ -187,8 +186,11 @@ enum Commands {
         service_command: ServiceCommands,
     },
 
-    /// Run diagnostics for daemon/scheduler/channel freshness
-    Doctor,
+    /// Run diagnostics (daemon, config, channels, security, filesystem, keys)
+    Doctor {
+        #[command(subcommand)]
+        doctor_command: Option<commands::DoctorCommands>,
+    },
 
     /// Show system status (full details)
     Status,
@@ -301,10 +303,55 @@ enum Commands {
         restore: bool,
     },
 
-    /// Housaky AGI commands (goals, reasoning, self-improvement)
-    Housaky {
+    /// Initialize Housaky AGI system
+    Init,
+    /// Trigger a manual heartbeat cycle
+    Heartbeat,
+    /// Show current tasks
+    Tasks,
+    /// Show state review
+    Review,
+    /// Force self-improvement cycle
+    Improve,
+    /// Connect to Kowalski agents
+    ConnectKowalski,
+    /// Start AGI mode interactive session
+    AgiSession {
+        /// Single message mode (don't enter interactive mode)
+        #[arg(short, long)]
+        message: Option<String>,
+        /// Provider to use
+        #[arg(short, long)]
+        provider: Option<String>,
+        /// Model to use
+        #[arg(long)]
+        model: Option<String>,
+    },
+    /// Show inner monologue (thoughts)
+    Thoughts {
+        /// Number of thoughts to show
+        #[arg(short, long, default_value = "10")]
+        count: usize,
+    },
+    /// Manage goals
+    Goals {
         #[command(subcommand)]
-        housaky_command: HousakyCommands,
+        goal_command: GoalCommands,
+    },
+    /// Manage self-modification parameters and experiment ledger
+    SelfMod {
+        #[command(subcommand)]
+        self_mod_command: SelfModCommands,
+    },
+    /// GSD Orchestration Commands
+    GSD {
+        #[command(subcommand)]
+        gsd_command: GSDCommands,
+    },
+    /// Global Collective Intelligence — submit diffs/plugins, vote, auto-apply improvements
+    Collective {
+        #[command(subcommand)]
+        collective_command: CollectiveCommands,
     },
 
     /// Quantum computing (Amazon Braket + local simulator)
@@ -329,10 +376,9 @@ fn is_daemon_running() -> bool {
     use std::net::TcpStream;
     use std::time::Duration;
 
-    if let Ok(stream) = TcpStream::connect_timeout(
-        &"127.0.0.1:8080".parse().unwrap(),
-        Duration::from_secs(1),
-    ) {
+    if let Ok(stream) =
+        TcpStream::connect_timeout(&"127.0.0.1:8080".parse().unwrap(), Duration::from_secs(1))
+    {
         let _ = stream.shutdown(std::net::Shutdown::Both);
         return true;
     }
@@ -353,7 +399,10 @@ async fn start_full_system(config: Config, verbose: bool) -> Result<()> {
 
     // Check for required configuration
     let has_api_key = config.api_key.as_ref().map_or(false, |k| !k.is_empty());
-    let has_provider = config.default_provider.as_ref().map_or(false, |p| !p.is_empty());
+    let has_provider = config
+        .default_provider
+        .as_ref()
+        .map_or(false, |p| !p.is_empty());
 
     if !has_api_key && !has_provider {
         println!("⚠️  No API key or provider configured.");
@@ -363,13 +412,19 @@ async fn start_full_system(config: Config, verbose: bool) -> Result<()> {
     }
 
     // Set workspace env for all components
-    std::env::set_var("HOUSAKY_WORKSPACE", config.workspace_dir.to_string_lossy().to_string());
+    std::env::set_var(
+        "HOUSAKY_WORKSPACE",
+        config.workspace_dir.to_string_lossy().to_string(),
+    );
 
     // Check if daemon is already running
     let daemon_already_running = is_daemon_running();
 
     let daemon_abort: tokio::task::AbortHandle = if daemon_already_running {
-        println!("🔗 Connecting to existing daemon on port {}...", gateway_port);
+        println!(
+            "🔗 Connecting to existing daemon on port {}...",
+            gateway_port
+        );
         println!("   Gateway:  http://{}:{}", host, gateway_port);
         println!("   Components: gateway, channels, heartbeat, housaky, scheduler");
         tokio::task::spawn(async {}).abort_handle()
@@ -391,10 +446,15 @@ async fn start_full_system(config: Config, verbose: bool) -> Result<()> {
     // 2. Start dashboard web server (if installed)
     let dashboard_installed = dashboard::check_dashboard_installed();
     let dashboard_abort = if dashboard_installed {
-        println!("📊 Dashboard detected, starting server on port {}...", dashboard_port);
+        println!(
+            "📊 Dashboard detected, starting server on port {}...",
+            dashboard_port
+        );
         let dashboard_host = host.clone();
         let t = tokio::spawn(async move {
-            if let Err(e) = dashboard::start_dashboard_server(&dashboard_host, dashboard_port, false).await {
+            if let Err(e) =
+                dashboard::start_dashboard_server(&dashboard_host, dashboard_port, false).await
+            {
                 eprintln!("❌ Dashboard error: {}", e);
             } else {
                 println!("✅ Dashboard stopped cleanly");
@@ -402,7 +462,9 @@ async fn start_full_system(config: Config, verbose: bool) -> Result<()> {
         });
         Some(t.abort_handle())
     } else {
-        println!("💡 Dashboard not installed. Build it with: cd dashboard && pnpm install && pnpm build");
+        println!(
+            "💡 Dashboard not installed. Build it with: cd dashboard && pnpm install && pnpm build"
+        );
         None
     };
 
@@ -424,11 +486,12 @@ async fn start_full_system(config: Config, verbose: bool) -> Result<()> {
 
     let result = housaky::housaky::heartbeat::run_agi_with_tui(
         config.clone(),
-        None,  // No initial message
-        None,  // Use default provider
-        None,  // Use default model
+        None, // No initial message
+        None, // Use default provider
+        None, // Use default model
         verbose,
-    ).await;
+    )
+    .await;
 
     // Shutdown sequence
     println!("\n👋 Shutting down Housaky system...");
@@ -447,7 +510,7 @@ async fn start_full_system(config: Config, verbose: bool) -> Result<()> {
 fn print_channel_status(config: &Config) {
     let channels_config = &config.channels_config;
     let mut active_channels = Vec::new();
-    
+
     if channels_config.telegram.is_some() {
         active_channels.push("Telegram");
     }
@@ -478,11 +541,11 @@ fn print_channel_status(config: &Config) {
     if channels_config.dingtalk.is_some() {
         active_channels.push("DingTalk");
     }
-    
+
     if !active_channels.is_empty() {
         println!("📡 Active channels: {}", active_channels.join(", "));
     }
-    
+
     // Voice integration check
     if std::env::var("ELEVENLABS_API_KEY").is_ok() {
         println!("🎙️  Voice integration: Enabled (ElevenLabs)");
@@ -507,7 +570,10 @@ fn is_first_run() -> (bool, Option<Config>) {
     match Config::load_or_init() {
         Ok(config) => {
             let has_api_key = config.api_key.as_ref().map_or(false, |k| !k.is_empty());
-            let has_provider = config.default_provider.as_ref().map_or(false, |p| !p.is_empty());
+            let has_provider = config
+                .default_provider
+                .as_ref()
+                .map_or(false, |p| !p.is_empty());
             // If neither API key nor provider is set, treat as first run
             if !has_api_key && !has_provider {
                 (true, None)
@@ -576,7 +642,10 @@ async fn main() -> Result<()> {
             };
 
             // Set workspace env
-            std::env::set_var("HOUSAKY_WORKSPACE", config.workspace_dir.to_string_lossy().to_string());
+            std::env::set_var(
+                "HOUSAKY_WORKSPACE",
+                config.workspace_dir.to_string_lossy().to_string(),
+            );
 
             return start_full_system(config, false).await;
         }
@@ -599,7 +668,10 @@ async fn main() -> Result<()> {
     // Provide workspace dir as env for channel commands (/logs today, /grep, etc.).
     if std::env::var("HOUSAKY_WORKSPACE").is_err() {
         if let Ok(cfg) = Config::load_or_init() {
-            std::env::set_var("HOUSAKY_WORKSPACE", cfg.workspace_dir.to_string_lossy().to_string());
+            std::env::set_var(
+                "HOUSAKY_WORKSPACE",
+                cfg.workspace_dir.to_string_lossy().to_string(),
+            );
         }
     }
 
@@ -630,7 +702,11 @@ async fn main() -> Result<()> {
             } else if interactive {
                 onboard::run_wizard()?
             } else {
-                onboard::run_quick_setup(api_key.as_deref(), provider.as_deref(), memory.as_deref())?
+                onboard::run_quick_setup(
+                    api_key.as_deref(),
+                    provider.as_deref(),
+                    memory.as_deref(),
+                )?
             };
             // Auto-start channels if user said yes during wizard
             if std::env::var("HOUSAKY_AUTOSTART_CHANNELS").as_deref() == Ok("1") {
@@ -660,10 +736,13 @@ async fn main() -> Result<()> {
                         info!("🚀 Starting Housaky Gateway on {host}:{port}");
                     }
                     gateway::run_gateway(&host, port, config).await
-                },
+                }
 
                 Commands::Daemon { action, port, host } => {
-                    match action.unwrap_or(DaemonAction::Start { port, host: host.clone() }) {
+                    match action.unwrap_or(DaemonAction::Start {
+                        port,
+                        host: host.clone(),
+                    }) {
                         DaemonAction::Start { port, host } => {
                             if port == 0 {
                                 info!("🧠 Starting Housaky Daemon on {host} (random port)");
@@ -690,21 +769,23 @@ async fn main() -> Result<()> {
                             Ok(())
                         }
                     }
-                },
+                }
 
-                Commands::Run { message, provider, model, verbose } => {
+                Commands::Run {
+                    message,
+                    provider,
+                    model,
+                    verbose,
+                } => {
                     println!("🚀 Starting Full Housaky AGI System with TUI Chat...");
                     if verbose {
                         println!("   Verbose mode: on");
                     }
                     housaky::housaky::heartbeat::run_agi_with_tui(
-                        config,
-                        message,
-                        provider,
-                        model,
-                        verbose,
-                    ).await
-                },
+                        config, message, provider, model, verbose,
+                    )
+                    .await
+                }
 
                 Commands::Status => {
                     println!("🦀 Housaky Status");
@@ -790,10 +871,62 @@ async fn main() -> Result<()> {
                     );
                     println!("  Boards:    {}", config.peripherals.boards.len());
 
+                    println!();
+                    println!("⚛️  Quantum:");
+                    println!(
+                        "  Enabled:   {}",
+                        if config.quantum.enabled {
+                            "✅ yes"
+                        } else {
+                            "❌ no  (set [quantum] enabled = true)"
+                        }
+                    );
+                    if config.quantum.enabled {
+                        println!("  Backend:   {}", config.quantum.backend);
+                        println!("  Max qubits: {}", config.quantum.max_qubits);
+                        println!("  Shots:     {}", config.quantum.shots);
+                        if config.quantum.backend == "braket" {
+                            let arn = if config.quantum.braket_device_arn.is_empty() {
+                                "arn:aws:braket:::device/quantum-simulator/amazon/sv1 (default)"
+                                    .to_string()
+                            } else {
+                                config.quantum.braket_device_arn.clone()
+                            };
+                            println!("  Device:    {}", arn);
+                            println!(
+                                "  S3 bucket: {}",
+                                if config.quantum.braket_s3_bucket.is_empty() {
+                                    "⚠️  not set".to_string()
+                                } else {
+                                    config.quantum.braket_s3_bucket.clone()
+                                }
+                            );
+                            println!("  Activate:  https://console.aws.amazon.com/braket/home");
+                        }
+                        println!("  Features:  QAOA goal-sched={} | QA mem-opt={} | Grover search={} | VQE fit={}",
+                            config.quantum.agi.enable_goal_scheduling,
+                            config.quantum.agi.enable_memory_optimization,
+                            config.quantum.agi.enable_reasoning_search,
+                            config.quantum.agi.enable_fitness_exploration,
+                        );
+                        if config.quantum.agi.cycle_budget_usd > 0.0 {
+                            println!(
+                                "  Budget:    ${:.4}/day",
+                                config.quantum.agi.cycle_budget_usd
+                            );
+                        }
+                    }
+
                     Ok(())
                 }
 
-                Commands::Dashboard { start, host, port, open, desktop } => {
+                Commands::Dashboard {
+                    start,
+                    host,
+                    port,
+                    open,
+                    desktop,
+                } => {
                     if desktop {
                         return dashboard::launch_desktop_app();
                     }
@@ -807,7 +940,9 @@ async fn main() -> Result<()> {
                         println!();
                         println!("Options:");
                         println!("  --start       Start the dashboard web server");
-                        println!("  --host <ip>   Bind to specific host (use \"0.0.0.0\" for network)");
+                        println!(
+                            "  --host <ip>   Bind to specific host (use \"0.0.0.0\" for network)"
+                        );
                         println!("  --port <n>    Port number (default: 3000)");
                         println!("  --open        Open in browser after starting");
                         println!("  --desktop     Launch the desktop app instead");
@@ -823,11 +958,13 @@ async fn main() -> Result<()> {
                     }
                 },
 
-                Commands::Service { service_command } => service::handle_command(&service_command, &config),
+                Commands::Service { service_command } => {
+                    service::handle_command(&service_command, &config)
+                }
 
                 Commands::Keys { key_command } => {
                     let keys_manager = housaky::keys_manager::manager::get_global_keys_manager();
-                    
+
                     async fn handle_keys_command(
                         config: &mut Config,
                         keys_manager: &housaky::keys_manager::manager::KeysManager,
@@ -845,27 +982,38 @@ async fn main() -> Result<()> {
                             KeyCommands::List => {
                                 let _load_result = keys_manager.load().await;
                                 let providers = keys_manager.get_providers().await;
-                                if !providers.is_empty() {
+                                if providers.is_empty() {
+                                    println!("No keys configured.");
+                                    println!("  Use `housaky keys manager add-provider` to add your first key.");
+                                    Ok(())
+                                } else {
                                     println!("Keys (keys_manager):");
                                     for provider in &providers {
-                                        let enabled_count = provider.keys.iter().filter(|key| key.enabled).count();
-                                        println!("  - {}: {} keys ({} enabled)", provider.name, provider.keys.len(), enabled_count);
+                                        let enabled_count =
+                                            provider.keys.iter().filter(|key| key.enabled).count();
+                                        println!(
+                                            "  - {}: {} keys ({} enabled)",
+                                            provider.name,
+                                            provider.keys.len(),
+                                            enabled_count
+                                        );
                                         for key in &provider.keys {
-                                            let suffix = if key.key.len() > 4 { &key.key[key.key.len()-4..] } else { &key.key };
-                                            let status = if key.enabled { "enabled" } else { "disabled" };
+                                            let suffix = if key.key.len() > 4 {
+                                                &key.key[key.key.len() - 4..]
+                                            } else {
+                                                &key.key
+                                            };
+                                            let status =
+                                                if key.enabled { "enabled" } else { "disabled" };
                                             println!("      ...{} - {}", suffix, status);
                                         }
                                     }
-                                    Ok(())
-                                } else {
-                                    println!("No keys configured.");
-                                    println!("  Use `housaky keys manager add-provider` to add your first key.");
                                     Ok(())
                                 }
                             }
                             KeyCommands::Add { provider, key } => {
                                 match keys_manager.add_key(&provider, key, None).await {
-                                    Ok(_) => {
+                                    Ok(()) => {
                                         println!("Added key to provider: {}", provider);
                                         keys_manager.save().await.ok();
                                         Ok(())
@@ -878,7 +1026,7 @@ async fn main() -> Result<()> {
                             }
                             KeyCommands::Remove { provider } => {
                                 match keys_manager.remove_provider(&provider).await {
-                                    Ok(_) => {
+                                    Ok(()) => {
                                         println!("Removed provider: {}", provider);
                                         keys_manager.save().await.ok();
                                         Ok(())
@@ -896,11 +1044,23 @@ async fn main() -> Result<()> {
                             }
                         }
                     }
-                    
+
                     handle_keys_command(&mut config, &keys_manager, key_command).await
                 }
 
-                Commands::Doctor => doctor::run(&config),
+                Commands::Doctor { doctor_command } => {
+                    match doctor_command.unwrap_or(commands::DoctorCommands::Run) {
+                        commands::DoctorCommands::Run => doctor::run(&config)?,
+                        commands::DoctorCommands::Fix => doctor::run_fix(&config)?,
+                        commands::DoctorCommands::Channels => doctor::run_channels(&config)?,
+                        commands::DoctorCommands::Security => doctor::run_security(&config)?,
+                        commands::DoctorCommands::Json => {
+                            let report = doctor::collect(&config);
+                            println!("{}", serde_json::to_string_pretty(&report)?);
+                        }
+                    }
+                    Ok(())
+                }
 
                 Commands::Channel { channel_command } => match channel_command {
                     ChannelCommands::Start => channels::start_channels(config).await,
@@ -912,9 +1072,15 @@ async fn main() -> Result<()> {
                     integration_command,
                 } => integrations::handle_command(integration_command, &config),
 
-                Commands::Skills { skill, skill_command } => {
+                Commands::Skills {
+                    skill,
+                    skill_command,
+                } => {
                     let cmd = if let Some(name) = skill {
-                        SkillCommands::Get { name, enable: false }
+                        SkillCommands::Get {
+                            name,
+                            enable: false,
+                        }
                     } else {
                         skill_command.unwrap_or(SkillCommands::Ui)
                     };
@@ -948,11 +1114,18 @@ async fn main() -> Result<()> {
                     Ok(())
                 }
 
-                Commands::Config { section, reset, restore } => {
+                Commands::Config {
+                    section,
+                    reset,
+                    restore,
+                } => {
                     if restore {
                         match Config::restore_from_backup() {
                             Ok(restored) => {
-                                println!("✅ Restored config from backup at {}", restored.config_path.display());
+                                println!(
+                                    "✅ Restored config from backup at {}",
+                                    restored.config_path.display()
+                                );
                             }
                             Err(e) => {
                                 println!("❌ Failed to restore config: {}", e);
@@ -972,24 +1145,20 @@ async fn main() -> Result<()> {
                         );
                         Ok(())
                     } else {
-                        tokio::task::spawn_blocking(move || config_editor::run_config_tui(config, section))
-                            .await
-                            .map_err(|e| anyhow::anyhow!("Config TUI task failed: {e}"))?
-                            .map_err(|e| anyhow::anyhow!("Config TUI error: {e}"))?;
+                        tokio::task::spawn_blocking(move || {
+                            config_editor::run_config_tui(config, section)
+                        })
+                        .await
+                        .map_err(|e| anyhow::anyhow!("Config TUI task failed: {e}"))?
+                        .map_err(|e| anyhow::anyhow!("Config TUI error: {e}"))?;
                         Ok(())
                     }
                 }
-
-                Commands::Housaky { housaky_command } => {
-                    housaky::housaky::handle_command(housaky_command, &config).await?;
-                    Ok(())
-                }
-
                 Commands::Quantum { quantum_command } => {
+                    use housaky::quantum::circuit::{Gate, QuantumCircuit};
                     use housaky::quantum::{
                         AmazonBraketBackend, QuantumBackend, QuantumConfig, SimulatorBackend,
                     };
-                    use housaky::quantum::circuit::{Gate, QuantumCircuit};
 
                     fn bell_circuit() -> QuantumCircuit {
                         let mut c = QuantumCircuit::new(2);
@@ -1000,7 +1169,12 @@ async fn main() -> Result<()> {
                     }
 
                     match quantum_command {
-                        QuantumCommands::RunBraket { shots, device, bucket, prefix } => {
+                        QuantumCommands::RunBraket {
+                            shots,
+                            device,
+                            bucket,
+                            prefix,
+                        } => {
                             println!("Submitting Bell-state circuit to Amazon Braket...");
                             println!("  Device : {device}");
                             println!("  Shots  : {shots}");
@@ -1015,22 +1189,54 @@ async fn main() -> Result<()> {
                             };
                             let backend = AmazonBraketBackend::from_config(&cfg).await?;
                             let circuit = bell_circuit();
-                            let result = backend.execute_circuit(&circuit).await?;
-                            println!("\nTask ARN  : {}", result.backend_id);
-                            println!("Shots run : {}", result.shots);
-                            println!("Runtime   : {} ms", result.execution_time_ms);
-                            println!("\nCounts:");
-                            let mut counts: Vec<_> = result.counts.iter().collect();
-                            counts.sort_by(|a, b| b.1.cmp(a.1));
-                            for (bitstring, count) in &counts {
-                                let pct = (**count as f64 / result.shots as f64) * 100.0;
-                                println!("  |{bitstring}> : {count:5}  ({pct:.1}%)", count = **count);
+                            match backend.execute_circuit(&circuit).await {
+                                Ok(result) => {
+                                    println!("\nTask ARN  : {}", result.backend_id);
+                                    println!("Shots run : {}", result.shots);
+                                    println!("Runtime   : {} ms", result.execution_time_ms);
+                                    println!("\nCounts:");
+                                    let mut counts: Vec<_> = result.counts.iter().collect();
+                                    counts.sort_by(|a, b| b.1.cmp(a.1));
+                                    for (bitstring, count) in &counts {
+                                        let pct = (**count as f64 / result.shots as f64) * 100.0;
+                                        println!(
+                                            "  |{bitstring}> : {count:5}  ({pct:.1}%)",
+                                            count = **count
+                                        );
+                                    }
+                                }
+                                Err(e) => {
+                                    let msg = format!("{e:?}");
+                                    if msg.contains("AccessDeniedException")
+                                        || msg.contains("not authorized")
+                                        || msg.contains("NotAuthorized")
+                                    {
+                                        eprintln!("\n❌  Amazon Braket is not yet enabled on this AWS account.");
+                                        eprintln!(
+                                            "\n   To activate Braket (one-time, free setup):"
+                                        );
+                                        eprintln!("   1. Open: https://console.aws.amazon.com/braket/home");
+                                        eprintln!("   2. Click \"Get started\" and accept the service terms.");
+                                        eprintln!("   3. Re-run this command — no further IAM changes needed.");
+                                        eprintln!("\n   Note: SV1 simulator costs $0.075/task (no free tier).");
+                                        eprintln!("   Set cycle_budget_usd in config.toml to cap daily spend.");
+                                        eprintln!(
+                                            "\n   To use the local simulator (zero cost) instead:"
+                                        );
+                                        eprintln!("   housaky quantum run-simulator");
+                                    } else {
+                                        eprintln!("Error running Braket task: {e}");
+                                    }
+                                    std::process::exit(1);
+                                }
                             }
                             Ok(())
                         }
 
                         QuantumCommands::RunSimulator { shots } => {
-                            println!("Running Bell-state circuit on local statevector simulator...");
+                            println!(
+                                "Running Bell-state circuit on local statevector simulator..."
+                            );
                             println!("  Shots : {shots}");
                             let backend = SimulatorBackend::new(2, shots);
                             let circuit = bell_circuit();
@@ -1052,16 +1258,40 @@ async fn main() -> Result<()> {
                             println!("Querying Braket device info...");
                             let cfg = QuantumConfig {
                                 backend: "braket".to_string(),
-                                braket_device_arn: device,
+                                braket_device_arn: device.clone(),
                                 braket_s3_bucket: bucket,
                                 ..QuantumConfig::default()
                             };
                             let backend = AmazonBraketBackend::from_config(&cfg).await?;
+                            // Try live AWS status; fall back to catalog on network error.
+                            let (online, status_str) = match backend.get_device_status().await {
+                                Ok((o, s)) => (o, s),
+                                Err(e) => {
+                                    let msg = format!("{e:?}");
+                                    if msg.contains("dns")
+                                        || msg.contains("Connect")
+                                        || msg.contains("io error")
+                                    {
+                                        eprintln!("  ⚠️  No network — showing cached catalog info");
+                                        (false, "UNKNOWN (offline)".to_string())
+                                    } else if msg.contains("AccessDeniedException")
+                                        || msg.contains("not authorized")
+                                    {
+                                        eprintln!(
+                                            "  ⚠️  Braket not yet activated — showing catalog info"
+                                        );
+                                        (false, "PENDING_ACTIVATION".to_string())
+                                    } else {
+                                        return Err(e);
+                                    }
+                                }
+                            };
                             let info = backend.get_backend_info().await;
-                            println!("  ID          : {}", info.id);
+                            println!("  ID          : {}", device);
                             println!("  Max qubits  : {}", info.max_qubits);
                             println!("  Max shots   : {}", info.max_shots);
-                            println!("  Online      : {}", info.online);
+                            println!("  Status      : {}", status_str);
+                            println!("  Online      : {}", online);
                             println!("  Gates       : {}", info.supported_gates.join(", "));
                             if let Some(ref cat) = backend.device_catalog {
                                 println!("  Provider    : {}", cat.provider);
@@ -1074,19 +1304,31 @@ async fn main() -> Result<()> {
                         QuantumCommands::Devices => {
                             use housaky::quantum::BraketDeviceCatalog;
                             println!("Known Amazon Braket Devices:\n");
-                            println!("{:<22} {:<10} {:<6} {:<10} {:<10} {}", "Name", "Provider", "Qubits", "Type", "$/task", "ARN");
+                            println!(
+                                "{:<22} {:<10} {:<6} {:<10} {:<10} {}",
+                                "Name", "Provider", "Qubits", "Type", "$/task", "ARN"
+                            );
                             println!("{}", "─".repeat(100));
                             for d in BraketDeviceCatalog::all_devices() {
                                 let dtype = format!("{:?}", d.device_type);
                                 println!(
                                     "{:<22} {:<10} {:<6} {:<10} ${:<9.4} {}",
-                                    d.name, d.provider, d.max_qubits, dtype, d.cost_per_task_usd, d.arn
+                                    d.name,
+                                    d.provider,
+                                    d.max_qubits,
+                                    dtype,
+                                    d.cost_per_task_usd,
+                                    d.arn
                                 );
                             }
                             Ok(())
                         }
 
-                        QuantumCommands::EstimateCost { device, shots, circuits } => {
+                        QuantumCommands::EstimateCost {
+                            device,
+                            shots,
+                            circuits,
+                        } => {
                             use housaky::quantum::BraketDeviceCatalog;
                             if let Some(cat) = BraketDeviceCatalog::find_by_arn(&device) {
                                 let per_task = cat.estimate_cost(shots);
@@ -1104,7 +1346,9 @@ async fn main() -> Result<()> {
                         }
 
                         QuantumCommands::Transpile { device, opt_level } => {
-                            use housaky::quantum::transpiler::{CircuitTranspiler, TranspilerConfig};
+                            use housaky::quantum::transpiler::{
+                                CircuitTranspiler, TranspilerConfig,
+                            };
                             println!("Transpiling Bell circuit for target device...");
                             println!("  Target : {device}");
                             println!("  Opt    : level {opt_level}\n");
@@ -1139,7 +1383,9 @@ async fn main() -> Result<()> {
                         }
 
                         QuantumCommands::Tomography { shots, qubits } => {
-                            use housaky::quantum::tomography::{StateTomographer, TomographyConfig};
+                            use housaky::quantum::tomography::{
+                                StateTomographer, TomographyConfig,
+                            };
                             println!("Running quantum state tomography...");
                             println!("  Qubits          : {qubits}");
                             println!("  Shots per basis : {shots}\n");
@@ -1184,7 +1430,8 @@ async fn main() -> Result<()> {
                             });
 
                             // Demo: Goal scheduling
-                            let goal_ids: Vec<String> = (0..goals).map(|i| format!("goal_{i}")).collect();
+                            let goal_ids: Vec<String> =
+                                (0..goals).map(|i| format!("goal_{i}")).collect();
                             let mut priorities = std::collections::HashMap::new();
                             for (i, id) in goal_ids.iter().enumerate() {
                                 priorities.insert(id.clone(), 1.0 - (i as f64 / goals as f64));
@@ -1195,7 +1442,8 @@ async fn main() -> Result<()> {
                                 vec![]
                             };
 
-                            let sched = bridge.schedule_goals(&goal_ids, &priorities, &deps).await?;
+                            let sched =
+                                bridge.schedule_goals(&goal_ids, &priorities, &deps).await?;
                             println!("Goal Scheduling:");
                             println!("  Strategy  : {}", sched.strategy);
                             println!("  Objective : {:.4}", sched.objective_value);
@@ -1204,10 +1452,17 @@ async fn main() -> Result<()> {
                             println!("  Runtime   : {} ms\n", sched.runtime_ms);
 
                             // Demo: Memory graph optimization
-                            let nodes: Vec<String> = (0..goals).map(|i| format!("node_{i}")).collect();
-                            let edges: Vec<(String, String, f64)> = (0..goals.saturating_sub(1)).map(|i| {
-                                (nodes[i].clone(), nodes[i + 1].clone(), 0.5 + (i as f64 * 0.1))
-                            }).collect();
+                            let nodes: Vec<String> =
+                                (0..goals).map(|i| format!("node_{i}")).collect();
+                            let edges: Vec<(String, String, f64)> = (0..goals.saturating_sub(1))
+                                .map(|i| {
+                                    (
+                                        nodes[i].clone(),
+                                        nodes[i + 1].clone(),
+                                        0.5 + (i as f64 * 0.1),
+                                    )
+                                })
+                                .collect();
 
                             let mem = bridge.optimize_memory_graph(&nodes, &edges).await?;
                             println!("Memory Graph Optimization:");
@@ -1220,36 +1475,147 @@ async fn main() -> Result<()> {
                             let metrics = bridge.metrics().await;
                             println!("Bridge Metrics:");
                             println!("  Quantum calls     : {}", metrics.total_quantum_calls);
-                            println!("  Classical fallback : {}", metrics.total_classical_fallbacks);
-                            println!("  Avg advantage     : {:.2}x", metrics.average_quantum_advantage);
+                            println!(
+                                "  Classical fallback : {}",
+                                metrics.total_classical_fallbacks
+                            );
+                            println!(
+                                "  Avg advantage     : {:.2}x",
+                                metrics.average_quantum_advantage
+                            );
                             Ok(())
                         }
 
-                        QuantumCommands::Tasks { device, bucket, max } => {
+                        QuantumCommands::Tasks {
+                            device,
+                            bucket,
+                            max,
+                        } => {
                             println!("Listing recent Braket tasks for {device}...\n");
                             let cfg = QuantumConfig {
                                 backend: "braket".to_string(),
-                                braket_device_arn: device,
+                                braket_device_arn: device.clone(),
                                 braket_s3_bucket: bucket,
                                 ..QuantumConfig::default()
                             };
                             let backend = AmazonBraketBackend::from_config(&cfg).await?;
-                            let tasks = backend.list_recent_tasks(max).await?;
-                            if tasks.is_empty() {
-                                println!("  No tasks found.");
-                            } else {
-                                println!("{:<50} {:<12} {:<8} {}", "Task ARN", "Status", "Shots", "Created");
-                                println!("{}", "─".repeat(100));
-                                for t in &tasks {
-                                    println!("{:<50} {:<12} {:<8} {}", t.task_arn, t.status, t.shots, t.created_at);
+                            match backend.list_recent_tasks(max).await {
+                                Ok(tasks) => {
+                                    if tasks.is_empty() {
+                                        println!("  No tasks found.");
+                                    } else {
+                                        println!(
+                                            "{:<50} {:<12} {:<8} {}",
+                                            "Task ARN", "Status", "Shots", "Created"
+                                        );
+                                        println!("{}", "─".repeat(100));
+                                        for t in &tasks {
+                                            println!(
+                                                "{:<50} {:<12} {:<8} {}",
+                                                t.task_arn, t.status, t.shots, t.created_at
+                                            );
+                                        }
+                                    }
+                                }
+                                Err(e) => {
+                                    let msg = format!("{e:?}");
+                                    if msg.contains("dns")
+                                        || msg.contains("Connect")
+                                        || msg.contains("io error")
+                                    {
+                                        println!("  ⚠️  No network connection to AWS — cannot list tasks.");
+                                        println!(
+                                            "  Tasks are recorded in S3 once Braket is activated."
+                                        );
+                                    } else if msg.contains("AccessDeniedException")
+                                        || msg.contains("not authorized")
+                                    {
+                                        println!("  ⚠️  Braket not yet activated on this account.");
+                                        println!("  Activate at: https://console.aws.amazon.com/braket/home");
+                                    } else {
+                                        return Err(e);
+                                    }
                                 }
                             }
                             Ok(())
                         }
 
+                        QuantumCommands::Metrics => {
+                            use housaky::quantum::agi_bridge::{AgiBridgeConfig, QuantumAgiBridge};
+                            println!("Quantum AGI Bridge Metrics\n");
+
+                            if !config.quantum.enabled {
+                                println!("  Status  : disabled");
+                                println!("  Enable  : set [quantum] enabled = true in config.toml");
+                                return Ok(());
+                            }
+
+                            let bridge_cfg = AgiBridgeConfig {
+                                max_qubits: config.quantum.max_qubits,
+                                error_mitigation: config.quantum.error_mitigation,
+                                transpile: config.quantum.transpile,
+                                target_device: if config.quantum.backend == "braket" {
+                                    Some(config.quantum.braket_device_arn.clone())
+                                } else {
+                                    None
+                                },
+                                quantum_threshold: config.quantum.agi.quantum_threshold,
+                                cycle_budget_usd: config.quantum.agi.cycle_budget_usd,
+                                goal_scheduling_shots: config.quantum.shots,
+                                reasoning_search_shots: config.quantum.shots * 2,
+                                memory_optimization_shots: config.quantum.shots / 2,
+                                fitness_eval_shots: config.quantum.shots * 2,
+                            };
+                            let bridge = QuantumAgiBridge::new(bridge_cfg);
+                            let m = bridge.metrics().await;
+
+                            println!("  Backend              : {}", config.quantum.backend);
+                            println!("  Max qubits           : {}", config.quantum.max_qubits);
+                            println!(
+                                "  Quantum threshold    : {} goals/nodes",
+                                config.quantum.agi.quantum_threshold
+                            );
+                            println!(
+                                "  Cycle budget         : ${:.4}",
+                                config.quantum.agi.cycle_budget_usd
+                            );
+                            println!();
+                            println!("  Total quantum calls  : {}", m.total_quantum_calls);
+                            println!("  Classical fallbacks  : {}", m.total_classical_fallbacks);
+                            println!(
+                                "  Avg quantum advantage: {:.2}x",
+                                m.average_quantum_advantage
+                            );
+                            println!("  Total cost (session) : ${:.6}", m.total_cost_usd);
+                            println!();
+                            println!("  Features enabled:");
+                            println!(
+                                "    Goal scheduling (QAOA)   : {}",
+                                config.quantum.agi.enable_goal_scheduling
+                            );
+                            println!(
+                                "    Memory optimisation (QA)  : {}",
+                                config.quantum.agi.enable_memory_optimization
+                            );
+                            println!(
+                                "    Reasoning search (Grover) : {}",
+                                config.quantum.agi.enable_reasoning_search
+                            );
+                            println!(
+                                "    Fitness exploration (VQE) : {}",
+                                config.quantum.agi.enable_fitness_exploration
+                            );
+                            println!(
+                                "    Hybrid planning (MCTS+Q)  : {}",
+                                config.quantum.agi.enable_planning
+                            );
+                            Ok(())
+                        }
+
                         QuantumCommands::Benchmark { sizes } => {
                             use housaky::housaky::quantum::benchmarks::QuantumBenchmarkSuite;
-                            let problem_sizes: Vec<usize> = sizes.split(',')
+                            let problem_sizes: Vec<usize> = sizes
+                                .split(',')
                                 .filter_map(|s| s.trim().parse().ok())
                                 .collect();
                             println!("Running quantum advantage benchmarks...");
@@ -1263,19 +1629,31 @@ async fn main() -> Result<()> {
 
                             println!("Benchmark Report:");
                             println!("  Total problems   : {}", report.total_problems);
-                            println!("  Quantum advantage: {}/{}", report.quantum_advantaged, report.total_problems);
+                            println!(
+                                "  Quantum advantage: {}/{}",
+                                report.quantum_advantaged, report.total_problems
+                            );
                             println!("  Avg speedup      : {:.2}x", report.average_speedup);
-                            println!("  Avg quality      : {:.2}x", report.average_quality_improvement);
+                            println!(
+                                "  Avg quality      : {:.2}x",
+                                report.average_quality_improvement
+                            );
                             println!("  Best domain      : {}", report.best_quantum_domain);
                             println!("\nDetailed Results:");
-                            println!("{:<15} {:<6} {:<10} {:<10} {:<10} {}", "Type", "Size", "Classical", "Quantum", "Speedup", "Advantage");
+                            println!(
+                                "{:<15} {:<6} {:<10} {:<10} {:<10} {}",
+                                "Type", "Size", "Classical", "Quantum", "Speedup", "Advantage"
+                            );
                             println!("{}", "─".repeat(70));
                             for r in &report.results {
                                 println!(
                                     "{:<15} {:<6} {:<10} {:<10} {:<10.2} {}",
-                                    r.problem_type, r.problem_size,
-                                    format!("{}ms", r.classical_ms), format!("{}ms", r.quantum_ms),
-                                    r.speedup_ratio, if r.quantum_advantage { "✓" } else { "✗" }
+                                    r.problem_type,
+                                    r.problem_size,
+                                    format!("{}ms", r.classical_ms),
+                                    format!("{}ms", r.quantum_ms),
+                                    r.speedup_ratio,
+                                    if r.quantum_advantage { "✓" } else { "✗" }
                                 );
                             }
                             Ok(())
@@ -1289,6 +1667,8 @@ async fn main() -> Result<()> {
             }
         }
     }
+
+    Ok(())
 }
 
 #[cfg(test)]

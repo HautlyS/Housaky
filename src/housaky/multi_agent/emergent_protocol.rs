@@ -83,7 +83,10 @@ impl EmergentProtocol {
             created_by: creator.to_string(),
             version: *self.protocol_version.read().await,
         };
-        self.symbol_table.write().await.insert(symbol.to_string(), ps);
+        self.symbol_table
+            .write()
+            .await
+            .insert(symbol.to_string(), ps);
         info!("New protocol symbol: '{}' = '{}'", symbol, meaning);
     }
 
@@ -146,10 +149,7 @@ impl EmergentProtocol {
         // Remove symbols with very low usage
         let to_remove: Vec<String> = table
             .iter()
-            .filter(|(_, ps)| {
-                ps.usage_count < 2
-                    && (Utc::now() - ps.created_at).num_hours() > 24
-            })
+            .filter(|(_, ps)| ps.usage_count < 2 && (Utc::now() - ps.created_at).num_hours() > 24)
             .map(|(k, _)| k.clone())
             .collect();
 
@@ -158,7 +158,10 @@ impl EmergentProtocol {
         }
 
         if !to_remove.is_empty() {
-            info!("Evolved protocol: removed {} unused symbols", to_remove.len());
+            info!(
+                "Evolved protocol: removed {} unused symbols",
+                to_remove.len()
+            );
         }
 
         drop(table);
@@ -199,10 +202,16 @@ mod tests {
     #[tokio::test]
     async fn test_symbol_encode_decode() {
         let proto = EmergentProtocol::new();
-        proto.define_symbol("$ACK", "task acknowledged", "agent-1").await;
-        proto.define_symbol("$DONE", "task completed successfully", "agent-1").await;
+        proto
+            .define_symbol("$ACK", "task acknowledged", "agent-1")
+            .await;
+        proto
+            .define_symbol("$DONE", "task completed successfully", "agent-1")
+            .await;
 
-        let (encoded, symbols) = proto.encode("task acknowledged and task completed successfully").await;
+        let (encoded, symbols) = proto
+            .encode("task acknowledged and task completed successfully")
+            .await;
         assert!(encoded.contains("$ACK"));
         assert!(encoded.contains("$DONE"));
         assert_eq!(symbols.len(), 2);

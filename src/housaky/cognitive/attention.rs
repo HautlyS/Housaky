@@ -127,7 +127,7 @@ impl AttentionMechanism {
     /// Add a context item to the pool.
     pub async fn add_context(&self, item: ContextItem) {
         let mut pool = self.context_pool.write().await;
-        
+
         // Replace if existing item with same ID
         if let Some(pos) = pool.iter().position(|i| i.id == item.id) {
             pool[pos] = item;
@@ -263,7 +263,7 @@ impl AttentionMechanism {
     fn compute_relevance(content: &str, query: &str) -> f64 {
         let query_lower = query.to_lowercase();
         let content_lower = content.to_lowercase();
-        
+
         let query_terms: Vec<&str> = query_lower.split_whitespace().collect();
         if query_terms.is_empty() {
             return 0.0;
@@ -290,15 +290,17 @@ impl AttentionMechanism {
         let scores: Vec<AttentionScore> = useful_item_ids
             .iter()
             .filter_map(|id| {
-                pool.iter().find(|i| i.id == *id).map(|item| AttentionScore {
-                    item_id: id.clone(),
-                    total_score: 1.0, // Items explicitly marked useful
-                    relevance_score: 1.0,
-                    recency_score: 0.0,
-                    importance_score: item.importance,
-                    frequency_score: 0.0,
-                    goal_alignment_score: 0.0,
-                })
+                pool.iter()
+                    .find(|i| i.id == *id)
+                    .map(|item| AttentionScore {
+                        item_id: id.clone(),
+                        total_score: 1.0, // Items explicitly marked useful
+                        relevance_score: 1.0,
+                        recency_score: 0.0,
+                        importance_score: item.importance,
+                        frequency_score: 0.0,
+                        goal_alignment_score: 0.0,
+                    })
             })
             .collect();
 
@@ -462,10 +464,8 @@ mod tests {
         );
         assert!(score > 0.5);
 
-        let low_score = AttentionMechanism::compute_relevance(
-            "making pizza dough",
-            "causal inference rust",
-        );
+        let low_score =
+            AttentionMechanism::compute_relevance("making pizza dough", "causal inference rust");
         assert!(low_score < score);
     }
 }

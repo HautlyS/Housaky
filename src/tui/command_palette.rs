@@ -240,7 +240,9 @@ impl CommandPalette {
                     cmd.shortcut.as_deref().unwrap_or("")
                 );
                 // fuzzy: all chars of query appear in order in haystack
-                if q.is_empty() { return true; }
+                if q.is_empty() {
+                    return true;
+                }
                 let mut chars = q.chars().peekable();
                 for c in haystack.chars() {
                     if chars.peek() == Some(&c) {
@@ -277,7 +279,9 @@ impl CommandPalette {
     }
 
     pub fn draw(&self, f: &mut Frame) {
-        if !self.active { return; }
+        if !self.active {
+            return;
+        }
 
         let area = f.area();
         let width = 64u16.min(area.width.saturating_sub(4));
@@ -285,12 +289,7 @@ impl CommandPalette {
         let visible = self.filtered.len().min(max_items);
         let height = (visible as u16 + 4).min(area.height.saturating_sub(4));
 
-        let popup = Rect::new(
-            (area.width.saturating_sub(width)) / 2,
-            3,
-            width,
-            height,
-        );
+        let popup = Rect::new((area.width.saturating_sub(width)) / 2, 3, width, height);
 
         f.render_widget(Clear, popup);
 
@@ -308,7 +307,9 @@ impl CommandPalette {
                     .border_style(Style::default().fg(Color::Cyan))
                     .title(Span::styled(
                         " ⌘  Command Palette — type to filter ",
-                        Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+                        Style::default()
+                            .fg(Color::Cyan)
+                            .add_modifier(Modifier::BOLD),
                     )),
             );
         f.render_widget(input_block, layout[0]);
@@ -324,14 +325,14 @@ impl CommandPalette {
                 let selected = display_idx == self.selected;
 
                 let cat_color = match cmd.category.as_str() {
-                    "Chat"    => Color::Cyan,
-                    "AGI"     => Color::Magenta,
-                    "Keys"    => Color::Yellow,
-                    "Skills"  => Color::Green,
-                    "Tools"   => Color::Blue,
+                    "Chat" => Color::Cyan,
+                    "AGI" => Color::Magenta,
+                    "Keys" => Color::Yellow,
+                    "Skills" => Color::Green,
+                    "Tools" => Color::Blue,
                     "Metrics" => Color::White,
-                    "View"    => Color::Gray,
-                    _         => Color::DarkGray,
+                    "View" => Color::Gray,
+                    _ => Color::DarkGray,
                 };
 
                 let row_style = if selected {
@@ -341,10 +342,7 @@ impl CommandPalette {
                 };
 
                 let shortcut_span = cmd.shortcut.as_deref().map(|s| {
-                    Span::styled(
-                        format!(" [{}]", s),
-                        Style::default().fg(Color::DarkGray),
-                    )
+                    Span::styled(format!(" [{}]", s), Style::default().fg(Color::DarkGray))
                 });
 
                 let mut spans = vec![
@@ -354,7 +352,11 @@ impl CommandPalette {
                     ),
                     Span::styled(
                         format!("{:30}", cmd.name),
-                        row_style.add_modifier(if selected { Modifier::BOLD } else { Modifier::empty() }),
+                        row_style.add_modifier(if selected {
+                            Modifier::BOLD
+                        } else {
+                            Modifier::empty()
+                        }),
                     ),
                     Span::styled(
                         format!("  {}", cmd.description.chars().take(20).collect::<String>()),
@@ -380,7 +382,10 @@ impl CommandPalette {
                     .borders(Borders::ALL)
                     .border_style(Style::default().fg(Color::DarkGray))
                     .title(Span::styled(
-                        format!(" {} results — ↑↓ navigate  Enter execute  Esc close ", self.filtered.len()),
+                        format!(
+                            " {} results — ↑↓ navigate  Enter execute  Esc close ",
+                            self.filtered.len()
+                        ),
                         Style::default().fg(Color::DarkGray),
                     )),
             )
@@ -391,5 +396,7 @@ impl CommandPalette {
 }
 
 impl Default for CommandPalette {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }

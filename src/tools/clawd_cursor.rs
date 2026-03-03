@@ -114,7 +114,8 @@ impl Tool for ClawdCursorTool {
                 success: false,
                 output: String::new(),
                 error: Some(
-                    "clawd_cursor is disabled. Enable it in config.toml under [clawd_cursor]".into(),
+                    "clawd_cursor is disabled. Enable it in config.toml under [clawd_cursor]"
+                        .into(),
                 ),
             });
         }

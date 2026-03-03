@@ -88,7 +88,11 @@ impl PheromoneMap {
         self.trails
             .values()
             .filter(|t| t.task_type == task_type)
-            .max_by(|a, b| a.strength.partial_cmp(&b.strength).unwrap_or(std::cmp::Ordering::Equal))
+            .max_by(|a, b| {
+                a.strength
+                    .partial_cmp(&b.strength)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
     }
 
     pub fn top_paths(&self, task_type: &str, n: usize) -> Vec<&PheromoneTrail> {
@@ -97,7 +101,11 @@ impl PheromoneMap {
             .values()
             .filter(|t| t.task_type == task_type)
             .collect();
-        matching.sort_by(|a, b| b.strength.partial_cmp(&a.strength).unwrap_or(std::cmp::Ordering::Equal));
+        matching.sort_by(|a, b| {
+            b.strength
+                .partial_cmp(&a.strength)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         matching.into_iter().take(n).collect()
     }
 
@@ -150,11 +158,20 @@ pub struct PheromoneService {
 impl PheromoneService {
     pub fn new(evaporation_rate: f64, reinforcement_factor: f64) -> Self {
         Self {
-            map: Arc::new(RwLock::new(PheromoneMap::new(evaporation_rate, reinforcement_factor))),
+            map: Arc::new(RwLock::new(PheromoneMap::new(
+                evaporation_rate,
+                reinforcement_factor,
+            ))),
         }
     }
 
-    pub async fn deposit(&self, path: Vec<String>, agent_id: &str, task_type: &str, success_rate: f64) {
+    pub async fn deposit(
+        &self,
+        path: Vec<String>,
+        agent_id: &str,
+        task_type: &str,
+        success_rate: f64,
+    ) {
         let mut trail = PheromoneTrail::new(path, agent_id.to_string(), task_type.to_string());
         trail.success_rate = success_rate;
         self.map.write().await.deposit(trail);
@@ -165,11 +182,21 @@ impl PheromoneService {
     }
 
     pub async fn best_path(&self, task_type: &str) -> Option<Vec<String>> {
-        self.map.read().await.get_best_path(task_type).map(|t| t.path.clone())
+        self.map
+            .read()
+            .await
+            .get_best_path(task_type)
+            .map(|t| t.path.clone())
     }
 
     pub async fn top_paths(&self, task_type: &str, n: usize) -> Vec<Vec<String>> {
-        self.map.read().await.top_paths(task_type, n).iter().map(|t| t.path.clone()).collect()
+        self.map
+            .read()
+            .await
+            .top_paths(task_type, n)
+            .iter()
+            .map(|t| t.path.clone())
+            .collect()
     }
 
     pub async fn stats(&self) -> PheromoneStats {
@@ -209,7 +236,13 @@ mod tests {
     #[tokio::test]
     async fn test_pheromone_service() {
         let svc = PheromoneService::new(0.05, 1.0);
-        svc.deposit(vec!["tool_a".into(), "tool_b".into()], "agent-1", "analysis", 0.95).await;
+        svc.deposit(
+            vec!["tool_a".into(), "tool_b".into()],
+            "agent-1",
+            "analysis",
+            0.95,
+        )
+        .await;
         let best = svc.best_path("analysis").await;
         assert!(best.is_some());
     }
