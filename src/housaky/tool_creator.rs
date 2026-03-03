@@ -145,6 +145,113 @@ impl ToolCreator {
         }
     }
 
+    /// Validates an OpenAPI spec URL for security.
+    /// Prevents SSRF attacks by blocking private/local IPs and requiring HTTPS.
+    fn validate_openapi_url(url: &str) -> Result<()> {
+        use std::net::IpAddr;
+
+        // Parse the URL
+        let parsed = url::Url::parse(url)
+            .map_err(|e| anyhow::anyhow!("Invalid URL '{}': {}", url, e))?;
+
+        // Require HTTPS for remote URLs
+        if parsed.scheme() != "https" {
+            bail!(
+                "OpenAPI spec URL must use HTTPS for security. Got: {}",
+                parsed.scheme()
+            );
+        }
+
+        // Check for userinfo in URL (potential credential exposure)
+        if parsed.username() != "" || parsed.password().is_some() {
+            bail!("OpenAPI spec URL must not contain credentials");
+        }
+
+        // Get the host
+        let host = parsed
+            .host_str()
+            .ok_or_else(|| anyhow::anyhow!("OpenAPI spec URL must have a valid host"))?;
+
+        // Block localhost and common local hostnames
+        let blocked_hosts = [
+            "localhost",
+            "127.0.0.1",
+            "0.0.0.0",
+            "::1",
+            "[::1]",
+            "local",
+            "internal",
+            "intranet",
+        ];
+
+        let host_lower = host.to_lowercase();
+        for blocked in &blocked_hosts {
+            if host_lower == *blocked || host_lower.ends_with(&format!(".{}", blocked)) {
+                bail!(
+                    "OpenAPI spec URL cannot point to local/internal host: {}",
+                    host
+                );
+            }
+        }
+
+        // Try to parse as IP address and check for private ranges
+        if let Ok(ip) = host.parse::<IpAddr>() {
+            if Self::is_private_ip(&ip) {
+                bail!(
+                    "OpenAPI spec URL cannot point to private IP address: {}",
+                    ip
+                );
+            }
+        }
+
+        // Block cloud metadata endpoints (SSRF common targets)
+        let metadata_hosts = [
+            "169.254.169.254",          // AWS/GCP/Azure metadata
+            "metadata.google.internal", // GCP
+            "metadata.goog",            // GCP
+            "100.100.100.200",          // Alibaba Cloud
+            "192.0.0.192",              // Oracle Cloud
+        ];
+
+        for metadata in &metadata_hosts {
+            if host_lower == *metadata {
+                bail!(
+                    "OpenAPI spec URL cannot point to cloud metadata endpoint: {}",
+                    host
+                );
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Check if an IP address is in a private range
+    fn is_private_ip(ip: &std::net::IpAddr) -> bool {
+        match ip {
+            std::net::IpAddr::V4(ipv4) => {
+                // Private IPv4 ranges
+                ipv4.is_private()
+                    || ipv4.is_loopback()
+                    || ipv4.is_link_local()
+                    || ipv4.is_broadcast()
+                    || ipv4.is_documentation()
+                    || ipv4.is_unspecified()
+                    // 100.64.0.0/10 (Carrier-grade NAT)
+                    || (ipv4.octets()[0] == 100 && (ipv4.octets()[1] & 0xC0) == 64)
+                    // 192.0.0.0/24 (IETF Protocol Assignments)
+                    || (ipv4.octets()[0] == 192 && ipv4.octets()[1] == 0 && ipv4.octets()[2] == 0)
+            }
+            std::net::IpAddr::V6(ipv6) => {
+                ipv6.is_loopback()
+                    || ipv6.is_unspecified()
+                    // Unique local address (fc00::/7)
+                    || (ipv6.segments()[0] & 0xfe00) == 0xfc00
+                    // Link-local (fe80::/10)
+                    || (ipv6.segments()[0] & 0xffc0) == 0xfe80
+            }
+        }
+    }
+
     pub async fn generate_tool(&self, request: ToolGenerationRequest) -> Result<GeneratedTool> {
         info!("Generating tool: {}", request.name);
 
@@ -473,12 +580,23 @@ if __name__ == "__main__":
         }
 
         if has_command {
-            logic.push_str("\n    # Command execution\n");
+            logic.push_str("\n    # Command execution (using shell=False for security)\n");
             logic.push_str(
-                r#"    cmd = input_data.get('cmd') or input_data.get('command')
+                r#"    import shlex
+    cmd = input_data.get('cmd') or input_data.get('command')
     if cmd:
         try:
-            result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=30)
+            # Use shlex.split for safe command parsing (avoids shell injection)
+            # If cmd is already a list, use it directly; otherwise split the string
+            if isinstance(cmd, list):
+                cmd_args = cmd
+            else:
+                cmd_args = shlex.split(cmd)
+            
+            if not cmd_args:
+                return {"status": "error", "error": "Empty command"}
+            
+            result = subprocess.run(cmd_args, shell=False, capture_output=True, text=True, timeout=30)
             return {
                 "status": "success" if result.returncode == 0 else "error",
                 "stdout": result.stdout,
@@ -546,9 +664,9 @@ if __name__ == "__main__":
 const http = require('http');
 const https = require('https');
 const fs = require('fs');
-const {{ exec }} = require('child_process');
+const {{ execFile, spawn }} = require('child_process');
 const util = require('util');
-const execPromise = util.promisify(exec);
+const execFilePromise = util.promisify(execFile);
 
 async function execute(input) {{
 "#,
@@ -656,12 +774,29 @@ process.stdin.on('end', async () => {
         }
 
         if has_command {
-            logic.push_str("\n    // Command execution\n");
+            logic.push_str("\n    // Command execution (using execFile for security - no shell)\n");
             logic.push_str(
                 r#"    if (cmd || command) {
-        const cmdStr = cmd || command;
+        const cmdInput = cmd || command;
         try {
-            const { stdout, stderr } = await execPromise(cmdStr, { timeout: 30000 });
+            // If cmdInput is an array, use it directly; otherwise split by whitespace
+            // Note: This simple split doesn't handle quoted arguments - for complex commands,
+            // pass an array instead of a string
+            let cmdArgs;
+            if (Array.isArray(cmdInput)) {
+                cmdArgs = cmdInput;
+            } else if (typeof cmdInput === 'string') {
+                cmdArgs = cmdInput.trim().split(/\s+/);
+            } else {
+                return { status: 'error', error: 'Command must be a string or array' };
+            }
+            
+            if (cmdArgs.length === 0) {
+                return { status: 'error', error: 'Empty command' };
+            }
+            
+            const [program, ...args] = cmdArgs;
+            const { stdout, stderr } = await execFilePromise(program, args, { timeout: 30000 });
             return {
                 status: 'success',
                 stdout: stdout,
@@ -1136,6 +1271,15 @@ if __name__ == "__main__":
         info!("Generating tools from OpenAPI spec: {}", spec_url);
 
         let spec_content = if spec_url.starts_with("http") {
+            // Validate the URL before fetching
+            Self::validate_openapi_url(spec_url)?;
+
+            warn!(
+                "Fetching OpenAPI spec from remote URL: {}. \
+                Ensure this URL is from a trusted source.",
+                spec_url
+            );
+
             reqwest::get(spec_url).await?.text().await?
         } else {
             tokio::fs::read_to_string(spec_url).await?

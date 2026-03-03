@@ -3614,6 +3614,8 @@ mod tests {
             self_replication: SelfReplicationConfig::default(),
             gradient_free_optimizer: GradientFreeOptimizerConfig::default(),
             quantum: QuantumConfig::default(),
+            collective_api_key: None,
+            collective: CollectiveSchemaConfig::default(),
         };
 
         let toml_str = toml::to_string_pretty(&config).unwrap();
@@ -3779,6 +3781,8 @@ tool_dispatcher = "xml"
             self_replication: SelfReplicationConfig::default(),
             gradient_free_optimizer: GradientFreeOptimizerConfig::default(),
             quantum: QuantumConfig::default(),
+            collective_api_key: None,
+            collective: CollectiveSchemaConfig::default(),
         };
 
         config.save().unwrap();

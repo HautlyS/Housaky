@@ -387,7 +387,7 @@ fn is_daemon_running() -> bool {
 
 /// Start the complete Housaky system: daemon + dashboard + AGI TUI
 /// This is the default behavior when running `housaky` with no subcommand
-async fn start_full_system(config: Config, verbose: bool) -> Result<()> {
+async fn start_full_system(config: Config, provider: Option<String>, model: Option<String>, verbose: bool) -> Result<()> {
     use tokio::time::{sleep, Duration};
 
     println!("🚀 Starting Full Housaky AGI System...");
@@ -487,8 +487,8 @@ async fn start_full_system(config: Config, verbose: bool) -> Result<()> {
     let result = housaky::housaky::heartbeat::run_agi_with_tui(
         config.clone(),
         None, // No initial message
-        None, // Use default provider
-        None, // Use default model
+        provider,
+        model,
         verbose,
     )
     .await;
@@ -633,7 +633,7 @@ async fn main() -> Result<()> {
             }
 
             // Start full system with the new config
-            return start_full_system(config, false).await;
+            return start_full_system(config, None, None, false).await;
         } else {
             // Reuse the config already loaded by is_first_run() when available
             let config = match existing_config {
@@ -647,7 +647,7 @@ async fn main() -> Result<()> {
                 config.workspace_dir.to_string_lossy().to_string(),
             );
 
-            return start_full_system(config, false).await;
+            return start_full_system(config, None, None, false).await;
         }
     }
 
@@ -1100,18 +1100,7 @@ async fn main() -> Result<()> {
                 }
 
                 Commands::Tui { provider, model } => {
-                    // The TUI must run on a plain OS thread so its internal
-                    // tokio::Runtime::new() + block_on calls (used for async
-                    // provider requests) work correctly.  spawn_blocking threads
-                    // still live inside the outer runtime and cause a panic when
-                    // a nested Runtime is created there.
-                    let (tx, rx) = std::sync::mpsc::channel::<Result<()>>();
-                    std::thread::spawn(move || {
-                        tx.send(tui::run_chat_tui(config, provider, model)).ok();
-                    });
-                    rx.recv()
-                        .map_err(|e| anyhow::anyhow!("TUI thread failed: {e}"))??;
-                    Ok(())
+                    start_full_system(config, provider, model, false).await
                 }
 
                 Commands::Config {

@@ -33,15 +33,22 @@
 pub mod consensus;
 pub mod moltbook_client;
 pub mod proposal_engine;
+pub mod verification_pipeline;
 
 pub use consensus::{ConsensusEngine, ConsensusResult, ConsensusVerdict};
 pub use moltbook_client::{MoltbookClient, MoltbookConfig};
 pub use proposal_engine::{Proposal, ProposalEngine, ProposalKind, ProposalStatus};
+pub use verification_pipeline::{
+    AppliedProposal, FindingCategory, FindingSeverity, HumanApprovalRecord, OverallVerdict,
+    PendingProposal, SecurityFinding, StageResult, VerificationPipeline, VerificationPipelineConfig,
+    VerificationReport, VerificationStage, VerificationStats,
+};
 
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{info, warn};
@@ -202,6 +209,8 @@ pub struct CollectiveHub {
     pub client: Arc<MoltbookClient>,
     pub proposal_engine: Arc<ProposalEngine>,
     pub consensus_engine: Arc<ConsensusEngine>,
+    /// Secure verification pipeline with human approval gate
+    pub verification_pipeline: Arc<VerificationPipeline>,
     /// Local cache of contributions submitted or fetched.
     pub contributions: Arc<RwLock<HashMap<String, Contribution>>>,
     /// Stats for observability.
@@ -209,7 +218,7 @@ pub struct CollectiveHub {
 }
 
 impl CollectiveHub {
-    pub fn new(config: CollectiveConfig) -> Self {
+    pub fn new(config: CollectiveConfig, workspace_dir: PathBuf) -> Self {
         let client = Arc::new(MoltbookClient::new(
             config.api_base_url.clone(),
             config.api_key.clone(),
@@ -219,12 +228,14 @@ impl CollectiveHub {
             config.approval_vote_threshold,
             config.min_author_karma,
         ));
+        let verification_pipeline = Arc::new(VerificationPipeline::new(workspace_dir));
 
         Self {
             config: Arc::new(RwLock::new(config)),
             client,
             proposal_engine,
             consensus_engine,
+            verification_pipeline,
             contributions: Arc::new(RwLock::new(HashMap::new())),
             stats: Arc::new(RwLock::new(CollectiveStats::default())),
         }
@@ -280,15 +291,17 @@ impl CollectiveHub {
     }
 
     /// Poll Moltbook for proposals, evaluate them, cast autonomous votes,
-    /// and return those that have reached consensus for application.
-    pub async fn collective_tick(&self) -> Result<Vec<Contribution>> {
+    /// and return those that have passed automated verification and are awaiting human approval.
+    pub async fn collective_tick(
+        &self,
+        provider: Option<&dyn crate::providers::Provider>,
+    ) -> Result<Vec<Contribution>> {
         let config = self.config.read().await;
         if !config.enabled {
             return Ok(vec![]);
         }
         let feed_limit = config.feed_limit;
         let autonomous_voting = config.autonomous_voting;
-        let auto_apply = config.auto_apply;
         drop(config);
 
         // Fetch hot proposals from the housaky-agi submolt.
@@ -297,27 +310,46 @@ impl CollectiveHub {
             .fetch_proposals(HOUSAKY_SUBMOLT, feed_limit)
             .await?;
 
-        let mut approved = Vec::new();
+        let mut awaiting_human_approval = Vec::new();
 
-        for mut proposal in proposals {
-            let verdict = self.consensus_engine.evaluate(&proposal).await;
+        for proposal in proposals {
+            // Run through secure verification pipeline
+            match self
+                .verification_pipeline
+                .verify_proposal(&proposal, provider)
+                .await
+            {
+                Ok(report) => {
+                    match report.overall_verdict {
+                        OverallVerdict::AwaitingHumanApproval => {
+                            // Passed all automated checks, waiting for human
+                            awaiting_human_approval.push(proposal.clone());
+                        }
+                        OverallVerdict::FailedVerification => {
+                            warn!(
+                                "Proposal '{}' failed automated verification",
+                                proposal.title
+                            );
+                        }
+                        _ => {}
+                    }
 
-            if autonomous_voting {
-                if let Err(e) = self.cast_autonomous_vote(&proposal, &verdict).await {
-                    warn!(
-                        "Collective: autonomous vote failed for {}: {e}",
-                        proposal.id
-                    );
+                    // Cast autonomous vote based on verification result
+                    if autonomous_voting {
+                        if let Err(e) = self
+                            .cast_autonomous_vote_from_verification(&proposal, &report)
+                            .await
+                        {
+                            warn!(
+                                "Collective: autonomous vote failed for {}: {e}",
+                                proposal.id
+                            );
+                        }
+                    }
                 }
-            }
-
-            if auto_apply && verdict == ConsensusVerdict::Approved {
-                proposal.status = ContributionStatus::Approved;
-                self.contributions
-                    .write()
-                    .await
-                    .insert(proposal.id.clone(), proposal.clone());
-                approved.push(proposal);
+                Err(e) => {
+                    warn!("Verification pipeline error for {}: {e}", proposal.title);
+                }
             }
 
             let mut stats = self.stats.write().await;
@@ -328,7 +360,7 @@ impl CollectiveHub {
         stats.tick_count += 1;
         drop(stats);
 
-        Ok(approved)
+        Ok(awaiting_human_approval)
     }
 
     /// Cast an autonomous vote based on local evaluation of the proposal.
@@ -354,12 +386,70 @@ impl CollectiveHub {
         Ok(())
     }
 
+    /// Cast an autonomous vote based on verification pipeline result.
+    async fn cast_autonomous_vote_from_verification(
+        &self,
+        contribution: &Contribution,
+        report: &VerificationReport,
+    ) -> Result<()> {
+        let post_id = match &contribution.moltbook_post_id {
+            Some(id) => id.clone(),
+            None => return Ok(()),
+        };
+
+        match report.overall_verdict {
+            OverallVerdict::AwaitingHumanApproval | OverallVerdict::ApprovedForApplication => {
+                // Passed automated verification - upvote
+                self.client.upvote_post(&post_id).await?;
+            }
+            OverallVerdict::FailedVerification => {
+                // Failed verification - downvote
+                self.client.downvote_post(&post_id).await?;
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+
     pub async fn get_stats(&self) -> CollectiveStats {
         self.stats.read().await.clone()
     }
 
     pub async fn list_contributions(&self) -> Vec<Contribution> {
         self.contributions.read().await.values().cloned().collect()
+    }
+
+    /// Get all proposals pending human approval
+    pub async fn get_pending_approvals(&self) -> Vec<PendingProposal> {
+        self.verification_pipeline.get_pending_approvals().await
+    }
+
+    /// Human approves or rejects a proposal (REQUIRED - no bypass)
+    pub async fn human_approve_proposal(
+        &self,
+        proposal_id: &str,
+        approved: bool,
+        reviewer_id: &str,
+        comments: Option<String>,
+    ) -> Result<VerificationReport> {
+        self.verification_pipeline
+            .human_decision(proposal_id, approved, reviewer_id, comments)
+            .await
+    }
+
+    /// Apply an approved proposal (only works after human approval)
+    pub async fn apply_approved_proposal(&self, report: &VerificationReport) -> Result<AppliedProposal> {
+        self.verification_pipeline.apply_approved_proposal(report).await
+    }
+
+    /// Get verification statistics
+    pub async fn get_verification_stats(&self) -> VerificationStats {
+        self.verification_pipeline.get_stats().await
+    }
+
+    /// Get audit log
+    pub async fn get_audit_log(&self) -> Vec<VerificationReport> {
+        self.verification_pipeline.get_audit_log().await
     }
 }
 

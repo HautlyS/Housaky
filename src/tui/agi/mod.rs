@@ -71,7 +71,8 @@ fn run_dashboard(
         }
 
         if event::poll(Duration::from_millis(16))? {
-            if let Event::Key(key) = event::read()? {
+            match event::read()? {
+                Event::Key(key) => {
                 match (key.modifiers, key.code) {
                     (KeyModifiers::CONTROL, KeyCode::Char('c')) => {
                         return Ok(());
@@ -83,7 +84,20 @@ fn run_dashboard(
                     }
                     _ => {}
                 }
-                dashboard.handle_key(key)?;
+                    dashboard.handle_key(key)?;
+                }
+                Event::Mouse(mouse) => {
+                    // Best-effort mouse support: map wheel to Up/Down scrolling in the active panel.
+                    // More advanced hit-testing lives inside the dashboard module.
+                    if let Err(e) = dashboard.handle_mouse(mouse) {
+                        // Ignore mouse errors
+                        let _ = e;
+                    }
+                }
+                Event::Resize(_, _) => {
+                    terminal.autoresize()?;
+                }
+                _ => {}
             }
         }
 

@@ -316,6 +316,20 @@ impl SkillsPanel {
 
     // ── Interaction ───────────────────────────────────────────────────────────
 
+    pub fn filtered_count(&self) -> usize {
+        self.filtered_indices().len()
+    }
+
+    pub fn set_selected(&mut self, display_idx: usize) {
+        let max = self.filtered_indices().len();
+        if max == 0 {
+            self.selected = 0;
+        } else {
+            self.selected = display_idx.min(max - 1);
+        }
+        self.detail_scroll = 0;
+    }
+
     pub fn select_prev(&mut self) {
         if self.selected > 0 {
             self.selected -= 1;

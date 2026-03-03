@@ -530,6 +530,21 @@ pub enum CollectiveCommands {
     },
     /// Poll Moltbook for proposals, cast autonomous votes, and list approved ones
     Tick,
+    /// List proposals pending human approval (after passing automated verification)
+    Pending,
+    /// Approve or reject a proposal that passed automated verification
+    Approve {
+        /// Proposal ID to approve/reject
+        id: String,
+        /// Approve (true) or reject (false)
+        #[arg(short, long, default_value = "true")]
+        approve: bool,
+        /// Optional comments explaining the decision
+        #[arg(short, long)]
+        comment: Option<String>,
+    },
+    /// Show verification pipeline statistics and audit log
+    Stats,
     /// List all locally cached contributions
     List,
     /// Fetch and display live vote counts for a contribution by Moltbook post ID

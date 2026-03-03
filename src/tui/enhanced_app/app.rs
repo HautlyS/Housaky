@@ -8,12 +8,18 @@ use ratatui::{
     Frame,
 };
 use std::sync::Arc;
+use std::time::Duration;
 
 use crate::config::Config;
 use crate::housaky::core::HousakyCore;
 use crate::housaky::heartbeat::HousakyHeartbeat;
-use crate::providers::{create_provider_with_keys_manager, ChatMessage};
+use crate::providers::ChatMessage;
 use std::sync::atomic::{AtomicBool, Ordering};
+
+// Animation frames for header sparkle
+const ANIM_FRAMES: &[&str] = &[
+    "◈", "◇", "◆", "◈", "✦", "✧", "✦", "◈",
+];
 
 use super::chat_pane::ChatPane;
 use super::command_palette::{CommandPalette, PaletteAction};
@@ -22,6 +28,49 @@ use super::doctor_panel::DoctorPanel;
 use super::help::HelpOverlay;
 use super::input::InputBar;
 use super::layout::{BodyZones, HeaderZones, RootZones};
+
+#[derive(Debug, Default, Clone)]
+struct UiHitMap {
+    term_area: Option<Rect>,
+    header: Option<Rect>,
+    tabs_area: Option<Rect>,
+    tab_hitboxes: Vec<Rect>,
+    body: Option<Rect>,
+    body_main: Option<Rect>,
+    body_sidebar: Option<Rect>,
+    input: Option<Rect>,
+    footer: Option<Rect>,
+
+    // Two-column layouts for list/detail tabs
+    skills_cols: Option<[Rect; 2]>,
+    tools_cols: Option<[Rect; 2]>,
+    logs_cols: Option<[Rect; 2]>,
+
+    // Item hitboxes (display indices)
+    skills_list_items: Vec<Rect>,
+    tools_list_items: Vec<Rect>,
+    palette_items: Vec<Rect>,
+
+    // Sidebar sections
+    sidebar_metrics: Option<Rect>,
+    sidebar_goals: Option<Rect>,
+    sidebar_activity: Option<Rect>,
+
+    // Chat pane hitboxes
+    chat_area: Option<Rect>,
+    chat_viewport: Option<Rect>,
+    chat_scrollbar: Option<Rect>,
+    chat_header_items: Vec<(Rect, usize)>, // rect + message index
+
+    // Config editor hitboxes
+    config_cols: Option<[Rect; 2]>,
+    config_section_items: Vec<Rect>,
+    config_field_items: Vec<Rect>,
+
+    // Overlays
+    help: Option<Rect>,
+    palette: Option<Rect>,
+}
 use super::notifications::Notifications;
 use super::sidebar::{ActivityKind, Sidebar, SidebarGoal};
 use super::skills_panel::SkillsPanel;
@@ -35,10 +84,17 @@ use super::tools_panel::ToolsPanel;
 // ── EnhancedApp ───────────────────────────────────────────────────────────────
 
 pub struct EnhancedApp {
+    // Mouse click tracking for double-click detection
+    last_click: Option<(u16, u16, std::time::Instant)>,
+    // Scrollbar drag state
+    dragging_chat_scrollbar: bool,
     // Config & provider
     config: Config,
     provider_name: String,
     model_name: String,
+
+    // Resolved API key (loaded once at init for the send thread)
+    resolved_api_key: Option<String>,
 
     // AGI core reference (live metrics, goals, thoughts)
     core: Option<Arc<HousakyCore>>,
@@ -67,6 +123,13 @@ pub struct EnhancedApp {
     streaming_active: Arc<AtomicBool>,
     streaming_result: Arc<std::sync::Mutex<Option<Result<String, String>>>>,
     streaming_chunks: Arc<std::sync::Mutex<Vec<String>>>,
+
+    // Animation
+    anim_frame: usize,
+    anim_tick: usize,
+
+    // Per-frame UI hit-testing map for mouse interactions
+    hitmap: UiHitMap,
 }
 
 impl EnhancedApp {
@@ -88,10 +151,15 @@ impl EnhancedApp {
 
         let cfg_editor = ConfigEditor::new(&config);
 
+        // Resolve API key eagerly so the send thread can use it without a tokio context.
+        // Priority: keys_manager → config.api_key → env vars
+        let resolved_api_key = Self::resolve_api_key_sync(&provider_name, &config);
+
         Self {
             config,
             provider_name,
             model_name,
+            resolved_api_key,
             core: None,
             heartbeat: None,
             state,
@@ -110,7 +178,66 @@ impl EnhancedApp {
             streaming_active: Arc::new(AtomicBool::new(false)),
             streaming_result: Arc::new(std::sync::Mutex::new(None)),
             streaming_chunks: Arc::new(std::sync::Mutex::new(Vec::new())),
+            anim_frame: 0,
+            anim_tick: 0,
+            hitmap: UiHitMap::default(),
+            last_click: None,
+            dragging_chat_scrollbar: false,
         }
+    }
+
+    /// Resolve API key synchronously (no async) for use before spawning background threads.
+    fn resolve_api_key_sync(provider_name: &str, config: &Config) -> Option<String> {
+        // 1. Try keys_manager (blocking read of the in-memory store)
+        {
+            let manager = crate::keys_manager::manager::get_global_keys_manager();
+            let store = manager.store.blocking_read();
+            if let Some(provider_store) = store.providers.get(provider_name) {
+                if let Some(key) = provider_store.keys.iter().find(|k| k.enabled) {
+                    return Some(key.key.clone());
+                }
+            }
+            // Also try any provider
+            for provider in store.providers.values() {
+                if let Some(key) = provider.keys.iter().find(|k| k.enabled) {
+                    return Some(key.key.clone());
+                }
+            }
+        }
+        // 2. Try config.api_key
+        if let Some(ref k) = config.api_key {
+            if !k.is_empty() {
+                return Some(k.clone());
+            }
+        }
+        // 3. Try common env vars
+        let env_candidates: &[&str] = match provider_name {
+            "anthropic" => &["ANTHROPIC_API_KEY", "ANTHROPIC_OAUTH_TOKEN"],
+            "openrouter" => &["OPENROUTER_API_KEY"],
+            "openai" => &["OPENAI_API_KEY"],
+            "gemini" | "google" => &["GEMINI_API_KEY", "GOOGLE_API_KEY"],
+            "groq" => &["GROQ_API_KEY"],
+            "mistral" => &["MISTRAL_API_KEY"],
+            "deepseek" => &["DEEPSEEK_API_KEY"],
+            _ => &[],
+        };
+        for env_var in env_candidates {
+            if let Ok(val) = std::env::var(env_var) {
+                let val = val.trim().to_string();
+                if !val.is_empty() {
+                    return Some(val);
+                }
+            }
+        }
+        for env_var in ["HOUSAKY_API_KEY", "API_KEY"] {
+            if let Ok(val) = std::env::var(env_var) {
+                let val = val.trim().to_string();
+                if !val.is_empty() {
+                    return Some(val);
+                }
+            }
+        }
+        None
     }
 
     /// Attach a live heartbeat (and its AGI core) for real-time dashboard data.
@@ -131,47 +258,60 @@ impl EnhancedApp {
         self.notifs.tick();
         self.skills.tick();
 
+        // Advance ASCII animation (changes every 6 ticks ≈ 200ms at 30fps)
+        self.anim_tick += 1;
+        if self.anim_tick >= 6 {
+            self.anim_tick = 0;
+            self.anim_frame = (self.anim_frame + 1) % ANIM_FRAMES.len();
+        }
+
         // Process streaming results
         if self.streaming_active.load(Ordering::SeqCst) {
-            // Process any new chunks
-            if let Ok(chunks) = self.streaming_chunks.lock() {
-                for chunk in chunks.iter() {
-                    self.chat.append_stream_chunk(chunk);
-                    self.state.stream_content.push_str(chunk);
-                }
+            // Drain chunks atomically so we don't hold the lock during draw
+            let new_chunks: Vec<String> = if let Ok(mut chunks) = self.streaming_chunks.lock() {
+                std::mem::take(&mut *chunks)
+            } else {
+                Vec::new()
+            };
+            for chunk in &new_chunks {
+                self.chat.append_stream_chunk(chunk);
+                self.state.stream_content.push_str(chunk);
             }
 
-            if let Ok(result_guard) = self.streaming_result.lock() {
-                if let Some(ref result) = *result_guard {
-                    match result {
-                        Ok(response) => {
-                            // Stream complete - finalize (finish_streaming already creates the message)
-                            self.chat.finish_streaming(None);
-                            let token_est = (response.len() / 4) as u32;
-                            self.state.metrics.total_tokens_out += u64::from(token_est);
-                            self.state.stream_status = StreamStatus::Done;
-                            self.sidebar.push_activity(
-                                ActivityKind::Thought,
-                                format!("AGI: {}", truncate_str(response, 40)),
-                            );
-                            self.state.metrics.total_messages += 1;
-                            self.state.stream_content.clear();
-                        }
-                        Err(e) => {
-                            let err_msg = format!("Error: {}", e);
-                            self.chat.push_system(err_msg.clone());
-                            self.state.stream_status = StreamStatus::Error(err_msg.clone());
-                            self.state.metrics.total_errors += 1;
-                            self.notifs.error(truncate_str(&err_msg, 48).to_string());
-                            self.state.stream_content.clear();
-                        }
+            // Check for completion
+            let result_opt: Option<Result<String, String>> =
+                if let Ok(mut result_guard) = self.streaming_result.lock() {
+                    result_guard.take()
+                } else {
+                    None
+                };
+
+            if let Some(result) = result_opt {
+                match result {
+                    Ok(response) => {
+                        self.chat.finish_streaming(None);
+                        let token_est = (response.len() / 4) as u32;
+                        self.state.metrics.total_tokens_out += u64::from(token_est);
+                        self.state.stream_status = StreamStatus::Done;
+                        self.sidebar.push_activity(
+                            ActivityKind::Thought,
+                            format!("AGI: {}", truncate_str(&response, 40)),
+                        );
+                        self.state.metrics.total_messages += 1;
+                        self.state.stream_content.clear();
+                        self.notifs.success("Response received");
                     }
-                    // Clear chunks
-                    if let Ok(mut chunks) = self.streaming_chunks.lock() {
-                        chunks.clear();
+                    Err(e) => {
+                        self.chat.finish_streaming(None);
+                        let err_msg = format!("⚠ {}", e);
+                        self.chat.push_system(err_msg.clone());
+                        self.state.stream_status = StreamStatus::Error(e.clone());
+                        self.state.metrics.total_errors += 1;
+                        self.notifs.error(truncate_str(&err_msg, 60).to_string());
+                        self.state.stream_content.clear();
                     }
-                    self.streaming_active.store(false, Ordering::SeqCst);
                 }
+                self.streaming_active.store(false, Ordering::SeqCst);
             }
         }
 
@@ -199,6 +339,11 @@ impl EnhancedApp {
         self.log_entries.push(entry);
     }
 
+    /// Show an error notification from outside the app (e.g. event-loop error recovery).
+    pub fn notifs_error(&mut self, msg: &str) {
+        self.notifs.error(msg.to_string());
+    }
+
     fn switch_tab(&mut self, tab: MainTab) {
         self.state.push_nav(self.state.active_tab);
         self.state.active_tab = tab;
@@ -222,27 +367,25 @@ impl EnhancedApp {
                 }
                 return Ok(());
             }
-            // Left arrow - go back to previous tab (navigation history)
-            (KeyModifiers::NONE, KeyCode::Left) => {
-                if let Some(prev_tab) = self.state.pop_nav() {
-                    self.state.active_tab = prev_tab;
-                }
-                return Ok(());
-            }
-            // Right arrow - go forward (or next tab if no history)
-            (KeyModifiers::NONE, KeyCode::Right) => {
-                self.switch_tab(self.state.active_tab.next());
-                return Ok(());
-            }
-            // Tab - next tab with history
-            (KeyModifiers::NONE, KeyCode::Tab) => {
-                self.switch_tab(self.state.active_tab.next());
-                return Ok(());
-            }
-            // Shift+Tab (BackTab) - previous tab with history
+            // Shift+Tab - always goes to previous main tab (works everywhere)
             (KeyModifiers::SHIFT, KeyCode::BackTab) => {
-                self.switch_tab(self.state.active_tab.prev());
-                return Ok(());
+                // Only switch main tab if NOT in config section editing
+                if self.state.active_tab != MainTab::Config || !self.cfg_editor.is_editing() {
+                    self.switch_tab(self.state.active_tab.prev());
+                    return Ok(());
+                }
+            }
+            // Tab - switch to next main tab, EXCEPT when Config tab handles it internally
+            (KeyModifiers::NONE, KeyCode::Tab) => {
+                // Config tab intercepts Tab for section navigation
+                if self.state.active_tab == MainTab::Config && !self.help.visible && !self.palette.active {
+                    // fall through to tab-specific handler below
+                } else if !self.help.visible && !self.palette.active
+                    && !self.state.input_mode.is_typing()
+                {
+                    self.switch_tab(self.state.active_tab.next());
+                    return Ok(());
+                }
             }
             _ => {}
         }
@@ -268,48 +411,266 @@ impl EnhancedApp {
         }
     }
 
+    fn handle_chat_scrollbar_drag(&mut self, _col: u16, row: u16) {
+        let Some(sb) = self.hitmap.chat_scrollbar else { return; };
+        let total = self.chat.messages_len() + if self.chat.is_streaming() { 1 } else { 0 };
+        if total == 0 {
+            return;
+        }
+        let rel = row.saturating_sub(sb.y) as f64;
+        let h = sb.height.max(1) as f64;
+        let ratio = (rel / h).clamp(0.0, 1.0);
+        let target = (ratio * (total.saturating_sub(1) as f64)).round() as usize;
+        self.chat.scroll_to_index(target);
+    }
+
+    fn handle_mouse_scroll(&mut self, direction: i32, col: u16, row: u16) {
+        // direction: -1 = up, +1 = down
+        let pos = ratatui::layout::Position::new(col, row);
+
+        let zones = match (self.hitmap.header, self.hitmap.body, self.hitmap.input, self.hitmap.footer) {
+            (Some(header), Some(body), Some(input), Some(footer)) => RootZones { header, body, input, footer },
+            _ => {
+                let (term_w, term_h) = crossterm::terminal::size().unwrap_or((120, 40));
+                RootZones::compute(Rect::new(0, 0, term_w, term_h))
+            }
+        };
+
+        // If wheel is over the header, change tabs.
+        if zones.header.contains(pos) {
+            if direction < 0 {
+                self.switch_tab(self.state.active_tab.prev());
+            } else {
+                self.switch_tab(self.state.active_tab.next());
+            }
+            return;
+        }
+
+        // If wheel is over the input row, don't scroll content.
+        if zones.input.contains(pos) {
+            return;
+        }
+
+        // If wheel is over chat scrollbar, do page scroll
+        if let Some(sb) = self.hitmap.chat_scrollbar {
+            if sb.contains(pos) {
+                if direction < 0 {
+                    self.chat.scroll_up(12);
+                } else {
+                    self.chat.scroll_down(12);
+                }
+                return;
+            }
+        }
+
+        // Sidebar-specific scroll
+        if let Some(r) = self.hitmap.sidebar_activity {
+            if r.contains(pos) {
+                if direction < 0 {
+                    self.sidebar.scroll_up();
+                } else {
+                    self.sidebar.scroll_down();
+                }
+                return;
+            }
+        }
+        if let Some(r) = self.hitmap.sidebar_goals {
+            if r.contains(pos) {
+                if direction < 0 {
+                    self.sidebar.goal_scroll = self.sidebar.goal_scroll.saturating_sub(1);
+                } else {
+                    self.sidebar.goal_scroll += 1;
+                }
+                return;
+            }
+        }
+
+        // Overlay scroll
+        if self.help.visible {
+            if direction < 0 {
+                self.help.scroll_up();
+            } else {
+                self.help.scroll_down();
+            }
+            return;
+        }
+
+        // Main tab scroll routing
+        match self.state.active_tab {
+            MainTab::Chat => {
+                if direction < 0 {
+                    self.chat.scroll_up(3);
+                } else {
+                    self.chat.scroll_down(3);
+                }
+            }
+            MainTab::Logs => {
+                if direction < 0 {
+                    self.logs_scroll = self.logs_scroll.saturating_add(1);
+                } else {
+                    self.logs_scroll = self.logs_scroll.saturating_sub(1);
+                }
+            }
+            MainTab::Skills => {
+                if direction < 0 {
+                    self.skills.detail_scroll_up();
+                } else {
+                    self.skills.detail_scroll_down();
+                }
+            }
+            MainTab::Tools => {
+                // If wheel is over the left list, move selection; if over the right detail, scroll detail.
+                let cols = self
+                    .hitmap
+                    .tools_cols
+                    .or_else(|| {
+                        let bz = BodyZones::compute(zones.body, self.state.view_mode, self.state.sidebar_visible);
+                        let c = Layout::default()
+                            .direction(Direction::Horizontal)
+                            .constraints([Constraint::Percentage(55), Constraint::Percentage(45)])
+                            .split(bz.main);
+                        Some([c[0], c[1]])
+                    })
+                    .unwrap();
+                if cols[0].contains(pos) {
+                    if direction < 0 {
+                        self.tools.selected = self.tools.selected.saturating_sub(1);
+                    } else {
+                        self.tools.selected = (self.tools.selected + 1).min(self.state.tool_log.len().saturating_sub(1));
+                    }
+                } else {
+                    if direction < 0 {
+                        self.tools.detail_scroll_up();
+                    } else {
+                        self.tools.detail_scroll_down();
+                    }
+                }
+            }
+            MainTab::Config => {
+                // Wheel scroll navigates fields when not editing.
+                if !self.cfg_editor.is_editing() {
+                    if direction < 0 {
+                        self.cfg_editor.field_up();
+                    } else {
+                        self.cfg_editor.field_down();
+                    }
+                }
+            }
+            MainTab::Doctor => {
+                if direction < 0 {
+                    self.doctor.detail_scroll_up();
+                } else {
+                    self.doctor.detail_scroll_down();
+                }
+            }
+            MainTab::Goals | MainTab::Metrics => {
+                // no-op for now
+            }
+        }
+    }
+
     pub fn handle_mouse(&mut self, mouse: MouseEvent) -> Result<()> {
         use crossterm::event::MouseEventKind;
 
-        if !matches!(mouse.kind, MouseEventKind::Down(_)) {
-            return Ok(());
+        match mouse.kind {
+            MouseEventKind::ScrollUp => {
+                self.handle_mouse_scroll(-1, mouse.column, mouse.row);
+                return Ok(());
+            }
+            MouseEventKind::ScrollDown => {
+                self.handle_mouse_scroll(1, mouse.column, mouse.row);
+                return Ok(());
+            }
+            MouseEventKind::ScrollLeft => {
+                // Horizontal scroll maps to tab navigation
+                self.switch_tab(self.state.active_tab.prev());
+                return Ok(());
+            }
+            MouseEventKind::ScrollRight => {
+                self.switch_tab(self.state.active_tab.next());
+                return Ok(());
+            }
+            MouseEventKind::Down(_) => {}
+            MouseEventKind::Drag(_) => {
+                if self.dragging_chat_scrollbar {
+                    self.handle_chat_scrollbar_drag(mouse.column, mouse.row);
+                }
+                return Ok(());
+            }
+            MouseEventKind::Up(_) => {
+                self.dragging_chat_scrollbar = false;
+                return Ok(());
+            }
+            _ => return Ok(()),
         }
 
         let pos = ratatui::layout::Position::new(mouse.column, mouse.row);
 
-        let terminal_size = Rect::new(0, 0, mouse.column.max(1), mouse.row.max(1));
-        let zones = RootZones::compute(terminal_size);
+        let zones = match (self.hitmap.header, self.hitmap.body, self.hitmap.input, self.hitmap.footer) {
+            (Some(header), Some(body), Some(input), Some(footer)) => RootZones { header, body, input, footer },
+            _ => {
+                // Fallback: compute from current terminal size
+                let (term_w, term_h) = crossterm::terminal::size().unwrap_or((120, 40));
+                RootZones::compute(Rect::new(0, 0, term_w, term_h))
+            }
+        };
 
-        if zones.header.height == 0 {
-            return Ok(());
+        // Tabs: if click in tab bar, use computed hitboxes
+        if let Some(tabs_area) = self.hitmap.tabs_area {
+            if tabs_area.contains(pos) {
+                for (idx, rect) in self.hitmap.tab_hitboxes.iter().enumerate() {
+                    if rect.contains(pos) {
+                        if let Some(&tab) = MainTab::ALL.get(idx) {
+                            self.switch_tab(tab);
+                        }
+                        break;
+                    }
+                }
+                return Ok(());
+            }
         }
 
-        // Check header tabs
-        let header_rect = Rect::new(0, 0, terminal_size.width, zones.header.height);
-        let hz = HeaderZones::compute(header_rect);
+        // Double click detection (same cell within 350ms)
+        let is_double_click = self
+            .last_click
+            .as_ref()
+            .is_some_and(|(c, r, t)| {
+                *c == mouse.column && *r == mouse.row && t.elapsed() < Duration::from_millis(350)
+            });
+        self.last_click = Some((mouse.column, mouse.row, std::time::Instant::now()));
 
-        if hz.tabs.contains(pos) {
-            let tab_titles: Vec<&str> = MainTab::ALL.iter().map(|t| t.label()).collect();
-            let tab_width: u16 = hz.tabs.width.saturating_sub(4) / tab_titles.len() as u16;
-            if tab_width > 0 {
-                let clicked_tab = (mouse.column.saturating_sub(hz.tabs.x + 2)) / tab_width;
-                if (clicked_tab as usize) < tab_titles.len() {
-                    let tab = MainTab::ALL[clicked_tab as usize];
-                    self.switch_tab(tab);
+        // Overlays get first refusal on clicks
+        if self.palette.active {
+            if let Some(popup) = self.hitmap.palette {
+                if popup.contains(pos) {
+                    // Click on result list item executes it
+                    for (di, r) in self.hitmap.palette_items.iter().enumerate() {
+                        if r.contains(pos) {
+                            self.palette.set_selected(di);
+                            if let Some(action) = self.palette.execute() {
+                                self.state.show_command_palette = false;
+                                self.execute_palette_action(action)?;
+                            }
+                            return Ok(());
+                        }
+                    }
+                    return Ok(());
                 }
             }
-            return Ok(());
-        }
-
-        // Close overlays on click outside
-        if self.help.visible {
-            self.help.hide();
-            return Ok(());
-        }
-
-        if self.palette.active {
+            // click outside closes
             self.palette.close();
             self.state.show_command_palette = false;
+            return Ok(());
+        }
+
+        if self.help.visible {
+            if let Some(popup) = self.hitmap.help {
+                if popup.contains(pos) {
+                    // click inside does nothing (wheel scroll supported)
+                    return Ok(());
+                }
+            }
+            self.help.hide();
             return Ok(());
         }
 
@@ -319,37 +680,123 @@ impl EnhancedApp {
                 if zones.input.contains(pos) {
                     self.state.active_pane = ActivePane::Input;
                     self.state.input_mode = InputMode::Insert;
-                } else if zones.body.contains(pos) {
+                    return Ok(());
+                }
+
+                if let Some(sb) = self.hitmap.body_sidebar {
+                    if sb.contains(pos) {
+                        self.state.active_pane = ActivePane::Sidebar;
+                        return Ok(());
+                    }
+                }
+
+                // Click message header
+                for (r, mi) in &self.hitmap.chat_header_items {
+                    if r.contains(pos) {
+                        self.state.active_pane = ActivePane::Chat;
+                        if is_double_click {
+                            if let Some(msg) = self.chat.get_message(*mi) {
+                                self.notifs.info(format!(
+                                    "Copied message (simulated): {}",
+                                    truncate_str(&msg.content, 40)
+                                ));
+                            }
+                        } else if let Some(msg) = self.chat.get_message(*mi) {
+                            self.notifs.info(format!(
+                                "{} @ {}",
+                                msg.role.label(),
+                                msg.timestamp
+                            ));
+                        }
+                        return Ok(());
+                    }
+                }
+
+                // Click in chat viewport focuses chat
+                if self.hitmap.chat_viewport.is_some_and(|r| r.contains(pos)) {
+                    self.state.active_pane = ActivePane::Chat;
+                    return Ok(());
+                }
+
+                // Click scrollbar jumps scroll position + enables dragging
+                if let Some(sb) = self.hitmap.chat_scrollbar {
+                    if sb.contains(pos) {
+                        self.dragging_chat_scrollbar = true;
+                        self.handle_chat_scrollbar_drag(mouse.column, mouse.row);
+                        self.state.active_pane = ActivePane::Chat;
+                        return Ok(());
+                    }
+                }
+
+                if zones.body.contains(pos) {
                     self.state.active_pane = ActivePane::Chat;
                 }
             }
             MainTab::Skills => {
                 self.state.active_pane = ActivePane::SkillsPanel;
+                if let Some([list, detail]) = self.hitmap.skills_cols {
+                    if list.contains(pos) {
+                        for (di, r) in self.hitmap.skills_list_items.iter().enumerate() {
+                            if r.contains(pos) {
+                                self.skills.set_selected(di);
+                                break;
+                            }
+                        }
+                    } else if detail.contains(pos) {
+                        // Focus detail (wheel scrolls)
+                    }
+                }
             }
             MainTab::Tools => {
-                let tools_area = zones.body;
-                if tools_area.contains(pos) {
-                    self.state.active_pane = ActivePane::ToolsPanel;
-                    let rel_y = mouse.row.saturating_sub(tools_area.y);
-                    let item_height = 2u16;
-                    if rel_y > 1 {
-                        let idx = ((rel_y - 1) / item_height) as usize;
-                        let max_idx = self.state.tool_log.len().saturating_sub(1);
-                        if idx <= max_idx {
-                            self.tools.selected = idx;
+                if let Some([list, detail]) = self.hitmap.tools_cols {
+                    if list.contains(pos) {
+                        self.state.active_pane = ActivePane::ToolsPanel;
+                        for (di, r) in self.hitmap.tools_list_items.iter().enumerate() {
+                            if r.contains(pos) {
+                                self.tools.set_selected(di, &self.state.tool_log);
+                                break;
+                            }
                         }
+                    } else if detail.contains(pos) {
+                        self.state.active_pane = ActivePane::ToolsPanel;
                     }
                 }
             }
             MainTab::Goals => {}
             MainTab::Metrics => {}
             MainTab::Logs => {
-                let logs_area = zones.body;
-                if logs_area.contains(pos) {
-                    self.state.active_pane = ActivePane::Chat;
+                if let Some([left, _right]) = self.hitmap.logs_cols {
+                    if left.contains(pos) {
+                        self.state.active_pane = ActivePane::Chat;
+                        // Click sets scroll position roughly
+                        self.logs_scroll = 0;
+                    }
                 }
             }
-            MainTab::Config => {}
+            MainTab::Config => {
+                if let Some([sec, fields]) = self.hitmap.config_cols {
+                    if sec.contains(pos) {
+                        for (i, r) in self.hitmap.config_section_items.iter().enumerate() {
+                            if r.contains(pos) {
+                                self.cfg_editor.set_section_idx(i, &self.config);
+                                self.notifs.info("Section selected");
+                                break;
+                            }
+                        }
+                    } else if fields.contains(pos) {
+                        for (i, r) in self.hitmap.config_field_items.iter().enumerate() {
+                            if r.contains(pos) {
+                                self.cfg_editor.set_field_idx(i);
+                                if is_double_click {
+                                    self.cfg_editor.start_edit();
+                                    self.notifs.info("Editing…");
+                                }
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
             MainTab::Doctor => {}
         }
 
@@ -362,26 +809,105 @@ impl EnhancedApp {
         let area = f.area();
         let zones = RootZones::compute(area);
 
+        // Reset per-frame hit targets
+        self.hitmap.term_area = Some(area);
+        self.hitmap.skills_list_items.clear();
+        self.hitmap.tools_list_items.clear();
+        self.hitmap.palette_items.clear();
+        self.hitmap.sidebar_metrics = None;
+        self.hitmap.chat_area = None;
+        self.hitmap.chat_viewport = None;
+        self.hitmap.chat_scrollbar = None;
+        self.hitmap.chat_header_items.clear();
+         self.hitmap.config_cols = None;
+        self.hitmap.config_section_items.clear();
+        self.hitmap.config_field_items.clear();
+        self.hitmap.sidebar_goals = None;
+        self.hitmap.sidebar_activity = None;
+        self.hitmap.help = None;
+        self.hitmap.palette = None;
+
+        // Populate base hitmap zones for this frame
+        self.hitmap.header = Some(zones.header);
+        self.hitmap.body = Some(zones.body);
+        self.hitmap.input = Some(zones.input);
+        self.hitmap.footer = Some(zones.footer);
+
+        let bz = BodyZones::compute(zones.body, self.state.view_mode, self.state.sidebar_visible);
+        self.hitmap.body_main = Some(bz.main);
+        self.hitmap.body_sidebar = bz.sidebar;
+
         self.draw_header(f, zones.header);
         self.draw_body(f, zones.body);
         self.draw_input_row(f, zones.input);
         self.draw_status(f, zones.footer);
 
         // Overlays (drawn on top)
+        // Mirror HelpOverlay geometry (centered_rect(72,82))
+        if self.help.visible {
+            let popup = super::layout::centered_rect(72, 82, f.area());
+            self.hitmap.help = Some(popup);
+        }
         self.help.draw(f);
         self.palette.draw(f);
+
+        // Mirror CommandPalette::draw geometry for mouse hit-testing.
+        if self.palette.active {
+            let area = f.area();
+            let max_items = 14usize;
+            let visible = self.palette.filtered_len().min(max_items);
+            let popup_width = 70u16.min(area.width.saturating_sub(6));
+            let popup_height = (visible as u16 + 5).min(area.height.saturating_sub(4));
+            let popup = Rect::new(
+                (area.width.saturating_sub(popup_width)) / 2,
+                4,
+                popup_width,
+                popup_height,
+            );
+            self.hitmap.palette = Some(popup);
+
+            // Layout: header input (3), results (rest)
+            let layout = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([Constraint::Length(3), Constraint::Min(1)])
+                .split(popup);
+            let results_inner = Block::default().borders(Borders::ALL).inner(layout[1]);
+
+            self.hitmap.palette_items.clear();
+            let mut y = results_inner.y;
+            for _ in 0..visible {
+                if y < results_inner.y + results_inner.height {
+                    self.hitmap
+                        .palette_items
+                        .push(Rect::new(results_inner.x, y, results_inner.width, 1));
+                }
+                y = y.saturating_add(1);
+            }
+        }
+
         self.notifs.draw(f);
+
+        // Draw streaming indicator if active
+        if self.streaming_active.load(Ordering::SeqCst) {
+            // The chat pane handles the streaming cursor - just ensure animation keeps running
+        }
     }
 
     // ── Header ────────────────────────────────────────────────────────────────
 
-    fn draw_header(&self, f: &mut Frame, area: Rect) {
+    fn draw_header(&mut self, f: &mut Frame, area: Rect) {
         let hz = HeaderZones::compute(area);
 
-        // Brand
+        // Brand with animated frame
+        let anim_icon = ANIM_FRAMES[self.anim_frame % ANIM_FRAMES.len()];
+        let streaming_anim = if self.streaming_active.load(Ordering::SeqCst) {
+            self.state.spinner()
+        } else {
+            anim_icon
+        };
         let brand = Paragraph::new(Line::from(vec![
             Span::styled(
-                format!(" {} ", LOGO),
+                format!(" {} HOUSAKY ", streaming_anim),
                 ratatui::style::Style::default()
                     .fg(Palette::BG)
                     .bg(Palette::CYAN)
@@ -403,11 +929,33 @@ impl EnhancedApp {
             })
             .collect();
 
-        let tabs = Tabs::new(tab_titles)
+        let divider = Span::styled(" │ ", style_muted());
+        let tabs = Tabs::new(tab_titles.clone())
             .select(self.state.active_tab.index())
-            .divider(Span::styled(" │ ", style_muted()))
+            .divider(divider.clone())
             .style(ratatui::style::Style::default());
         f.render_widget(tabs, hz.tabs);
+
+        // Compute hitboxes for mouse clicks. Ratatui renders tabs left-to-right with a divider in
+        // between; we mirror that to compute per-tab clickable rects.
+        self.hitmap.tabs_area = Some(hz.tabs);
+        self.hitmap.tab_hitboxes.clear();
+        let mut cursor_x = hz.tabs.x;
+        let y = hz.tabs.y;
+        for (i, title) in tab_titles.iter().enumerate() {
+            // Tabs add padding in the label strings themselves (e.g. " Chat "), so width is accurate.
+            let w = ratatui::text::Line::from(title.clone()).width() as u16;
+            self.hitmap
+                .tab_hitboxes
+                .push(Rect::new(cursor_x, y, w, hz.tabs.height.max(1)));
+            cursor_x = cursor_x.saturating_add(w);
+
+            // divider after each tab except last
+            if i + 1 < tab_titles.len() {
+                let div_w = ratatui::text::Line::from(divider.clone()).width() as u16;
+                cursor_x = cursor_x.saturating_add(div_w);
+            }
+        }
 
         // Meta (right side: provider / view / search hint)
         let view_label = self.state.view_mode.label();
@@ -434,21 +982,143 @@ impl EnhancedApp {
     fn draw_body(&mut self, f: &mut Frame, area: Rect) {
         let bz = BodyZones::compute(area, self.state.view_mode, self.state.sidebar_visible);
 
+        // Clear tab-specific hit targets before drawing
+        self.hitmap.skills_cols = None;
+        self.hitmap.tools_cols = None;
+        self.hitmap.logs_cols = None;
+
         match self.state.active_tab {
             MainTab::Chat => {
                 let focused_chat = self.state.active_pane == ActivePane::Chat;
+
+                // Mirror ChatPane layout for hit-testing.
+                self.hitmap.chat_area = Some(bz.main);
+                let inner = Block::default().borders(Borders::ALL).inner(bz.main);
+                self.hitmap.chat_viewport = Some(inner);
+                self.hitmap.chat_header_items.clear();
+                for (mi, line_off) in self.chat.visible_header_line_offsets(inner.height) {
+                    let y = inner.y + line_off;
+                    if y < inner.y + inner.height {
+                        self.hitmap
+                            .chat_header_items
+                            .push((Rect::new(inner.x, y, inner.width.saturating_sub(1), 1), mi));
+                    }
+                }
+                // Scrollbar renders on the right edge of inner
+                if inner.width > 0 {
+                    self.hitmap.chat_scrollbar = Some(Rect::new(
+                        inner.x + inner.width.saturating_sub(1),
+                        inner.y,
+                        1,
+                        inner.height,
+                    ));
+                }
+
                 self.chat.draw(f, bz.main, focused_chat);
             }
-            MainTab::Skills => self.skills.draw(f, bz.main),
-            MainTab::Tools => self.tools.draw(f, bz.main, &self.state.tool_log),
+            MainTab::Skills => {
+                // SkillsPanel internally uses a list/detail split.
+                let cols = Layout::default()
+                    .direction(Direction::Horizontal)
+                    .constraints([Constraint::Percentage(45), Constraint::Percentage(55)])
+                    .split(bz.main);
+                self.hitmap.skills_cols = Some([cols[0], cols[1]]);
+
+                // Compute skills list item hitboxes (1 line per item in List widget)
+                let list_inner = Block::default().borders(Borders::ALL).inner(cols[0]);
+                let filtered_len = self.skills.filtered_count();
+                self.hitmap.skills_list_items.clear();
+                let mut y = list_inner.y;
+                for _ in 0..filtered_len {
+                    if y < list_inner.y + list_inner.height {
+                        self.hitmap
+                            .skills_list_items
+                            .push(Rect::new(list_inner.x, y, list_inner.width, 1));
+                    }
+                    y = y.saturating_add(1);
+                }
+
+                self.skills.draw(f, bz.main);
+            }
+            MainTab::Tools => {
+                let cols = Layout::default()
+                    .direction(Direction::Horizontal)
+                    .constraints([Constraint::Percentage(55), Constraint::Percentage(45)])
+                    .split(bz.main);
+                self.hitmap.tools_cols = Some([cols[0], cols[1]]);
+
+                // Compute list item hitboxes (display indices) for the left list.
+                // ToolsPanel::draw_list renders a bordered list whose inner area is the list viewport.
+                let list_inner = Block::default().borders(Borders::ALL).inner(cols[0]);
+                let filtered_len = self.tools.filtered_count(&self.state.tool_log);
+                self.hitmap.tools_list_items.clear();
+                let per_item_h: u16 = 2;
+                let mut y = list_inner.y;
+                for _ in 0..filtered_len {
+                    if y + per_item_h <= list_inner.y + list_inner.height {
+                        self.hitmap
+                            .tools_list_items
+                            .push(Rect::new(list_inner.x, y, list_inner.width, per_item_h));
+                    }
+                    y = y.saturating_add(per_item_h);
+                }
+
+                self.tools.draw(f, bz.main, &self.state.tool_log);
+            }
             MainTab::Goals => self.draw_goals_tab(f, bz.main),
             MainTab::Metrics => self.draw_metrics_tab(f, bz.main),
             MainTab::Logs => self.draw_logs_tab(f, bz.main),
-            MainTab::Config => self.cfg_editor.draw(f, bz.main),
+            MainTab::Config => {
+                // Mirror ConfigEditor layout: sections list + fields.
+                let cols = Layout::default()
+                    .direction(Direction::Horizontal)
+                    .constraints([Constraint::Length(26), Constraint::Min(30)])
+                    .split(bz.main);
+                self.hitmap.config_cols = Some([cols[0], cols[1]]);
+
+                let sec_inner = Block::default().borders(Borders::ALL).inner(cols[0]);
+                self.hitmap.config_section_items.clear();
+                let mut y = sec_inner.y;
+                for _ in 0..self.cfg_editor.section_count() {
+                    if y < sec_inner.y + sec_inner.height {
+                        self.hitmap
+                            .config_section_items
+                            .push(Rect::new(sec_inner.x, y, sec_inner.width, 1));
+                    }
+                    y = y.saturating_add(1);
+                }
+
+                let field_inner = Block::default().borders(Borders::ALL).inner(cols[1]);
+                self.hitmap.config_field_items.clear();
+                let mut y2 = field_inner.y;
+                for _ in 0..self.cfg_editor.field_count() {
+                    if y2 < field_inner.y + field_inner.height {
+                        self.hitmap
+                            .config_field_items
+                            .push(Rect::new(field_inner.x, y2, field_inner.width, 1));
+                    }
+                    y2 = y2.saturating_add(1);
+                }
+
+                self.cfg_editor.draw(f, bz.main)
+            }
             MainTab::Doctor => self.doctor.draw(f, bz.main),
         }
 
         if let Some(sb_area) = bz.sidebar {
+            // Mirror Sidebar::draw layout to expose dynamic hitboxes
+            let zones = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([
+                    Constraint::Length(10),
+                    Constraint::Min(5),
+                    Constraint::Length(7),
+                ])
+                .split(sb_area);
+            self.hitmap.sidebar_metrics = Some(zones[0]);
+            self.hitmap.sidebar_goals = Some(zones[1]);
+            self.hitmap.sidebar_activity = Some(zones[2]);
+
             self.sidebar.draw(f, sb_area, &self.state.metrics);
         }
     }
@@ -671,11 +1341,13 @@ impl EnhancedApp {
 
     // ── Logs tab ───────────────────────────────────────────────────────────────
 
-    fn draw_logs_tab(&self, f: &mut Frame, area: Rect) {
+    fn draw_logs_tab(&mut self, f: &mut Frame, area: Rect) {
         let cols = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([Constraint::Percentage(60), Constraint::Percentage(40)])
             .split(area);
+        // Save for mouse hit-testing
+        self.hitmap.logs_cols = Some([cols[0], cols[1]]);
 
         // Left: AGI activity log
         let log_block = Block::default()
@@ -1753,39 +2425,15 @@ impl EnhancedApp {
 
     // ── Message sending ───────────────────────────────────────────────────────
 
-    /// Pure async helper: creates the provider, builds the chat history, and
-    /// calls `chat_with_history`. Returns the assistant response text on
-    /// success. This method has **no** side-effects on the UI state, making
-    /// it easier to test in isolation.
-    fn send_message_async(
-        provider_name: &str,
-        model_name: &str,
-        chat_messages: Vec<ChatMessage>,
-    ) -> Result<String> {
-        let provider = create_provider_with_keys_manager(provider_name, Some(model_name))?;
-
-        let result = match tokio::runtime::Handle::try_current() {
-            Ok(handle) => tokio::task::block_in_place(|| {
-                handle.block_on(async {
-                    provider
-                        .chat_with_history(&chat_messages, model_name, 0.7)
-                        .await
-                })
-            }),
-            Err(_) => {
-                let rt = tokio::runtime::Runtime::new()?;
-                rt.block_on(async {
-                    provider
-                        .chat_with_history(&chat_messages, model_name, 0.7)
-                        .await
-                })
-            }
-        };
-
-        result.map_err(Into::into)
-    }
-
     fn send_message(&mut self, text: String) -> Result<()> {
+        // Verify we have an API key before sending
+        if self.resolved_api_key.is_none() {
+            let warn = "⚠ No API key configured. Run `housaky onboard` or add keys via `housaky keys manager add-provider <name> <key>`";
+            self.chat.push_system(warn.to_string());
+            self.notifs.error("No API key! See chat for details.");
+            return Ok(());
+        }
+
         self.chat.push_user(text.clone());
         self.state.stream_status = StreamStatus::Thinking;
         self.state.stream_content.clear();
@@ -1814,64 +2462,81 @@ impl EnhancedApp {
             let mut result_guard = self.streaming_result.lock().unwrap();
             *result_guard = None;
         }
-        {
-            let mut chunks = self.streaming_chunks.lock().unwrap();
-            chunks.clear();
-        }
 
-        // Clone what we need for the async task
+        // Clone what we need for the worker thread
         let provider_name = self.provider_name.clone();
         let model_name = self.model_name.clone();
-        let _streaming_active = Arc::clone(&self.streaming_active);
+        // Pass the already-resolved API key so the thread doesn't need tokio
+        let api_key = self.resolved_api_key.clone();
         let streaming_result = Arc::clone(&self.streaming_result);
         let streaming_chunks = Arc::clone(&self.streaming_chunks);
+        // Also get fallback config for resilient provider
+        let reliability = self.config.reliability.clone();
 
-        // Spawn a tokio task to do the streaming chat
+        // Spawn a dedicated OS thread with its own tokio runtime to avoid
+        // blocking the main TUI event loop.
         std::thread::spawn(move || {
-            let rt = tokio::runtime::Runtime::new().unwrap();
+            let rt = match tokio::runtime::Builder::new_multi_thread()
+                .worker_threads(2)
+                .enable_all()
+                .build()
+            {
+                Ok(r) => r,
+                Err(e) => {
+                    if let Ok(mut g) = streaming_result.lock() {
+                        *g = Some(Err(format!("Runtime error: {e}")));
+                    }
+                    return;
+                }
+            };
+
             let start = std::time::Instant::now();
 
             let result = rt.block_on(async {
-                let provider =
-                    create_provider_with_keys_manager(&provider_name, Some(&model_name))?;
+                // Use a resilient provider with key rotation on rate-limit
+                let provider = crate::providers::create_resilient_provider(
+                    &provider_name,
+                    api_key.as_deref(),
+                    &reliability,
+                    Some(true), // use_keys_manager
+                )?;
                 provider
                     .chat_with_history(&chat_messages, &model_name, 0.7)
                     .await
             });
 
-            let elapsed = start.elapsed().as_millis() as u64;
+            let elapsed_ms = start.elapsed().as_millis() as u64;
+            let _ = elapsed_ms; // used for metrics later
 
             match result {
                 Ok(response) => {
-                    // Simulate streaming by sending chunks incrementally
+                    // Stream incrementally so the UI can show typing animation
                     let words: Vec<&str> = response.split_whitespace().collect();
+                    // Aim for ~20 visual chunks regardless of response length
                     let chunk_size = (words.len() / 20).max(1);
 
                     for chunk in words.chunks(chunk_size) {
-                        let chunk_text = chunk.join(" ") + " ";
-                        // Send chunk to UI
+                        let chunk_text = format!("{} ", chunk.join(" "));
                         if let Ok(mut chunks) = streaming_chunks.lock() {
                             chunks.push(chunk_text);
                         }
-                        std::thread::sleep(std::time::Duration::from_millis(20));
+                        std::thread::sleep(std::time::Duration::from_millis(25));
                     }
 
-                    // Update metrics
-                    let token_est = (response.len() / 4) as u64;
-                    let _tokens_per_sec = if elapsed > 0 {
-                        token_est as f64 / (elapsed as f64 / 1000.0)
-                    } else {
-                        0.0
-                    };
-
-                    // Store final result for UI to pick up
-                    if let Ok(mut result_guard) = streaming_result.lock() {
-                        *result_guard = Some(Ok(response));
+                    if let Ok(mut g) = streaming_result.lock() {
+                        *g = Some(Ok(response));
                     }
                 }
                 Err(e) => {
-                    if let Ok(mut result_guard) = streaming_result.lock() {
-                        *result_guard = Some(Err(e.to_string()));
+                    let msg = e.to_string();
+                    // Check for rate-limit patterns
+                    let display = if msg.contains("429") || msg.contains("rate") || msg.contains("limit") {
+                        format!("Rate limited (auto-rotating keys). {}", &msg[..msg.len().min(120)])
+                    } else {
+                        msg[..msg.len().min(200)].to_string()
+                    };
+                    if let Ok(mut g) = streaming_result.lock() {
+                        *g = Some(Err(display));
                     }
                 }
             }

@@ -1,3 +1,5 @@
+vendor/
+BOOK/The*
 /target
 firmware/*/target
 *.db

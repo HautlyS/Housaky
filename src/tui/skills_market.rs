@@ -1,6 +1,6 @@
 use crate::config::Config;
 use anyhow::Result;
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseEvent, MouseEventKind, MouseButton};
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
@@ -106,6 +106,9 @@ impl SkillTab {
 }
 
 pub struct SkillsMarketApp {
+    // Last rendered layout (for mouse hit-testing)
+    last_layout: Option<[Rect; 4]>,
+    last_content_cols: Option<[Rect; 2]>,
     pub config: Config,
     pub repo_root: PathBuf,
     pub items: Vec<MarketSkill>,
@@ -126,6 +129,8 @@ impl SkillsMarketApp {
         let mut ls = ratatui::widgets::ListState::default();
         ls.select(Some(0));
         Self {
+            last_layout: None,
+            last_content_cols: None,
             config,
             repo_root,
             items: Vec::new(),
@@ -398,6 +403,85 @@ impl SkillsMarketApp {
         Ok(())
     }
 
+    pub fn handle_mouse(&mut self, mouse: MouseEvent) -> Result<()> {
+        let Some(layout) = self.last_layout else { return Ok(()); };
+        let Some(cols) = self.last_content_cols else { return Ok(()); };
+
+        let pos = ratatui::layout::Position::new(mouse.column, mouse.row);
+
+        match mouse.kind {
+            MouseEventKind::ScrollUp => {
+                // If over list, move selection; if over detail, scroll detail.
+                if cols[0].contains(pos) {
+                    let max = self.filtered_indices().len();
+                    if max > 0 {
+                        self.selected = self.selected.saturating_sub(1);
+                        self.list_state.select(Some(self.selected));
+                        self.detail_scroll = 0;
+                    }
+                } else if cols[1].contains(pos) {
+                    if self.detail_scroll > 0 {
+                        self.detail_scroll -= 1;
+                    }
+                }
+            }
+            MouseEventKind::ScrollDown => {
+                if cols[0].contains(pos) {
+                    let max = self.filtered_indices().len();
+                    if max > 0 && self.selected + 1 < max {
+                        self.selected += 1;
+                        self.list_state.select(Some(self.selected));
+                        self.detail_scroll = 0;
+                    }
+                } else if cols[1].contains(pos) {
+                    self.detail_scroll += 1;
+                }
+            }
+            MouseEventKind::Down(MouseButton::Left) => {
+                // Tabs row: layout[1]
+                if layout[1].contains(pos) {
+                    // Tabs are rendered as text; approximate by dividing width into 3 chunks.
+                    let w = layout[1].width.max(3);
+                    let per = w / 3;
+                    let rel = mouse.column.saturating_sub(layout[1].x);
+                    let idx = (rel / per).min(2) as usize;
+                    self.tab = match idx {
+                        1 => SkillTab::Enabled,
+                        2 => SkillTab::Available,
+                        _ => SkillTab::All,
+                    };
+                    self.selected = 0;
+                    self.list_state.select(Some(0));
+                    self.detail_scroll = 0;
+                    return Ok(());
+                }
+
+                // Click in list selects and toggles on double-click-ish (or click on status icon).
+                if cols[0].contains(pos) {
+                    let rel_y = mouse.row.saturating_sub(cols[0].y);
+                    // List has a border; items start at y+1
+                    let idx = rel_y.saturating_sub(1) as usize;
+                    // Each item is 1 line in List widget
+                    let max = self.filtered_indices().len();
+                    if idx < max {
+                        self.selected = idx;
+                        self.list_state.select(Some(idx));
+                        self.detail_scroll = 0;
+                    }
+                    return Ok(());
+                }
+
+                // Click in detail toggles enabled state (quick action)
+                if cols[1].contains(pos) {
+                    self.toggle_selected();
+                }
+            }
+            _ => {}
+        }
+
+        Ok(())
+    }
+
     pub fn draw(&mut self, f: &mut Frame) {
         let area = f.area();
 
@@ -417,6 +501,8 @@ impl SkillsMarketApp {
                 Constraint::Length(1), // footer
             ])
             .split(area);
+        // Save for mouse hit-testing
+        self.last_layout = Some([layout[0], layout[1], layout[2], layout[3]]);
 
         self.draw_header(f, layout[0]);
         self.draw_tabs(f, layout[1]);
@@ -522,6 +608,7 @@ impl SkillsMarketApp {
             .direction(Direction::Horizontal)
             .constraints([Constraint::Percentage(42), Constraint::Percentage(58)])
             .split(area);
+        self.last_content_cols = Some([cols[0], cols[1]]);
 
         self.draw_skill_list(f, cols[0]);
         self.draw_skill_detail(f, cols[1]);

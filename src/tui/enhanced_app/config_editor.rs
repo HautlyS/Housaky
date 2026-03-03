@@ -211,6 +211,30 @@ impl ConfigEditor {
         self.editing
     }
 
+    pub fn section_count(&self) -> usize {
+        Section::ALL.len()
+    }
+
+    pub fn set_section_idx(&mut self, idx: usize, config: &Config) {
+        self.section_idx = idx % Section::ALL.len();
+        self.load_section(config, self.section_idx);
+        self.list_state.select(Some(0));
+    }
+
+    pub fn field_count(&self) -> usize {
+        self.fields.len()
+    }
+
+    pub fn set_field_idx(&mut self, idx: usize) {
+        if self.fields.is_empty() {
+            self.field_idx = 0;
+            self.list_state.select(None);
+        } else {
+            self.field_idx = idx.min(self.fields.len() - 1);
+            self.list_state.select(Some(self.field_idx));
+        }
+    }
+
     // ── Section loader ────────────────────────────────────────────────────────
 
     fn load_section(&mut self, config: &Config, idx: usize) {
@@ -253,6 +277,61 @@ impl ConfigEditor {
                         config.provider_timeout.request_timeout_secs.unwrap_or(0)
                     ),
                 ));
+                self.fields.push(ConfigField::new(
+                    "rotate_on_rate_limit",
+                    "Auto-rotate key / provider on 429 rate-limit",
+                    FieldKind::Bool,
+                    format!("{}", config.fallback.rotate_on_rate_limit),
+                ));
+                self.fields.push(ConfigField::new(
+                    "rotate_at_percent",
+                    "Rotate provider at N% usage threshold",
+                    FieldKind::Number,
+                    format!("{}", config.fallback.rotate_at_percent),
+                ));
+                // Read live key stats from the global keys manager
+                let manager = crate::keys_manager::manager::get_global_keys_manager();
+                let store = manager.store.blocking_read();
+                let total_providers = store.providers.len();
+                let total_keys: usize = store.providers.values().map(|p| p.keys.len()).sum();
+                let enabled_keys: usize = store
+                    .providers
+                    .values()
+                    .flat_map(|p| p.keys.iter())
+                    .filter(|k| k.enabled)
+                    .count();
+                self.fields.push(ConfigField::new(
+                    "_key_info",
+                    format!(
+                        "{} providers  •  {}/{} keys enabled",
+                        total_providers, enabled_keys, total_keys
+                    ),
+                    FieldKind::Text,
+                    String::new(),
+                ));
+                for (pname, pe) in store.providers.iter() {
+                    let active_keys = pe.keys.iter().filter(|k| k.enabled).count();
+                    let status = if pe.state.is_rate_limited {
+                        "⚠ RATE-LIMITED"
+                    } else if pe.state.is_healthy {
+                        "✓ healthy"
+                    } else {
+                        "✗ unhealthy"
+                    };
+                    self.fields.push(ConfigField::new(
+                        "provider_key",
+                        format!(
+                            "{}: {}/{} keys  •  {}  •  {}",
+                            pname,
+                            active_keys,
+                            pe.keys.len(),
+                            status,
+                            pe.priority
+                        ),
+                        FieldKind::Text,
+                        String::new(),
+                    ));
+                }
             }
             Section::Agent => {
                 self.fields.push(ConfigField::new(
@@ -707,7 +786,7 @@ impl ConfigEditor {
             return;
         }
         // Skip info-only pseudo-fields
-        if f.label == "_info" {
+        if f.label == "_info" || f.label == "_key_info" || f.label == "provider_key" {
             return;
         }
         self.editing = true;

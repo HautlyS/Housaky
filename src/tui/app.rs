@@ -6,7 +6,7 @@ use crate::tui::provider::ProviderState;
 use crate::tui::search::SearchState;
 use crate::tui::status_bar::StatusBar;
 use anyhow::Result;
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseEvent, MouseEventKind, MouseButton};
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
@@ -103,6 +103,71 @@ impl App {
         if let Some(ref mut status_bar) = self.status_bar {
             status_bar.update();
         }
+    }
+
+    pub fn handle_mouse(&mut self, mouse: MouseEvent) -> Result<()> {
+        let pos = ratatui::layout::Position::new(mouse.column, mouse.row);
+
+        match mouse.kind {
+            MouseEventKind::ScrollUp => {
+                match self.mode {
+                    AppMode::Chat => {
+                        if let Some(ref mut chat) = self.chat {
+                            chat.scroll_up();
+                            self.update_scroll_status();
+                        }
+                    }
+                    AppMode::ProviderTest => {
+                        if let Some(ref mut provider) = self.provider {
+                            provider.select_previous();
+                        }
+                    }
+                }
+            }
+            MouseEventKind::ScrollDown => {
+                match self.mode {
+                    AppMode::Chat => {
+                        if let Some(ref mut chat) = self.chat {
+                            chat.scroll_down();
+                            self.update_scroll_status();
+                        }
+                    }
+                    AppMode::ProviderTest => {
+                        if let Some(ref mut provider) = self.provider {
+                            provider.select_next();
+                        }
+                    }
+                }
+            }
+            MouseEventKind::Down(MouseButton::Left) => {
+                // Very lightweight hit-testing: click in bottom input box => editing.
+                // Layout in draw_chat(): status bar is last 3 lines, input is 3 lines above it.
+                let (_, h) = crossterm::terminal::size().unwrap_or((120, 40));
+                if mouse.row >= h.saturating_sub(6) {
+                    self.input_mode = InputMode::Editing;
+                } else {
+                    self.input_mode = InputMode::Normal;
+                }
+
+                // Provider test: click selects row
+                if self.mode == AppMode::ProviderTest {
+                    // list starts after title block (3 lines)
+                    if mouse.row > 3 {
+                        if let Some(ref mut provider) = self.provider {
+                            let rel = mouse.row.saturating_sub(4) as usize;
+                            if rel < provider.providers.len() {
+                                provider.selected = rel;
+                            }
+                        }
+                    }
+                }
+
+                let _ = pos; // keep for future richer hit-testing
+            }
+            _ => {}
+        }
+
+        Ok(())
     }
 
     pub fn handle_key(&mut self, key: KeyEvent) -> Result<()> {

@@ -1755,10 +1755,15 @@ mod inner_monologue_tests {
         let monologue = InnerMonologue::new(&workspace);
 
         for i in 0..150 {
-            monologue
+            let id = monologue
                 .add_thought(&format!("Low importance thought {}", i), 0.1)
                 .await
                 .unwrap();
+            
+            // Mark every other thought as processed so they can be compacted
+            if i % 2 == 0 {
+                monologue.mark_processed(&id).await.unwrap();
+            }
         }
 
         let compacted = monologue.compact().await.unwrap();

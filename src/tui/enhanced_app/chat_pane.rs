@@ -87,6 +87,50 @@ pub struct ChatPane {
 }
 
 impl ChatPane {
+    pub fn messages_len(&self) -> usize {
+        self.messages.len()
+    }
+
+    pub fn is_streaming(&self) -> bool {
+        self.is_streaming
+    }
+
+    pub fn scroll_to_index(&mut self, idx: usize) {
+        let max = self.messages.len().saturating_sub(1);
+        self.scroll_offset = idx.min(max);
+        self.auto_scroll = self.scroll_offset >= max;
+    }
+
+    /// Best-effort mapping of visible message headers to viewport line offsets.
+    /// Returns Vec of (message_index, header_line_offset) where header_line_offset is relative to the
+    /// top of the viewport content (0-based).
+    pub fn get_message(&self, idx: usize) -> Option<&Message> {
+        self.messages.get(idx)
+    }
+
+    pub fn visible_header_line_offsets(&self, viewport_height: u16) -> Vec<(usize, u16)> {
+        let mut out = Vec::new();
+        let mut line: u16 = 0;
+        let max_lines = viewport_height;
+
+        for (mi, msg) in self.messages.iter().enumerate().skip(self.scroll_offset) {
+            if line >= max_lines {
+                break;
+            }
+            // header is current line
+            out.push((mi, line));
+            line = line.saturating_add(1);
+
+            // content lines (approx: number of text lines + markdown expansions)
+            let content_lines = msg.content.lines().count() as u16;
+            line = line.saturating_add(content_lines);
+
+            // spacing line
+            line = line.saturating_add(1);
+        }
+
+        out
+    }
     pub fn new() -> Self {
         Self {
             messages: Vec::new(),

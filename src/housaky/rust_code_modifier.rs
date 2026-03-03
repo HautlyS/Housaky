@@ -4,6 +4,8 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use syn::{parse_file, Item, ItemEnum, ItemFn, ItemImpl, ItemStruct};
 
+use crate::housaky::code_parsing::tree_sitter as ts;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ParsedModule {
     pub path: PathBuf,
@@ -19,7 +21,9 @@ pub struct ParsedFunction {
     pub name: String,
     pub sig: String,
     pub body_preview: String,
+    #[serde(default)]
     pub line_start: usize,
+    #[serde(default)]
     pub line_end: usize,
     pub visibility: String,
     pub is_async: bool,
@@ -29,7 +33,9 @@ pub struct ParsedFunction {
 pub struct ParsedStruct {
     pub name: String,
     pub fields: Vec<String>,
+    #[serde(default)]
     pub line_start: usize,
+    #[serde(default)]
     pub line_end: usize,
 }
 
@@ -59,8 +65,28 @@ pub struct CodeModification {
     pub modification_kind: ModificationKind,
     pub old_code: String,
     pub new_code: String,
+
+    /// Preferred edit anchoring.
+    ///
+    /// - If `byte_start/byte_end` are present, modifications are applied using byte ranges (safer).
+    /// - Otherwise, fall back to line-based edits using `line_start/line_end`.
+    ///
+    /// Byte ranges are UTF-8 byte offsets into the file content.
+    #[serde(default)]
+    pub byte_start: Option<usize>,
+    #[serde(default)]
+    pub byte_end: Option<usize>,
+
+    #[serde(default)]
     pub line_start: usize,
+    #[serde(default)]
     pub line_end: usize,
+
+    /// If true, attempt to resolve a structural anchor via tree-sitter (Rust grammar) using
+    /// `target_type/target_name` when byte offsets are not provided.
+    #[serde(default)]
+    pub use_tree_sitter_anchor: bool,
+
     pub confidence: f64,
     pub reason: String,
 }
@@ -99,6 +125,55 @@ pub struct RustCodeParser {
     project_root: PathBuf,
 }
 
+fn find_item_line_range(
+    ts_tree: Option<&tree_sitter::Tree>,
+    content: &str,
+    name: &str,
+) -> Option<(usize, usize)> {
+    let tree = ts_tree?;
+    let root = tree.root_node();
+
+    // Heuristic: find an identifier node whose text equals `name`, then climb to a
+    // likely containing item node (function_item/struct_item/enum_item/impl_item).
+    // This avoids adding `tree-sitter` query strings at this stage.
+    let mut cursor = root.walk();
+    let mut stack: Vec<tree_sitter::Node> = vec![root];
+
+    while let Some(node) = stack.pop() {
+        if node.is_named() {
+            if node.kind() == "identifier" {
+                if let Ok(text) = node.utf8_text(content.as_bytes()) {
+                    if text == name {
+                        let mut parent = node.parent();
+                        while let Some(p) = parent {
+                            match p.kind() {
+                                "function_item" | "struct_item" | "enum_item" | "impl_item" => {
+                                    let start = p.start_byte();
+                                    let end = p.end_byte();
+                                    let (ls, _) = ts::byte_to_line_col(content, start);
+                                    let (le, _) = ts::byte_to_line_col(content, end);
+                                    return Some((ls, le));
+                                }
+                                _ => {
+                                    parent = p.parent();
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Push children for DFS.
+        cursor.reset(node);
+        for child in node.children(&mut cursor) {
+            stack.push(child);
+        }
+    }
+
+    None
+}
+
 impl RustCodeParser {
     pub fn new(project_root: PathBuf) -> Self {
         Self { project_root }
@@ -111,6 +186,16 @@ impl RustCodeParser {
         let syntax_tree = parse_file(&content)
             .with_context(|| format!("Failed to parse Rust code in: {}", path.display()))?;
 
+        // Best-effort: compute line ranges via tree-sitter when the Rust grammar is enabled.
+        // This gives stable anchors for edits and more useful metadata for the self-improvement loop.
+        let mut ts_engine = match ts::rust_language() {
+            Ok(lang) => ts::TsEngine::new(lang).ok(),
+            Err(_) => None,
+        };
+        let ts_tree = ts_engine
+            .as_mut()
+            .and_then(|eng| eng.parse_str(&content).ok());
+
         let mut functions = Vec::new();
         let mut structs = Vec::new();
         let mut enums = Vec::new();
@@ -119,16 +204,16 @@ impl RustCodeParser {
         for item in &syntax_tree.items {
             match item {
                 Item::Fn(item_fn) => {
-                    functions.push(self.parse_function(item_fn, &content));
+                    functions.push(self.parse_function(item_fn, &content, ts_tree.as_ref()));
                 }
                 Item::Struct(item_struct) => {
-                    structs.push(self.parse_struct(item_struct));
+                    structs.push(self.parse_struct(item_struct, &content, ts_tree.as_ref()));
                 }
                 Item::Enum(item_enum) => {
-                    enums.push(self.parse_enum(item_enum));
+                    enums.push(self.parse_enum(item_enum, &content, ts_tree.as_ref()));
                 }
                 Item::Impl(item_impl) => {
-                    impls.push(self.parse_impl(item_impl));
+                    impls.push(self.parse_impl(item_impl, &content, ts_tree.as_ref()));
                 }
                 _ => {}
             }
@@ -144,7 +229,12 @@ impl RustCodeParser {
         })
     }
 
-    fn parse_function(&self, item_fn: &ItemFn, _content: &str) -> ParsedFunction {
+    fn parse_function(
+        &self,
+        item_fn: &ItemFn,
+        content: &str,
+        ts_tree: Option<&tree_sitter::Tree>,
+    ) -> ParsedFunction {
         let name = item_fn.sig.ident.to_string();
         let is_async = item_fn.sig.asyncness.is_some();
         let visibility = match &item_fn.vis {
@@ -160,18 +250,26 @@ impl RustCodeParser {
             format!("{} statements", stmt_count)
         };
 
+        let (line_start, line_end) = find_item_line_range(ts_tree, content, &name)
+            .unwrap_or((0, 0));
+
         ParsedFunction {
             name,
             sig,
             body_preview,
-            line_start: 0,
-            line_end: 0,
+            line_start,
+            line_end,
             visibility,
             is_async,
         }
     }
 
-    fn parse_struct(&self, item_struct: &ItemStruct) -> ParsedStruct {
+    fn parse_struct(
+        &self,
+        item_struct: &ItemStruct,
+        content: &str,
+        ts_tree: Option<&tree_sitter::Tree>,
+    ) -> ParsedStruct {
         let name = item_struct.ident.to_string();
         let fields = match &item_struct.fields {
             syn::Fields::Named(named) => named
@@ -187,15 +285,23 @@ impl RustCodeParser {
             syn::Fields::Unit => vec![],
         };
 
+        let (line_start, line_end) = find_item_line_range(ts_tree, content, &name)
+            .unwrap_or((0, 0));
+
         ParsedStruct {
             name,
             fields,
-            line_start: 0,
-            line_end: 0,
+            line_start,
+            line_end,
         }
     }
 
-    fn parse_enum(&self, item_enum: &ItemEnum) -> ParsedEnum {
+    fn parse_enum(
+        &self,
+        item_enum: &ItemEnum,
+        content: &str,
+        ts_tree: Option<&tree_sitter::Tree>,
+    ) -> ParsedEnum {
         let name = item_enum.ident.to_string();
         let variants = item_enum
             .variants
@@ -225,15 +331,23 @@ impl RustCodeParser {
             })
             .collect();
 
+        let (line_start, line_end) = find_item_line_range(ts_tree, content, &name)
+            .unwrap_or((0, 0));
+
         ParsedEnum {
             name,
             variants,
-            line_start: 0,
-            line_end: 0,
+            line_start,
+            line_end,
         }
     }
 
-    fn parse_impl(&self, item_impl: &ItemImpl) -> ParsedImpl {
+    fn parse_impl(
+        &self,
+        item_impl: &ItemImpl,
+        content: &str,
+        ts_tree: Option<&tree_sitter::Tree>,
+    ) -> ParsedImpl {
         let self_type = format!("{:?}", item_impl.self_ty);
         let trait_name = item_impl.trait_.as_ref().map(|_| "trait".to_string());
 
@@ -249,12 +363,16 @@ impl RustCodeParser {
             })
             .collect();
 
+        let impl_name = self_type.clone();
+        let (line_start, line_end) = find_item_line_range(ts_tree, content, &impl_name)
+            .unwrap_or((0, 0));
+
         ParsedImpl {
             trait_name,
             self_type,
             methods,
-            line_start: 0,
-            line_end: 0,
+            line_start,
+            line_end,
         }
     }
 
@@ -291,6 +409,7 @@ impl RustCodeParser {
 pub struct RustCodeModifier {
     parser: RustCodeParser,
     backup_dir: PathBuf,
+    project_root: PathBuf,
 }
 
 impl RustCodeModifier {
@@ -299,9 +418,74 @@ impl RustCodeModifier {
         std::fs::create_dir_all(&backup_dir).ok();
 
         Self {
-            parser: RustCodeParser::new(project_root),
+            parser: RustCodeParser::new(project_root.clone()),
             backup_dir,
+            project_root,
         }
+    }
+
+    /// Validates that the target path is within the project root directory.
+    /// This prevents path traversal attacks that could write to arbitrary locations.
+    fn validate_path_within_project(&self, target_path: &Path) -> Result<PathBuf> {
+        // Canonicalize both paths to resolve symlinks and relative components
+        let canonical_root = self
+            .project_root
+            .canonicalize()
+            .with_context(|| format!("Failed to canonicalize project root: {}", self.project_root.display()))?;
+
+        // For the target, we need to handle the case where it doesn't exist yet
+        let canonical_target = if target_path.exists() {
+            target_path.canonicalize()
+                .with_context(|| format!("Failed to canonicalize target path: {}", target_path.display()))?
+        } else {
+            // If the file doesn't exist, canonicalize the parent and append the filename
+            let parent = target_path.parent()
+                .ok_or_else(|| anyhow::anyhow!("Target path has no parent: {}", target_path.display()))?;
+            let filename = target_path.file_name()
+                .ok_or_else(|| anyhow::anyhow!("Target path has no filename: {}", target_path.display()))?;
+            
+            let canonical_parent = parent.canonicalize()
+                .with_context(|| format!("Failed to canonicalize parent directory: {}", parent.display()))?;
+            
+            canonical_parent.join(filename)
+        };
+
+        // Check that the target is within the project root
+        if !canonical_target.starts_with(&canonical_root) {
+            anyhow::bail!(
+                "Security violation: target path '{}' is outside project root '{}'. \
+                Self-modification is only allowed within the project directory.",
+                target_path.display(),
+                self.project_root.display()
+            );
+        }
+
+        // Additional check: don't allow modifications to sensitive files
+        let filename = canonical_target
+            .file_name()
+            .and_then(|f| f.to_str())
+            .unwrap_or("");
+        
+        let sensitive_patterns = [
+            ".git",
+            ".env",
+            "secrets",
+            "credentials",
+            "private_key",
+            ".ssh",
+        ];
+        
+        for pattern in &sensitive_patterns {
+            if filename.contains(pattern) || canonical_target.to_string_lossy().contains(&format!("/{}/", pattern)) {
+                anyhow::bail!(
+                    "Security violation: cannot modify sensitive file or directory containing '{}': {}",
+                    pattern,
+                    target_path.display()
+                );
+            }
+        }
+
+        Ok(canonical_target)
     }
 
     pub fn apply_modification(
@@ -311,12 +495,15 @@ impl RustCodeModifier {
         let id = &modification.id;
         let target_path = &modification.target_file;
 
-        let original_content = std::fs::read_to_string(target_path)
-            .with_context(|| format!("Failed to read: {}", target_path.display()))?;
+        // Security: validate that the target path is within the project root
+        let validated_path = self.validate_path_within_project(target_path)?;
+
+        let original_content = std::fs::read_to_string(&validated_path)
+            .with_context(|| format!("Failed to read: {}", validated_path.display()))?;
 
         let backup_path = self.backup_dir.join(format!(
             "{}_{}_{}.rs.backup",
-            target_path
+            validated_path
                 .file_name()
                 .unwrap_or_default()
                 .to_string_lossy(),
@@ -328,18 +515,18 @@ impl RustCodeModifier {
 
         let modified_content = self.apply_change(&original_content, modification)?;
 
-        std::fs::write(target_path, &modified_content)?;
+        std::fs::write(&validated_path, &modified_content)?;
 
-        let compile_result = self.compile_check(target_path);
+        let compile_result = self.compile_check(&validated_path);
 
         let test_result = if compile_result.success {
-            self.run_tests(target_path)
+            self.run_tests(&validated_path)
         } else {
             false
         };
 
         if !compile_result.success || !test_result {
-            std::fs::write(target_path, &original_content)?;
+            std::fs::write(&validated_path, &original_content)?;
             std::fs::remove_file(&backup_path).ok();
 
             return Ok(ModificationResult {
@@ -363,19 +550,28 @@ impl RustCodeModifier {
     }
 
     fn apply_change(&self, content: &str, modification: &CodeModification) -> Result<String> {
+        // 1) Prefer byte-range edits if provided (most robust).
+        // 2) Otherwise, if requested, try to resolve an anchor via tree-sitter.
+        // 3) Otherwise, fall back to legacy line-based edits.
+
+        if let Some(updated) = self.apply_change_by_bytes(content, modification)? {
+            return Ok(updated);
+        }
+
+        // Legacy line-based fallback.
         let lines: Vec<&str> = content.lines().collect();
 
         match modification.modification_kind {
             ModificationKind::Replace => {
-                let mut new_lines = lines[..modification.line_start - 1].to_vec();
+                let mut new_lines = lines[..modification.line_start.saturating_sub(1)].to_vec();
                 new_lines.push(&modification.new_code);
                 new_lines.extend_from_slice(&lines[modification.line_end..]);
                 Ok(new_lines.join("\n"))
             }
             ModificationKind::InsertBefore => {
-                let mut new_lines = lines[..modification.line_start - 1].to_vec();
+                let mut new_lines = lines[..modification.line_start.saturating_sub(1)].to_vec();
                 new_lines.push(&modification.new_code);
-                new_lines.extend_from_slice(&lines[modification.line_start - 1..]);
+                new_lines.extend_from_slice(&lines[modification.line_start.saturating_sub(1)..]);
                 Ok(new_lines.join("\n"))
             }
             ModificationKind::InsertAfter => {
@@ -385,23 +581,43 @@ impl RustCodeModifier {
                 Ok(new_lines.join("\n"))
             }
             ModificationKind::Remove => {
-                let mut new_lines = lines[..modification.line_start - 1].to_vec();
+                let mut new_lines = lines[..modification.line_start.saturating_sub(1)].to_vec();
                 new_lines.extend_from_slice(&lines[modification.line_end..]);
                 Ok(new_lines.join("\n"))
             }
-            ModificationKind::Rename => {
-                Ok(content.replace(&modification.old_code, &modification.new_code))
-            }
+            ModificationKind::Rename => Ok(content.replace(&modification.old_code, &modification.new_code)),
             ModificationKind::Wrap => {
-                let before = lines[..modification.line_start - 1].join("\n");
+                let before = lines[..modification.line_start.saturating_sub(1)].join("\n");
                 let wrapped = modification.new_code.replace(
                     "{OLD_CODE}",
-                    &lines[modification.line_start - 1..modification.line_end].join("\n"),
+                    &lines[modification.line_start.saturating_sub(1)..modification.line_end]
+                        .join("\n"),
                 );
                 let after = lines[modification.line_end..].join("\n");
                 Ok(format!("{}\n{}\n{}", before, wrapped, after))
             }
         }
+    }
+
+    fn apply_change_by_bytes(
+        &self,
+        content: &str,
+        modification: &CodeModification,
+    ) -> Result<Option<String>> {
+        // If explicit bytes are given, apply directly.
+        if let (Some(start), Some(end)) = (modification.byte_start, modification.byte_end) {
+            return Ok(Some(apply_byte_edit(content, modification, start, end)?));
+        }
+
+        // If requested, attempt structural anchoring via tree-sitter (Rust grammar).
+        if modification.use_tree_sitter_anchor {
+            let anchor = resolve_ts_anchor_for_modification(content, modification)?;
+            if let Some((start, end)) = anchor {
+                return Ok(Some(apply_byte_edit(content, modification, start, end)?));
+            }
+        }
+
+        Ok(None)
     }
 
     fn compile_check(&self, _path: &Path) -> CompileResult {
@@ -475,3 +691,84 @@ struct CompileResult {
 }
 
 use walkdir;
+
+fn apply_byte_edit(
+    content: &str,
+    modification: &CodeModification,
+    start: usize,
+    end: usize,
+) -> Result<String> {
+    if start > end || end > content.len() {
+        anyhow::bail!("Invalid byte range: {}..{} (len={})", start, end, content.len());
+    }
+
+    match modification.modification_kind {
+        ModificationKind::Replace => {
+            Ok(format!("{}{}{}", &content[..start], modification.new_code, &content[end..]))
+        }
+        ModificationKind::InsertBefore => {
+            Ok(format!("{}{}{}", &content[..start], modification.new_code, &content[start..]))
+        }
+        ModificationKind::InsertAfter => {
+            Ok(format!("{}{}{}", &content[..end], modification.new_code, &content[end..]))
+        }
+        ModificationKind::Remove => Ok(format!("{}{}", &content[..start], &content[end..])),
+        ModificationKind::Rename => Ok(content.replace(&modification.old_code, &modification.new_code)),
+        ModificationKind::Wrap => {
+            let old = &content[start..end];
+            let wrapped = modification.new_code.replace("{OLD_CODE}", old);
+            Ok(format!("{}{}{}", &content[..start], wrapped, &content[end..]))
+        }
+    }
+}
+
+fn resolve_ts_anchor_for_modification(
+    content: &str,
+    modification: &CodeModification,
+) -> Result<Option<(usize, usize)>> {
+    // Only Rust is supported for now; other languages can be added by adding grammar crates + resolvers.
+    let language = match ts::rust_language() {
+        Ok(l) => l,
+        Err(_) => return Ok(None),
+    };
+
+    let mut engine = ts::TsEngine::new(language)?;
+    let tree = engine.parse_str(content)?;
+
+    let target_name = modification.target_name.trim();
+    if target_name.is_empty() {
+        return Ok(None);
+    }
+
+    // For Function/Struct/Enum: find identifier == target_name and climb.
+    // For Impl: also try to match identifier, but this may not always work for complex self types.
+    // For Module/LineRange: unsupported here.
+    let root = tree.root_node();
+    let mut cursor = root.walk();
+    let mut stack: Vec<tree_sitter::Node> = vec![root];
+
+    while let Some(node) = stack.pop() {
+        if node.is_named() && node.kind() == "identifier" {
+            if let Ok(text) = node.utf8_text(content.as_bytes()) {
+                if text == target_name {
+                    let mut parent = node.parent();
+                    while let Some(p) = parent {
+                        match p.kind() {
+                            "function_item" | "struct_item" | "enum_item" | "impl_item" => {
+                                return Ok(Some((p.start_byte(), p.end_byte())));
+                            }
+                            _ => parent = p.parent(),
+                        }
+                    }
+                }
+            }
+        }
+
+        cursor.reset(node);
+        for child in node.children(&mut cursor) {
+            stack.push(child);
+        }
+    }
+
+    Ok(None)
+}

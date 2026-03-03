@@ -4,7 +4,7 @@ use crate::housaky::goal_engine::Goal;
 use crate::housaky::heartbeat::HousakyHeartbeat;
 use crate::providers::ChatMessage;
 use anyhow::Result;
-use crossterm::event::{KeyCode, KeyEvent};
+use crossterm::event::{KeyCode, KeyEvent, MouseEvent, MouseEventKind};
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
@@ -15,6 +15,9 @@ use ratatui::{
 use std::sync::Arc;
 
 pub struct AGIDashboard {
+    // Last rendered zones for mouse hit-testing
+    last_chunks: Option<[Rect; 4]>,
+    tab_hitboxes: Vec<Rect>,
     config: Config,
     core: Option<Arc<HousakyCore>>,
     heartbeat: Option<Arc<HousakyHeartbeat>>,
@@ -38,6 +41,8 @@ pub struct AGIDashboard {
 impl AGIDashboard {
     pub fn new(config: Config, provider_name: String, model_name: String) -> Self {
         Self {
+            last_chunks: None,
+            tab_hitboxes: Vec::new(),
             config,
             core: None,
             heartbeat: None,
@@ -72,6 +77,70 @@ impl AGIDashboard {
 
     pub fn should_quit(&self) -> bool {
         self.should_quit
+    }
+
+    pub fn handle_mouse(&mut self, mouse: MouseEvent) -> Result<()> {
+        // Minimal mouse support: wheel scrolls active pane, click switches tabs / focuses input.
+        match mouse.kind {
+            MouseEventKind::ScrollUp => {
+                self.handle_scroll(-3);
+                return Ok(());
+            }
+            MouseEventKind::ScrollDown => {
+                self.handle_scroll(3);
+                return Ok(());
+            }
+            MouseEventKind::Down(_) => {
+                if let Some(chunks) = self.last_chunks {
+                    let header = chunks[0];
+                    let pos = ratatui::layout::Position::new(mouse.column, mouse.row);
+                    if header.contains(pos) {
+                        for (idx, r) in self.tab_hitboxes.iter().enumerate() {
+                            if r.contains(pos) {
+                                self.selected_tab = idx.min(self.tabs.len().saturating_sub(1));
+                                return Ok(());
+                            }
+                        }
+                    }
+                }
+                // Clicking near bottom focuses/unfocuses input.
+                let (_, h) = crossterm::terminal::size().unwrap_or((120, 40));
+                if mouse.row >= h.saturating_sub(7) {
+                    self.input_focused = true;
+                } else {
+                    self.input_focused = false;
+                }
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+
+    fn handle_scroll(&mut self, delta: i32) {
+        // Positive delta scrolls down
+        match self.selected_tab {
+            2 => {
+                if delta < 0 {
+                    self.thought_scroll = self.thought_scroll.saturating_sub(delta.unsigned_abs() as usize);
+                } else {
+                    self.thought_scroll = self.thought_scroll.saturating_add(delta as usize);
+                }
+            }
+            1 => {
+                if delta < 0 {
+                    self.goal_scroll = self.goal_scroll.saturating_sub(delta.unsigned_abs() as usize);
+                } else {
+                    self.goal_scroll = self.goal_scroll.saturating_add(delta as usize);
+                }
+            }
+            _ => {
+                if delta < 0 {
+                    self.scroll_offset = self.scroll_offset.saturating_sub(delta.unsigned_abs() as usize);
+                } else {
+                    self.scroll_offset = self.scroll_offset.saturating_add(delta as usize);
+                }
+            }
+        }
     }
 
     pub fn handle_key(&mut self, key: KeyEvent) -> Result<()> {
@@ -232,7 +301,7 @@ impl AGIDashboard {
         }
     }
 
-    pub fn draw(&self, f: &mut Frame) {
+    pub fn draw(&mut self, f: &mut Frame) {
         let size = f.area();
 
         let chunks = Layout::default()
@@ -246,7 +315,21 @@ impl AGIDashboard {
             ])
             .split(size);
 
-        let tabs = Tabs::new(self.tabs.iter().map(|s| Span::raw(*s)).collect::<Vec<_>>())
+        // Save zones for mouse hit-testing
+        self.last_chunks = Some([chunks[0], chunks[1], chunks[2], chunks[3]]);
+
+        // Tabs and per-tab hitboxes
+        let tab_spans: Vec<Span> = self.tabs.iter().map(|s| Span::raw(*s)).collect();
+        self.tab_hitboxes.clear();
+        let mut cursor_x = chunks[0].x + 1; // inside left border
+        let y = chunks[0].y + 1;
+        for title in &tab_spans {
+            let w = ratatui::text::Line::from(title.clone()).width() as u16;
+            self.tab_hitboxes.push(Rect::new(cursor_x, y, w, 1));
+            cursor_x = cursor_x.saturating_add(w);
+        }
+
+        let tabs = Tabs::new(tab_spans.clone())
             .block(Block::default().borders(Borders::ALL).title("Housaky AGI"))
             .select(self.selected_tab)
             .style(Style::default().fg(Color::Cyan))

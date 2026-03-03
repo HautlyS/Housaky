@@ -51,7 +51,7 @@ pub fn run_agi_tui(
     agi::run_agi_tui(config, provider, model, heartbeat)
 }
 
-pub fn run_chat_tui(config: Config, provider: Option<String>, model: Option<String>) -> Result<()> {
+pub fn run_chat_tui(config: Config, provider: Option<String>, model: Option<String>, heartbeat: Option<Arc<HousakyHeartbeat>>) -> Result<()> {
     enable_raw_mode()?;
     let mut stdout = io::stdout();
     execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
@@ -66,6 +66,9 @@ pub fn run_chat_tui(config: Config, provider: Option<String>, model: Option<Stri
         .unwrap_or_else(|| "auto".to_string());
 
     let mut app = EnhancedApp::new(config, provider_name, model_name);
+    if let Some(hb) = heartbeat {
+        app = app.with_heartbeat(hb);
+    }
     let res = run_enhanced_app(&mut terminal, &mut app);
 
     disable_raw_mode()?;
@@ -96,11 +99,20 @@ pub fn run_skills_market_tui(config: Config, repo_root: std::path::PathBuf) -> R
     let res = loop {
         terminal.draw(|f| app.draw(f))?;
         if event::poll(Duration::from_millis(33))? {
-            if let Event::Key(key) = event::read()? {
-                app.handle_key(key)?;
-                if app.quit {
-                    break Ok(());
+            match event::read()? {
+                Event::Key(key) => {
+                    app.handle_key(key)?;
+                    if app.quit {
+                        break Ok(());
+                    }
                 }
+                Event::Mouse(mouse) => {
+                    let _ = app.handle_mouse(mouse);
+                }
+                Event::Resize(_, _) => {
+                    terminal.autoresize()?;
+                }
+                _ => {}
             }
         }
     };
@@ -162,15 +174,24 @@ fn run_enhanced_app(
         if event::poll(Duration::from_millis(10))? {
             match event::read()? {
                 Event::Key(key) => {
-                    app.handle_key(key)?;
+                    // Catch errors from key handlers and show in-TUI rather than crashing
+                    if let Err(e) = app.handle_key(key) {
+                        let msg = format!("[TUI Error] {}", e);
+                        app.push_log(msg.clone());
+                        app.notifs_error(&msg[..msg.len().min(72)]);
+                    }
                 }
                 Event::Mouse(mouse) => {
                     if let Err(e) = app.handle_mouse(mouse) {
-                        eprintln!("Mouse handler error: {}", e);
+                        // Mouse errors are silent — just log them
+                        app.push_log(format!("[Mouse] {}", e));
                     }
                 }
                 Event::Resize(_, _) => {
-                    let _ = terminal.autoresize();
+                    // Force immediate redraw on resize
+                    terminal.autoresize()?;
+                    terminal.draw(|f| app.draw(f))?;
+                    last_draw = std::time::Instant::now();
                 }
                 _ => {}
             }
@@ -197,7 +218,8 @@ fn run_app(
 
         // Handle events with timeout for responsive UI
         if event::poll(Duration::from_millis(10))? {
-            if let Event::Key(key) = event::read()? {
+            match event::read()? {
+                Event::Key(key) => {
                 match (key.modifiers, key.code) {
                     (KeyModifiers::CONTROL, KeyCode::Char('c')) => {
                         if app.should_exit_on_ctrl_c() {
@@ -211,7 +233,15 @@ fn run_app(
                     }
                     _ => {}
                 }
-                app.handle_key(key)?;
+                    app.handle_key(key)?;
+                }
+                Event::Mouse(mouse) => {
+                    let _ = app.handle_mouse(mouse);
+                }
+                Event::Resize(_, _) => {
+                    terminal.autoresize()?;
+                }
+                _ => {}
             }
         }
 

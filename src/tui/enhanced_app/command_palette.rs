@@ -222,6 +222,19 @@ impl CommandPalette {
         self.selected = 0;
     }
 
+    pub fn filtered_len(&self) -> usize {
+        self.filtered.len()
+    }
+
+    pub fn set_selected(&mut self, display_idx: usize) {
+        let max = self.filtered.len();
+        if max == 0 {
+            self.selected = 0;
+        } else {
+            self.selected = display_idx.min(max - 1);
+        }
+    }
+
     pub fn close(&mut self) {
         self.active = false;
         self.input.clear();

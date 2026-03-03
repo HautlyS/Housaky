@@ -137,6 +137,13 @@ quote = "1.0"
 proc-macro2 = "1.0"
 walkdir = "2.5"
 
+# Tree-sitter for incremental parsing + structural code ops
+# We use the official crates.io dependency; vendored tree-sitter is kept as reference only.
+tree-sitter = "0.24"
+
+# Optional grammars (enable when you want structural parsing for that language)
+tree-sitter-rust = { version = "0.21", optional = true }
+
 # HTML scraping
 scraper = "0.22"
 
@@ -173,6 +180,10 @@ rppal = { version = "0.14", optional = true }
 
 [features]
 # Disabled by default: legacy / unstable integration tests for key management.
+
+# Enable Rust grammar for tree-sitter based parsing (used by self-improvement tooling).
+tree-sitter-rust = ["dep:tree-sitter-rust"]
+
 # IMPORTANT: `cargo test --all-features` should remain stable, so these tests require an
 # additional opt-in feature (`run-unstable-tests`) to compile.
 unstable-key-tests = []

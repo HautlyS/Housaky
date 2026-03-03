@@ -1269,7 +1269,7 @@ pub async fn run_agi_with_tui(
     // Give the heartbeat a moment to initialise before launching the TUI.
     tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
 
-    crate::tui::run_agi_tui(config, None, None, Some(heartbeat))?;
+    crate::tui::run_chat_tui(config, provider_override, model_override, Some(heartbeat))?;
 
     Ok(())
 }

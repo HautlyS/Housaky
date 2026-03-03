@@ -44,6 +44,20 @@ impl ToolsPanel {
         }
     }
 
+    pub fn filtered_count(&self, tools: &[ToolEntry]) -> usize {
+        self.filtered_indices(tools).len()
+    }
+
+    pub fn set_selected(&mut self, display_idx: usize, tools: &[ToolEntry]) {
+        let max = self.filtered_indices(tools).len();
+        if max == 0 {
+            self.selected = 0;
+        } else {
+            self.selected = display_idx.min(max - 1);
+        }
+        self.detail_scroll = 0;
+    }
+
     pub fn detail_scroll_up(&mut self) {
         self.detail_scroll = self.detail_scroll.saturating_sub(1);
     }

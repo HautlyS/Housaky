@@ -57,6 +57,9 @@ pub mod git_sandbox;
 pub mod rust_code_modifier;
 pub mod self_improve_interface;
 
+// Structural parsing utilities (tree-sitter)
+pub mod code_parsing;
+
 // GSD-inspired orchestration system
 pub mod gsd_orchestration;
 
@@ -849,7 +852,9 @@ async fn handle_gsd_command(command: GSDCommands, config: &Config) -> Result<()>
 async fn handle_collective_command(command: CollectiveCommands, config: &Config) -> Result<()> {
     use crate::housaky::collective::{
         CollectiveConfig, CollectiveHub, Contribution, ContributionKind, ContributionStatus,
+        FindingSeverity, VerificationStage,
     };
+    use std::path::PathBuf;
 
     // Build CollectiveConfig from environment / workspace config file.
     let api_key = std::env::var("MOLTBOOK_API_KEY")
@@ -869,7 +874,9 @@ async fn handle_collective_command(command: CollectiveCommands, config: &Config)
         ..CollectiveConfig::default()
     };
 
-    let hub = CollectiveHub::new(collective_config);
+    // Determine workspace directory for sandbox verification
+    let workspace_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    let hub = CollectiveHub::new(collective_config, workspace_dir);
 
     match command {
         CollectiveCommands::Register { name, description } => {
@@ -1034,19 +1041,31 @@ async fn handle_collective_command(command: CollectiveCommands, config: &Config)
             }
             println!("🔄 Running collective tick — polling global proposals...");
 
-            let approved = hub.collective_tick().await?;
+            // Note: LLM provider for security review would be passed here
+            let approved = hub.collective_tick(None).await?;
             let stats = hub.get_stats().await;
+            let verify_stats = hub.get_verification_stats().await;
 
             println!("✓ Tick complete");
             println!("  Proposals evaluated: {}", stats.proposals_evaluated);
-            println!("  Approved:            {}", approved.len());
+            println!("  Awaiting human approval: {}", approved.len());
+            println!();
+            println!("📊 Verification Statistics:");
+            println!("  Total reviewed:              {}", verify_stats.total_proposals_reviewed);
+            println!("  Passed automated checks:     {}", verify_stats.passed_automated_verification);
+            println!("  Failed automated checks:     {}", verify_stats.rejected_automated_verification);
+            println!("  Pending human approval:      {}", verify_stats.pending_human_approval);
+            println!("  Approved by human:           {}", verify_stats.approved_by_human);
+            println!("  Rejected by human:           {}", verify_stats.rejected_by_human);
+            println!("  Applied to codebase:         {}", verify_stats.total_applied);
 
             if approved.is_empty() {
                 println!();
-                println!("No proposals reached consensus threshold yet.");
+                println!("No proposals passed automated verification yet.");
+                println!("Use 'housaky housaky collective pending' to see proposals awaiting your approval.");
             } else {
                 println!();
-                println!("Approved proposals (ready to apply):");
+                println!("Proposals awaiting YOUR human approval:");
                 for c in &approved {
                     println!(
                         "  [{:?}] {} (post: {})",
@@ -1056,15 +1075,14 @@ async fn handle_collective_command(command: CollectiveCommands, config: &Config)
                     );
                     if let Some(votes) = &c.vote_summary {
                         println!(
-                            "    Score: {} ({} up / {} down)",
-                            votes.score, votes.upvotes, votes.downvotes
+                            "    Score: {} ({} up / {} down) | karma: {}",
+                            votes.score, votes.upvotes, votes.downvotes, votes.author_karma
                         );
                     }
                 }
                 println!();
-                println!(
-                    "Note: set auto_apply = true in collective config to apply automatically."
-                );
+                println!("Review with: housaky housaky collective pending");
+                println!("Approve/Reject with: housaky housaky collective approve <id>");
             }
         }
 
@@ -1129,6 +1147,124 @@ async fn handle_collective_command(command: CollectiveCommands, config: &Config)
                         post.id,
                         post.title,
                         post.score.unwrap_or(0)
+                    );
+                }
+            }
+        }
+
+        CollectiveCommands::Pending => {
+            println!("📋 Proposals awaiting your human approval...\n");
+            
+            let pending = hub.get_pending_approvals().await;
+            
+            if pending.is_empty() {
+                println!("No proposals currently pending approval.");
+                println!("Run 'tick' to fetch and verify new proposals from the network.");
+            } else {
+                for (i, p) in pending.iter().enumerate() {
+                    println!("{}. {} (ID: {})", i + 1, p.proposal.title, p.proposal.id);
+                    println!("   Author: {} | Karma: {}", 
+                        p.proposal.author_agent,
+                        p.report.stages.iter()
+                            .find(|s| s.stage == VerificationStage::SignatureVerification)
+                            .map(|s| s.score)
+                            .unwrap_or(0.0)
+                    );
+                    println!("   Security Score: {:.2}", p.report.security_score);
+                    println!("   Improvement Score: {:.2}", p.report.improvement_score);
+                    
+                    // Show key findings
+                    let critical_findings: Vec<_> = p.report.stages.iter()
+                        .flat_map(|s| s.findings.iter())
+                        .filter(|f| f.severity == FindingSeverity::Critical || f.severity == FindingSeverity::High)
+                        .collect();
+                    
+                    if !critical_findings.is_empty() {
+                        println!("   ⚠️  Warnings:");
+                        for finding in critical_findings {
+                            println!("      - {}: {}", finding.severity, finding.description);
+                        }
+                    }
+                    
+                    println!("   Full report: use 'housaky housaky collective approve {} --help'", p.proposal.id);
+                    println!();
+                }
+                
+                println!("Approve: housaky housaky collective approve <id> --approve");
+                println!("Reject:  housaky housaky collective approve <id> --no-approve");
+            }
+        }
+
+        CollectiveCommands::Approve { id, approve, comment } => {
+            let reviewer_id = std::env::var("USER")
+                .unwrap_or_else(|_| "admin".to_string());
+            
+            println!("🔐 Human approval decision for proposal '{}'...", id);
+            
+            match hub.human_approve_proposal(&id, approve, &reviewer_id, comment.clone()).await {
+                Ok(report) => {
+                    if approve {
+                        println!("✅ Proposal APPROVED by {}", reviewer_id);
+                        println!("   Comment: {}", comment.as_deref().unwrap_or("No comment"));
+                        
+                        // Try to apply immediately
+                        match hub.apply_approved_proposal(&report).await {
+                            Ok(applied) => {
+                                println!("✅ Applied successfully!");
+                                println!("   Git commit: {}", applied.git_commit_hash);
+                                println!("   Rollback available: {}", applied.rollback_available);
+                            }
+                            Err(e) => {
+                                println!("⚠️  Application pending: {}", e);
+                            }
+                        }
+                    } else {
+                        println!("❌ Proposal REJECTED by {}", reviewer_id);
+                        println!("   Comment: {}", comment.as_deref().unwrap_or("No comment"));
+                    }
+                    
+                    println!("\nAudit hash: {}", report.audit_hash);
+                }
+                Err(e) => {
+                    eprintln!("Error: {}", e);
+                }
+            }
+        }
+
+        CollectiveCommands::Stats => {
+            let stats = hub.get_verification_stats().await;
+            let audit = hub.get_audit_log().await;
+            
+            println!("📊 Collective Verification Statistics\n");
+            println!("Pipeline Overview:");
+            println!("  Total proposals reviewed:       {}", stats.total_proposals_reviewed);
+            println!("  Passed automated verification:  {}", stats.passed_automated_verification);
+            println!("  Failed automated verification:  {}", stats.rejected_automated_verification);
+            println!("  Pending human approval:         {}", stats.pending_human_approval);
+            println!("  Approved by human:              {}", stats.approved_by_human);
+            println!("  Rejected by human:              {}", stats.rejected_by_human);
+            println!("  Applied to codebase:            {}", stats.total_applied);
+            
+            if stats.total_proposals_reviewed > 0 {
+                let pass_rate = stats.passed_automated_verification as f64 / stats.total_proposals_reviewed as f64 * 100.0;
+                let apply_rate = if stats.approved_by_human > 0 {
+                    stats.total_applied as f64 / stats.approved_by_human as f64 * 100.0
+                } else {
+                    0.0
+                };
+                println!("\nRates:");
+                println!("  Automated pass rate:  {:.1}%", pass_rate);
+                println!("  Application rate:     {:.1}%", apply_rate);
+            }
+            
+            // Recent audit entries
+            if !audit.is_empty() {
+                println!("\nRecent Audit Log (last 5):");
+                for entry in audit.iter().rev().take(5) {
+                    println!("  [{}] {} → {:?}",
+                        entry.created_at.format("%Y-%m-%d %H:%M"),
+                        entry.proposal_title,
+                        entry.overall_verdict
                     );
                 }
             }

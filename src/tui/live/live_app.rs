@@ -4,7 +4,7 @@ use crate::housaky::goal_engine::Goal;
 use crate::housaky::streaming::{StreamChunk, StreamState, StreamingManager};
 use crate::providers::{create_provider, ChatMessage};
 use anyhow::Result;
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseEvent, MouseEventKind, MouseButton};
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
@@ -17,6 +17,9 @@ use tokio::sync::{broadcast, mpsc};
 use tracing::info;
 
 pub struct LiveAGIApp {
+    // Last rendered header rect + per-tab hitboxes (mouse)
+    tab_hitboxes: Vec<Rect>,
+    last_header: Option<Rect>,
     config: Config,
     cognitive_loop: Option<Arc<CognitiveLoop>>,
     streaming_manager: Arc<StreamingManager>,
@@ -68,6 +71,8 @@ impl LiveAGIApp {
         let state_receiver = Some(streaming_manager.subscribe_state());
 
         Self {
+            tab_hitboxes: Vec::new(),
+            last_header: None,
             config,
             cognitive_loop: None,
             streaming_manager,
@@ -133,6 +138,40 @@ impl LiveAGIApp {
 
     pub fn should_quit(&self) -> bool {
         self.should_quit
+    }
+
+    pub fn handle_mouse(&mut self, mouse: MouseEvent) -> Result<()> {
+        match mouse.kind {
+            MouseEventKind::ScrollUp => {
+                self.handle_scroll(-3);
+            }
+            MouseEventKind::ScrollDown => {
+                self.handle_scroll(3);
+            }
+            MouseEventKind::Down(MouseButton::Left) => {
+                let pos = ratatui::layout::Position::new(mouse.column, mouse.row);
+                if let Some(header) = self.last_header {
+                    if header.contains(pos) {
+                        for (idx, r) in self.tab_hitboxes.iter().enumerate() {
+                            if r.contains(pos) {
+                                self.selected_tab = idx.min(self.tabs.len().saturating_sub(1));
+                                return Ok(());
+                            }
+                        }
+                    }
+                }
+
+                // Click near bottom focuses input
+                let (_, h) = crossterm::terminal::size().unwrap_or((120, 40));
+                if mouse.row >= h.saturating_sub(7) {
+                    self.input_focused = true;
+                } else {
+                    self.input_focused = false;
+                }
+            }
+            _ => {}
+        }
+        Ok(())
     }
 
     pub fn handle_key(&mut self, key: KeyEvent) -> Result<()> {
@@ -352,7 +391,7 @@ impl LiveAGIApp {
         Ok(())
     }
 
-    pub fn draw(&self, f: &mut Frame) {
+    pub fn draw(&mut self, f: &mut Frame) {
         let size = f.area();
 
         let chunks = Layout::default()
@@ -381,8 +420,20 @@ impl LiveAGIApp {
         self.draw_status_bar(f, chunks[3]);
     }
 
-    fn draw_header(&self, f: &mut Frame, area: Rect) {
-        let tabs = Tabs::new(self.tabs.iter().map(|s| Span::raw(*s)).collect::<Vec<_>>())
+    fn draw_header(&mut self, f: &mut Frame, area: Rect) {
+        self.last_header = Some(area);
+        self.tab_hitboxes.clear();
+        let tab_spans: Vec<Span> = self.tabs.iter().map(|s| Span::raw(*s)).collect();
+        // hitboxes inside border
+        let mut cursor_x = area.x + 1;
+        let y = area.y + 1;
+        for title in &tab_spans {
+            let w = ratatui::text::Line::from(title.clone()).width() as u16;
+            self.tab_hitboxes.push(Rect::new(cursor_x, y, w, 1));
+            cursor_x = cursor_x.saturating_add(w);
+        }
+
+        let tabs = Tabs::new(tab_spans)
             .block(Block::default().borders(Borders::ALL).title("Housaky AGI"))
             .select(self.selected_tab)
             .style(Style::default().fg(Color::Cyan))

