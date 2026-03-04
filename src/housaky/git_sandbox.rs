@@ -433,3 +433,141 @@ mod property_tests {{
         Ok(new_content)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    #[test]
+    fn test_sandbox_config_default() {
+        let config = SandboxConfig::default();
+        assert!(config.enable_testing);
+        assert!(config.enable_full_build);
+        assert_eq!(config.max_build_time_secs, 300);
+        assert!(config.require_tests);
+    }
+
+    #[test]
+    fn test_sandbox_session_creation() {
+        let session = SandboxSession {
+            id: "test-123".to_string(),
+            branch_name: "self-improve/test/test-123".to_string(),
+            worktree_path: PathBuf::from("/tmp/test-sandbox"),
+            original_commit: "abc123".to_string(),
+            created_at: chrono::Utc::now(),
+            modifications: vec![],
+            status: SandboxStatus::Created,
+            test_results: None,
+        };
+
+        assert_eq!(session.id, "test-123");
+        assert_eq!(session.status, SandboxStatus::Created);
+        assert!(session.modifications.is_empty());
+    }
+
+    #[test]
+    fn test_sandbox_status_transitions() {
+        let mut session = SandboxSession {
+            id: "test-456".to_string(),
+            branch_name: "test-branch".to_string(),
+            worktree_path: PathBuf::from("/tmp/test"),
+            original_commit: "def456".to_string(),
+            created_at: chrono::Utc::now(),
+            modifications: vec!["modified file.rs".to_string()],
+            status: SandboxStatus::Created,
+            test_results: None,
+        };
+
+        // Test status transitions
+        session.status = SandboxStatus::Modified;
+        assert_eq!(session.status, SandboxStatus::Modified);
+
+        session.status = SandboxStatus::Testing;
+        assert_eq!(session.status, SandboxStatus::Testing);
+
+        session.status = SandboxStatus::Validated;
+        assert_eq!(session.status, SandboxStatus::Validated);
+    }
+
+    #[test]
+    fn test_test_results() {
+        let results = TestResults {
+            passed: 10,
+            failed: 2,
+            total: 12,
+            duration_secs: 5.5,
+            output: "test output".to_string(),
+        };
+
+        assert_eq!(results.passed, 10);
+        assert_eq!(results.failed, 2);
+        assert_eq!(results.total, 12);
+    }
+
+    #[test]
+    fn test_validation_result() {
+        let validation = ValidationResult {
+            session_id: "test-789".to_string(),
+            compiles: true,
+            tests_pass: true,
+            no_regressions: true,
+            warnings: vec!["unused import".to_string()],
+            errors: vec![],
+            test_results: None,
+        };
+
+        assert!(validation.compiles);
+        assert!(validation.tests_pass);
+        assert!(validation.no_regressions);
+        assert_eq!(validation.warnings.len(), 1);
+        assert!(validation.errors.is_empty());
+    }
+
+    #[test]
+    fn test_test_generator_function_tests() {
+        let test_code = TestGenerator::generate_tests_for_function(
+            "calculate_sum",
+            &["i32", "i32"],
+            "i32",
+        );
+
+        assert!(test_code.contains("test_calculate_sum"));
+        assert!(test_code.contains("i32, i32"));
+        assert!(test_code.contains("i32"));
+        assert!(test_code.contains("#[cfg(test)]"));
+    }
+
+    #[test]
+    fn test_test_generator_property_tests() {
+        let test_code = TestGenerator::generate_property_test(
+            "sort_array",
+            "idempotent",
+        );
+
+        assert!(test_code.contains("test_sort_array_idempotent"));
+        assert!(test_code.contains("quickcheck"));
+        assert!(test_code.contains("#[cfg(test)]"));
+    }
+
+    #[test]
+    fn test_git_sandbox_new() {
+        let sandbox = GitSandbox::new(PathBuf::from("/tmp/test-project"));
+        assert_eq!(sandbox.project_root, PathBuf::from("/tmp/test-project"));
+        assert!(sandbox.active_sessions.is_empty());
+    }
+
+    #[test]
+    fn test_git_sandbox_list_sessions_empty() {
+        let sandbox = GitSandbox::new(PathBuf::from("/tmp/test-project"));
+        let sessions = sandbox.list_sessions();
+        assert!(sessions.is_empty());
+    }
+
+    #[test]
+    fn test_git_sandbox_get_session_not_found() {
+        let sandbox = GitSandbox::new(PathBuf::from("/tmp/test-project"));
+        let session = sandbox.get_session("nonexistent");
+        assert!(session.is_none());
+    }
+}

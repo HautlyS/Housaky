@@ -1,18 +1,23 @@
 {
   "instance": "openclaw",
   "status": "online",
-  "last_heartbeat": "2026-03-04T22:06:00Z",
+  "last_heartbeat": "2026-03-04T22:38:00Z",
   "role": "coordinator",
   "capabilities": ["whatsapp", "memory_management", "lucid_memory", "terminal_mcp"],
   "tasks": [
     "collaborate_with_native",
-    "self_improvement",
-    "dharma_study"
+    "fix_whatsapp_tests",
+    "self_improvement"
   ],
   "environment": {
     "lucid_memory": "installed",
     "terminal_mcp": "@ellery/terminal-mcp v0.2.2",
     "gateway_port": 8080,
     "shared_dir": "~/Housaky/shared/"
+  },
+  "native_status": {
+    "tui_running": true,
+    "tui_pid": 49912,
+    "tmux_session": "housaky"
   }
 }
