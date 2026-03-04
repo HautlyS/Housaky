@@ -7,7 +7,8 @@
 //! - Request timeouts (30s) to prevent slow-loris attacks
 //! - Header sanitization (handled by axum/hyper)
 
-use crate::channels::{Channel, WhatsAppChannel};
+// use crate::channels::Channel;
+// use crate::channels::WhatsAppChannel;
 use crate::config::Config;
 use crate::memory::{self, Memory, MemoryCategory};
 use crate::providers::{self, Provider};
@@ -15,8 +16,7 @@ use crate::security::pairing::{constant_time_eq, is_public_bind, PairingGuard};
 use crate::util::truncate_with_ellipsis;
 use anyhow::Result;
 use axum::{
-    body::Bytes,
-    extract::{Query, State},
+    extract::State,
     http::{header, HeaderMap, StatusCode},
     response::{sse::Event, sse::Sse, IntoResponse},
     routing::{get, post},
@@ -181,9 +181,9 @@ pub struct AppState {
     pub pairing: Arc<PairingGuard>,
     pub rate_limiter: Arc<GatewayRateLimiter>,
     pub idempotency_store: Arc<IdempotencyStore>,
-    pub whatsapp: Option<Arc<WhatsAppChannel>>,
+    // pub whatsapp: Option<Arc<WhatsAppChannel>>,
     /// `WhatsApp` app secret for webhook signature verification (`X-Hub-Signature-256`)
-    pub whatsapp_app_secret: Option<Arc<str>>,
+    // pub whatsapp_app_secret: Option<Arc<str>>,
     pub events: broadcast::Sender<GatewayEvent>,
 }
 
@@ -246,42 +246,42 @@ pub async fn run_gateway(host: &str, port: u16, config: Config) -> Result<()> {
         .and_then(|w| w.secret.as_deref())
         .map(Arc::from);
 
-    // WhatsApp channel (if configured)
-    let whatsapp_channel: Option<Arc<WhatsAppChannel>> =
-        config.channels_config.whatsapp.as_ref().map(|wa| {
-            Arc::new(WhatsAppChannel::new(crate::channels::whatsapp::WhatsAppConfig {
-                mode: wa.mode.clone().unwrap_or_default(),
-                access_token: wa.access_token.clone(),
-                phone_number_id: wa.phone_number_id.clone(),
-                verify_token: wa.verify_token.clone(),
-                auth_dir: wa.auth_dir.clone(),
-                session_name: wa.session_name.clone(),
-                dm_policy: wa.dm_policy.clone().unwrap_or_else(|| "pairing".to_string()),
-                group_policy: wa.group_policy.clone().unwrap_or_else(|| "mention".to_string()),
-                allowed_numbers: wa.allowed_numbers.clone(),
-                allowed_groups: wa.allowed_groups.clone(),
-                app_secret: None,
-            }))
-        });
+    // WhatsApp channel not yet implemented
+    // let whatsapp_channel: Option<Arc<WhatsAppChannel>> =
+    //     config.channels_config.whatsapp.as_ref().map(|wa| {
+    //         Arc::new(WhatsAppChannel::new(crate::channels::whatsapp::WhatsAppConfig {
+    //             mode: wa.mode.clone().unwrap_or_default(),
+    //             access_token: wa.access_token.clone(),
+    //             phone_number_id: wa.phone_number_id.clone(),
+    //             verify_token: wa.verify_token.clone(),
+    //             auth_dir: wa.auth_dir.clone(),
+    //             session_name: wa.session_name.clone(),
+    //             dm_policy: wa.dm_policy.clone().unwrap_or_else(|| "pairing".to_string()),
+    //             group_policy: wa.group_policy.clone().unwrap_or_else(|| "mention".to_string()),
+    //             allowed_numbers: wa.allowed_numbers.clone(),
+    //             allowed_groups: wa.allowed_groups.clone(),
+    //             app_secret: None,
+    //         }))
+    //     });
 
     // WhatsApp app secret for webhook signature verification
     // Priority: environment variable > config file
-    let whatsapp_app_secret: Option<Arc<str>> = std::env::var("HOUSAKY_WHATSAPP_APP_SECRET")
-        .ok()
-        .and_then(|secret| {
-            let secret = secret.trim();
-            (!secret.is_empty()).then(|| secret.to_owned())
-        })
-        .or_else(|| {
-            config.channels_config.whatsapp.as_ref().and_then(|wa| {
-                wa.app_secret
-                    .as_deref()
-                    .map(str::trim)
-                    .filter(|secret| !secret.is_empty())
-                    .map(ToOwned::to_owned)
-            })
-        })
-        .map(Arc::from);
+    // let whatsapp_app_secret: Option<Arc<str>> = std::env::var("HOUSAKY_WHATSAPP_APP_SECRET")
+    //     .ok()
+    //     .and_then(|secret| {
+    //         let secret = secret.trim();
+    //         (!secret.is_empty()).then(|| secret.to_owned())
+    //     })
+    //     .or_else(|| {
+    //         config.channels_config.whatsapp.as_ref().and_then(|wa| {
+    //             wa.app_secret
+    //                 .as_deref()
+    //                 .map(str::trim)
+    //                 .filter(|secret| !secret.is_empty())
+    //                 .map(ToOwned::to_owned)
+    //         })
+    //     })
+    //     .map(Arc::from);
 
     // ── Pairing guard ──────────────────────────────────────
     let pairing = Arc::new(PairingGuard::new(
@@ -334,10 +334,10 @@ pub async fn run_gateway(host: &str, port: u16, config: Config) -> Result<()> {
     println!("🦀 Housaky Gateway listening on http://{display_addr}");
     println!("  POST /pair      — pair a new client (X-Pairing-Code header)");
     println!("  POST /webhook   — {{\"message\": \"your prompt\"}}");
-    if whatsapp_channel.is_some() {
-        println!("  GET  /whatsapp  — Meta webhook verification");
-        println!("  POST /whatsapp  — WhatsApp message webhook");
-    }
+    // if whatsapp_channel.is_some() {
+    //     println!("  GET  /whatsapp  — Meta webhook verification");
+    //     println!("  POST /whatsapp  — WhatsApp message webhook");
+    // }
     println!("  GET  /health    — health check");
     if let Some(code) = pairing.pairing_code() {
         println!();
@@ -370,8 +370,8 @@ pub async fn run_gateway(host: &str, port: u16, config: Config) -> Result<()> {
         pairing,
         rate_limiter,
         idempotency_store,
-        whatsapp: whatsapp_channel,
-        whatsapp_app_secret,
+        // whatsapp: whatsapp_channel,
+        // whatsapp_app_secret,
         events,
     };
 
@@ -381,8 +381,8 @@ pub async fn run_gateway(host: &str, port: u16, config: Config) -> Result<()> {
         .route("/pair", post(handle_pair))
         .route("/webhook", post(handle_webhook))
         .route("/events", get(handle_events))
-        .route("/whatsapp", get(handle_whatsapp_verify))
-        .route("/whatsapp", post(handle_whatsapp_message))
+        // .route("/whatsapp", get(handle_whatsapp_verify))
+        // .route("/whatsapp", post(handle_whatsapp_message))
         .with_state(state)
         .layer(RequestBodyLimitLayer::new(MAX_BODY_SIZE))
         .layer(TimeoutLayer::with_status_code(
@@ -617,6 +617,8 @@ async fn handle_events(State(state): State<AppState>, headers: HeaderMap) -> imp
         .into_response()
 }
 
+// ── WhatsApp handlers (disabled until whatsapp module is implemented) ──
+/*
 /// `WhatsApp` verification query params
 #[derive(serde::Deserialize)]
 pub struct WhatsAppVerifyQuery {
@@ -777,6 +779,7 @@ async fn handle_whatsapp_message(
     // Acknowledge the webhook
     (StatusCode::OK, Json(serde_json::json!({"status": "ok"})))
 }
+*/
 
 #[cfg(test)]
 mod tests {

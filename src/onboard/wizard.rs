@@ -1,4 +1,4 @@
-use crate::config::schema::{DingTalkConfig, IrcConfig, WhatsAppConfig};
+use crate::config::schema::{DingTalkConfig, IrcConfig, WhatsAppConfig, WhatsAppMode};
 use crate::config::{
     AutonomyConfig, BrowserConfig, ChannelsConfig, ComposioConfig, Config, DiscordConfig,
     HeartbeatConfig, IMessageConfig, MatrixConfig, MemoryConfig, ObservabilityConfig,
@@ -2902,11 +2902,17 @@ fn setup_channels() -> Result<ChannelsConfig> {
                 };
 
                 config.whatsapp = Some(WhatsAppConfig {
-                    access_token: access_token.trim().to_string(),
-                    phone_number_id: phone_number_id.trim().to_string(),
-                    verify_token: verify_token.trim().to_string(),
-                    app_secret: None, // Can be set via HOUSAKY_WHATSAPP_APP_SECRET env var
+                    mode: Some(WhatsAppMode::BusinessApi),
+                    access_token: Some(access_token.trim().to_string()),
+                    phone_number_id: Some(phone_number_id.trim().to_string()),
+                    verify_token: Some(verify_token.trim().to_string()),
+                    app_secret: None,
+                    auth_dir: None,
+                    session_name: None,
+                    dm_policy: Some("pairing".to_string()),
+                    group_policy: Some("mention".to_string()),
                     allowed_numbers,
+                    allowed_groups: vec![],
                 });
             }
             6 => {

@@ -790,7 +790,7 @@ fn check_channels_config(config: &Config) -> Vec<CheckResult> {
 
     if let Some(ref wa) = cc.whatsapp {
         any_configured = true;
-        if wa.access_token.is_empty() {
+        if wa.access_token.as_ref().map(|s| s.is_empty()).unwrap_or(true) {
             checks.push(
                 CheckResult::error(
                     CheckCategory::Channel,
@@ -806,7 +806,7 @@ fn check_channels_config(config: &Config) -> Vec<CheckResult> {
                 "WhatsApp configured",
             ));
         }
-        if wa.verify_token.is_empty() || wa.verify_token == "housaky_secret" {
+        if wa.verify_token.as_ref().map(|s| s.is_empty()).unwrap_or(true) || wa.verify_token.as_deref() == Some("housaky_secret") {
             checks.push(
                 CheckResult::warn(
                     CheckCategory::Channel,
