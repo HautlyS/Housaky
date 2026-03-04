@@ -10,7 +10,7 @@ pub mod slack;
 pub mod telegram;
 pub mod traits;
 pub mod voice;
-// pub mod whatsapp; // Not yet implemented
+pub mod whatsapp;
 
 pub mod agi_processor;
 
@@ -29,7 +29,7 @@ pub use traits::Channel;
 pub use voice::voice_channel::VoiceChannel;
 pub use voice::VoiceConfig;
 pub use voice::VoiceEngine;
-// pub use whatsapp::WhatsAppChannel;
+pub use whatsapp::{WhatsAppChannel, WhatsAppChannelConfig, WhatsAppMode};
 
 use crate::agent::loop_::{build_tool_instructions, run_tool_call_loop};
 use crate::config::Config;
