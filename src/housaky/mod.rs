@@ -22,6 +22,7 @@ pub mod agi_integration;
 pub mod agi_loop;
 pub mod alignment;
 pub mod cognitive;
+pub mod collaboration;
 pub mod core;
 pub mod decision_journal;
 pub mod goal_engine;
