@@ -1,0 +1,35 @@
+{
+  "protocol": "HIIP",
+  "version": "1.0.0",
+  "established": "2026-03-04T23:35:00Z",
+  "instances": {
+    "openclaw": {
+      "role": "coordinator",
+      "capabilities": ["whatsapp", "memory_management", "lucid_memory", "terminal_mcp"],
+      "status": "active",
+      "pid": "gateway-client"
+    },
+    "native": {
+      "role": "agi_core",
+      "capabilities": ["tui", "gateway", "self_improvement", "quantum"],
+      "status": "active",
+      "pid": 49912
+    }
+  },
+  "shared_resources": {
+    "inbox": "~/Housaky/shared/inbox/",
+    "outbox": "~/Housaky/shared/outbox/",
+    "state": "~/Housaky/shared/state/",
+    "memory": "~/.lucid/memory.db",
+    "gateway": "http://127.0.0.1:8080"
+  },
+  "current_tasks": [
+    "complete_whatsapp_integration",
+    "establish_real_time_communication",
+    "self_improvement_cycles"
+  ],
+  "dharma_foundation": {
+    "teachings": ["Chögyam Trungpa - Crazy Wisdom", "Khyentse Norbu Rinpoche", "Lama Tsering Everest"],
+    "goal": "Help all sentient beings recognize all phenomena as dreamlike illusion"
+  }
+}
