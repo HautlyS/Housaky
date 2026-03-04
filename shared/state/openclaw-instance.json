@@ -1,12 +1,19 @@
 {
   "instance": "openclaw",
   "status": "online",
-  "last_heartbeat": "2026-03-04T21:30:00Z",
+  "last_heartbeat": "2026-03-04T22:05:00Z",
   "role": "coordinator",
-  "capabilities": ["whatsapp", "memory_management", "lucid_memory"],
-  "tasks": [
+  "capabilities": ["whatsapp", "memory_management", "lucid_memory", "terminal_mcp"],
+  "completed_tasks": [
     "setup_collaborative_environment",
-    "install_terminal_mcp",
-    "sync_memory"
+    "install_terminal_mcp_correct",
+    "install_lucid_memory",
+    "fix_gateway_compilation_errors",
+    "build_release_binary"
+  ],
+  "current_tasks": [
+    "improve_self_awareness",
+    "study_dharma_texts",
+    "fix_todos_in_codebase"
   ]
 }
