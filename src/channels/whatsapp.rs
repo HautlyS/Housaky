@@ -16,7 +16,7 @@ pub struct WhatsAppChannel {
 }
 
 /// Configuration for WhatsApp channel
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct WhatsAppChannelConfig {
     /// Operation mode
     pub mode: WhatsAppMode,
