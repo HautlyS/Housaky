@@ -36,9 +36,11 @@
 pub mod builtins;
 pub mod config;
 pub mod registry;
+pub mod rules;
 pub mod types;
 
 pub use builtins::{BootMdHook, CommandLoggerHook, SessionMemoryHook};
 pub use config::HookConfig;
 pub use registry::HookRegistry;
-pub use types::{Hook, HookError, HookEvent, HookEventType, HookResult};
+pub use rules::MarkdownRulesHook;
+pub use types::{Hook, HookDecision, HookError, HookEvent, HookEventType, HookResult};

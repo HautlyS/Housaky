@@ -346,11 +346,10 @@ pub fn list_claude_official_plugins(
     let content = if marketplace_path.exists() {
         std::fs::read_to_string(&marketplace_path)?
     } else {
-        // Fallback to HTTP; uses reqwest blocking feature already enabled.
-        let resp = reqwest::blocking::get(CLAUDE_OFFICIAL_MARKETPLACE_URL)
-            .with_context(|| "Failed to fetch Claude official marketplace index")?;
-        resp.text()
-            .with_context(|| "Failed to read marketplace response")?
+        // No local cache — skip blocking HTTP fetch to avoid panicking when
+        // called from within a tokio runtime (e.g. during TUI init).
+        // Skills will show as unavailable; run `housaky skills ui` to refresh.
+        return Ok(Vec::new());
     };
 
     let index: ClaudeMarketplaceIndex = serde_json::from_str(&content)

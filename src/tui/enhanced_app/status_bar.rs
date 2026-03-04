@@ -1,6 +1,7 @@
 use crate::tui::enhanced_app::state::{AppState, StreamStatus};
 use crate::tui::enhanced_app::theme::{
-    style_dim, style_muted, style_status_err, style_status_loading, style_status_ok, Palette, LOGO,
+    style_dim, style_muted, style_status_err, style_status_loading, style_status_ok, truncate_str,
+    Palette, LOGO,
 };
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
@@ -264,10 +265,3 @@ fn draw_right(f: &mut Frame, area: Rect, state: &AppState) {
     f.render_widget(Paragraph::new(Line::from(hints)), area);
 }
 
-fn truncate_str(s: &str, max: usize) -> &str {
-    if s.len() <= max {
-        s
-    } else {
-        &s[..max]
-    }
-}

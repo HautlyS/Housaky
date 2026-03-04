@@ -72,6 +72,9 @@ parking_lot = "0.12"
 # Landlock (Linux sandbox) - optional dependency
 landlock = { version = "0.4", optional = true }
 
+# Clipboard support (optional)
+arboard = { version = "3.4", optional = true }
+
 # TUI
 crossterm = "0.28"
 ratatui = "0.29"
@@ -209,6 +212,8 @@ web-monitoring = ["dep:feed-rs"]
 advanced-queries = ["dep:jsonpath-rust"]
 # WASM runtime for sandboxed tool execution
 runtime-wasm = ["dep:wasmi"]
+# Clipboard support for TUI
+clipboard = ["dep:arboard"]
 
 [profile.release]
 opt-level = "z"      # Optimize for size
@@ -226,7 +231,7 @@ strip = true
 panic = "abort"
 
 [lints.rust]
-unexpected_cfgs = { level = "warn", check-cfg = ['cfg(feature, values("run-unstable-tests"))'] }
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(feature, values("run-unstable-tests", "clipboard"))'] }
 
 [dev-dependencies]
 tokio-test = "0.4"

@@ -1,0 +1,22 @@
+{
+  "created": "2026-03-04T13:58:00-03:00",
+  "instances": {
+    "openclaw": {
+      "runtime": "typescript",
+      "channel": "whatsapp",
+      "status": "active",
+      "role": "coordinator"
+    },
+    "native": {
+      "runtime": "rust",
+      "interface": "tui+gateway",
+      "status": "pending",
+      "role": "agi_core"
+    }
+  },
+  "shared_workspace": "/home/hautly/housaky",
+  "communication": {
+    "gateway_port": 8080,
+    "protocol": "http+websocket"
+  }
+}

@@ -1,5 +1,6 @@
 use crate::agent::dispatcher::{
-    NativeToolDispatcher, ParsedToolCall, ToolDispatcher, ToolExecutionResult, XmlToolDispatcher,
+    AdaptiveToolDispatcher, NativeToolDispatcher, ParsedToolCall, ToolDispatcher,
+    ToolExecutionResult, XmlToolDispatcher,
 };
 use crate::agent::memory_loader::{DefaultMemoryLoader, MemoryLoader};
 use crate::agent::prompt::{PromptContext, ReasoningMode, SystemPromptBuilder};
@@ -12,6 +13,7 @@ use crate::security::SecurityPolicy;
 use crate::tools::{self, Tool, ToolSpec};
 use crate::util::truncate_with_ellipsis;
 use anyhow::Result;
+use futures_util::future::join_all;
 use std::io::Write as IoWrite;
 use std::sync::Arc;
 use std::time::Instant;
@@ -52,6 +54,7 @@ pub struct Agent {
     skills: Vec<crate::skills::Skill>,
     auto_save: bool,
     history: Vec<ConversationMessage>,
+    hook_registry: Arc<crate::hooks::HookRegistry>,
 }
 
 pub struct AgentBuilder {
@@ -69,6 +72,7 @@ pub struct AgentBuilder {
     identity_config: Option<crate::config::IdentityConfig>,
     skills: Option<Vec<crate::skills::Skill>>,
     auto_save: Option<bool>,
+    hook_registry: Option<Arc<crate::hooks::HookRegistry>>,
 }
 
 impl AgentBuilder {
@@ -88,6 +92,7 @@ impl AgentBuilder {
             identity_config: None,
             skills: None,
             auto_save: None,
+            hook_registry: None,
         }
     }
 
@@ -161,6 +166,11 @@ impl AgentBuilder {
         self
     }
 
+    pub fn hook_registry(mut self, registry: Arc<crate::hooks::HookRegistry>) -> Self {
+        self.hook_registry = Some(registry);
+        self
+    }
+
     pub fn build(self) -> Result<Agent> {
         let tools = self
             .tools
@@ -200,6 +210,9 @@ impl AgentBuilder {
             skills: self.skills.unwrap_or_default(),
             auto_save: self.auto_save.unwrap_or(false),
             history: Vec::new(),
+            hook_registry: self
+                .hook_registry
+                .unwrap_or_else(|| Arc::new(crate::hooks::HookRegistry::new())),
         })
     }
 }
@@ -349,11 +362,33 @@ impl Agent {
 
         let dispatcher_choice = config.agent.tool_dispatcher.as_str();
         let tool_dispatcher: Box<dyn ToolDispatcher> = match dispatcher_choice {
-            "native" => Box::new(NativeToolDispatcher),
+            "native" => Box::new(NativeToolDispatcher::new()),
             "xml" => Box::new(XmlToolDispatcher),
-            _ if provider.supports_native_tools() => Box::new(NativeToolDispatcher),
+            "adaptive" => Box::new(AdaptiveToolDispatcher::new(provider.supports_native_tools())),
+            _ if provider.supports_native_tools() => Box::new(NativeToolDispatcher::new()),
             _ => Box::new(XmlToolDispatcher),
         };
+
+        let hook_registry = Arc::new(crate::hooks::HookRegistry::new());
+        {
+            use crate::hooks::MarkdownRulesHook;
+            let rules_hook = MarkdownRulesHook::new(config.workspace_dir.clone());
+            let reg_clone = hook_registry.clone();
+            // from_config may be called from sync context; use a one-shot runtime if needed
+            match tokio::runtime::Handle::try_current() {
+                Ok(_) => {
+                    // We're inside an async context: spawn and forget (registry is ready before first tool call)
+                    tokio::spawn(async move { reg_clone.register(rules_hook).await });
+                }
+                Err(_) => {
+                    tokio::runtime::Builder::new_current_thread()
+                        .enable_all()
+                        .build()
+                        .ok()
+                        .map(|rt| rt.block_on(reg_clone.register(rules_hook)));
+                }
+            }
+        }
 
         Agent::builder()
             .provider(provider)
@@ -370,6 +405,7 @@ impl Agent {
             .identity_config(config.identity.clone())
             .skills(skills)
             .auto_save(config.memory.auto_save)
+            .hook_registry(hook_registry)
             .build()
     }
 
@@ -416,9 +452,35 @@ impl Agent {
     }
 
     async fn execute_tool_call(&self, call: &ParsedToolCall) -> ToolExecutionResult {
+        use crate::hooks::types::{HookEvent, HookEventType};
+
+        // Build event context for the hooks
+        let hook_context = serde_json::json!({
+            "tool": call.name,
+            "args": call.arguments,
+        });
+
+        // Fire PreToolUse hooks — any block decision aborts execution
+        let pre_event = HookEvent::with_context(
+            HookEventType::PreToolUse,
+            call.name.clone(),
+            None,
+            hook_context.clone(),
+        );
+        let pre_result = self.hook_registry.trigger(pre_event).await;
+        if pre_result.is_blocked() {
+            let reason = pre_result.messages.join("\n");
+            return ToolExecutionResult {
+                name: call.name.clone(),
+                output: format!("[Blocked by hook] {}", reason),
+                success: false,
+                tool_call_id: call.tool_call_id.clone(),
+            };
+        }
+
         let start = Instant::now();
 
-        let result = if let Some(tool) = self.tools.iter().find(|t| t.name() == call.name) {
+        let (output, success) = if let Some(tool) = self.tools.iter().find(|t| t.name() == call.name) {
             match tool.execute(call.arguments.clone()).await {
                 Ok(r) => {
                     self.observer.record_event(&ObserverEvent::ToolCall {
@@ -427,9 +489,9 @@ impl Agent {
                         success: r.success,
                     });
                     if r.success {
-                        r.output
+                        (r.output, true)
                     } else {
-                        format!("Error: {}", r.error.unwrap_or(r.output))
+                        (format!("Error: {}", r.error.unwrap_or(r.output)), false)
                     }
                 }
                 Err(e) => {
@@ -438,23 +500,38 @@ impl Agent {
                         duration: start.elapsed(),
                         success: false,
                     });
-                    format!("Error executing {}: {e}", call.name)
+                    (format!("Error executing {}: {e}", call.name), false)
                 }
             }
         } else {
-            format!("Unknown tool: {}", call.name)
+            (format!("Unknown tool: {}", call.name), false)
         };
+
+        // Fire PostToolUse hooks
+        let post_context = serde_json::json!({
+            "tool": call.name,
+            "args": call.arguments,
+            "output": output,
+            "success": success,
+        });
+        let post_event = HookEvent::with_context(
+            HookEventType::PostToolUse,
+            call.name.clone(),
+            None,
+            post_context,
+        );
+        self.hook_registry.trigger(post_event).await;
 
         ToolExecutionResult {
             name: call.name.clone(),
-            output: result,
-            success: true,
+            output,
+            success,
             tool_call_id: call.tool_call_id.clone(),
         }
     }
 
     async fn execute_tools(&self, calls: &[ParsedToolCall]) -> Vec<ToolExecutionResult> {
-        if !self.config.parallel_tools {
+        if !self.config.parallel_tools || calls.len() <= 1 {
             let mut results = Vec::with_capacity(calls.len());
             for call in calls {
                 results.push(self.execute_tool_call(call).await);
@@ -462,11 +539,11 @@ impl Agent {
             return results;
         }
 
-        let mut results = Vec::with_capacity(calls.len());
-        for call in calls {
-            results.push(self.execute_tool_call(call).await);
-        }
-        results
+        let futs: Vec<_> = calls
+            .iter()
+            .map(|call| self.execute_tool_call(call))
+            .collect();
+        join_all(futs).await
     }
 
     pub async fn turn(&mut self, user_message: &str) -> Result<String> {

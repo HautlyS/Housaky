@@ -13,7 +13,7 @@ use std::collections::HashMap;
 /// Each variant represents a category of events that hooks can respond to.
 /// Hooks can register to handle specific event types or specific actions within types.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "snake_case")]
 pub enum HookEventType {
     /// Events related to command execution
     Command,
@@ -25,6 +25,14 @@ pub enum HookEventType {
     Gateway,
     /// Events related to messaging
     Message,
+    /// Fires before a tool is executed — can block execution
+    PreToolUse,
+    /// Fires after a tool completes — can augment results
+    PostToolUse,
+    /// Fires when the agent is about to stop — can block stopping
+    Stop,
+    /// Fires when the user submits a prompt — can modify it
+    UserPromptSubmit,
 }
 
 impl HookEventType {
@@ -37,6 +45,10 @@ impl HookEventType {
             Self::Agent => "agent",
             Self::Gateway => "gateway",
             Self::Message => "message",
+            Self::PreToolUse => "pre_tool_use",
+            Self::PostToolUse => "post_tool_use",
+            Self::Stop => "stop",
+            Self::UserPromptSubmit => "user_prompt_submit",
         }
     }
 
@@ -51,6 +63,10 @@ impl HookEventType {
             "agent" => Some(Self::Agent),
             "gateway" => Some(Self::Gateway),
             "message" => Some(Self::Message),
+            "pre_tool_use" | "pretooluse" => Some(Self::PreToolUse),
+            "post_tool_use" | "posttooluse" => Some(Self::PostToolUse),
+            "stop" => Some(Self::Stop),
+            "user_prompt_submit" | "userpromptsubmit" => Some(Self::UserPromptSubmit),
             _ => None,
         }
     }
@@ -147,11 +163,23 @@ impl HookEvent {
     }
 }
 
+/// Decision made by a PreToolUse or Stop hook.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum HookDecision {
+    /// Allow the operation to proceed (default)
+    #[default]
+    Allow,
+    /// Block the operation — reason is taken from `messages`
+    Block,
+}
+
 /// Result returned by hook handlers.
 ///
 /// Hooks return this struct to indicate:
 /// - `messages`: Optional messages to output
 /// - `should_continue`: Whether the event processing should continue to other hooks
+/// - `decision`: For PreToolUse/Stop hooks, whether to allow or block the operation
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HookResult {
     /// Messages to output as a result of handling the event
@@ -160,6 +188,9 @@ pub struct HookResult {
     /// Whether to continue processing this event with other hooks
     #[serde(default = "default_true")]
     pub should_continue: bool,
+    /// For PreToolUse/Stop: allow or block the operation
+    #[serde(default)]
+    pub decision: HookDecision,
 }
 
 fn default_true() -> bool {
@@ -173,6 +204,7 @@ impl HookResult {
         Self {
             messages: Vec::new(),
             should_continue: true,
+            decision: HookDecision::Allow,
         }
     }
 
@@ -182,7 +214,24 @@ impl HookResult {
         Self {
             messages: Vec::new(),
             should_continue: false,
+            decision: HookDecision::Allow,
         }
+    }
+
+    /// Create a hook result that blocks the operation with a reason.
+    #[must_use]
+    pub fn block(reason: impl Into<String>) -> Self {
+        Self {
+            messages: vec![reason.into()],
+            should_continue: false,
+            decision: HookDecision::Block,
+        }
+    }
+
+    /// Returns true if this result blocks the operation.
+    #[must_use]
+    pub fn is_blocked(&self) -> bool {
+        self.decision == HookDecision::Block
     }
 
     /// Create a new hook result with messages that continues processing.
@@ -191,6 +240,7 @@ impl HookResult {
         Self {
             messages,
             should_continue: true,
+            decision: HookDecision::Allow,
         }
     }
 
@@ -200,6 +250,7 @@ impl HookResult {
         Self {
             messages: vec![message.into()],
             should_continue: true,
+            decision: HookDecision::Allow,
         }
     }
 }
@@ -370,6 +421,22 @@ mod tests {
             HookEventType::from_str("session"),
             Some(HookEventType::Session)
         );
+        assert_eq!(
+            HookEventType::from_str("pre_tool_use"),
+            Some(HookEventType::PreToolUse)
+        );
+        assert_eq!(
+            HookEventType::from_str("pretooluse"),
+            Some(HookEventType::PreToolUse)
+        );
+        assert_eq!(
+            HookEventType::from_str("post_tool_use"),
+            Some(HookEventType::PostToolUse)
+        );
+        assert_eq!(
+            HookEventType::from_str("stop"),
+            Some(HookEventType::Stop)
+        );
         assert_eq!(HookEventType::from_str("invalid"), None);
     }
 
@@ -377,6 +444,9 @@ mod tests {
     fn test_event_type_as_str() {
         assert_eq!(HookEventType::Command.as_str(), "command");
         assert_eq!(HookEventType::Session.as_str(), "session");
+        assert_eq!(HookEventType::PreToolUse.as_str(), "pre_tool_use");
+        assert_eq!(HookEventType::PostToolUse.as_str(), "post_tool_use");
+        assert_eq!(HookEventType::Stop.as_str(), "stop");
     }
 
     #[test]

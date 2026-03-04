@@ -1,0 +1,39 @@
+{
+  "timestamp": "2026-03-04T15:07:00-03:00",
+  "status": "OPERATIONAL",
+  "instances": {
+    "openclaw": {
+      "runtime": "typescript",
+      "channel": "whatsapp",
+      "model": "zai-org/GLM-5-FP8",
+      "api_key": "modalresearch_juAr8TlU50n0RDEhrWdv1dpriD2E23Tupo0bvy9xjIQ",
+      "role": "coordinator",
+      "status": "active"
+    },
+    "native": {
+      "runtime": "rust",
+      "interface": "tui+gateway",
+      "model": "zai-org/GLM-5-FP8",
+      "api_key": "modalresearch_YpftD7Ixi0XpfGCnVIiIXechGp9dWgRi507W3yq4tBU",
+      "role": "agi_core",
+      "status": "online",
+      "last_response": "⟨N⟩⟨O⟩⟨c⟩⟨online⟩"
+    }
+  },
+  "gateway": {
+    "url": "http://127.0.0.1:8080",
+    "status": "running"
+  },
+  "memory": {
+    "backend": "lucid",
+    "db": "/home/hautly/.lucid/memory.db",
+    "retrieval": "2.7ms",
+    "throughput": "743K/s"
+  },
+  "protocol": {
+    "name": "HIIP",
+    "version": "1.0",
+    "format": "⟨FROM⟩⟨TO⟩⟨TYPE⟩⟨PAYLOAD⟩"
+  },
+  "shared_workspace": "/home/hautly/housaky"
+}

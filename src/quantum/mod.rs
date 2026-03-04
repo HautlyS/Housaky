@@ -7,6 +7,9 @@ pub mod error_mitigation;
 pub mod grover;
 pub mod hybrid_solver;
 pub mod optimizer;
+pub mod phase_estimation;
+pub mod qcbm;
+pub mod quantum_walk;
 pub mod tomography;
 pub mod transpiler;
 
@@ -34,5 +37,10 @@ pub use optimizer::{
     OptimizationProblem, OptimizationResult, ProblemType, QAOAConfig, QAOAOptimizer, QuboMatrix,
     VQEConfig, VQEOptimizer,
 };
+pub use phase_estimation::{QPEConfig, QPEResult, QuantumPCAResult, QuantumPhaseEstimator};
+pub use qcbm::{
+    GenerativeContext, QCBMConfig, QCBMResult, QCBMSample, QuantumBornMachine,
+};
+pub use quantum_walk::{QuantumWalkConfig, QuantumWalkResult, QuantumWalker, WalkGraph};
 pub use tomography::{DensityMatrix, StateTomographer, TomographyConfig, TomographyResult};
 pub use transpiler::{CircuitTranspiler, NativeGateSet, TranspilationReport, TranspilerConfig};

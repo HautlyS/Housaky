@@ -39,6 +39,7 @@
 
 pub mod agent;
 pub mod channels;
+pub mod cli;
 pub mod commands;
 pub mod config;
 pub mod config_editor;

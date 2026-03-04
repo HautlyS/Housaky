@@ -1,6 +1,6 @@
 use crate::tui::enhanced_app::theme::{
     style_border, style_border_active, style_border_focus, style_dim, style_muted, style_success,
-    style_tag_skill, Palette,
+    style_tag_skill, truncate, Palette,
 };
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
@@ -376,6 +376,11 @@ impl SkillsPanel {
         } else {
             None
         }
+    }
+
+    pub fn get_selected_skill_name(&self) -> Option<String> {
+        let idx = self.selected_real_idx()?;
+        Some(self.skills[idx].name.clone())
     }
 
     pub fn mark_selected_installed(&mut self) {
@@ -866,15 +871,3 @@ impl Default for SkillsPanel {
     }
 }
 
-fn truncate(s: &str, max: usize) -> String {
-    if s.chars().count() <= max {
-        s.to_owned()
-    } else {
-        let end = s
-            .char_indices()
-            .nth(max.saturating_sub(1))
-            .map(|(i, _)| i)
-            .unwrap_or(s.len());
-        format!("{}…", &s[..end])
-    }
-}

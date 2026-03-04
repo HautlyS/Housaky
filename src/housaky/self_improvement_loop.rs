@@ -262,6 +262,72 @@ impl SelfImprovementLoop {
         }
     }
 
+    /// §10.QCBM — Quantum imagination: generate diverse self-improvement scenarios
+    /// using a Quantum Circuit Born Machine.
+    ///
+    /// Encodes the current improvement cycle metrics as context features and
+    /// samples novel improvement hypotheses from the quantum Born distribution.
+    pub async fn quantum_generate_improvement_scenarios(
+        &self,
+        cycle: &ImprovementCycle,
+        n_scenarios: usize,
+    ) -> Vec<String> {
+        let bridge = match &self.quantum_bridge {
+            Some(b) => b,
+            None => return Vec::new(),
+        };
+
+        let context_features = vec![
+            cycle.inputs.reasoning_confidence,
+            cycle.metrics.tool_effectiveness,
+            cycle.metrics.knowledge_growth,
+            cycle.metrics.intelligence_delta.abs().min(1.0),
+            cycle.metrics.consciousness_delta.abs().min(1.0),
+            (cycle.inputs.recent_failures.len() as f64 / 10.0).min(1.0),
+        ];
+        let diversity = 1.0 - cycle.inputs.reasoning_confidence.clamp(0.0, 1.0) * 0.5;
+
+        match bridge
+            .generate_scenarios(&context_features, diversity, n_scenarios)
+            .await
+        {
+            Ok(result) => {
+                info!(
+                    "🔮 QCBM imagination: {} scenarios generated, \
+                     entropy={:.3} bits (diversity={:.2}), strategy={}",
+                    result.samples.len(),
+                    result.entropy,
+                    diversity,
+                    result.strategy
+                );
+                result
+                    .samples
+                    .iter()
+                    .enumerate()
+                    .map(|(i, s)| {
+                        let archetype = match i % 4 {
+                            0 => "explore new reasoning strategy",
+                            1 => "strengthen knowledge acquisition",
+                            2 => "optimize tool usage pattern",
+                            _ => "refine self-modification parameters",
+                        };
+                        format!(
+                            "Quantum scenario {}: {} (confidence={:.3}, pattern={})",
+                            i + 1,
+                            archetype,
+                            s.probability,
+                            s.bitstring
+                        )
+                    })
+                    .collect()
+            }
+            Err(e) => {
+                warn!("QCBM scenario generation failed: {e}");
+                Vec::new()
+            }
+        }
+    }
+
     /// DGM §8.4 — structured failure diagnosis prompt.
     /// Returns `(log_summary, improvement_proposal, implementation_suggestion)` or `None`
     /// if no provider is available or the call fails.
@@ -576,6 +642,18 @@ impl SelfImprovementLoop {
             }
             // Quantum analysis increases confidence if insights were produced.
             base_confidence = (base_confidence + 0.05 * quantum_insights.len() as f64).min(0.85);
+        }
+
+        // §10.QCBM — Quantum imagination: generate diverse improvement scenarios via
+        // Born-machine sampling to broaden the search space of self-modification.
+        let quantum_scenarios = self
+            .quantum_generate_improvement_scenarios(&cycle, 4)
+            .await;
+        if !quantum_scenarios.is_empty() {
+            for qs in &quantum_scenarios {
+                insights.push(qs.clone());
+            }
+            base_confidence = (base_confidence + 0.03).min(0.88);
         }
 
         cycle.outputs.insights.extend(insights);

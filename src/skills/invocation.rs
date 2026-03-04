@@ -58,13 +58,10 @@ impl SkillInvocationEngine {
             }
         }
 
-        let mut t = self.triggers.write().await;
-        *t = triggers;
+        let count = triggers.len();
+        *self.triggers.write().await = triggers;
 
-        info!(
-            "SkillInvocationEngine initialized with {} triggers",
-            self.triggers.read().await.len()
-        );
+        info!("SkillInvocationEngine initialized with {} triggers", count);
         Ok(())
     }
 

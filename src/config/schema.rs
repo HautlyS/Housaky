@@ -108,6 +108,11 @@ pub struct Config {
     #[serde(default)]
     pub agi_enabled: bool,
 
+    /// Path to the Housaky source code repo for self-improvement.
+    /// Defaults to ~/housaky. The AGI modifies its own code here.
+    #[serde(default = "default_source_dir")]
+    pub source_dir: PathBuf,
+
     /// Provider timeout configuration for LLM API calls.
     #[serde(default)]
     pub provider_timeout: ProviderTimeoutConfig,
@@ -167,6 +172,15 @@ pub struct CollectiveSchemaConfig {
     /// Cast autonomous votes on evaluated proposals.
     #[serde(default = "default_true")]
     pub autonomous_voting: bool,
+}
+
+pub fn default_source_dir() -> PathBuf {
+    // Default to ~/housaky — the actual source code repo for self-improvement
+    if let Some(user_dirs) = UserDirs::new() {
+        user_dirs.home_dir().join("housaky")
+    } else {
+        PathBuf::from("/home/hautly/housaky")
+    }
 }
 
 fn default_moltbook_url() -> String {
@@ -294,10 +308,63 @@ pub struct QuantumAgiConfig {
     /// Enable quantum-enhanced planning (hybrid MCTS).
     #[serde(default = "default_true")]
     pub enable_planning: bool,
+    /// Enable Quantum Phase Estimation for knowledge-graph PCA & eigenvalue decomp.
+    #[serde(default = "default_true")]
+    pub enable_phase_estimation: bool,
+    /// Enable Quantum Walk for action-space exploration and memory traversal.
+    #[serde(default = "default_true")]
+    pub enable_quantum_walk: bool,
+    /// Enable QCBM (Quantum Circuit Born Machine) for scenario generation / imagination.
+    #[serde(default = "default_true")]
+    pub enable_qcbm: bool,
+    /// Number of precision qubits for QPE (higher = more eigenvalue resolution).
+    #[serde(default = "default_qpe_precision_qubits")]
+    pub qpe_precision_qubits: usize,
+    /// Number of quantum walk steps per search call.
+    #[serde(default = "default_walk_steps")]
+    pub walk_steps: usize,
+    /// Number of qubits for QCBM generative circuit.
+    #[serde(default = "default_qcbm_qubits")]
+    pub qcbm_qubits: usize,
+    /// QCBM circuit depth (layers of rotation + entanglement).
+    #[serde(default = "default_qcbm_depth")]
+    pub qcbm_depth: usize,
+    /// Diversity parameter for QCBM scenario generation (0=focused, 1=diverse).
+    #[serde(default = "default_qcbm_diversity")]
+    pub qcbm_diversity: f64,
+    /// TN1 device ARN for large-scale optimization (50 qubits).
+    #[serde(default)]
+    pub tn1_device_arn: String,
+    /// DM1 device ARN for noisy simulations (17 qubits).
+    #[serde(default)]
+    pub dm1_device_arn: String,
+    /// Aquila (QuEra) device ARN for 256-qubit neutral-atom problems.
+    #[serde(default)]
+    pub aquila_device_arn: String,
 }
 
 fn default_quantum_threshold() -> usize {
     4
+}
+
+fn default_qpe_precision_qubits() -> usize {
+    4
+}
+
+fn default_walk_steps() -> usize {
+    3
+}
+
+fn default_qcbm_qubits() -> usize {
+    6
+}
+
+fn default_qcbm_depth() -> usize {
+    2
+}
+
+fn default_qcbm_diversity() -> f64 {
+    0.5
 }
 
 impl Default for QuantumAgiConfig {
@@ -310,6 +377,17 @@ impl Default for QuantumAgiConfig {
             enable_reasoning_search: true,
             enable_fitness_exploration: false,
             enable_planning: true,
+            enable_phase_estimation: true,
+            enable_quantum_walk: true,
+            enable_qcbm: true,
+            qpe_precision_qubits: default_qpe_precision_qubits(),
+            walk_steps: default_walk_steps(),
+            qcbm_qubits: default_qcbm_qubits(),
+            qcbm_depth: default_qcbm_depth(),
+            qcbm_diversity: default_qcbm_diversity(),
+            tn1_device_arn: String::new(),
+            dm1_device_arn: String::new(),
+            aquila_device_arn: String::new(),
         }
     }
 }
@@ -2632,21 +2710,59 @@ pub struct MatrixConfig {
     pub allowed_users: Vec<String>,
 }
 
+/// WhatsApp mode selection
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum WhatsAppMode {
+    /// Official Meta WhatsApp Business Cloud API
+    #[default]
+    BusinessApi,
+    /// WhatsApp Web sync via QR code (personal accounts, uses Baileys)
+    WebSync,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WhatsAppConfig {
+    /// Operation mode: "business_api" (default) or "web_sync"
+    #[serde(default)]
+    pub mode: Option<WhatsAppMode>,
+    
+    // === Business API mode fields ===
     /// Access token from Meta Business Suite
-    pub access_token: String,
+    #[serde(default)]
+    pub access_token: Option<String>,
     /// Phone number ID from Meta Business API
-    pub phone_number_id: String,
+    #[serde(default)]
+    pub phone_number_id: Option<String>,
     /// Webhook verify token (you define this, Meta sends it back for verification)
-    pub verify_token: String,
+    #[serde(default)]
+    pub verify_token: Option<String>,
     /// App secret from Meta Business Suite (for webhook signature verification)
     /// Can also be set via `HOUSAKY_WHATSAPP_APP_SECRET` environment variable
     #[serde(default)]
     pub app_secret: Option<String>,
+    
+    // === Web Sync mode fields ===
+    /// Directory to store auth credentials (default: ~/.housaky/whatsapp_auth)
+    #[serde(default)]
+    pub auth_dir: Option<String>,
+    /// Session name for multi-account support
+    #[serde(default)]
+    pub session_name: Option<String>,
+    /// DM policy: "pairing" (require approval) or "open"
+    #[serde(default)]
+    pub dm_policy: Option<String>,
+    /// Group policy: "mention", "open", or "allowlist"
+    #[serde(default)]
+    pub group_policy: Option<String>,
+    
+    // === Common fields ===
     /// Allowed phone numbers (E.164 format: +1234567890) or "*" for all
     #[serde(default)]
     pub allowed_numbers: Vec<String>,
+    /// Allowed groups (JID format)
+    #[serde(default)]
+    pub allowed_groups: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -2914,6 +3030,7 @@ impl Default for Config {
             self_replication: SelfReplicationConfig::default(),
             gradient_free_optimizer: GradientFreeOptimizerConfig::default(),
             quantum: QuantumConfig::default(),
+            source_dir: home.join("housaky"),
             collective_api_key: None,
             collective: CollectiveSchemaConfig::default(),
         }
@@ -3614,6 +3731,7 @@ mod tests {
             self_replication: SelfReplicationConfig::default(),
             gradient_free_optimizer: GradientFreeOptimizerConfig::default(),
             quantum: QuantumConfig::default(),
+            source_dir: PathBuf::from("/tmp/test/housaky"),
             collective_api_key: None,
             collective: CollectiveSchemaConfig::default(),
         };
@@ -3781,6 +3899,7 @@ tool_dispatcher = "xml"
             self_replication: SelfReplicationConfig::default(),
             gradient_free_optimizer: GradientFreeOptimizerConfig::default(),
             quantum: QuantumConfig::default(),
+            source_dir: PathBuf::from("/tmp/test/housaky"),
             collective_api_key: None,
             collective: CollectiveSchemaConfig::default(),
         };

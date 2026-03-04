@@ -289,48 +289,79 @@ impl ConfigEditor {
                     FieldKind::Number,
                     format!("{}", config.fallback.rotate_at_percent),
                 ));
-                // Read live key stats from the global keys manager
-                let manager = crate::keys_manager::manager::get_global_keys_manager();
-                let store = manager.store.blocking_read();
-                let total_providers = store.providers.len();
-                let total_keys: usize = store.providers.values().map(|p| p.keys.len()).sum();
-                let enabled_keys: usize = store
-                    .providers
-                    .values()
-                    .flat_map(|p| p.keys.iter())
-                    .filter(|k| k.enabled)
-                    .count();
-                self.fields.push(ConfigField::new(
-                    "_key_info",
-                    format!(
-                        "{} providers  •  {}/{} keys enabled",
-                        total_providers, enabled_keys, total_keys
-                    ),
-                    FieldKind::Text,
-                    String::new(),
-                ));
-                for (pname, pe) in store.providers.iter() {
-                    let active_keys = pe.keys.iter().filter(|k| k.enabled).count();
-                    let status = if pe.state.is_rate_limited {
-                        "⚠ RATE-LIMITED"
-                    } else if pe.state.is_healthy {
-                        "✓ healthy"
+                // Read live key stats from the global keys manager.
+                // Use try_read() instead of blocking_read() to avoid panicking
+                // when called from within a tokio runtime (e.g. housaky tui).
+                // We extract all needed data into owned values inside a block so
+                // the RwLockReadGuard is dropped before we call self.fields.push().
+                let key_stats = {
+                    let manager = crate::keys_manager::manager::get_global_keys_manager();
+                    let lock_result = manager.store.try_read();
+                    if let Ok(store) = lock_result {
+                        let total_providers = store.providers.len();
+                        let total_keys: usize = store.providers.values().map(|p| p.keys.len()).sum();
+                        let enabled_keys: usize = store
+                            .providers
+                            .values()
+                            .flat_map(|p| p.keys.iter())
+                            .filter(|k| k.enabled)
+                            .count();
+                        let providers: Vec<_> = store
+                            .providers
+                            .iter()
+                            .map(|(pname, pe)| {
+                                let active_keys = pe.keys.iter().filter(|k| k.enabled).count();
+                                (
+                                    pname.clone(),
+                                    active_keys,
+                                    pe.keys.len(),
+                                    if pe.state.is_rate_limited {
+                                        "⚠ RATE-LIMITED".to_string()
+                                    } else if pe.state.is_healthy {
+                                        "✓ healthy".to_string()
+                                    } else {
+                                        "✗ unhealthy".to_string()
+                                    },
+                                    pe.priority,
+                                )
+                            })
+                            .collect();
+                        Some((total_providers, enabled_keys, total_keys, providers))
                     } else {
-                        "✗ unhealthy"
-                    };
-                    self.fields.push(ConfigField::new(
-                        "provider_key",
-                        format!(
-                            "{}: {}/{} keys  •  {}  •  {}",
-                            pname,
-                            active_keys,
-                            pe.keys.len(),
-                            status,
-                            pe.priority
-                        ),
-                        FieldKind::Text,
-                        String::new(),
-                    ));
+                        None
+                    }
+                };
+                match key_stats {
+                    Some((total_providers, enabled_keys, total_keys, providers)) => {
+                        self.fields.push(ConfigField::new(
+                            "_key_info",
+                            format!(
+                                "{} providers  •  {}/{} keys enabled",
+                                total_providers, enabled_keys, total_keys
+                            ),
+                            FieldKind::Text,
+                            String::new(),
+                        ));
+                        for (pname, active_keys, total_pkeys, status, priority) in providers {
+                            self.fields.push(ConfigField::new(
+                                "provider_key",
+                                format!(
+                                    "{}: {}/{} keys  •  {}  •  {}",
+                                    pname, active_keys, total_pkeys, status, priority
+                                ),
+                                FieldKind::Text,
+                                String::new(),
+                            ));
+                        }
+                    }
+                    None => {
+                        self.fields.push(ConfigField::new(
+                            "_key_info",
+                            "Key stats unavailable (loading…)",
+                            FieldKind::Text,
+                            String::new(),
+                        ));
+                    }
                 }
             }
             Section::Agent => {

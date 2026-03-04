@@ -1,5 +1,5 @@
 use crate::tui::enhanced_app::theme::{
-    style_border_focus, style_dim, style_muted, style_title, Palette,
+    style_border_focus, style_dim, style_muted, style_title, truncate, Palette,
 };
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
@@ -446,15 +446,3 @@ fn fuzzy_match(query: &str, haystack: &str) -> bool {
     chars.peek().is_none()
 }
 
-fn truncate(s: &str, max: usize) -> String {
-    if s.chars().count() <= max {
-        s.to_owned()
-    } else {
-        let end = s
-            .char_indices()
-            .nth(max.saturating_sub(1))
-            .map(|(i, _)| i)
-            .unwrap_or(s.len());
-        format!("{}…", &s[..end])
-    }
-}

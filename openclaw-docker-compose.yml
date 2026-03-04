@@ -1,0 +1,17 @@
+version: "3.9"
+
+services:
+  openclaw:
+    image: ghcr.io/openclaw/openclaw:latest
+    command: ["node", "dist/index.js", "gateway", "--port", "3000", "--bind", "0.0.0.0"]
+    environment:
+      - HOME=/home/hautly
+      - LLM_BACKEND_API_KEY=${LLM_BACKEND_API_KEY:-}
+      - OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_TOKEN:-}
+    volumes:
+      - ~/.openclaw:/home/hautly/.openclaw:ro
+      - ~/:/home/hautly/home:rw
+    ports:
+      - "3000:3000"
+    tty: true
+    stdin_open: true

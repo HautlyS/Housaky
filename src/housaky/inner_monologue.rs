@@ -6,7 +6,7 @@ use std::fmt::Write as _;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::info;
+use tracing::{debug, info};
 
 const MAX_THOUGHTS: usize = 1000;
 const RECENT_CAPACITY: usize = 50;
@@ -152,8 +152,8 @@ impl InnerMonologue {
             confidence
         );
 
-        println!(
-            "💭 Thought: {}",
+        debug!(
+            "Thought: {}",
             thought_content.chars().take(120).collect::<String>()
         );
 

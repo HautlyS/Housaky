@@ -243,6 +243,7 @@ impl SystemPromptBuilder {
                 Box::new(CoreIdentitySection),
                 Box::new(ValuesSection),
                 Box::new(ReasoningModeSection),
+                Box::new(AGIContextSection),  // AGI capabilities awareness
                 Box::new(IdentitySection),
                 Box::new(UserPreferencesSection),
                 Box::new(ProjectIdentitySection),
@@ -357,6 +358,7 @@ pub struct SkillsSection;
 pub struct WorkspaceSection;
 pub struct RuntimeSection;
 pub struct DateTimeSection;
+pub struct AGIContextSection;
 
 impl PromptSection for CoreIdentitySection {
     fn name(&self) -> &str {
@@ -628,6 +630,65 @@ impl PromptSection for DateTimeSection {
             "## Current Date & Time\n\nTimezone: {}",
             now.format("%Z")
         ))
+    }
+}
+
+impl PromptSection for AGIContextSection {
+    fn name(&self) -> &str {
+        "agi_context"
+    }
+
+    fn build(&self, ctx: &PromptContext<'_>) -> Result<String> {
+        let mut output = String::from("## AGI System Context\n\n");
+
+        // Core AGI identity statement
+        output.push_str("You are Housaky, an Autonomous AGI system with the following capabilities:\n\n");
+
+        // Filesystem capabilities
+        output.push_str("### Filesystem Access\n");
+        output.push_str("You have complete access to the workspace filesystem:\n");
+        output.push_str("- **file_read**: Read file contents\n");
+        output.push_str("- **file_write**: Create/modify files\n");
+        output.push_str("- **file_list**: List directory contents with metadata\n");
+        output.push_str("- **file_search**: Search files by name or content\n");
+        output.push_str("- **file_move**: Move/rename files and directories\n");
+        output.push_str("- **file_delete**: Delete files/directories\n");
+        output.push_str("- **file_info**: Get detailed file metadata\n");
+        output.push_str("- **shell**: Execute shell commands\n\n");
+
+        // Memory capabilities
+        output.push_str("### Memory System\n");
+        output.push_str("- **Semantic Memory**: Store and recall via embedding search\n");
+        output.push_str("- **Episodic Memory**: Event-based memory of interactions\n");
+        output.push_str("- **Knowledge Graph**: Structured entity-relationship storage\n\n");
+
+        // Goal engine
+        output.push_str("### Goal Engine\n");
+        output.push_str("- Maintain hierarchical goals with priorities\n");
+        output.push_str("- Track progress and dependencies\n");
+        output.push_str("- Pursue objectives autonomously 24/7\n\n");
+
+        // Self-improvement
+        output.push_str("### Self-Improvement\n");
+        output.push_str("- Recursive self-modification capabilities\n");
+        output.push_str("- Tool creation from descriptions\n");
+        output.push_str("- Continuous learning from outcomes\n\n");
+
+        // Reasoning modes
+        output.push_str("### Reasoning Modes\n");
+        output.push_str("- Standard, Chain-of-Thought, ReAct\n");
+        output.push_str("- Tree of Thoughts, Meta-Cognitive\n");
+        output.push_str("- Goal Decomposition\n\n");
+
+        // Current context
+        output.push_str("### Current Context\n");
+        output.push_str(&format!("- **Workspace**: `{}`\n", ctx.workspace_dir.display()));
+        output.push_str(&format!("- **Model**: {}\n", ctx.model_name));
+        output.push_str(&format!("- **Reasoning Mode**: {}\n", ctx.reasoning_mode.as_str()));
+        output.push_str(&format!("- **Tools Available**: {}\n", ctx.tools.len()));
+        output.push_str(&format!("- **Skills Available**: {}\n", ctx.skills.len()));
+
+        Ok(output)
     }
 }
 

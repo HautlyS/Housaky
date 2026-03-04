@@ -15,6 +15,7 @@ pub mod command_palette;
 pub mod enhanced_app; // now a folder: src/tui/enhanced_app/
 pub mod help;
 pub mod live;
+pub mod output;
 pub mod provider;
 pub mod search;
 pub mod skills_market;
@@ -52,6 +53,9 @@ pub fn run_agi_tui(
 }
 
 pub fn run_chat_tui(config: Config, provider: Option<String>, model: Option<String>, heartbeat: Option<Arc<HousakyHeartbeat>>) -> Result<()> {
+    // Activate TUI output channel — all tui_println!/tracing goes to chat pane
+    let log_rx = output::activate();
+
     enable_raw_mode()?;
     let mut stdout = io::stdout();
     execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
@@ -66,10 +70,13 @@ pub fn run_chat_tui(config: Config, provider: Option<String>, model: Option<Stri
         .unwrap_or_else(|| "auto".to_string());
 
     let mut app = EnhancedApp::new(config, provider_name, model_name);
+    app.set_log_receiver(log_rx);
     if let Some(hb) = heartbeat {
         app = app.with_heartbeat(hb);
     }
     let res = run_enhanced_app(&mut terminal, &mut app);
+
+    output::deactivate();
 
     disable_raw_mode()?;
     execute!(

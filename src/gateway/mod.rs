@@ -249,12 +249,19 @@ pub async fn run_gateway(host: &str, port: u16, config: Config) -> Result<()> {
     // WhatsApp channel (if configured)
     let whatsapp_channel: Option<Arc<WhatsAppChannel>> =
         config.channels_config.whatsapp.as_ref().map(|wa| {
-            Arc::new(WhatsAppChannel::new(
-                wa.access_token.clone(),
-                wa.phone_number_id.clone(),
-                wa.verify_token.clone(),
-                wa.allowed_numbers.clone(),
-            ))
+            Arc::new(WhatsAppChannel::new(crate::channels::whatsapp::WhatsAppConfig {
+                mode: wa.mode.clone().unwrap_or_default(),
+                access_token: wa.access_token.clone(),
+                phone_number_id: wa.phone_number_id.clone(),
+                verify_token: wa.verify_token.clone(),
+                auth_dir: wa.auth_dir.clone(),
+                session_name: wa.session_name.clone(),
+                dm_policy: wa.dm_policy.clone().unwrap_or_else(|| "pairing".to_string()),
+                group_policy: wa.group_policy.clone().unwrap_or_else(|| "mention".to_string()),
+                allowed_numbers: wa.allowed_numbers.clone(),
+                allowed_groups: wa.allowed_groups.clone(),
+                app_secret: None,
+            }))
         });
 
     // WhatsApp app secret for webhook signature verification

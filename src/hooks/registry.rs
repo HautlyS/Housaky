@@ -4,7 +4,7 @@
 //! supporting both type-level handlers (e.g., "command") and specific
 //! handlers (e.g., "command:new").
 
-use crate::hooks::types::{Hook, HookEvent, HookEventType, HookResult};
+use crate::hooks::types::{Hook, HookDecision, HookEvent, HookEventType, HookResult};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -207,6 +207,7 @@ impl HookRegistry {
         // Execute hooks
         let mut messages = Vec::new();
         let mut should_continue = true;
+        let mut decision = HookDecision::Allow;
 
         for entry in enabled_hooks {
             let hook_id = entry.hook.id();
@@ -215,6 +216,10 @@ impl HookRegistry {
             match entry.hook.handle(event.clone()).await {
                 Ok(result) => {
                     messages.extend(result.messages);
+                    if result.decision == HookDecision::Block {
+                        debug!("Hook '{}' blocked event '{}'", hook_id, full_key);
+                        decision = HookDecision::Block;
+                    }
                     if !result.should_continue {
                         debug!("Hook '{}' signaled stop for event '{}'", hook_id, full_key);
                         should_continue = false;
@@ -230,6 +235,7 @@ impl HookRegistry {
         HookResult {
             messages,
             should_continue,
+            decision,
         }
     }
 

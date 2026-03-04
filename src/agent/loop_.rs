@@ -10,7 +10,7 @@ use crate::util::truncate_with_ellipsis;
 use anyhow::Result;
 use std::collections::HashMap;
 use std::fmt::Write;
-use std::io::Write as _;
+
 use std::sync::Arc;
 use std::time::Instant;
 use uuid::Uuid;
@@ -557,8 +557,7 @@ pub(crate) async fn run_tool_call_loop(
 
         // Print any text the LLM produced alongside tool calls (unless silent)
         if !silent && !parsed_text.is_empty() {
-            print!("{parsed_text}");
-            let _ = std::io::stdout().flush();
+            crate::tui_println!("{parsed_text}");
         }
 
         // Execute each tool call and build results
@@ -735,8 +734,7 @@ pub(crate) async fn run_tool_call_loop_with_agi(
         }
 
         if !silent && !parsed_text.is_empty() {
-            print!("{parsed_text}");
-            let _ = std::io::stdout().flush();
+            crate::tui_println!("{parsed_text}");
         }
 
         let mut tool_results = String::new();

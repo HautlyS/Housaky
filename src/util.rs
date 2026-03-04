@@ -147,7 +147,7 @@ mod tests {
 
 use anyhow::{Context, Result};
 use serde::{de::DeserializeOwned, Serialize};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 /// Serialize data to TOML string (human-readable, fast for simple data).
 pub fn to_toml<T: Serialize>(value: &T) -> Result<String> {
@@ -210,6 +210,57 @@ pub async fn write_msgpack_file<T: Serialize>(path: &Path, value: &T) -> Result<
 pub async fn read_msgpack_file<T: DeserializeOwned>(path: &Path) -> Result<T> {
     let bytes = tokio::fs::read(path).await?;
     from_msgpack(&bytes)
+}
+
+/// Expand a path that may contain `~` (home directory) to an absolute path.
+///
+/// Supports:
+/// - `~/path` - Expands to user's home directory + path
+/// - `~user/path` - Expands to specified user's home directory (Unix only)
+/// - Regular paths - Returned as-is
+///
+/// # Examples
+/// ```
+/// use housaky::util::expand_path;
+/// use std::path::PathBuf;
+///
+/// // Expands home directory
+/// let path = expand_path("~/Documents");
+/// assert!(!path.to_string_lossy().contains('~'));
+///
+/// // Regular paths unchanged
+/// let path = expand_path("/usr/local/bin");
+/// assert_eq!(path, PathBuf::from("/usr/local/bin"));
+/// ```
+pub fn expand_path<P: AsRef<Path>>(path: P) -> PathBuf {
+    let path = path.as_ref();
+    let path_str = path.to_string_lossy();
+
+    // Use shellexpand for proper tilde expansion
+    let expanded = shellexpand::tilde(&path_str);
+    PathBuf::from(expanded.as_ref())
+}
+
+/// Expand path and resolve to absolute path.
+///
+/// Similar to `expand_path` but also converts relative paths to absolute
+/// based on the provided base directory (or current directory if None).
+pub fn expand_and_resolve<P: AsRef<Path>, B: AsRef<Path>>(
+    path: P,
+    base_dir: Option<B>,
+) -> PathBuf {
+    let expanded = expand_path(path);
+
+    if expanded.is_absolute() {
+        expanded
+    } else if let Some(base) = base_dir {
+        base.as_ref().join(expanded)
+    } else {
+        // Try to use current directory
+        std::env::current_dir()
+            .map(|cwd| cwd.join(&expanded))
+            .unwrap_or(expanded)
+    }
 }
 
 /// Get the appropriate file extension for each format.

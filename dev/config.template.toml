@@ -26,4 +26,24 @@ braket_s3_prefix = "housaky-results"
 max_qubits = 34
 shots = 1024
 error_mitigation = true
-hybrid_threshold = 1000
+transpile = true
+
+[quantum.agi]
+quantum_threshold = 4
+cycle_budget_usd = 5.0
+enable_goal_scheduling = true
+enable_memory_optimization = true
+enable_reasoning_search = true
+enable_fitness_exploration = true
+enable_planning = true
+enable_phase_estimation = true
+qpe_precision_qubits = 4
+enable_quantum_walk = true
+walk_steps = 3
+enable_qcbm = true
+qcbm_qubits = 6
+qcbm_depth = 2
+qcbm_diversity = 0.6
+tn1_device_arn = "arn:aws:braket:::device/quantum-simulator/amazon/tn1"
+dm1_device_arn = "arn:aws:braket:::device/quantum-simulator/amazon/dm1"
+aquila_device_arn = "arn:aws:braket:us-east-1::device/qpu/quera/Aquila"

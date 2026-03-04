@@ -65,6 +65,8 @@ pub struct HousakyCore {
     pub feedback_loop: Arc<UnifiedFeedbackLoop>,
     /// Skill invocation engine for automatic skill triggering
     pub skill_invocation_engine: Arc<SkillInvocationEngine>,
+    /// Shared activity log for heartbeat→TUI communication
+    activity_log: Arc<std::sync::Mutex<Vec<(String, String)>>>,
     state: Arc<RwLock<HousakyCoreState>>,
     config: HousakyCoreConfig,
     workspace_dir: PathBuf,
@@ -380,6 +382,7 @@ impl HousakyCore {
             quantum_planner,
             feedback_loop,
             skill_invocation_engine,
+            activity_log: Arc::new(std::sync::Mutex::new(Vec::new())),
             state,
             config: core_config,
             workspace_dir,
@@ -447,14 +450,12 @@ impl HousakyCore {
         }
 
         // Phase 6 — discover and register compute substrates
-        self.singularity_engine.read().await.init_substrates().await;
+        self.singularity_engine.write().await.init_substrates().await;
 
-        // Load persistent world model (§2.5 — world model persistence).
         if let Err(e) = self.world_model.load().await {
             warn!("Failed to load world model: {e}");
         }
 
-        // Load persistent episodic memory (§2.3 — unified persistent memory).
         if let Err(e) = self.episodic_memory.load(&self.workspace_dir).await {
             warn!("Failed to load episodic memory: {e}");
         }
@@ -1097,6 +1098,87 @@ impl HousakyCore {
         }
     }
 
+    pub async fn get_goals_for_tui(&self) -> Vec<super::goal_engine::Goal> {
+        self.goal_engine.get_active_goals().await
+    }
+
+    pub async fn get_goal_stats_for_tui(&self) -> super::goal_engine::GoalStats {
+        self.goal_engine.get_goal_stats().await
+    }
+
+    pub async fn create_goal_for_tui(
+        &self,
+        title: String,
+        description: String,
+        priority: GoalPriority,
+    ) -> Result<Goal> {
+        let goal = Goal {
+            title,
+            description,
+            priority,
+            status: GoalStatus::Pending,
+            ..Default::default()
+        };
+        self.goal_engine.add_goal(goal.clone()).await?;
+        Ok(goal)
+    }
+
+    pub async fn update_goal_progress_for_tui(&self, goal_id: &str, progress: f64) -> Result<()> {
+        self.goal_engine.update_progress(goal_id, progress, "tui update").await
+    }
+
+    pub async fn complete_goal_for_tui(&self, goal_id: &str) -> Result<()> {
+        self.goal_engine.update_progress(goal_id, 1.0, "completed from TUI").await
+    }
+
+    pub fn get_skills_for_tui(&self) -> Vec<crate::skills::Skill> {
+        crate::skills::load_skills(&self.workspace_dir)
+    }
+
+    /// Push an activity entry from the heartbeat (or any background process).
+    /// Format: (kind, message) where kind is "tool", "thought", "goal", "system".
+    pub fn push_activity(&self, kind: &str, message: impl Into<String>) {
+        if let Ok(mut log) = self.activity_log.lock() {
+            log.push((kind.to_string(), message.into()));
+            // Keep bounded to avoid unbounded growth
+            if log.len() > 100 {
+                log.drain(..50);
+            }
+        }
+    }
+
+    /// Drain all pending activity entries (consumed by TUI sync).
+    pub fn drain_activities(&self) -> Vec<(String, String)> {
+        if let Ok(mut log) = self.activity_log.lock() {
+            std::mem::take(&mut *log)
+        } else {
+            Vec::new()
+        }
+    }
+
+    pub fn get_tools_for_tui(&self) -> Vec<(String, String)> {
+        // Tools are registered dynamically; return known built-in tool names
+        vec![
+            ("shell".to_string(), "Execute shell commands".to_string()),
+            ("file_read".to_string(), "Read file contents".to_string()),
+            ("file_write".to_string(), "Write file contents".to_string()),
+            ("web_search".to_string(), "Search the web".to_string()),
+            ("web_browse".to_string(), "Browse web pages".to_string()),
+            ("code_edit".to_string(), "Edit code files".to_string()),
+        ]
+    }
+
+    pub async fn get_inner_monologue_for_tui(&self) -> Vec<String> {
+        self.inner_monologue.get_recent(10).await
+    }
+
+    pub async fn add_thought(&self, thought: String) {
+        let mut state = self.state.write().await;
+        state.last_thought = Some(thought.clone());
+        drop(state);
+        let _ = self.inner_monologue.add_thought(&thought, 0.8).await;
+    }
+
     pub async fn process_with_cognitive_loop(
         &self,
         user_input: &str,
@@ -1109,11 +1191,17 @@ impl HousakyCore {
         // Check for skill invocations before processing
         let skill_context = self.check_skill_invocations(user_input).await;
 
+        if skill_context.is_some() {
+            self.push_activity("skill", "Skill invocation detected");
+        }
+
         let enriched_input = if let Some(ref ctx) = skill_context {
             format!("{}\n\n{}", ctx, user_input)
         } else {
             user_input.to_string()
         };
+
+        self.push_activity("thought", "Cognitive loop processing...");
 
         let response = self
             .cognitive_loop
@@ -1128,13 +1216,41 @@ impl HousakyCore {
         state.confidence_level =
             (state.confidence_level * 0.9 + response.confidence * 0.1).clamp(0.0, 1.0);
         state.last_thought = response.thoughts.first().cloned();
+        let turn_count = state.total_turns;
         drop(state);
 
         if response.goals_updated {
             let stats = self.goal_engine.get_goal_stats().await;
             let mut state = self.state.write().await;
             state.goals_completed = stats.completed as u64;
+            self.push_activity("goal", &format!("Goals updated ({} completed)", stats.completed));
         }
+
+        // Persist knowledge graph after each turn
+        if let Err(e) = self.knowledge_graph.save().await {
+            warn!("Knowledge graph save failed: {e}");
+        }
+
+        // Save inner monologue state
+        if let Err(e) = self.inner_monologue.save().await {
+            warn!("Inner monologue save failed: {e}");
+        }
+
+        // Run memory consolidation every 20 turns
+        if turn_count % 20 == 0 {
+            info!("Milestone turn {turn_count}: running memory consolidation");
+            if let Err(e) = self.run_memory_consolidation().await {
+                warn!("Memory consolidation failed at turn {turn_count}: {e}");
+            }
+        }
+
+        self.push_activity(
+            "thought",
+            &format!(
+                "Response ready (confidence={:.0}%)",
+                response.confidence * 100.0
+            ),
+        );
 
         Ok(response)
     }

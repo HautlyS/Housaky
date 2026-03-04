@@ -9,7 +9,7 @@ use ratatui::{
 use crate::doctor::{CheckCategory, CheckResult, DoctorReport, Severity};
 use crate::tui::enhanced_app::theme::{
     style_border, style_border_focus, style_dim, style_error, style_muted, style_success,
-    style_title, style_warning, Palette,
+    style_title, style_warning, truncate, Palette,
 };
 
 // ── DoctorPanel ──────────────────────────────────────────────────────────────
@@ -116,6 +116,16 @@ impl DoctorPanel {
                 CategoryFilter::Keys => c.category == CheckCategory::Keys,
             })
             .collect()
+    }
+
+    pub fn set_selected(&mut self, idx: usize) {
+        let len = self.visible_checks().len();
+        if len == 0 {
+            return;
+        }
+        self.selected = idx.min(len - 1);
+        self.list_state.select(Some(self.selected));
+        self.detail_scroll = 0;
     }
 
     pub fn select_prev(&mut self) {
@@ -461,15 +471,3 @@ fn category_color(cat: CheckCategory) -> ratatui::style::Color {
     }
 }
 
-fn truncate(s: &str, max: usize) -> String {
-    if s.chars().count() <= max {
-        s.to_owned()
-    } else {
-        let end = s
-            .char_indices()
-            .nth(max.saturating_sub(1))
-            .map(|(i, _)| i)
-            .unwrap_or(s.len());
-        format!("{}…", &s[..end])
-    }
-}

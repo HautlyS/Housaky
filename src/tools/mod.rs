@@ -3,7 +3,12 @@ pub mod browser_open;
 pub mod clawd_cursor;
 pub mod composio;
 pub mod delegate;
+pub mod file_delete;
+pub mod file_info;
+pub mod file_list;
+pub mod file_move;
 pub mod file_read;
+pub mod file_search;
 pub mod file_write;
 pub mod generated_tool;
 pub mod git_operations;
@@ -26,7 +31,12 @@ pub use browser_open::BrowserOpenTool;
 pub use clawd_cursor::ClawdCursorTool;
 pub use composio::ComposioTool;
 pub use delegate::DelegateTool;
+pub use file_delete::FileDeleteTool;
+pub use file_info::FileInfoTool;
+pub use file_list::FileListTool;
+pub use file_move::FileMoveTool;
 pub use file_read::FileReadTool;
+pub use file_search::FileSearchTool;
 pub use file_write::FileWriteTool;
 pub use generated_tool::load_active_generated_tools;
 pub use git_operations::GitOperationsTool;
@@ -65,8 +75,14 @@ pub fn default_tools_with_runtime(
 ) -> Vec<Box<dyn Tool>> {
     vec![
         Box::new(ShellTool::new(security.clone(), runtime)),
+        // Core filesystem tools for exploration and modification
         Box::new(FileReadTool::new(security.clone())),
-        Box::new(FileWriteTool::new(security)),
+        Box::new(FileWriteTool::new(security.clone())),
+        Box::new(FileListTool::new(security.clone())),
+        Box::new(FileSearchTool::new(security.clone())),
+        Box::new(FileMoveTool::new(security.clone())),
+        Box::new(FileDeleteTool::new(security.clone())),
+        Box::new(FileInfoTool::new(security)),
     ]
 }
 
@@ -116,8 +132,15 @@ pub fn all_tools_with_runtime(
 ) -> Vec<Box<dyn Tool>> {
     let mut tools: Vec<Box<dyn Tool>> = vec![
         Box::new(ShellTool::new(security.clone(), runtime)),
+        // Filesystem tools - comprehensive file operations
         Box::new(FileReadTool::new(security.clone())),
         Box::new(FileWriteTool::new(security.clone())),
+        Box::new(FileListTool::new(security.clone())),
+        Box::new(FileSearchTool::new(security.clone())),
+        Box::new(FileMoveTool::new(security.clone())),
+        Box::new(FileDeleteTool::new(security.clone())),
+        Box::new(FileInfoTool::new(security.clone())),
+        // Memory tools
         Box::new(MemoryStoreTool::new(memory.clone())),
         Box::new(MemoryRecallTool::new(memory.clone())),
         Box::new(MemoryForgetTool::new(memory)),
@@ -197,10 +220,10 @@ mod tests {
     }
 
     #[test]
-    fn default_tools_has_three() {
+    fn default_tools_has_eight() {
         let security = Arc::new(SecurityPolicy::default());
         let tools = default_tools(security);
-        assert_eq!(tools.len(), 3);
+        assert_eq!(tools.len(), 8);
     }
 
     #[test]

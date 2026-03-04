@@ -1,7 +1,8 @@
 use crate::tui::enhanced_app::state::SessionMetrics;
 use crate::tui::enhanced_app::theme::{
     render_gauge_bar, style_border, style_dim, style_error, style_muted, style_success,
-    style_tag_goal, style_tag_skill, style_tag_thought, style_tag_tool, style_title, Palette,
+    style_tag_goal, style_tag_skill, style_tag_thought, style_tag_tool, style_title, truncate,
+    Palette,
 };
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
@@ -303,17 +304,3 @@ impl Default for Sidebar {
     }
 }
 
-// ── Helper ────────────────────────────────────────────────────────────────────
-
-fn truncate(s: &str, max: usize) -> String {
-    if s.chars().count() <= max {
-        s.to_owned()
-    } else {
-        let end = s
-            .char_indices()
-            .nth(max.saturating_sub(1))
-            .map(|(i, _)| i)
-            .unwrap_or(s.len());
-        format!("{}…", &s[..end])
-    }
-}

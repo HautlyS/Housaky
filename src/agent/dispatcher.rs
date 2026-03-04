@@ -158,6 +158,18 @@ impl ToolDispatcher for XmlToolDispatcher {
 
 pub struct NativeToolDispatcher;
 
+impl NativeToolDispatcher {
+    pub fn new() -> Self {
+        NativeToolDispatcher
+    }
+}
+
+impl Default for NativeToolDispatcher {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ToolDispatcher for NativeToolDispatcher {
     fn parse_response(&self, response: &ChatResponse) -> (String, Vec<ParsedToolCall>) {
         let text = response.text.clone().unwrap_or_default();
@@ -222,6 +234,69 @@ impl ToolDispatcher for NativeToolDispatcher {
 
     fn should_send_tool_specs(&self) -> bool {
         true
+    }
+}
+
+pub struct AdaptiveToolDispatcher {
+    use_native: bool,
+}
+
+impl AdaptiveToolDispatcher {
+    pub fn new(start_with_native: bool) -> Self {
+        AdaptiveToolDispatcher {
+            use_native: start_with_native,
+        }
+    }
+
+    fn detect_format(&self, response: &ChatResponse) -> bool {
+        if let Some(ref text) = response.text {
+            let has_xml_tags = text.contains("<tool_call>") || text.contains("</tool_call>");
+            if has_xml_tags {
+                return false;
+            }
+        }
+        if !response.tool_calls.is_empty() {
+            return true;
+        }
+        self.use_native
+    }
+}
+
+impl ToolDispatcher for AdaptiveToolDispatcher {
+    fn parse_response(&self, response: &ChatResponse) -> (String, Vec<ParsedToolCall>) {
+        if self.detect_format(response) {
+            NativeToolDispatcher.parse_response(response)
+        } else {
+            XmlToolDispatcher.parse_response(response)
+        }
+    }
+
+    fn format_results(&self, results: &[ToolExecutionResult]) -> ConversationMessage {
+        if self.use_native {
+            NativeToolDispatcher.format_results(results)
+        } else {
+            XmlToolDispatcher.format_results(results)
+        }
+    }
+
+    fn prompt_instructions(&self, tools: &[Box<dyn Tool>]) -> String {
+        if self.use_native {
+            NativeToolDispatcher.prompt_instructions(tools)
+        } else {
+            XmlToolDispatcher.prompt_instructions(tools)
+        }
+    }
+
+    fn to_provider_messages(&self, history: &[ConversationMessage]) -> Vec<ChatMessage> {
+        if self.use_native {
+            NativeToolDispatcher.to_provider_messages(history)
+        } else {
+            XmlToolDispatcher.to_provider_messages(history)
+        }
+    }
+
+    fn should_send_tool_specs(&self) -> bool {
+        self.use_native
     }
 }
 
@@ -308,5 +383,36 @@ mod tests {
             }
             _ => panic!("expected ToolResults variant"),
         }
+    }
+
+    #[test]
+    fn adaptive_dispatcher_uses_native_when_available() {
+        let response = ChatResponse {
+            text: Some("ok".into()),
+            tool_calls: vec![crate::providers::ToolCall {
+                id: "tc1".into(),
+                name: "shell".into(),
+                arguments: "{\"command\":\"ls\"}".into(),
+            }],
+        };
+        let dispatcher = AdaptiveToolDispatcher::new(true);
+        let (_, calls) = dispatcher.parse_response(&response);
+        assert_eq!(calls.len(), 1);
+        assert!(calls[0].tool_call_id.is_some());
+    }
+
+    #[test]
+    fn adaptive_dispatcher_uses_xml_when_xml_detected() {
+        let response = ChatResponse {
+            text: Some(
+                "<tool_call>{\"name\":\"shell\",\"arguments\":{\"command\":\"ls\"}}</tool_call>"
+                    .into(),
+            ),
+            tool_calls: vec![],
+        };
+        let dispatcher = AdaptiveToolDispatcher::new(true);
+        let (_, calls) = dispatcher.parse_response(&response);
+        assert_eq!(calls.len(), 1);
+        assert!(calls[0].tool_call_id.is_none());
     }
 }

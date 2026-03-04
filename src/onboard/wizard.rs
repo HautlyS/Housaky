@@ -146,6 +146,7 @@ pub fn run_wizard() -> Result<Config> {
         self_replication: crate::config::schema::SelfReplicationConfig::default(),
         gradient_free_optimizer: crate::config::schema::GradientFreeOptimizerConfig::default(),
         quantum: crate::config::schema::QuantumConfig::default(),
+        source_dir: crate::config::schema::default_source_dir(),
         collective_api_key: None,
         collective: crate::config::schema::CollectiveSchemaConfig::default(),
     };
@@ -371,6 +372,7 @@ pub fn run_quick_setup(
         self_replication: crate::config::schema::SelfReplicationConfig::default(),
         gradient_free_optimizer: crate::config::schema::GradientFreeOptimizerConfig::default(),
         quantum: crate::config::schema::QuantumConfig::default(),
+        source_dir: crate::config::schema::default_source_dir(),
         collective_api_key: None,
         collective: crate::config::schema::CollectiveSchemaConfig::default(),
     };
@@ -492,7 +494,7 @@ fn default_model_for_provider(provider: &str) -> String {
     match canonical_provider_name(provider) {
         "anthropic" => "claude-sonnet-4-20250514".into(),
         "openai" => "gpt-5.2".into(),
-        "glm" | "zhipu" | "zai" | "z.ai" => "glm-5".into(),
+        "glm" | "zhipu" | "zai" | "z.ai" => "glm-4-plus".into(),
         "minimax" => "MiniMax-M2.5".into(),
         "ollama" => "llama3.2".into(),
         "groq" => "llama-3.3-70b-versatile".into(),

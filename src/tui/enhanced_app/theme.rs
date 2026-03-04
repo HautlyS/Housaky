@@ -255,3 +255,32 @@ pub fn render_bar(value: f64, width: usize, filled_char: &str, empty_char: &str)
 pub fn render_gauge_bar(value: f64, width: usize) -> String {
     render_bar(value, width, "█", "░")
 }
+
+// ── Text truncation helpers ──────────────────────────────────────────────────
+
+/// Truncate a string to `max` characters, appending `…` if truncated.
+/// Returns an owned `String`. Unicode-safe.
+pub fn truncate(s: &str, max: usize) -> String {
+    if s.chars().count() <= max {
+        s.to_owned()
+    } else {
+        let end = s
+            .char_indices()
+            .nth(max.saturating_sub(1))
+            .map(|(i, _)| i)
+            .unwrap_or(s.len());
+        format!("{}…", &s[..end])
+    }
+}
+
+/// Truncate a string to `max` characters, returning a borrowed slice (no ellipsis).
+/// Unicode-safe.
+pub fn truncate_str(s: &str, max: usize) -> &str {
+    if s.len() <= max {
+        return s;
+    }
+    match s.char_indices().nth(max) {
+        Some((byte_idx, _)) => &s[..byte_idx],
+        None => s,
+    }
+}

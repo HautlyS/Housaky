@@ -277,16 +277,52 @@ pub async fn handle_command(command: HousakyCommands, config: &Config) -> Result
         }
 
         HousakyCommands::Improve => {
-            println!("🔧 Forcing self-improvement cycle...");
+            println!("🔧 Forcing quantum-enhanced self-improvement cycle...");
 
-            let meta = meta_cognition::MetaCognitionEngine::new();
-            let reflection = meta.reflect("Manual improvement trigger").await?;
+            // Build the full HousakyCore — wires quantum bridge into cognitive loop,
+            // singularity engine, reasoning pipeline, memory consolidator, etc.
+            let core = core::HousakyCore::new(&config)?;
+            core.initialize().await?;
 
-            println!("Reflection complete:");
-            println!("  Observations: {}", reflection.observations.len());
-            println!("  Insights:     {}", reflection.insights.len());
-            println!("  Actions:      {}", reflection.actions.len());
-            println!("  Mood:         {:?}", reflection.mood);
+            // Minimal provider stub — run_self_improvement only uses reflection,
+            // not actual LLM calls, so this never fires.
+            struct NullProvider;
+            #[async_trait::async_trait]
+            impl crate::providers::Provider for NullProvider {
+                async fn chat_with_system(
+                    &self,
+                    _system: Option<&str>,
+                    _msg: &str,
+                    _model: &str,
+                    _temp: f64,
+                ) -> anyhow::Result<String> {
+                    anyhow::bail!("null provider — no LLM configured")
+                }
+            }
+            let null_provider = NullProvider;
+
+            // Run one full self-improvement cycle (meta-cognition + goal injection
+            // + inner monologue + quantum goal scheduling).
+            let improvements = core.run_self_improvement(&null_provider, "").await?;
+
+            println!("✅ Quantum-enhanced self-improvement cycle complete:");
+            println!("  Improvements  : {}", improvements.len());
+            for imp in &improvements {
+                println!("  • {imp}");
+            }
+
+            // Show quantum bridge metrics.
+            if let Some(m) = core.get_quantum_metrics().await {
+                println!("\n  Quantum bridge (QuEra Aquila):");
+                println!("  Quantum calls : {}", m.total_quantum_calls);
+                println!("  Classical fb  : {}", m.total_classical_fallbacks);
+                println!("  Avg advantage : {:.2}x", m.average_quantum_advantage);
+                if m.total_quantum_calls > 0 {
+                    println!("  💜 Aquila AHS circuits executed this cycle!");
+                } else {
+                    println!("  ℹ️  Quantum fallback active (enable Braket: https://console.aws.amazon.com/braket/home)");
+                }
+            }
         }
 
         HousakyCommands::ConnectKowalski => {

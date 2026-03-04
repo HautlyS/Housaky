@@ -17,6 +17,9 @@ use super::grover::{GroverConfig, GroverSearch};
 use super::optimizer::{
     OptimizationProblem, ProblemType, QAOAConfig, QAOAOptimizer, VQEConfig, VQEOptimizer,
 };
+use super::phase_estimation::{QPEConfig, QuantumPhaseEstimator};
+use super::qcbm::{GenerativeContext, QCBMConfig, QuantumBornMachine};
+use super::quantum_walk::{QuantumWalkConfig, QuantumWalker, WalkGraph};
 use super::transpiler::CircuitTranspiler;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
@@ -366,60 +369,81 @@ impl QuantumAgiBridge {
             self.schedule_goals_classical_inner(goal_ids, priorities, dependencies);
         let classical_ms = classical_start.elapsed().as_millis() as u64;
 
-        // Quantum QAOA execution.
+        // Quantum QAOA execution — fall back to classical on any backend error
+        // (AccessDenied, network unreachable, device offline, budget exceeded).
         let quantum_start = std::time::Instant::now();
         let optimizer = QAOAOptimizer::new(self.backend.clone(), qaoa_config);
-        let result = optimizer.solve(&problem).await?;
-        let quantum_ms = quantum_start.elapsed().as_millis() as u64;
+        match optimizer.solve(&problem).await {
+            Err(e) => {
+                let msg = format!("{e:?}");
+                let reason = if msg.contains("AccessDenied") || msg.contains("not authorized") {
+                    "braket_access_denied"
+                } else if msg.contains("dispatch failure")
+                    || msg.contains("ConnectError")
+                    || msg.contains("dns error")
+                    || msg.contains("timeout")
+                {
+                    "braket_unreachable"
+                } else {
+                    "braket_error"
+                };
+                tracing::warn!(
+                    "Quantum backend failed ({}): {} — falling back to classical",
+                    reason, e
+                );
+                return Ok((
+                    classical_schedule,
+                    classical_mask,
+                    classical_obj,
+                    format!("classical_{reason}"),
+                    1.0,
+                ));
+            }
+            Ok(result) => {
+                let quantum_ms = quantum_start.elapsed().as_millis() as u64;
 
-        // Build schedule from QAOA solution.
-        let mut scored_goals: Vec<(String, f64, bool)> = goal_ids
-            .iter()
-            .enumerate()
-            .map(|(i, id)| {
-                let selected = result.best_solution.get(i).copied().unwrap_or(false);
-                let priority = priorities.get(id).copied().unwrap_or(0.0);
-                (id.clone(), priority, selected)
-            })
-            .collect();
+                let mut scored_goals: Vec<(String, f64, bool)> = goal_ids
+                    .iter()
+                    .enumerate()
+                    .map(|(i, id)| {
+                        let selected = result.best_solution.get(i).copied().unwrap_or(false);
+                        let priority = priorities.get(id).copied().unwrap_or(0.0);
+                        (id.clone(), priority, selected)
+                    })
+                    .collect();
 
-        // Sort selected goals by priority (descending).
-        scored_goals.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+                scored_goals
+                    .sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
-        let schedule: Vec<String> = scored_goals
-            .iter()
-            .filter(|(_, _, selected)| *selected)
-            .map(|(id, _, _)| id.clone())
-            .collect();
+                let schedule: Vec<String> = scored_goals
+                    .iter()
+                    .filter(|(_, _, selected)| *selected)
+                    .map(|(id, _, _)| id.clone())
+                    .collect();
 
-        let mask: HashMap<String, bool> = scored_goals
-            .iter()
-            .map(|(id, _, selected)| (id.clone(), *selected))
-            .collect();
+                let mask: HashMap<String, bool> = scored_goals
+                    .iter()
+                    .map(|(id, _, selected)| (id.clone(), *selected))
+                    .collect();
 
-        let advantage = if quantum_ms > 0 {
-            (classical_ms as f64 / quantum_ms as f64).max(0.1)
-        } else {
-            1.0
-        };
+                let advantage = if quantum_ms > 0 {
+                    (classical_ms as f64 / quantum_ms as f64).max(0.1)
+                } else {
+                    1.0
+                };
 
-        // Use whichever solution is better.
-        if result.best_value >= classical_obj {
-            Ok((
-                schedule,
-                mask,
-                result.best_value,
-                "quantum_qaoa".into(),
-                advantage,
-            ))
-        } else {
-            Ok((
-                classical_schedule,
-                classical_mask,
-                classical_obj,
-                "classical_fallback".into(),
-                advantage,
-            ))
+                if result.best_value >= classical_obj {
+                    Ok((schedule, mask, result.best_value, "quantum_qaoa".into(), advantage))
+                } else {
+                    Ok((
+                        classical_schedule,
+                        classical_mask,
+                        classical_obj,
+                        "classical_fallback".into(),
+                        advantage,
+                    ))
+                }
+            }
         }
     }
 
@@ -868,6 +892,168 @@ impl QuantumAgiBridge {
         }
 
         Ok(posteriors)
+    }
+
+    // ── Quantum PCA (Phase Estimation) ───────────────────────────────────────
+
+    /// Quantum PCA via Phase Estimation — eigenvalue decomposition of a covariance
+    /// matrix for knowledge-graph semantic compression.
+    ///
+    /// `covariance_diagonal`: diagonal entries of the covariance matrix (node embedding
+    /// variances). Returns principal eigenvalues and explained variance ratios.
+    pub async fn quantum_pca(
+        &self,
+        covariance_diagonal: &[f64],
+        n_components: usize,
+    ) -> Result<super::phase_estimation::QuantumPCAResult> {
+        let start = std::time::Instant::now();
+        let n = covariance_diagonal.len();
+
+        if n == 0 {
+            return Ok(super::phase_estimation::QuantumPCAResult {
+                eigenvalues: vec![],
+                explained_variance_ratio: vec![],
+                projections: vec![],
+                strategy: "empty".into(),
+                runtime_ms: 0,
+            });
+        }
+
+        let estimator = QuantumPhaseEstimator::new(
+            self.backend.clone(),
+            QPEConfig {
+                precision_qubits: 4.min(self.config.max_qubits / 2),
+                shots: self.config.fitness_eval_shots,
+                top_k: n_components,
+            },
+        );
+
+        let result = estimator.quantum_pca(covariance_diagonal, n_components).await?;
+
+        {
+            let mut m = self.metrics.write().await;
+            if result.strategy.contains("quantum") {
+                m.total_quantum_calls += 1;
+            } else {
+                m.total_classical_fallbacks += 1;
+            }
+        }
+
+        info!(
+            "🔮 Quantum PCA via AGI bridge: dim={}, top-{}, runtime={}ms, strategy={}",
+            n, n_components, start.elapsed().as_millis(), result.strategy
+        );
+
+        Ok(result)
+    }
+
+    // ── Quantum Walk Search ───────────────────────────────────────────────────
+
+    /// Quantum walk search on the AGI knowledge/action graph.
+    ///
+    /// Traverses a graph using a coined quantum walk, biasing probability toward
+    /// the target node with quadratic speedup over classical random walk.
+    pub async fn quantum_walk_search(
+        &self,
+        node_ids: &[String],
+        edges: &[(String, String, f64)],
+        start_node: &str,
+        target_node: &str,
+    ) -> Result<super::quantum_walk::QuantumWalkResult> {
+        let start = std::time::Instant::now();
+
+        if node_ids.is_empty() {
+            return Ok(super::quantum_walk::QuantumWalkResult {
+                path: vec![],
+                node_probabilities: HashMap::new(),
+                target_found: false,
+                speedup: 1.0,
+                strategy: "empty".into(),
+                runtime_ms: 0,
+            });
+        }
+
+        let graph = WalkGraph::from_ids_and_edges(node_ids, edges);
+        let walker = QuantumWalker::new(
+            self.backend.clone(),
+            QuantumWalkConfig {
+                steps: 3.min(self.config.max_qubits / 4),
+                shots: self.config.reasoning_search_shots,
+                max_nodes: self.config.max_qubits / 2,
+            },
+        );
+
+        let result = walker.walk_search(&graph, start_node, target_node).await?;
+
+        {
+            let mut m = self.metrics.write().await;
+            if result.strategy.contains("quantum") {
+                m.total_quantum_calls += 1;
+                m.record_advantage(result.speedup);
+            } else {
+                m.total_classical_fallbacks += 1;
+            }
+        }
+
+        info!(
+            "🔮 Quantum walk search via AGI bridge: {} nodes, target={}, found={}, speedup={:.2}x, runtime={}ms",
+            node_ids.len(), target_node, result.target_found, result.speedup, start.elapsed().as_millis()
+        );
+
+        Ok(result)
+    }
+
+    // ── QCBM Scenario Generation ──────────────────────────────────────────────
+
+    /// Generate diverse AGI scenarios using QCBM (Quantum Circuit Born Machine).
+    ///
+    /// Samples from a learned quantum distribution biased by the given context
+    /// features. Returns `n_scenarios` distinct scenario bitstrings.
+    pub async fn generate_scenarios(
+        &self,
+        context_features: &[f64],
+        diversity: f64,
+        n_scenarios: usize,
+    ) -> Result<super::qcbm::QCBMResult> {
+        let start = std::time::Instant::now();
+
+        let n_qubits = (n_scenarios as f64).log2().ceil() as usize + 2;
+        let n_qubits = n_qubits.clamp(3, self.config.max_qubits.min(20));
+
+        let mut qcbm = QuantumBornMachine::new(
+            self.backend.clone(),
+            QCBMConfig {
+                n_qubits,
+                depth: 2,
+                shots: self.config.goal_scheduling_shots,
+                training_iterations: 10,
+                learning_rate: 0.05,
+            },
+        );
+
+        let context = GenerativeContext {
+            features: context_features.to_vec(),
+            diversity,
+            n_scenarios,
+        };
+
+        let result = qcbm.generate_scenarios(&context).await?;
+
+        {
+            let mut m = self.metrics.write().await;
+            if result.strategy.contains("quantum") {
+                m.total_quantum_calls += 1;
+            } else {
+                m.total_classical_fallbacks += 1;
+            }
+        }
+
+        info!(
+            "🔮 QCBM scenario generation via AGI bridge: {} scenarios, entropy={:.3} bits, runtime={}ms, strategy={}",
+            result.samples.len(), result.entropy, start.elapsed().as_millis(), result.strategy
+        );
+
+        Ok(result)
     }
 
     // ── Utility ──────────────────────────────────────────────────────────────

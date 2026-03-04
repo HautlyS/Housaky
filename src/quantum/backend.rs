@@ -486,6 +486,8 @@ pub struct BraketDeviceCatalog {
 pub enum BraketDeviceType {
     Simulator,
     QPU,
+    /// Analog Hamiltonian Simulation QPU (e.g. QuEra Aquila — neutral atom)
+    AnalogQPU,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -624,6 +626,19 @@ impl BraketDeviceCatalog {
                 cost_per_task_usd: 0.30,
                 cost_per_shot_usd: 0.00145,
             },
+            // ── QuEra Aquila — 256-qubit analog neutral-atom QPU ──
+            Self {
+                arn: "arn:aws:braket:us-east-1::device/qpu/quera/Aquila".into(),
+                name: "Aquila".into(),
+                provider: "QuEra".into(),
+                device_type: BraketDeviceType::AnalogQPU,
+                max_qubits: 256,
+                max_shots: 1_000,
+                native_gates: vec!["ahs"].into_iter().map(String::from).collect(),
+                connectivity: BraketConnectivity::Custom,
+                cost_per_task_usd: 0.30,
+                cost_per_shot_usd: 0.01,
+            },
             // ── Rigetti QPU ──
             Self {
                 arn: "arn:aws:braket:us-west-1::device/qpu/rigetti/Ankaa-3".into(),
@@ -648,6 +663,12 @@ impl BraketDeviceCatalog {
         Self::all_devices()
             .into_iter()
             .find(|d| arn.contains(&d.name.replace(' ', "-")) || d.arn == arn)
+    }
+
+    /// Returns true when this device uses Analog Hamiltonian Simulation (AHS)
+    /// rather than gate-based OpenQASM programs.
+    pub fn is_analog(&self) -> bool {
+        self.device_type == BraketDeviceType::AnalogQPU
     }
 
     /// Estimate cost for a task with the given number of shots.
@@ -705,7 +726,13 @@ impl AmazonBraketBackend {
         s3_bucket: String,
         s3_prefix: String,
     ) -> Result<Self> {
-        let config = aws_config::load_defaults(aws_config::BehaviorVersion::latest()).await;
+        // Load AWS config from env vars + profile file only.
+        // `from_env()` skips IMDS/container metadata endpoints so construction
+        // is purely local — no network calls until an actual API call is made.
+        let config = aws_config::from_env()
+            .region(aws_config::Region::new("us-east-1"))
+            .load()
+            .await;
         let client = Client::new(&config);
         let s3_client = S3Client::new(&config);
 
@@ -1079,6 +1106,111 @@ impl AmazonBraketBackend {
 
         Ok(summaries)
     }
+
+    /// Submit an Analog Hamiltonian Simulation (AHS) program to QuEra Aquila.
+    ///
+    /// Aquila is a Rydberg neutral-atom QPU: atoms are arranged in a 2-D plane
+    /// and driven by a global laser pulse.  It does not accept OpenQASM; instead
+    /// it requires an `ahs.program` JSON action describing:
+    ///  - `setup.ahs_register`: atom positions (x, y in metres)
+    ///  - `hamiltonian.drivingFields[0]`: time-dependent Rabi frequency Ω(t)
+    ///    and detuning Δ(t) pulses
+    ///
+    /// This method builds a minimal adiabatic pulse that maps `circuit.qubits`
+    /// atoms onto a 1-D chain and runs a smooth Rabi ramp (rise → hold → fall)
+    /// — suitable for ground-state / optimization tasks used by the AGI bridge
+    /// (goal scheduling, reasoning search, memory-graph optimization).
+    async fn execute_as_ahs(&self, circuit: &QuantumCircuit) -> Result<MeasurementResult> {
+        let n = circuit.qubits.min(self.max_qubits);
+        if n == 0 {
+            anyhow::bail!("AHS: circuit has no qubits");
+        }
+
+        // ── Atom register: 1-D chain with 4 µm spacing ──────────────────────
+        let spacing_m = 4e-6_f64; // 4 µm
+        let mut sites: Vec<serde_json::Value> = Vec::with_capacity(n);
+        for i in 0..n {
+            sites.push(serde_json::json!({
+                "x": (i as f64) * spacing_m,
+                "y": 0.0
+            }));
+        }
+
+        // ── Adiabatic Rabi pulse (rise 0→Ω_max, hold, fall Ω_max→0) ────────
+        //   Total time 4 µs, rise/fall 1 µs each, hold 2 µs.
+        //   Ω_max = 2π × 4 MHz = ~25.1 Mrad/s (within Aquila limits).
+        let omega_max = 2.0 * std::f64::consts::PI * 4.0e6_f64;
+        let t_rise   = 1.0e-6_f64;
+        let t_hold   = 3.0e-6_f64;
+        let t_fall   = 4.0e-6_f64;
+
+        let amplitude = serde_json::json!({
+            "time_series": {
+                "times":  [0.0, t_rise, t_hold, t_fall],
+                "values": [0.0, omega_max, omega_max, 0.0]
+            },
+            "pattern": "uniform"
+        });
+        let phase = serde_json::json!({
+            "time_series": {
+                "times":  [0.0, t_fall],
+                "values": [0.0, 0.0]
+            },
+            "pattern": "uniform"
+        });
+        // Linear detuning sweep: −Ω_max → +Ω_max (adiabatic ramp for QAOA-like tasks)
+        let detuning = serde_json::json!({
+            "time_series": {
+                "times":  [0.0, t_rise, t_hold, t_fall],
+                "values": [-omega_max, -omega_max, omega_max, omega_max]
+            },
+            "pattern": "uniform"
+        });
+
+        let ahs_program = serde_json::json!({
+            "braketSchemaHeader": {
+                "name": "braket.ir.ahs.program",
+                "version": "1"
+            },
+            "setup": {
+                "ahs_register": {
+                    "sites": sites,
+                    "filling": vec![1u8; n]
+                }
+            },
+            "hamiltonian": {
+                "drivingFields": [{
+                    "amplitude": amplitude,
+                    "phase":     phase,
+                    "detuning":  detuning
+                }],
+                "shiftingFields": []
+            }
+        });
+
+        let action_json = serde_json::to_string(&ahs_program)
+            .map_err(|e| anyhow::anyhow!("AHS serialisation error: {e}"))?;
+
+        let client_token = uuid::Uuid::new_v4().to_string();
+        info!(
+            "Submitting AHS task to QuEra Aquila: {} atoms, {} shots",
+            n, self.shots
+        );
+
+        let output = self
+            .client
+            .create_quantum_task()
+            .client_token(&client_token)
+            .device_arn(&self.device_arn)
+            .action(action_json)
+            .shots(self.shots)
+            .output_s3_bucket(&self.s3_bucket)
+            .output_s3_key_prefix(&self.s3_prefix)
+            .send()
+            .await?;
+
+        self.wait_for_task(&output.quantum_task_arn, n).await
+    }
 }
 
 /// Summary of a Braket quantum task.
@@ -1094,6 +1226,17 @@ pub struct BraketTaskSummary {
 #[async_trait]
 impl QuantumBackend for AmazonBraketBackend {
     async fn execute_circuit(&self, circuit: &QuantumCircuit) -> Result<MeasurementResult> {
+        // QuEra Aquila is an analog AHS device — it cannot run gate-based
+        // OpenQASM circuits.  Map the circuit to an AHS program instead.
+        if self
+            .device_catalog
+            .as_ref()
+            .map(|c| c.is_analog())
+            .unwrap_or(false)
+        {
+            return self.execute_as_ahs(circuit).await;
+        }
+
         if circuit.qubits > self.max_qubits {
             anyhow::bail!(
                 "Circuit requires {} qubits but device supports at most {}",

@@ -281,23 +281,24 @@ impl MetaCognitionEngine {
     pub async fn reflect(&self, trigger: &str) -> Result<Reflection> {
         info!("Starting reflection on: {}", trigger);
 
-        let self_model = self.self_model.read().await;
-
-        let observations = self.gather_observations(&self_model);
-        let insights = self.derive_insights(&observations, &self_model);
-        let actions = self.plan_actions(&insights);
-        let mood = self.assess_mood(&observations, &insights);
-
-        let reflection = Reflection {
-            id: format!("ref_{}", uuid::Uuid::new_v4()),
-            timestamp: Utc::now(),
-            trigger: trigger.to_string(),
-            observations,
-            insights,
-            actions,
-            mood,
-            confidence_delta: 0.0,
-        };
+        let reflection = {
+            let self_model = self.self_model.read().await;
+            let observations = self.gather_observations(&self_model);
+            let insights = self.derive_insights(&observations, &self_model);
+            let actions = self.plan_actions(&insights);
+            let mood = self.assess_mood(&observations, &insights);
+            // Drop read guard before we need a write lock in update_self_model.
+            Reflection {
+                id: format!("ref_{}", uuid::Uuid::new_v4()),
+                timestamp: Utc::now(),
+                trigger: trigger.to_string(),
+                observations,
+                insights,
+                actions,
+                mood,
+                confidence_delta: 0.0,
+            }
+        }; // read guard dropped here
 
         self.store_reflection(reflection.clone()).await?;
 

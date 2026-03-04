@@ -14,7 +14,7 @@ use anyhow::Result;
 use std::collections::HashSet;
 use std::sync::Arc;
 use tokio::time::{interval, Duration};
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 
 pub struct HousakyHeartbeat {
     agent: Arc<Agent>,
@@ -44,6 +44,7 @@ fn create_heartbeat_components(
     agent: &Arc<Agent>,
     core: &Arc<HousakyCore>,
     model: &str,
+    config: Option<&Config>,
 ) -> HeartbeatComponents {
     let skill_registry = Arc::new(SkillRegistry::new(&agent.workspace_dir));
 
@@ -72,8 +73,13 @@ fn create_heartbeat_components(
         Arc::new(SelfImprovementEngine::new(agent.clone()))
     };
 
+    // Use config.source_dir (~/housaky) for self-improvement so it modifies
+    // the actual Housaky source code, not the data workspace.
+    let source_dir = config
+        .map(|c| c.source_dir.clone())
+        .unwrap_or_else(|| agent.workspace_dir.clone());
     let improvement_loop_base = SelfImprovementLoop::new(
-        &agent.workspace_dir,
+        &source_dir,
         core.goal_engine.clone(),
         core.meta_cognition.clone(),
     );
@@ -108,7 +114,7 @@ impl HousakyHeartbeat {
         .ok()
         .map(Arc::from);
 
-        let c = create_heartbeat_components(&agent, &core, &model);
+        let c = create_heartbeat_components(&agent, &core, &model, Some(&full_config));
 
         Self {
             agent,
@@ -134,7 +140,7 @@ impl HousakyHeartbeat {
         .ok()
         .map(Arc::from);
 
-        let c = create_heartbeat_components(&agent, &core, &model);
+        let c = create_heartbeat_components(&agent, &core, &model, Some(config));
 
         Self {
             agent,
@@ -177,7 +183,7 @@ impl HousakyHeartbeat {
         model: String,
         config: Config,
     ) -> Self {
-        let c = create_heartbeat_components(&agent, &core, &model);
+        let c = create_heartbeat_components(&agent, &core, &model, Some(&config));
 
         Self {
             agent,
@@ -245,19 +251,27 @@ impl HousakyHeartbeat {
             "Housaky heartbeat at {}",
             timestamp.format("%Y-%m-%d %H:%M:%S UTC")
         );
+        self.core.push_activity("system", format!(
+            "Heartbeat cycle started ({})",
+            timestamp.format("%H:%M:%S")
+        ));
 
         self.analyze_state().await?;
         self.update_system_health().await?;
         let active_tasks = self.review_tasks().await?;
         self.improve_todos(active_tasks).await?;
+        self.core.push_activity("thought", "State analysis & task review complete");
 
         // §10 — Quantum-accelerated autonomous goal selection: pick the globally
         // optimal next goal each heartbeat via QAOA scheduling.
         self.run_quantum_goal_cycle().await;
+        self.core.push_activity("goal", "Quantum goal scheduling done");
 
         self.run_cognitive_cycle().await?;
+        self.core.push_activity("thought", "Cognitive cycle complete");
 
         self.self_improve().await?;
+        self.core.push_activity("tool", "Self-improvement phase complete");
 
         if self.agent.config.enable_self_improvement {
             let loop_provider = self.provider.as_ref().map(|provider| provider.as_ref());
@@ -268,16 +282,24 @@ impl HousakyHeartbeat {
             {
                 warn!("Recursive self-improvement loop error: {}", e);
             }
+            self.core.push_activity("tool", "Recursive improvement loop done");
         }
 
         if let Err(e) = self.core.run_memory_consolidation().await {
             warn!("Memory consolidation error: {}", e);
         }
+        self.core.push_activity("system", "Memory consolidated");
 
         // §10.4 — Quantum knowledge graph clustering: anneal the KG topology
         // each heartbeat to surface optimal clusters and prune weak edges.
         if let Err(e) = self.core.knowledge_graph.run_quantum_clustering().await {
             warn!("Quantum KG clustering error (non-fatal): {e}");
+        }
+
+        // §10.QPE — Quantum PCA semantic compression: eigenvalue decomposition of
+        // entity importance covariance for knowledge-graph dimensionality reduction.
+        if let Err(e) = self.core.knowledge_graph.run_quantum_pca_compression().await {
+            warn!("Quantum PCA compression error (non-fatal): {e}");
         }
 
         // §10.7 — Quantum belief refinement: reduce epistemic uncertainty on
@@ -382,13 +404,24 @@ impl HousakyHeartbeat {
         if let Some(ref provider) = self.provider {
             info!("Running cognitive cycle via CognitiveLoop...");
 
+            // Build real tool registry so the cognitive loop can act on the codebase
+            let security = std::sync::Arc::new(
+                crate::security::SecurityPolicy::from_config(
+                    &self.config.autonomy,
+                    &self.config.workspace_dir,
+                ),
+            );
+            let tools_registry = crate::tools::default_tools(security);
+            let tool_refs: Vec<&dyn crate::tools::Tool> =
+                tools_registry.iter().map(|t| t.as_ref()).collect();
+
             let response = self
                 .core
                 .process_with_cognitive_loop(
-                    "Periodic self-assessment",
+                    "Periodic self-assessment: review goals, identify improvements to ~/housaky source code, execute tool actions to improve capabilities",
                     provider.as_ref(),
                     &self.model,
-                    &[],
+                    &tool_refs,
                 )
                 .await;
 
@@ -399,20 +432,15 @@ impl HousakyHeartbeat {
                         cog_response.confidence,
                         cog_response.thoughts.len()
                     );
-                    println!(
-                        "🧠 Cognitive Cycle: confidence={:.0}%, {} thoughts",
+                    debug!(
+                        "Cognitive Cycle: confidence={:.0}%, {} thoughts",
                         cog_response.confidence * 100.0,
                         cog_response.thoughts.len()
                     );
-                    if !cog_response.thoughts.is_empty() {
-                        for thought in &cog_response.thoughts {
-                            println!("   💭 {}", thought.chars().take(80).collect::<String>());
-                        }
-                    }
                 }
                 Err(e) => {
                     warn!("Cognitive cycle error: {}", e);
-                    println!("⚠️ Cognitive cycle error: {}", e);
+                    debug!("Cognitive cycle error: {}", e);
                 }
             }
         }
@@ -1213,20 +1241,29 @@ pub async fn run_agi_with_tui(
     let core = match crate::housaky::core::HousakyCore::new(&config) {
         Ok(c) => Arc::new(c),
         Err(e) => {
-            eprintln!("ERROR creating core: {:?}", e);
+            error!("ERROR creating core: {:?}", e);
             return Err(e.into());
         }
     };
     if let Err(e) = core.initialize().await {
-        eprintln!("ERROR initializing core: {:?}", e);
+        error!("ERROR initializing core: {:?}", e);
         return Err(e);
     }
 
     // Process initial message (if any) before starting the TUI.
     if let Some(ref msg) = message {
         info!("Processing initial message: {}", msg);
+        let security = std::sync::Arc::new(
+            crate::security::SecurityPolicy::from_config(
+                &config.autonomy,
+                &config.workspace_dir,
+            ),
+        );
+        let init_tools = crate::tools::default_tools(security);
+        let init_tool_refs: Vec<&dyn crate::tools::Tool> =
+            init_tools.iter().map(|t| t.as_ref()).collect();
         let response = core
-            .process_with_cognitive_loop(msg, provider.as_ref(), model_name, &[])
+            .process_with_cognitive_loop(msg, provider.as_ref(), model_name, &init_tool_refs)
             .await;
         match response {
             Ok(cog_response) => {

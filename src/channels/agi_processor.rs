@@ -4,6 +4,7 @@ use crate::housaky::agi_context::AGIContext;
 use crate::housaky::cognitive::PerceptionEngine;
 use crate::housaky::goal_engine::{Goal, GoalCategory, GoalPriority, GoalStatus};
 use crate::housaky::inner_monologue::{InnerMonologue, ThoughtSource, ThoughtType};
+use crate::housaky::knowledge_graph::KnowledgeGraphEngine;
 use crate::housaky::reasoning_pipeline::ReasoningPipeline;
 use crate::memory::Memory;
 use crate::observability::Observer;
@@ -47,6 +48,7 @@ pub struct AGIChannelProcessor {
     state_cache: Arc<Mutex<HashMap<String, SessionMetadata>>>,
     skill_invocation_engine: Arc<SkillInvocationEngine>,
     perception: PerceptionEngine,
+    knowledge_graph: Option<Arc<KnowledgeGraphEngine>>,
 }
 
 impl AGIChannelProcessor {
@@ -71,6 +73,8 @@ impl AGIChannelProcessor {
         let _ = tokio::runtime::Handle::current()
             .block_on(async { skill_invocation_engine.initialize(&skills).await });
 
+        let knowledge_graph = Some(Arc::new(KnowledgeGraphEngine::new(&workspace_dir)));
+
         Self {
             workspace_dir,
             config: config.clone(),
@@ -86,6 +90,7 @@ impl AGIChannelProcessor {
             message_timeout_secs,
             conv_history: Arc::new(Mutex::new(HashMap::new())),
             state_cache: Arc::new(Mutex::new(HashMap::new())),
+            knowledge_graph,
             skill_invocation_engine,
             perception: PerceptionEngine::new(),
         }
@@ -175,6 +180,16 @@ impl AGIChannelProcessor {
         inner_monologue: &InnerMonologue,
         goal_engine: &crate::housaky::goal_engine::GoalEngine,
     ) -> String {
+        self.build_agi_context_with_query(inner_monologue, goal_engine, None)
+            .await
+    }
+
+    async fn build_agi_context_with_query(
+        &self,
+        inner_monologue: &InnerMonologue,
+        goal_engine: &crate::housaky::goal_engine::GoalEngine,
+        user_query: Option<&str>,
+    ) -> String {
         let mut context = String::new();
 
         let recent_thoughts = inner_monologue.get_recent(3).await;
@@ -201,6 +216,18 @@ impl AGIChannelProcessor {
                 ));
             }
             context.push('\n');
+        }
+
+        // Inject knowledge graph context when a user query is provided
+        if let (Some(query), Some(ref kg)) = (user_query, &self.knowledge_graph) {
+            let entities = kg.search(query, 3).await;
+            if !entities.is_empty() {
+                context.push_str("## Related Knowledge\n");
+                for entity in &entities {
+                    context.push_str(&format!("- {} [{:?}]\n", entity.name, entity.entity_type));
+                }
+                context.push('\n');
+            }
         }
 
         context
@@ -251,7 +278,9 @@ impl AGIChannelProcessor {
 
         Self::send_status(status_tx.as_ref(), "🧠 Building AGI context...").await;
 
-        let agi_context = self.build_agi_context(&inner_monologue, &goal_engine).await;
+        let agi_context = self
+            .build_agi_context_with_query(&inner_monologue, &goal_engine, Some(&msg.content))
+            .await;
 
         Self::send_status(status_tx.as_ref(), "📚 Loading memory...").await;
 
@@ -335,16 +364,18 @@ impl AGIChannelProcessor {
 
         match llm_result {
             Ok(Ok(response)) => {
+                let elapsed_ms = started_at.elapsed().as_millis();
                 println!(
                     "  🤖 AGI Reply ({}ms): {}",
-                    started_at.elapsed().as_millis(),
+                    elapsed_ms,
                     truncate_with_ellipsis(&response, 80)
                 );
 
                 inner_monologue
                     .add_thought_with_type(
                         &format!(
-                            "Assistant response: {}",
+                            "Assistant response ({}ms): {}",
+                            elapsed_ms,
                             response.chars().take(200).collect::<String>()
                         ),
                         ThoughtType::Decision,
@@ -353,6 +384,32 @@ impl AGIChannelProcessor {
                     )
                     .await?;
 
+                // Extract knowledge graph entities from the conversation for learning
+                if let Some(ref kg) = self.knowledge_graph {
+                    let _ = kg
+                        .extract_from_text(&msg.content, &format!("channel:{}", msg.channel))
+                        .await;
+                }
+
+                // Update goal progress based on successful interaction
+                let active_goals = goal_engine.get_active_goals().await;
+                if let Some(top_goal) = active_goals.first() {
+                    let delta = 0.05_f64;
+                    let new_progress = (top_goal.progress + delta).min(1.0);
+                    let _ = goal_engine
+                        .update_progress(
+                            &top_goal.id,
+                            new_progress,
+                            &format!(
+                                "Channel turn from {}: {}",
+                                msg.sender,
+                                msg.content.chars().take(30).collect::<String>()
+                            ),
+                        )
+                        .await;
+                }
+
+                // Periodic reflection with richer context
                 if turn_count % 10 == 0 {
                     if let Some(reflection) = inner_monologue.reflect().await? {
                         println!(

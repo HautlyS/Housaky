@@ -255,6 +255,113 @@ impl KnowledgeGraphEngine {
         Ok(())
     }
 
+    /// §10.QPE — Quantum PCA semantic compression of the knowledge graph.
+    ///
+    /// Computes eigenvalues of the entity importance covariance vector via QPE,
+    /// then annotates entities with their principal component projections for
+    /// faster semantic retrieval and knowledge-graph dimensionality reduction.
+    pub async fn run_quantum_pca_compression(&self) -> Result<()> {
+        let bridge = match &self.quantum_bridge {
+            Some(b) => b.clone(),
+            None => return Ok(()),
+        };
+
+        let graph = self.graph.read().await;
+        if graph.entities.len() < 4 {
+            return Ok(());
+        }
+
+        let covariance: Vec<f64> = graph
+            .entities
+            .values()
+            .map(|e| e.importance * e.confidence * (e.access_count as f64 + 1.0).ln())
+            .collect();
+        drop(graph);
+
+        let n_components = 3.min(covariance.len());
+        match bridge.quantum_pca(&covariance, n_components).await {
+            Ok(result) => {
+                info!(
+                    "🔮 Quantum PCA: {} entities → {} principal components, \
+                     explained={:.1}%, strategy={}",
+                    covariance.len(),
+                    result.eigenvalues.len(),
+                    result.explained_variance_ratio.iter().sum::<f64>() * 100.0,
+                    result.strategy
+                );
+                let graph = self.graph.read().await;
+                let entity_ids: Vec<String> = graph.entities.keys().map(|id| id.as_str().to_string()).collect();
+                drop(graph);
+                for (i, entity_id) in entity_ids.iter().enumerate() {
+                    if let Some(&projection) = result
+                        .projections
+                        .first()
+                        .and_then(|p| p.get(i % n_components))
+                    {
+                        let _ = self
+                            .set_metadata(entity_id, "qpe_projection", &format!("{projection:.4}"))
+                            .await;
+                    }
+                }
+            }
+            Err(e) => {
+                warn!("Quantum PCA compression failed (non-fatal): {e}");
+            }
+        }
+        Ok(())
+    }
+
+    /// §10.Walk — Quantum walk search in the knowledge graph.
+    ///
+    /// Given a start entity and a target concept, uses a quantum walk to
+    /// find the most probable navigation path with √N speedup.
+    pub async fn quantum_walk_to(
+        &self,
+        start_entity: &str,
+        target_entity: &str,
+    ) -> Vec<String> {
+        let bridge = match &self.quantum_bridge {
+            Some(b) => b.clone(),
+            None => return Vec::new(),
+        };
+
+        let graph = self.graph.read().await;
+        let node_ids: Vec<String> = graph.entities.keys().map(|id| id.as_str().to_string()).collect();
+        let edges: Vec<(String, String, f64)> = graph
+            .relations
+            .iter()
+            .map(|r| {
+                (
+                    r.from_entity.as_str().to_string(),
+                    r.to_entity.as_str().to_string(),
+                    r.weight * r.confidence,
+                )
+            })
+            .collect();
+        drop(graph);
+
+        match bridge
+            .quantum_walk_search(&node_ids, &edges, start_entity, target_entity)
+            .await
+        {
+            Ok(result) => {
+                info!(
+                    "🔮 KG quantum walk: {} → {}, found={}, speedup={:.2}x, strategy={}",
+                    start_entity,
+                    target_entity,
+                    result.target_found,
+                    result.speedup,
+                    result.strategy
+                );
+                result.path
+            }
+            Err(e) => {
+                warn!("KG quantum walk failed (non-fatal): {e}");
+                Vec::new()
+            }
+        }
+    }
+
     pub async fn add_entity(
         &self,
         name: &str,

@@ -392,19 +392,19 @@ pub enum SelfModCommands {
 /// Quantum computing subcommands (Amazon Braket + local simulator)
 #[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum QuantumCommands {
-    /// Run a Bell-state circuit on Amazon Braket SV1 and print results
+    /// Run a Bell-state circuit on Amazon Braket and print results
     RunBraket {
         /// Number of shots
-        #[arg(short, long, default_value = "1000")]
+        #[arg(short, long, default_value = "100")]
         shots: u64,
-        /// Device ARN (defaults to SV1 simulator)
+        /// Device ARN (defaults to QuEra Aquila 256-qubit analog QPU)
         #[arg(
             long,
-            default_value = "arn:aws:braket:::device/quantum-simulator/amazon/sv1"
+            default_value = "arn:aws:braket:us-east-1::device/qpu/quera/Aquila"
         )]
         device: String,
-        /// S3 bucket for results (defaults to project bucket)
-        #[arg(long, default_value = "amazon-braket-housaky-541739678328")]
+        /// S3 bucket for results
+        #[arg(long, default_value = "amazon-braket-housaky")]
         bucket: String,
         /// S3 key prefix
         #[arg(long, default_value = "housaky-results")]
@@ -421,11 +421,11 @@ pub enum QuantumCommands {
         /// Device ARN
         #[arg(
             long,
-            default_value = "arn:aws:braket:::device/quantum-simulator/amazon/sv1"
+            default_value = "arn:aws:braket:us-east-1::device/qpu/quera/Aquila"
         )]
         device: String,
         /// S3 bucket (needed to create the backend)
-        #[arg(long, default_value = "amazon-braket-housaky-541739678328")]
+        #[arg(long, default_value = "amazon-braket-housaky")]
         bucket: String,
     },
     /// List all known Braket devices (simulators + QPUs) with cost estimates
@@ -477,11 +477,11 @@ pub enum QuantumCommands {
         /// Device ARN
         #[arg(
             long,
-            default_value = "arn:aws:braket:::device/quantum-simulator/amazon/sv1"
+            default_value = "arn:aws:braket:us-east-1::device/qpu/quera/Aquila"
         )]
         device: String,
         /// S3 bucket
-        #[arg(long, default_value = "amazon-braket-housaky-541739678328")]
+        #[arg(long, default_value = "amazon-braket-housaky")]
         bucket: String,
         /// Max results
         #[arg(short, long, default_value = "10")]

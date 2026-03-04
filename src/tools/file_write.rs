@@ -1,5 +1,6 @@
 use super::traits::{Tool, ToolResult};
 use crate::security::SecurityPolicy;
+use crate::util::expand_path;
 use async_trait::async_trait;
 use serde_json::json;
 use std::sync::Arc;
@@ -22,7 +23,7 @@ impl Tool for FileWriteTool {
     }
 
     fn description(&self) -> &str {
-        "Write contents to a file in the workspace"
+        "Write contents to a file. Supports ~ (home directory) expansion. Creates parent directories automatically."
     }
 
     fn parameters_schema(&self) -> serde_json::Value {
@@ -31,7 +32,7 @@ impl Tool for FileWriteTool {
             "properties": {
                 "path": {
                     "type": "string",
-                    "description": "Relative path to the file within the workspace"
+                    "description": "Path to the file (supports ~/ for home directory)"
                 },
                 "content": {
                     "type": "string",
@@ -69,8 +70,12 @@ impl Tool for FileWriteTool {
             });
         }
 
+        // Expand home directory (~) in path
+        let expanded_path = expand_path(path);
+        let path_str = expanded_path.to_string_lossy();
+
         // Security check: validate path is within workspace
-        if !self.security.is_path_allowed(path) {
+        if !self.security.is_path_allowed(&path_str) {
             return Ok(ToolResult {
                 success: false,
                 output: String::new(),
@@ -78,7 +83,12 @@ impl Tool for FileWriteTool {
             });
         }
 
-        let full_path = self.security.workspace_dir.join(path);
+        // Use expanded path directly if absolute, otherwise join with workspace
+        let full_path = if expanded_path.is_absolute() {
+            expanded_path
+        } else {
+            self.security.workspace_dir.join(path_str.as_ref())
+        };
 
         let Some(parent) = full_path.parent() else {
             return Ok(ToolResult {

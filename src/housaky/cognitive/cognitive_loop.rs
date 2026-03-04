@@ -221,6 +221,30 @@ impl CognitiveLoop {
             }
         }
 
+        // §KG — Query knowledge graph for related entities and inject into working memory
+        let kg_entities = self.knowledge_graph.search(user_input, 3).await;
+        if !kg_entities.is_empty() {
+            let kg_context = kg_entities
+                .iter()
+                .map(|e| format!("[KG] {} [{:?}]", e.name, e.entity_type))
+                .collect::<Vec<_>>()
+                .join("\n");
+            let mut ctx = HashMap::new();
+            ctx.insert("source".to_string(), "knowledge_graph".to_string());
+            let _ = self
+                .working_memory
+                .add(
+                    &kg_context,
+                    crate::housaky::working_memory::MemoryImportance::Normal,
+                    ctx,
+                )
+                .await;
+            info!(
+                "KG: injected {} related entities into working memory",
+                kg_entities.len()
+            );
+        }
+
         let uncertainty = if self.config.enable_uncertainty_detection {
             self.assess_uncertainty(user_input, provider, model).await?
         } else {
@@ -234,6 +258,20 @@ impl CognitiveLoop {
         let applicable_patterns = self
             .experience_learner
             .get_applicable_patterns(&perception)
+            .await;
+
+        // Record pre-decision inner monologue with perception + context summary
+        let pre_thought = format!(
+            "Perceiving: intent={:?}, topics={:?}, uncertainty={:.0}%, kg_hits={}, experiences={}",
+            perception.intent.primary,
+            perception.topics,
+            uncertainty.overall_uncertainty * 100.0,
+            kg_entities.len(),
+            similar_experiences.len(),
+        );
+        let _ = self
+            .inner_monologue
+            .add_thought(&pre_thought, 0.7)
             .await;
 
         let decision = self
@@ -257,6 +295,12 @@ impl CognitiveLoop {
                 .record_experience(&perception, &decision, &outcome)
                 .await?;
         }
+
+        // Extract entities from the user input to grow the knowledge graph
+        let _ = self
+            .knowledge_graph
+            .extract_from_text(user_input, "cognitive_loop")
+            .await;
 
         let thought = format!(
             "Processed {}: intent={:?}, action={:?}, confidence={:.0}%",
@@ -622,7 +666,40 @@ impl CognitiveLoop {
         );
 
         if !memory_context.is_empty() {
-            writeln!(system_prompt, "## Relevant Context\n{memory_context}\n").ok();
+            writeln!(system_prompt, "## Working Memory\n{memory_context}\n").ok();
+        }
+
+        // Inject recent inner monologue for self-awareness
+        let recent_thoughts = self.inner_monologue.get_recent(3).await;
+        if !recent_thoughts.is_empty() {
+            system_prompt.push_str("## Inner Monologue\n");
+            for thought in &recent_thoughts {
+                writeln!(
+                    system_prompt,
+                    "- {}",
+                    thought.chars().take(120).collect::<String>()
+                )
+                .ok();
+            }
+            system_prompt.push('\n');
+        }
+
+        // Inject knowledge graph entities related to the user's input
+        let kg_entities = self
+            .knowledge_graph
+            .search(&perception.raw_input, 3)
+            .await;
+        if !kg_entities.is_empty() {
+            system_prompt.push_str("## Related Knowledge\n");
+            for entity in &kg_entities {
+                writeln!(
+                    system_prompt,
+                    "- {} [{:?}] (importance={:.2})",
+                    entity.name, entity.entity_type, entity.importance,
+                )
+                .ok();
+            }
+            system_prompt.push('\n');
         }
 
         if !active_goals.is_empty() {
@@ -653,7 +730,8 @@ impl CognitiveLoop {
             decision.confidence * 100.0
         )
         .ok();
-        system_prompt.push_str("Respond helpfully and accurately. If uncertain, say so.");
+        system_prompt.push_str("Respond helpfully and accurately. If uncertain, say so.\n");
+        system_prompt.push_str("Draw on your inner monologue, working memory, and knowledge graph to give the most informed response.");
 
         let state = self.state.read().await;
         let history: Vec<ChatMessage> = state

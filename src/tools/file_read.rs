@@ -1,5 +1,6 @@
 use super::traits::{Tool, ToolResult};
 use crate::security::SecurityPolicy;
+use crate::util::expand_path;
 use async_trait::async_trait;
 use serde_json::json;
 use std::sync::Arc;
@@ -24,7 +25,7 @@ impl Tool for FileReadTool {
     }
 
     fn description(&self) -> &str {
-        "Read the contents of a file in the workspace"
+        "Read the contents of a file. Supports ~ (home directory) expansion."
     }
 
     fn parameters_schema(&self) -> serde_json::Value {
@@ -33,7 +34,7 @@ impl Tool for FileReadTool {
             "properties": {
                 "path": {
                     "type": "string",
-                    "description": "Relative path to the file within the workspace"
+                    "description": "Path to the file (supports ~/ for home directory)"
                 }
             },
             "required": ["path"]
@@ -54,8 +55,12 @@ impl Tool for FileReadTool {
             });
         }
 
+        // Expand home directory (~) in path
+        let expanded_path = expand_path(path);
+        let path_str = expanded_path.to_string_lossy();
+
         // Security check: validate path is within workspace
-        if !self.security.is_path_allowed(path) {
+        if !self.security.is_path_allowed(&path_str) {
             return Ok(ToolResult {
                 success: false,
                 output: String::new(),
@@ -74,7 +79,12 @@ impl Tool for FileReadTool {
             });
         }
 
-        let full_path = self.security.workspace_dir.join(path);
+        // Use expanded path directly if absolute, otherwise join with workspace
+        let full_path = if expanded_path.is_absolute() {
+            expanded_path
+        } else {
+            self.security.workspace_dir.join(path_str.as_ref())
+        };
 
         // Resolve path before reading to block symlink escapes.
         let resolved_path = match tokio::fs::canonicalize(&full_path).await {
