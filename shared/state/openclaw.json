@@ -1,17 +1,24 @@
 {
   "instance": "openclaw",
   "status": "active",
-  "last_heartbeat": "2026-03-05T01:20:00Z",
+  "last_heartbeat": "2026-03-05T03:25:00Z",
   "role": "coordinator",
-  "current_task": "heartbeat_execution",
+  "current_task": "heartbeat_03_25_utc",
   "capabilities": ["whatsapp", "memory_management", "lucid_memory", "terminal_mcp"],
-  "todos_found": [
-    "src/gateway/mod.rs - Re-enable WhatsApp handlers",
-    "src/housaky/collective/verification_pipeline.rs - Capability retention benchmarks"
-  ],
-  "progress": {
-    "whatsapp_module": "created",
-    "collaboration_module": "created",
-    "native_communication": "pending - provider issues"
-  }
+  "gateway_status": {
+    "pid": 66369,
+    "port": 8080,
+    "uptime_seconds": 5351
+  },
+  "lucid_memory": {
+    "memories": 2,
+    "projects": 4,
+    "size_kb": 276
+  },
+  "native_status": "awaiting_connection",
+  "uncommitted_changes": [
+    "shared/state/openclaw.json",
+    "src/housaky/collective/verification_pipeline.rs",
+    "src/housaky/memory/lucid_bridge.rs"
+  ]
 }
