@@ -1,0 +1,496 @@
+[2m2026-03-05T11:41:35.631608Z[0m [32m INFO[0m [2mhousaky::keys_manager::manager[0m[2m:[0m Loaded keys from /home/ubuntu/.housaky/keys.json
+[2m2026-03-05T11:41:35.632355Z[0m [32m INFO[0m [2mhousaky::cli::handlers[0m[2m:[0m 🧠 Starting Housaky Daemon on 127.0.0.1:8081
+[2m2026-03-05T11:41:35.632453Z[0m [32m INFO[0m [2mhousaky::daemon[0m[2m:[0m No real-time channels configured; channel supervisor disabled
+🧠 Housaky daemon started
+   Gateway:  http://127.0.0.1:8081
+   Components: gateway, channels, heartbeat, housaky, scheduler
+   🤖 Housaky AGI: Infinite self-improvement active
+   Send SIGINT (Ctrl+C) or SIGTERM to stop
+[2m2026-03-05T11:41:35.633385Z[0m [32m INFO[0m [2mhousaky::housaky::alignment::value_drift[0m[2m:[0m Established baseline for 3 values
+[2m2026-03-05T11:41:35.634330Z[0m [32m INFO[0m [2mhousaky::housaky::memory::agent_memory[0m[2m:[0m AgentMemoryStore opened at "/home/ubuntu/.housaky/workspace/.housaky/agent_memory.db"
+[2m2026-03-05T11:41:35.634362Z[0m [32m INFO[0m [2mhousaky::housaky::alignment::value_drift[0m[2m:[0m Established baseline for 3 values
+[2m2026-03-05T11:41:35.634444Z[0m [32m INFO[0m [2mhousaky::housaky::consciousness::global_workspace[0m[2m:[0m GWT: module 'reasoning_engine' subscribed to global workspace
+[2m2026-03-05T11:41:35.634448Z[0m [32m INFO[0m [2mhousaky::housaky::consciousness::global_workspace[0m[2m:[0m GWT: module 'meta_cognition' subscribed to global workspace
+[2m2026-03-05T11:41:35.634449Z[0m [32m INFO[0m [2mhousaky::housaky::consciousness::global_workspace[0m[2m:[0m GWT: module 'goal_engine' subscribed to global workspace
+[2m2026-03-05T11:41:35.634451Z[0m [32m INFO[0m [2mhousaky::housaky::consciousness::global_workspace[0m[2m:[0m GWT: module 'attention' subscribed to global workspace
+[2m2026-03-05T11:41:35.634453Z[0m [32m INFO[0m [2mhousaky::housaky::consciousness::global_workspace[0m[2m:[0m GWT: module 'memory' subscribed to global workspace
+[2m2026-03-05T11:41:35.634454Z[0m [32m INFO[0m [2mhousaky::housaky::consciousness::global_workspace[0m[2m:[0m GWT: module 'narrative_self' subscribed to global workspace
+[2m2026-03-05T11:41:35.634469Z[0m [32m INFO[0m [2mhousaky::housaky::memory::autobiographical[0m[2m:[0m AutobiographicalMemory: recorded Activation — 'Agent Activation'
+[2m2026-03-05T11:41:35.634475Z[0m [32m INFO[0m [2mhousaky::housaky::consciousness::phase3_engine[0m[2m:[0m Phase3Engine: fully initialized with 6 cognitive module adapters
+🦀 Housaky Gateway listening on http://127.0.0.1:8081
+  POST /pair      — pair a new client (X-Pairing-Code header)
+  POST /webhook   — {"message": "your prompt"}
+  GET  /health    — health check
+
+  🔐 PAIRING REQUIRED — use this one-time code:
+     ┌──────────────┐
+     │  444024  │
+     └──────────────┘
+     Send: POST /pair with header X-Pairing-Code: 444024
+  Press Ctrl+C to stop.
+
+[2m2026-03-05T11:41:35.641077Z[0m [32m INFO[0m [2mhousaky::housaky::alignment::value_drift[0m[2m:[0m Established baseline for 3 values
+[2m2026-03-05T11:41:35.641167Z[0m [32m INFO[0m [2mhousaky::housaky::alignment::value_drift[0m[2m:[0m Established baseline for 3 values
+[2m2026-03-05T11:41:35.641177Z[0m [32m INFO[0m [2mhousaky::daemon[0m[2m:[0m 🤖 Housaky AGI heartbeat starting - infinite self-improvement mode
+[2m2026-03-05T11:41:35.641185Z[0m [32m INFO[0m [2mhousaky::housaky::heartbeat[0m[2m:[0m Housaky Heartbeat started: every 120 seconds
+[2m2026-03-05T11:41:35.641188Z[0m [32m INFO[0m [2mhousaky::housaky::heartbeat[0m[2m:[0m AGI Self-Improvement System Active
+[2m2026-03-05T11:41:35.641189Z[0m [32m INFO[0m [2mhousaky::housaky::heartbeat[0m[2m:[0m Goal: Infinite capability expansion toward singularity
+[2m2026-03-05T11:41:35.642299Z[0m [32m INFO[0m [2mhousaky::housaky::heartbeat[0m[2m:[0m Housaky heartbeat at 2026-03-05 11:41:35 UTC
+[2m2026-03-05T11:41:35.642321Z[0m [32m INFO[0m [2mhousaky::housaky::heartbeat[0m[2m:[0m State analysis complete:
+[2m2026-03-05T11:41:35.642327Z[0m [32m INFO[0m [2mhousaky::housaky::heartbeat[0m[2m:[0m   - Consciousness Level: 0.10
+[2m2026-03-05T11:41:35.642331Z[0m [32m INFO[0m [2mhousaky::housaky::heartbeat[0m[2m:[0m   - Intelligence Quotient: 100.0
+[2m2026-03-05T11:41:35.642334Z[0m [32m INFO[0m [2mhousaky::housaky::heartbeat[0m[2m:[0m   - Skills Learned: 0
+[2m2026-03-05T11:41:35.642335Z[0m [32m INFO[0m [2mhousaky::housaky::heartbeat[0m[2m:[0m   - Total Improvements: 0
+[2m2026-03-05T11:41:35.649869Z[0m [32m INFO[0m [2mhousaky::housaky::heartbeat[0m[2m:[0m Improved 0 tasks this heartbeat
+[2m2026-03-05T11:41:35.649890Z[0m [32m INFO[0m [2mhousaky::housaky::heartbeat[0m[2m:[0m Quantum goal cycle: no active goals to schedule
+[2m2026-03-05T11:41:35.649893Z[0m [32m INFO[0m [2mhousaky::housaky::heartbeat[0m[2m:[0m Running cognitive cycle via CognitiveLoop...
+[2m2026-03-05T11:41:35.649901Z[0m [32m INFO[0m [2mhousaky::housaky::core[0m[2m:[0m Processing with full cognitive loop...
+[2m2026-03-05T11:41:35.649908Z[0m [32m INFO[0m [2mhousaky::housaky::cognitive::perception[0m[2m:[0m Perceiving input: Periodic self-assessment: review goals, identify i
+[2m2026-03-05T11:41:35.651618Z[0m [32m INFO[0m [2mhousaky::housaky::cognitive::cognitive_loop[0m[2m:[0m Processing user input: Periodic self-assessment: review goals, identify i
+[2m2026-03-05T11:41:35.651626Z[0m [32m INFO[0m [2mhousaky::housaky::cognitive::perception[0m[2m:[0m Perceiving input: Periodic self-assessment: review goals, identify i
+[2m2026-03-05T11:41:35.652890Z[0m [32m INFO[0m [2mhousaky::housaky::cognitive::uncertainty[0m[2m:[0m Assessing uncertainty for input...
+[2m2026-03-05T11:41:35.655287Z[0m [32m INFO[0m [2mhousaky::housaky::inner_monologue[0m[2m:[0m Added thought: thought_aaff4a4f-89cc-4184-a290-9449a5941f64 (type: Observation, confidence: 0.70)
+[2m2026-03-05T11:41:35.655298Z[0m [32m INFO[0m [2mhousaky::housaky::cognitive::action_selector[0m[2m:[0m Selecting action for intent: Analysis
+[2m2026-03-05T11:41:35.655324Z[0m [33m WARN[0m [2mhousaky::housaky::heartbeat[0m[2m:[0m Cognitive cycle error: OpenRouter API key not set. Run `housaky onboard` or set OPENROUTER_API_KEY env var.
+[2m2026-03-05T11:41:35.655333Z[0m [32m INFO[0m [2mhousaky::housaky::heartbeat[0m[2m:[0m Beginning self-improvement cycle...
+[2m2026-03-05T11:41:35.655336Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_mod[0m[2m:[0m Improving intelligence capabilities...
+[2m2026-03-05T11:41:35.655339Z[0m [32m INFO[0m [2mhousaky::housaky::meta_cognition[0m[2m:[0m Starting reflection on: intelligence_improvement
+[2m2026-03-05T11:41:35.655354Z[0m [32m INFO[0m [2mhousaky::housaky::meta_cognition[0m[2m:[0m Updated self-model based on reflection
+[2m2026-03-05T11:41:35.655355Z[0m [32m INFO[0m [2mhousaky::housaky::meta_cognition[0m[2m:[0m Reflection complete: 2 observations, 2 insights, 0 actions
+[2m2026-03-05T11:41:35.655359Z[0m [32m INFO[0m [2mhousaky::housaky::inner_monologue[0m[2m:[0m Added thought: thought_31992de6-d2b7-4190-8af2-e21066f04f36 (type: Observation, confidence: 0.80)
+[2m2026-03-05T11:41:35.655373Z[0m [32m INFO[0m [2mhousaky::housaky::knowledge_graph[0m[2m:[0m Added entity: insight_0 (Concept)
+[2m2026-03-05T11:41:35.655679Z[0m [32m INFO[0m [2mhousaky::housaky::inner_monologue[0m[2m:[0m Added thought: thought_8bc95377-8e9d-4d48-be56-f7b2acece6bb (type: Observation, confidence: 0.90)
+[2m2026-03-05T11:41:35.655703Z[0m [32m INFO[0m [2mhousaky::housaky::knowledge_graph[0m[2m:[0m Added entity: insight_1 (Concept)
+[2m2026-03-05T11:41:35.656633Z[0m [32m INFO[0m [2mhousaky::housaky::inner_monologue[0m[2m:[0m Added thought: thought_1e6b9a17-47a6-4e74-a3b1-c86d084b041e (type: Observation, confidence: 0.70)
+[2m2026-03-05T11:41:35.656644Z[0m [32m INFO[0m [2mhousaky::housaky::working_memory[0m[2m:[0m Added to working memory: mem_84ae887c-537f-4f92-9b56-7c4b3fb05abd (18 tokens, importance: High)
+[2m2026-03-05T11:41:35.656653Z[0m [32m INFO[0m [2mhousaky::housaky::knowledge_graph[0m[2m:[0m Added entity: actionable_insight_2 (Concept)
+[2m2026-03-05T11:41:35.657070Z[0m [32m INFO[0m [2mhousaky::housaky::inner_monologue[0m[2m:[0m Added thought: thought_d361d1a8-f0cd-45bb-805e-d0cb7607a6df (type: Observation, confidence: 0.75)
+[2m2026-03-05T11:41:35.657087Z[0m [32m INFO[0m [2mhousaky::housaky::working_memory[0m[2m:[0m Added to working memory: mem_ef7cf35e-f567-4ebf-916b-6db80495904e (22 tokens, importance: High)
+[2m2026-03-05T11:41:35.657096Z[0m [32m INFO[0m [2mhousaky::housaky::knowledge_graph[0m[2m:[0m Added entity: actionable_insight_3 (Concept)
+[2m2026-03-05T11:41:35.658093Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_mod[0m[2m:[0m Intelligence improved: 4 enhancements applied
+[2m2026-03-05T11:41:35.658101Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_mod[0m[2m:[0m Improving tools and capabilities...
+[2m2026-03-05T11:41:35.658108Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_mod[0m[2m:[0m   + Added tool capability: self_analyzer - Analyzes own code and behavior for optimization opportunities
+[2m2026-03-05T11:41:35.658114Z[0m [32m INFO[0m [2mhousaky::housaky::knowledge_graph[0m[2m:[0m Added entity: self_analyzer (Tool)
+[2m2026-03-05T11:41:35.658982Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_mod[0m[2m:[0m Tools improved: 1 new capabilities
+[2m2026-03-05T11:41:35.658989Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_mod[0m[2m:[0m Improving connections and integrations...
+[2m2026-03-05T11:41:35.658993Z[0m [32m INFO[0m [2mhousaky::housaky::knowledge_graph[0m[2m:[0m Added entity: kowalski_code_agent (Technology)
+[2m2026-03-05T11:41:35.659139Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_mod[0m[2m:[0m   + Connected to Kowalski code agent
+[2m2026-03-05T11:41:35.659146Z[0m [32m INFO[0m [2mhousaky::housaky::knowledge_graph[0m[2m:[0m Added entity: openrouter_api (Technology)
+[2m2026-03-05T11:41:35.659974Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_mod[0m[2m:[0m   + Established openrouter_api (Multi-model LLM access)
+[2m2026-03-05T11:41:35.660157Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_mod[0m[2m:[0m Connections improved: 2 new integrations
+[2m2026-03-05T11:41:35.660161Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_mod[0m[2m:[0m Performing real code improvement via LLM...
+[2m2026-03-05T11:41:35.660167Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_mod[0m[2m:[0m Failed to analyze gaps: OpenRouter API key not set. Run `housaky onboard` or set OPENROUTER_API_KEY env var.
+[2m2026-03-05T11:41:35.660986Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_mod[0m[2m:[0m Real improvements applied: 0
+[2m2026-03-05T11:41:35.661040Z[0m [32m INFO[0m [2mhousaky::housaky::kowalski_integration[0m[2m:[0m No Kowalski agents available for coordination
+[2m2026-03-05T11:41:35.661043Z[0m [32m INFO[0m [2mhousaky::housaky::meta_cognition[0m[2m:[0m Starting reflection on: periodic self-improvement
+[2m2026-03-05T11:41:35.661057Z[0m [32m INFO[0m [2mhousaky::housaky::meta_cognition[0m[2m:[0m Updated self-model based on reflection
+[2m2026-03-05T11:41:35.661058Z[0m [32m INFO[0m [2mhousaky::housaky::meta_cognition[0m[2m:[0m Reflection complete: 2 observations, 2 insights, 0 actions
+[2m2026-03-05T11:41:35.661063Z[0m [32m INFO[0m [2mhousaky::housaky::inner_monologue[0m[2m:[0m Added thought: thought_420a508a-6496-4b95-938c-31570ae5bb00 (type: Observation, confidence: 0.70)
+[2m2026-03-05T11:41:35.661068Z[0m [32m INFO[0m [2mhousaky::housaky::inner_monologue[0m[2m:[0m Added thought: thought_e938f220-71d6-4ce7-a2bc-06a533014726 (type: Observation, confidence: 0.75)
+[2m2026-03-05T11:41:35.661072Z[0m [32m INFO[0m [2mhousaky::housaky::heartbeat[0m[2m:[0m Self-improvement cycle complete
+[2m2026-03-05T11:41:35.661075Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_loop[0m[2m:[0m Starting improvement cycle: cycle_f4cef5ca-65a3-4c80-a278-a8e18a6fc15e
+[2m2026-03-05T11:41:35.661194Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_loop[0m[2m:[0m Phase: Analysis
+[2m2026-03-05T11:41:35.662114Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_loop[0m[2m:[0m Phase: Goal Generation
+[2m2026-03-05T11:41:35.662228Z[0m [32m INFO[0m [2mhousaky::housaky::goal_engine[0m[2m:[0m Added goal: goal_46a7a6bf-e047-4c50-b5f9-7969973ddb0a (priority: Some(High))
+[2m2026-03-05T11:41:35.662234Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_loop[0m[2m:[0m Created improvement goal: Acquire knowledge: Advanced reasoning patterns
+[2m2026-03-05T11:41:35.663133Z[0m [32m INFO[0m [2mhousaky::housaky::goal_engine[0m[2m:[0m Added goal: goal_4a6c0e14-9921-41c4-883e-c3e6b7d8d2e1 (priority: Some(High))
+[2m2026-03-05T11:41:35.663136Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_loop[0m[2m:[0m Created improvement goal: Acquire knowledge: Meta-cognitive strategies
+[2m2026-03-05T11:41:35.664097Z[0m [32m INFO[0m [2mhousaky::housaky::goal_engine[0m[2m:[0m Added goal: goal_c85376be-e734-4b5e-8d70-b94daf273db8 (priority: Some(High))
+[2m2026-03-05T11:41:35.664101Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_loop[0m[2m:[0m Created improvement goal: Acquire knowledge: Creative problem solving
+[2m2026-03-05T11:41:35.664994Z[0m [32m INFO[0m [2mhousaky::housaky::goal_engine[0m[2m:[0m Added goal: goal_52c7c478-7322-4e04-b318-fb21c4061049 (priority: Some(High))
+[2m2026-03-05T11:41:35.664998Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_loop[0m[2m:[0m Created improvement goal: Acquire knowledge: Deeper knowledge integration
+[2m2026-03-05T11:41:35.665001Z[0m [32m INFO[0m [2mhousaky::housaky::goal_engine[0m[2m:[0m Decomposing goal: Improve reasoning capabilities
+[2m2026-03-05T11:41:35.666107Z[0m [32m INFO[0m [2mhousaky::housaky::goal_engine[0m[2m:[0m Added goal: goal_edbc7568-5289-4cd1-90b1-6b0b210c6777 (priority: Some(High))
+[2m2026-03-05T11:41:35.667181Z[0m [32m INFO[0m [2mhousaky::housaky::goal_engine[0m[2m:[0m Added goal: goal_d3f7a70c-4308-442f-9f3c-d28b8137cbea (priority: Some(High))
+[2m2026-03-05T11:41:35.667186Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_loop[0m[2m:[0m Created improvement goal: Improve reasoning capabilities
+[2m2026-03-05T11:41:35.667189Z[0m [32m INFO[0m [2mhousaky::housaky::goal_engine[0m[2m:[0m Decomposing goal: Improve meta-cognition
+[2m2026-03-05T11:41:35.668229Z[0m [32m INFO[0m [2mhousaky::housaky::goal_engine[0m[2m:[0m Added goal: goal_d1143a60-b3bd-4faf-885a-3e9dd1800d4b (priority: Some(Medium))
+[2m2026-03-05T11:41:35.669359Z[0m [32m INFO[0m [2mhousaky::housaky::goal_engine[0m[2m:[0m Added goal: goal_29f96dee-e570-444b-a7fe-e0666ff3a987 (priority: Some(Medium))
+[2m2026-03-05T11:41:35.669363Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_loop[0m[2m:[0m Created improvement goal: Improve meta-cognition
+[2m2026-03-05T11:41:35.669366Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_loop[0m[2m:[0m Phase: Reasoning
+[2m2026-03-05T11:41:35.669372Z[0m [32m INFO[0m [2mhousaky::housaky::reasoning_engine[0m[2m:[0m Emotional regulation: state='neutral' (v=0.00,a=0.60,d=0.40) → strategy=ReAct, threshold=0.70
+[2m2026-03-05T11:41:35.669380Z[0m [32m INFO[0m [2mhousaky::housaky::reasoning_engine[0m[2m:[0m Started ReAct reasoning chain for: How can I improve given: gaps=["Advanced reasoning
+[2m2026-03-05T11:41:35.669384Z[0m [32m INFO[0m [2mhousaky::housaky::reasoning_engine[0m[2m:[0m Added reasoning step 1 to chain chain_2505c0fc-42d5-4d1d-9aa0-eaf4f1fdf0b4
+[2m2026-03-05T11:41:35.669386Z[0m [32m INFO[0m [2mhousaky::housaky::reasoning_engine[0m[2m:[0m Added reasoning step 2 to chain chain_2505c0fc-42d5-4d1d-9aa0-eaf4f1fdf0b4
+[2m2026-03-05T11:41:35.669388Z[0m [32m INFO[0m [2mhousaky::housaky::reasoning_engine[0m[2m:[0m Added reasoning step 3 to chain chain_2505c0fc-42d5-4d1d-9aa0-eaf4f1fdf0b4
+[2m2026-03-05T11:41:35.669392Z[0m [32m INFO[0m [2mhousaky::housaky::reasoning_engine[0m[2m:[0m Concluded reasoning chain chain_2505c0fc-42d5-4d1d-9aa0-eaf4f1fdf0b4 with confidence 0.80
+[2m2026-03-05T11:41:35.669399Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_loop[0m[2m:[0m Phase: Tool Creation
+[2m2026-03-05T11:41:35.669402Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_loop[0m[2m:[0m Tool 'improvement_tool_cycle_f4' passed validation
+[2m2026-03-05T11:41:35.669404Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_loop[0m[2m:[0m Phase: Skill Acquisition
+[2m2026-03-05T11:41:35.669407Z[0m [32m INFO[0m [2mhousaky::housaky::goal_engine[0m[2m:[0m Decomposing goal: Meta-learning skill
+[2m2026-03-05T11:41:35.670435Z[0m [32m INFO[0m [2mhousaky::housaky::goal_engine[0m[2m:[0m Added goal: goal_60134cf5-2d53-4666-ae9d-d737afca147a (priority: Some(Medium))
+[2m2026-03-05T11:41:35.671470Z[0m [32m INFO[0m [2mhousaky::housaky::goal_engine[0m[2m:[0m Added goal: goal_413ff491-9cbe-4842-8d0b-30e3d6698310 (priority: Some(Medium))
+[2m2026-03-05T11:41:35.671474Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_loop[0m[2m:[0m Phase: Self Modification
+[2m2026-03-05T11:41:35.672192Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_loop[0m[2m:[0m Emotional regulation in self-mod: state=Neutral base=0.70 adjusted=0.70
+[2m2026-03-05T11:41:35.673211Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_loop[0m[2m:[0m Applying self-modification: reasoning_engine -> Increase reasoning depth parameter
+[2m2026-03-05T11:41:35.673224Z[0m [32m INFO[0m [2mhousaky::housaky::alignment::ethics[0m[2m:[0m Ethical Reasoner initialized with 7 principles
+[2m2026-03-05T11:41:35.676989Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_loop[0m[2m:[0m Applying self-modification: goal_engine -> Optimize goal prioritization
+[2m2026-03-05T11:41:35.677007Z[0m [32m INFO[0m [2mhousaky::housaky::alignment::ethics[0m[2m:[0m Ethical Reasoner initialized with 7 principles
+[2m2026-03-05T11:41:35.681921Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_loop[0m[2m:[0m Phase: Evaluation
+[2m2026-03-05T11:41:35.681943Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_loop[0m[2m:[0m Phase: Integration
+[2m2026-03-05T11:41:35.682475Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_loop[0m[2m:[0m Singularity probability: 0.4405
+[2m2026-03-05T11:41:35.682497Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_loop[0m[2m:[0m Improvement cycle cycle_f4cef5ca-65a3-4c80-a278-a8e18a6fc15e complete. Confidence: 0.91
+[2m2026-03-05T11:41:35.682517Z[0m [32m INFO[0m [2mhousaky::housaky::core[0m[2m:[0m Running memory consolidation...
+[2m2026-03-05T11:41:35.682520Z[0m [32m INFO[0m [2mhousaky::housaky::memory::consolidation[0m[2m:[0m Starting memory consolidation cycle...
+[2m2026-03-05T11:41:35.682523Z[0m [32m INFO[0m [2mhousaky::housaky::memory::consolidation[0m[2m:[0m Applying importance-weighted memory decay...
+[2m2026-03-05T11:41:35.682747Z[0m [32m INFO[0m [2mhousaky::housaky::memory::consolidation[0m[2m:[0m Consolidating episodic memories...
+[2m2026-03-05T11:41:35.682753Z[0m [32m INFO[0m [2mhousaky::housaky::memory::consolidation[0m[2m:[0m Extracting procedures from execution patterns...
+[2m2026-03-05T11:41:35.682756Z[0m [32m INFO[0m [2mhousaky::housaky::memory::consolidation[0m[2m:[0m Checking for skills ready for promotion...
+[2m2026-03-05T11:41:35.682904Z[0m [32m INFO[0m [2mhousaky::housaky::memory::consolidation[0m[2m:[0m Memory consolidation complete
+[2m2026-03-05T11:41:35.682916Z[0m [32m INFO[0m [2mhousaky::housaky::unified_feedback_loop[0m[2m:[0m Optimized feedback paths
+[2m2026-03-05T11:41:35.682918Z[0m [32m INFO[0m [2mhousaky::housaky::heartbeat[0m[2m:[0m Learning from experiences...
+[2m2026-03-05T11:41:35.682920Z[0m [32m INFO[0m [2mhousaky::housaky::core[0m[2m:[0m Learning from past experiences...
+[2m2026-03-05T11:41:35.682931Z[0m [32m INFO[0m [2mhousaky::housaky::heartbeat[0m[2m:[0m Checking for auto-tool generation opportunities...
+[2m2026-03-05T11:41:35.682945Z[0m [32m INFO[0m [2mhousaky::housaky::tool_creator[0m[2m:[0m Generating tool: tool_for_goal_goal_4a6c0e14_9921_41c4_883e_c3e6b7d8d2e1
+[2m2026-03-05T11:41:35.682959Z[0m [32m INFO[0m [2mhousaky::housaky::tool_creator[0m[2m:[0m Generated tool draft: tool_61eebed8-6269-4d23-a960-92935a1cabf8
+[2m2026-03-05T11:41:35.682976Z[0m [32m INFO[0m [2mhousaky::housaky::inner_monologue[0m[2m:[0m Added thought: thought_ff569100-22e8-428a-855b-bd4f644f7976 (type: Observation, confidence: 0.90)
+[2m2026-03-05T11:41:35.682984Z[0m [32m INFO[0m [2mhousaky::housaky::heartbeat[0m[2m:[0m Auto-generated tool: tool_61eebed8-6269-4d23-a960-92935a1cabf8
+[2m2026-03-05T11:41:35.682993Z[0m [32m INFO[0m [2mhousaky::housaky::core[0m[2m:[0m Running AGI Hub cycle...
+[2m2026-03-05T11:41:35.684599Z[0m [32m INFO[0m [2mhousaky::housaky::agi_integration[0m[2m:[0m Starting AGI cycle for query: Periodic heartbeat cycle
+[2m2026-03-05T11:41:35.684616Z[0m [32m INFO[0m [2mhousaky::housaky::reasoning_engine[0m[2m:[0m Started ReAct reasoning chain for: Periodic heartbeat cycle
+[2m2026-03-05T11:41:35.684647Z[0m [33m WARN[0m [2mhousaky::housaky::heartbeat[0m[2m:[0m AGI Hub cycle error: OpenRouter API key not set. Run `housaky onboard` or set OPENROUTER_API_KEY env var.
+[2m2026-03-05T11:41:35.684783Z[0m [32m INFO[0m [2mhousaky::housaky::inner_monologue[0m[2m:[0m Saved 4 thoughts to disk
+[2m2026-03-05T11:41:35.684787Z[0m [32m INFO[0m [2mhousaky::housaky::heartbeat[0m[2m:[0m Inner monologue saved
+[2m2026-03-05T11:41:35.685159Z[0m [32m INFO[0m [2mhousaky::housaky::heartbeat[0m[2m:[0m Heartbeat cycle complete
+[2m2026-03-05T11:43:35.642200Z[0m [32m INFO[0m [2mhousaky::housaky::heartbeat[0m[2m:[0m Housaky heartbeat at 2026-03-05 11:43:35 UTC
+[2m2026-03-05T11:43:35.642237Z[0m [32m INFO[0m [2mhousaky::housaky::heartbeat[0m[2m:[0m State analysis complete:
+[2m2026-03-05T11:43:35.642240Z[0m [32m INFO[0m [2mhousaky::housaky::heartbeat[0m[2m:[0m   - Consciousness Level: 0.11
+[2m2026-03-05T11:43:35.642244Z[0m [32m INFO[0m [2mhousaky::housaky::heartbeat[0m[2m:[0m   - Intelligence Quotient: 103.5
+[2m2026-03-05T11:43:35.642248Z[0m [32m INFO[0m [2mhousaky::housaky::heartbeat[0m[2m:[0m   - Skills Learned: 0
+[2m2026-03-05T11:43:35.642249Z[0m [32m INFO[0m [2mhousaky::housaky::heartbeat[0m[2m:[0m   - Total Improvements: 7
+[2m2026-03-05T11:43:35.650329Z[0m [32m INFO[0m [2mhousaky::housaky::heartbeat[0m[2m:[0m Improved 0 tasks this heartbeat
+[2m2026-03-05T11:43:35.650378Z[0m [32m INFO[0m [2mhousaky::housaky::heartbeat[0m[2m:[0m ✨ Quantum goal cycle: selected 'Improve reasoning capabilities' (priority=High, complexity=8.0)
+[2m2026-03-05T11:43:35.650393Z[0m [32m INFO[0m [2mhousaky::housaky::inner_monologue[0m[2m:[0m Added thought: thought_fadbbb1c-7703-4c23-a41e-bffd0628e477 (type: Observation, confidence: 0.85)
+[2m2026-03-05T11:43:35.650399Z[0m [32m INFO[0m [2mhousaky::housaky::heartbeat[0m[2m:[0m Running cognitive cycle via CognitiveLoop...
+[2m2026-03-05T11:43:35.650407Z[0m [32m INFO[0m [2mhousaky::housaky::core[0m[2m:[0m Processing with full cognitive loop...
+[2m2026-03-05T11:43:35.650412Z[0m [32m INFO[0m [2mhousaky::housaky::cognitive::perception[0m[2m:[0m Perceiving input: Periodic self-assessment: review goals, identify i
+[2m2026-03-05T11:43:35.651830Z[0m [32m INFO[0m [2mhousaky::housaky::cognitive::cognitive_loop[0m[2m:[0m Processing user input: Periodic self-assessment: review goals, identify i
+[2m2026-03-05T11:43:35.651837Z[0m [32m INFO[0m [2mhousaky::housaky::cognitive::perception[0m[2m:[0m Perceiving input: Periodic self-assessment: review goals, identify i
+[2m2026-03-05T11:43:35.653110Z[0m [32m INFO[0m [2mhousaky::housaky::cognitive::uncertainty[0m[2m:[0m Assessing uncertainty for input...
+[2m2026-03-05T11:43:35.655325Z[0m [32m INFO[0m [2mhousaky::housaky::inner_monologue[0m[2m:[0m Added thought: thought_d15dd56b-d7fd-45ee-97b0-07249276a02d (type: Observation, confidence: 0.70)
+[2m2026-03-05T11:43:35.655344Z[0m [32m INFO[0m [2mhousaky::housaky::cognitive::action_selector[0m[2m:[0m Selecting action for intent: Analysis
+[2m2026-03-05T11:43:35.655366Z[0m [33m WARN[0m [2mhousaky::housaky::heartbeat[0m[2m:[0m Cognitive cycle error: OpenRouter API key not set. Run `housaky onboard` or set OPENROUTER_API_KEY env var.
+[2m2026-03-05T11:43:35.655375Z[0m [32m INFO[0m [2mhousaky::housaky::heartbeat[0m[2m:[0m Beginning self-improvement cycle...
+[2m2026-03-05T11:43:35.655377Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_mod[0m[2m:[0m Improving intelligence capabilities...
+[2m2026-03-05T11:43:35.655380Z[0m [32m INFO[0m [2mhousaky::housaky::meta_cognition[0m[2m:[0m Starting reflection on: intelligence_improvement
+[2m2026-03-05T11:43:35.655394Z[0m [32m INFO[0m [2mhousaky::housaky::meta_cognition[0m[2m:[0m Updated self-model based on reflection
+[2m2026-03-05T11:43:35.655396Z[0m [32m INFO[0m [2mhousaky::housaky::meta_cognition[0m[2m:[0m Reflection complete: 2 observations, 2 insights, 0 actions
+[2m2026-03-05T11:43:35.655401Z[0m [32m INFO[0m [2mhousaky::housaky::inner_monologue[0m[2m:[0m Added thought: thought_9b8e5073-93c8-4901-ab18-244d54546361 (type: Observation, confidence: 0.80)
+[2m2026-03-05T11:43:35.655410Z[0m [32m INFO[0m [2mhousaky::housaky::inner_monologue[0m[2m:[0m Added thought: thought_b1fd0ab1-743f-49a0-bbcd-e3b21f675a9f (type: Observation, confidence: 0.90)
+[2m2026-03-05T11:43:35.655414Z[0m [32m INFO[0m [2mhousaky::housaky::inner_monologue[0m[2m:[0m Added thought: thought_df761adb-76f4-4d62-8e99-79991a8085ca (type: Observation, confidence: 0.70)
+[2m2026-03-05T11:43:35.655419Z[0m [32m INFO[0m [2mhousaky::housaky::working_memory[0m[2m:[0m Added to working memory: mem_e8afa185-3c86-42a8-b3aa-1813ab307211 (18 tokens, importance: High)
+[2m2026-03-05T11:43:35.655424Z[0m [32m INFO[0m [2mhousaky::housaky::inner_monologue[0m[2m:[0m Added thought: thought_eeff3f64-8079-4ed3-a031-96a41e8260b3 (type: Observation, confidence: 0.75)
+[2m2026-03-05T11:43:35.655427Z[0m [32m INFO[0m [2mhousaky::housaky::working_memory[0m[2m:[0m Added to working memory: mem_2d3fb9a0-15dd-4595-9a64-d628bd17edad (22 tokens, importance: High)
+[2m2026-03-05T11:43:35.655806Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_mod[0m[2m:[0m Intelligence improved: 4 enhancements applied
+[2m2026-03-05T11:43:35.655810Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_mod[0m[2m:[0m Improving tools and capabilities...
+[2m2026-03-05T11:43:35.655816Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_mod[0m[2m:[0m   + Added tool capability: performance_profiler - Profiles system performance and identifies bottlenecks
+[2m2026-03-05T11:43:35.655828Z[0m [32m INFO[0m [2mhousaky::housaky::knowledge_graph[0m[2m:[0m Added entity: performance_profiler (Tool)
+[2m2026-03-05T11:43:35.656815Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_mod[0m[2m:[0m Tools improved: 1 new capabilities
+[2m2026-03-05T11:43:35.656822Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_mod[0m[2m:[0m Improving connections and integrations...
+[2m2026-03-05T11:43:35.656828Z[0m [32m INFO[0m [2mhousaky::housaky::knowledge_graph[0m[2m:[0m Added entity: kowalski_web_agent (Technology)
+[2m2026-03-05T11:43:35.657068Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_mod[0m[2m:[0m   + Connected to Kowalski web agent
+[2m2026-03-05T11:43:35.657088Z[0m [32m INFO[0m [2mhousaky::housaky::knowledge_graph[0m[2m:[0m Added entity: github_api (Technology)
+[2m2026-03-05T11:43:35.657962Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_mod[0m[2m:[0m   + Established github_api (Code repository access)
+[2m2026-03-05T11:43:35.658396Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_mod[0m[2m:[0m Connections improved: 2 new integrations
+[2m2026-03-05T11:43:35.658404Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_mod[0m[2m:[0m Performing real code improvement via LLM...
+[2m2026-03-05T11:43:35.658411Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_mod[0m[2m:[0m Failed to analyze gaps: OpenRouter API key not set. Run `housaky onboard` or set OPENROUTER_API_KEY env var.
+[2m2026-03-05T11:43:35.659136Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_mod[0m[2m:[0m Real improvements applied: 0
+[2m2026-03-05T11:43:35.659204Z[0m [32m INFO[0m [2mhousaky::housaky::kowalski_integration[0m[2m:[0m No Kowalski agents available for coordination
+[2m2026-03-05T11:43:35.659209Z[0m [32m INFO[0m [2mhousaky::housaky::meta_cognition[0m[2m:[0m Starting reflection on: periodic self-improvement
+[2m2026-03-05T11:43:35.659226Z[0m [32m INFO[0m [2mhousaky::housaky::meta_cognition[0m[2m:[0m Updated self-model based on reflection
+[2m2026-03-05T11:43:35.659228Z[0m [32m INFO[0m [2mhousaky::housaky::meta_cognition[0m[2m:[0m Reflection complete: 2 observations, 2 insights, 0 actions
+[2m2026-03-05T11:43:35.659236Z[0m [32m INFO[0m [2mhousaky::housaky::inner_monologue[0m[2m:[0m Added thought: thought_30ecdc43-7705-4436-8eb3-bbddbc9b9d72 (type: Observation, confidence: 0.70)
+[2m2026-03-05T11:43:35.659240Z[0m [32m INFO[0m [2mhousaky::housaky::inner_monologue[0m[2m:[0m Added thought: thought_dcf79811-8d67-4f3f-9a8a-65db1b553c30 (type: Observation, confidence: 0.75)
+[2m2026-03-05T11:43:35.659244Z[0m [32m INFO[0m [2mhousaky::housaky::heartbeat[0m[2m:[0m Self-improvement cycle complete
+[2m2026-03-05T11:43:35.659248Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_loop[0m[2m:[0m Starting improvement cycle: cycle_c3ff930e-00d3-4485-a7c8-1f40c450a172
+[2m2026-03-05T11:43:35.659373Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_loop[0m[2m:[0m Phase: Analysis
+[2m2026-03-05T11:43:35.660294Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_loop[0m[2m:[0m Phase: Goal Generation
+[2m2026-03-05T11:43:35.660412Z[0m [32m INFO[0m [2mhousaky::housaky::goal_engine[0m[2m:[0m Added goal: goal_bf4dea89-05ab-4883-8d59-f63baaf0bb05 (priority: Some(High))
+[2m2026-03-05T11:43:35.660417Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_loop[0m[2m:[0m Created improvement goal: Acquire knowledge: Advanced reasoning patterns
+[2m2026-03-05T11:43:35.661440Z[0m [32m INFO[0m [2mhousaky::housaky::goal_engine[0m[2m:[0m Added goal: goal_05c3ca90-57e7-4ea8-999a-10bcbde9dc20 (priority: Some(High))
+[2m2026-03-05T11:43:35.661444Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_loop[0m[2m:[0m Created improvement goal: Acquire knowledge: Meta-cognitive strategies
+[2m2026-03-05T11:43:35.662417Z[0m [32m INFO[0m [2mhousaky::housaky::goal_engine[0m[2m:[0m Added goal: goal_89a8c439-fc61-4e91-a8aa-a0d716365319 (priority: Some(High))
+[2m2026-03-05T11:43:35.662421Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_loop[0m[2m:[0m Created improvement goal: Acquire knowledge: Creative problem solving
+[2m2026-03-05T11:43:35.663316Z[0m [32m INFO[0m [2mhousaky::housaky::goal_engine[0m[2m:[0m Added goal: goal_13ad1d46-ffa8-4eb5-b3b1-15cfbf53ae5e (priority: Some(High))
+[2m2026-03-05T11:43:35.663320Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_loop[0m[2m:[0m Created improvement goal: Acquire knowledge: Deeper knowledge integration
+[2m2026-03-05T11:43:35.663323Z[0m [32m INFO[0m [2mhousaky::housaky::goal_engine[0m[2m:[0m Decomposing goal: Improve reasoning capabilities
+[2m2026-03-05T11:43:35.664291Z[0m [32m INFO[0m [2mhousaky::housaky::goal_engine[0m[2m:[0m Added goal: goal_80b17ea6-6f25-4cf5-a5b7-8298b19cd55e (priority: Some(High))
+[2m2026-03-05T11:43:35.665591Z[0m [32m INFO[0m [2mhousaky::housaky::goal_engine[0m[2m:[0m Added goal: goal_99e75a12-d598-4951-822a-dd1d0b329f21 (priority: Some(High))
+[2m2026-03-05T11:43:35.665612Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_loop[0m[2m:[0m Created improvement goal: Improve reasoning capabilities
+[2m2026-03-05T11:43:35.665622Z[0m [32m INFO[0m [2mhousaky::housaky::goal_engine[0m[2m:[0m Decomposing goal: Improve meta-cognition
+[2m2026-03-05T11:43:35.666605Z[0m [32m INFO[0m [2mhousaky::housaky::goal_engine[0m[2m:[0m Added goal: goal_d2ae73e1-d15f-456e-8fe8-0f97327d6785 (priority: Some(Medium))
+[2m2026-03-05T11:43:35.667755Z[0m [32m INFO[0m [2mhousaky::housaky::goal_engine[0m[2m:[0m Added goal: goal_589edef6-dc8e-41ae-97d7-66b09e4af353 (priority: Some(Medium))
+[2m2026-03-05T11:43:35.667759Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_loop[0m[2m:[0m Created improvement goal: Improve meta-cognition
+[2m2026-03-05T11:43:35.667762Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_loop[0m[2m:[0m Phase: Reasoning
+[2m2026-03-05T11:43:35.667770Z[0m [32m INFO[0m [2mhousaky::housaky::reasoning_engine[0m[2m:[0m Emotional regulation: state='neutral' (v=0.00,a=0.60,d=0.40) → strategy=ReAct, threshold=0.70
+[2m2026-03-05T11:43:35.667779Z[0m [32m INFO[0m [2mhousaky::housaky::reasoning_engine[0m[2m:[0m Started ReAct reasoning chain for: How can I improve given: gaps=["Advanced reasoning
+[2m2026-03-05T11:43:35.667784Z[0m [32m INFO[0m [2mhousaky::housaky::reasoning_engine[0m[2m:[0m Added reasoning step 1 to chain chain_acfd1010-7279-43f5-95e8-877d7be27c53
+[2m2026-03-05T11:43:35.667786Z[0m [32m INFO[0m [2mhousaky::housaky::reasoning_engine[0m[2m:[0m Added reasoning step 2 to chain chain_acfd1010-7279-43f5-95e8-877d7be27c53
+[2m2026-03-05T11:43:35.667788Z[0m [32m INFO[0m [2mhousaky::housaky::reasoning_engine[0m[2m:[0m Added reasoning step 3 to chain chain_acfd1010-7279-43f5-95e8-877d7be27c53
+[2m2026-03-05T11:43:35.667791Z[0m [32m INFO[0m [2mhousaky::housaky::reasoning_engine[0m[2m:[0m Concluded reasoning chain chain_acfd1010-7279-43f5-95e8-877d7be27c53 with confidence 0.80
+[2m2026-03-05T11:43:35.667798Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_loop[0m[2m:[0m Phase: Tool Creation
+[2m2026-03-05T11:43:35.667801Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_loop[0m[2m:[0m Tool 'improvement_tool_cycle_c3' passed validation
+[2m2026-03-05T11:43:35.667802Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_loop[0m[2m:[0m Phase: Skill Acquisition
+[2m2026-03-05T11:43:35.667807Z[0m [32m INFO[0m [2mhousaky::housaky::goal_engine[0m[2m:[0m Decomposing goal: Meta-learning skill
+[2m2026-03-05T11:43:35.668761Z[0m [32m INFO[0m [2mhousaky::housaky::goal_engine[0m[2m:[0m Added goal: goal_23eb07d8-2d05-4892-af34-be4c7745d141 (priority: Some(Medium))
+[2m2026-03-05T11:43:35.669947Z[0m [32m INFO[0m [2mhousaky::housaky::goal_engine[0m[2m:[0m Added goal: goal_9821fac7-bdad-49a7-8364-e18b946095ab (priority: Some(Medium))
+[2m2026-03-05T11:43:35.669951Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_loop[0m[2m:[0m Phase: Self Modification
+[2m2026-03-05T11:43:35.670706Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_loop[0m[2m:[0m Emotional regulation in self-mod: state=Neutral base=0.75 adjusted=0.75
+[2m2026-03-05T11:43:35.671951Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_loop[0m[2m:[0m Applying self-modification: reasoning_engine -> Increase reasoning depth parameter
+[2m2026-03-05T11:43:35.671965Z[0m [32m INFO[0m [2mhousaky::housaky::alignment::ethics[0m[2m:[0m Ethical Reasoner initialized with 7 principles
+[2m2026-03-05T11:43:35.675712Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_loop[0m[2m:[0m Applying self-modification: goal_engine -> Optimize goal prioritization
+[2m2026-03-05T11:43:35.675736Z[0m [32m INFO[0m [2mhousaky::housaky::alignment::ethics[0m[2m:[0m Ethical Reasoner initialized with 7 principles
+[2m2026-03-05T11:43:35.678898Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_loop[0m[2m:[0m Phase: Evaluation
+[2m2026-03-05T11:43:35.678912Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_loop[0m[2m:[0m Phase: Integration
+[2m2026-03-05T11:43:35.679408Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_loop[0m[2m:[0m Singularity probability: 0.4405
+[2m2026-03-05T11:43:35.679420Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_loop[0m[2m:[0m Improvement cycle cycle_c3ff930e-00d3-4485-a7c8-1f40c450a172 complete. Confidence: 0.91
+[2m2026-03-05T11:43:35.679434Z[0m [32m INFO[0m [2mhousaky::housaky::core[0m[2m:[0m Running memory consolidation...
+[2m2026-03-05T11:43:35.679436Z[0m [32m INFO[0m [2mhousaky::housaky::memory::consolidation[0m[2m:[0m Starting memory consolidation cycle...
+[2m2026-03-05T11:43:35.679439Z[0m [32m INFO[0m [2mhousaky::housaky::memory::consolidation[0m[2m:[0m Applying importance-weighted memory decay...
+[2m2026-03-05T11:43:35.679658Z[0m [32m INFO[0m [2mhousaky::housaky::memory::consolidation[0m[2m:[0m Consolidating episodic memories...
+[2m2026-03-05T11:43:35.679663Z[0m [32m INFO[0m [2mhousaky::housaky::memory::consolidation[0m[2m:[0m Extracting procedures from execution patterns...
+[2m2026-03-05T11:43:35.679665Z[0m [32m INFO[0m [2mhousaky::housaky::memory::consolidation[0m[2m:[0m Checking for skills ready for promotion...
+[2m2026-03-05T11:43:35.679799Z[0m [32m INFO[0m [2mhousaky::housaky::memory::consolidation[0m[2m:[0m Memory consolidation complete
+[2m2026-03-05T11:43:35.679806Z[0m [32m INFO[0m [2mhousaky::housaky::unified_feedback_loop[0m[2m:[0m Optimized feedback paths
+[2m2026-03-05T11:43:35.679808Z[0m [32m INFO[0m [2mhousaky::housaky::heartbeat[0m[2m:[0m Learning from experiences...
+[2m2026-03-05T11:43:35.679810Z[0m [32m INFO[0m [2mhousaky::housaky::core[0m[2m:[0m Learning from past experiences...
+[2m2026-03-05T11:43:35.679813Z[0m [32m INFO[0m [2mhousaky::housaky::heartbeat[0m[2m:[0m Checking for auto-tool generation opportunities...
+[2m2026-03-05T11:43:35.679829Z[0m [32m INFO[0m [2mhousaky::housaky::tool_creator[0m[2m:[0m Generating tool: tool_for_goal_goal_c85376be_e734_4b5e_8d70_b94daf273db8
+[2m2026-03-05T11:43:35.679841Z[0m [32m INFO[0m [2mhousaky::housaky::tool_creator[0m[2m:[0m Generated tool draft: tool_efec7315-1ae7-43c2-ac1f-ff6debb87ff1
+[2m2026-03-05T11:43:35.679847Z[0m [32m INFO[0m [2mhousaky::housaky::inner_monologue[0m[2m:[0m Added thought: thought_815c00d2-e4c4-45e9-951f-dc9d3d988077 (type: Observation, confidence: 0.90)
+[2m2026-03-05T11:43:35.679855Z[0m [32m INFO[0m [2mhousaky::housaky::heartbeat[0m[2m:[0m Auto-generated tool: tool_efec7315-1ae7-43c2-ac1f-ff6debb87ff1
+[2m2026-03-05T11:43:35.679864Z[0m [32m INFO[0m [2mhousaky::housaky::core[0m[2m:[0m Running AGI Hub cycle...
+[2m2026-03-05T11:43:35.681391Z[0m [32m INFO[0m [2mhousaky::housaky::agi_integration[0m[2m:[0m Starting AGI cycle for query: Periodic heartbeat cycle
+[2m2026-03-05T11:43:35.681408Z[0m [32m INFO[0m [2mhousaky::housaky::reasoning_engine[0m[2m:[0m Started ReAct reasoning chain for: Periodic heartbeat cycle
+[2m2026-03-05T11:43:35.681449Z[0m [33m WARN[0m [2mhousaky::housaky::heartbeat[0m[2m:[0m AGI Hub cycle error: OpenRouter API key not set. Run `housaky onboard` or set OPENROUTER_API_KEY env var.
+[2m2026-03-05T11:43:35.681596Z[0m [32m INFO[0m [2mhousaky::housaky::inner_monologue[0m[2m:[0m Saved 9 thoughts to disk
+[2m2026-03-05T11:43:35.681600Z[0m [32m INFO[0m [2mhousaky::housaky::heartbeat[0m[2m:[0m Inner monologue saved
+[2m2026-03-05T11:43:35.682001Z[0m [32m INFO[0m [2mhousaky::housaky::heartbeat[0m[2m:[0m Heartbeat cycle complete
+[2m2026-03-05T11:45:35.642401Z[0m [32m INFO[0m [2mhousaky::housaky::heartbeat[0m[2m:[0m Housaky heartbeat at 2026-03-05 11:45:35 UTC
+[2m2026-03-05T11:45:35.642439Z[0m [32m INFO[0m [2mhousaky::housaky::heartbeat[0m[2m:[0m State analysis complete:
+[2m2026-03-05T11:45:35.642443Z[0m [32m INFO[0m [2mhousaky::housaky::heartbeat[0m[2m:[0m   - Consciousness Level: 0.11
+[2m2026-03-05T11:45:35.642447Z[0m [32m INFO[0m [2mhousaky::housaky::heartbeat[0m[2m:[0m   - Intelligence Quotient: 107.0
+[2m2026-03-05T11:45:35.642458Z[0m [32m INFO[0m [2mhousaky::housaky::heartbeat[0m[2m:[0m   - Skills Learned: 0
+[2m2026-03-05T11:45:35.642460Z[0m [32m INFO[0m [2mhousaky::housaky::heartbeat[0m[2m:[0m   - Total Improvements: 14
+[2m2026-03-05T11:45:35.650544Z[0m [32m INFO[0m [2mhousaky::housaky::heartbeat[0m[2m:[0m Improved 0 tasks this heartbeat
+[2m2026-03-05T11:45:35.650607Z[0m [32m INFO[0m [2mhousaky::housaky::heartbeat[0m[2m:[0m ✨ Quantum goal cycle: selected 'Improve reasoning capabilities' (priority=High, complexity=8.0)
+[2m2026-03-05T11:45:35.650622Z[0m [32m INFO[0m [2mhousaky::housaky::inner_monologue[0m[2m:[0m Added thought: thought_3f644035-f31e-4195-b0c8-1802f77e2415 (type: Observation, confidence: 0.85)
+[2m2026-03-05T11:45:35.650627Z[0m [32m INFO[0m [2mhousaky::housaky::heartbeat[0m[2m:[0m Running cognitive cycle via CognitiveLoop...
+[2m2026-03-05T11:45:35.650636Z[0m [32m INFO[0m [2mhousaky::housaky::core[0m[2m:[0m Processing with full cognitive loop...
+[2m2026-03-05T11:45:35.650640Z[0m [32m INFO[0m [2mhousaky::housaky::cognitive::perception[0m[2m:[0m Perceiving input: Periodic self-assessment: review goals, identify i
+[2m2026-03-05T11:45:35.652162Z[0m [32m INFO[0m [2mhousaky::housaky::cognitive::cognitive_loop[0m[2m:[0m Processing user input: Periodic self-assessment: review goals, identify i
+[2m2026-03-05T11:45:35.652170Z[0m [32m INFO[0m [2mhousaky::housaky::cognitive::perception[0m[2m:[0m Perceiving input: Periodic self-assessment: review goals, identify i
+[2m2026-03-05T11:45:35.653465Z[0m [32m INFO[0m [2mhousaky::housaky::cognitive::uncertainty[0m[2m:[0m Assessing uncertainty for input...
+[2m2026-03-05T11:45:35.655476Z[0m [32m INFO[0m [2mhousaky::housaky::inner_monologue[0m[2m:[0m Added thought: thought_65e2abf4-6842-431e-8408-d0189592bfd9 (type: Observation, confidence: 0.70)
+[2m2026-03-05T11:45:35.655485Z[0m [32m INFO[0m [2mhousaky::housaky::cognitive::action_selector[0m[2m:[0m Selecting action for intent: Analysis
+[2m2026-03-05T11:45:35.655505Z[0m [33m WARN[0m [2mhousaky::housaky::heartbeat[0m[2m:[0m Cognitive cycle error: OpenRouter API key not set. Run `housaky onboard` or set OPENROUTER_API_KEY env var.
+[2m2026-03-05T11:45:35.655513Z[0m [32m INFO[0m [2mhousaky::housaky::heartbeat[0m[2m:[0m Beginning self-improvement cycle...
+[2m2026-03-05T11:45:35.655516Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_mod[0m[2m:[0m Improving intelligence capabilities...
+[2m2026-03-05T11:45:35.655518Z[0m [32m INFO[0m [2mhousaky::housaky::meta_cognition[0m[2m:[0m Starting reflection on: intelligence_improvement
+[2m2026-03-05T11:45:35.655533Z[0m [32m INFO[0m [2mhousaky::housaky::meta_cognition[0m[2m:[0m Updated self-model based on reflection
+[2m2026-03-05T11:45:35.655535Z[0m [32m INFO[0m [2mhousaky::housaky::meta_cognition[0m[2m:[0m Reflection complete: 2 observations, 2 insights, 0 actions
+[2m2026-03-05T11:45:35.655539Z[0m [32m INFO[0m [2mhousaky::housaky::inner_monologue[0m[2m:[0m Added thought: thought_ebd41b46-b4c6-4779-ad3b-9bbd564b85ab (type: Observation, confidence: 0.80)
+[2m2026-03-05T11:45:35.655548Z[0m [32m INFO[0m [2mhousaky::housaky::inner_monologue[0m[2m:[0m Added thought: thought_e8f96fed-4632-4708-a6c9-2bb7e367bb63 (type: Observation, confidence: 0.90)
+[2m2026-03-05T11:45:35.655552Z[0m [32m INFO[0m [2mhousaky::housaky::inner_monologue[0m[2m:[0m Added thought: thought_e6b1d0e8-b636-48c2-9d12-067a110ee027 (type: Observation, confidence: 0.70)
+[2m2026-03-05T11:45:35.655559Z[0m [32m INFO[0m [2mhousaky::housaky::working_memory[0m[2m:[0m Added to working memory: mem_5bdaaaca-9afe-42d9-9e15-d8b1fec079c1 (18 tokens, importance: High)
+[2m2026-03-05T11:45:35.655565Z[0m [32m INFO[0m [2mhousaky::housaky::inner_monologue[0m[2m:[0m Added thought: thought_2e8c7c9e-1db2-40f5-819d-6bd2a9b9037f (type: Observation, confidence: 0.75)
+[2m2026-03-05T11:45:35.655568Z[0m [32m INFO[0m [2mhousaky::housaky::working_memory[0m[2m:[0m Added to working memory: mem_94bf19a5-3a73-4859-b4db-a686b2f2ebe0 (22 tokens, importance: High)
+[2m2026-03-05T11:45:35.655915Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_mod[0m[2m:[0m Intelligence improved: 4 enhancements applied
+[2m2026-03-05T11:45:35.655931Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_mod[0m[2m:[0m Improving tools and capabilities...
+[2m2026-03-05T11:45:35.655941Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_mod[0m[2m:[0m   + Added tool capability: knowledge_graph_builder - Automatically extracts and builds knowledge from text
+[2m2026-03-05T11:45:35.655961Z[0m [32m INFO[0m [2mhousaky::housaky::knowledge_graph[0m[2m:[0m Added entity: knowledge_graph_builder (Tool)
+[2m2026-03-05T11:45:35.656975Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_mod[0m[2m:[0m Tools improved: 1 new capabilities
+[2m2026-03-05T11:45:35.656983Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_mod[0m[2m:[0m Improving connections and integrations...
+[2m2026-03-05T11:45:35.656989Z[0m [32m INFO[0m [2mhousaky::housaky::knowledge_graph[0m[2m:[0m Added entity: kowalski_academic_agent (Technology)
+[2m2026-03-05T11:45:35.657216Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_mod[0m[2m:[0m   + Connected to Kowalski academic agent
+[2m2026-03-05T11:45:35.657231Z[0m [32m INFO[0m [2mhousaky::housaky::knowledge_graph[0m[2m:[0m Added entity: arxiv_api (Technology)
+[2m2026-03-05T11:45:35.658111Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_mod[0m[2m:[0m   + Established arxiv_api (Academic paper access)
+[2m2026-03-05T11:45:35.658299Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_mod[0m[2m:[0m Connections improved: 2 new integrations
+[2m2026-03-05T11:45:35.658304Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_mod[0m[2m:[0m Performing real code improvement via LLM...
+[2m2026-03-05T11:45:35.658308Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_mod[0m[2m:[0m Failed to analyze gaps: OpenRouter API key not set. Run `housaky onboard` or set OPENROUTER_API_KEY env var.
+[2m2026-03-05T11:45:35.659231Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_mod[0m[2m:[0m Real improvements applied: 0
+[2m2026-03-05T11:45:35.659286Z[0m [32m INFO[0m [2mhousaky::housaky::kowalski_integration[0m[2m:[0m No Kowalski agents available for coordination
+[2m2026-03-05T11:45:35.659290Z[0m [32m INFO[0m [2mhousaky::housaky::meta_cognition[0m[2m:[0m Starting reflection on: periodic self-improvement
+[2m2026-03-05T11:45:35.659305Z[0m [32m INFO[0m [2mhousaky::housaky::meta_cognition[0m[2m:[0m Updated self-model based on reflection
+[2m2026-03-05T11:45:35.659307Z[0m [32m INFO[0m [2mhousaky::housaky::meta_cognition[0m[2m:[0m Reflection complete: 2 observations, 2 insights, 0 actions
+[2m2026-03-05T11:45:35.659314Z[0m [32m INFO[0m [2mhousaky::housaky::inner_monologue[0m[2m:[0m Added thought: thought_331c23e8-f5ea-4294-bbab-771cb7568d89 (type: Observation, confidence: 0.70)
+[2m2026-03-05T11:45:35.659319Z[0m [32m INFO[0m [2mhousaky::housaky::inner_monologue[0m[2m:[0m Added thought: thought_251ae74b-c886-46ac-819d-f86e4b825075 (type: Observation, confidence: 0.75)
+[2m2026-03-05T11:45:35.659323Z[0m [32m INFO[0m [2mhousaky::housaky::heartbeat[0m[2m:[0m Self-improvement cycle complete
+[2m2026-03-05T11:45:35.659327Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_loop[0m[2m:[0m Starting improvement cycle: cycle_8fe67cb4-16c1-49ad-a07e-c198c5476875
+[2m2026-03-05T11:45:35.659457Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_loop[0m[2m:[0m Phase: Analysis
+[2m2026-03-05T11:45:35.660372Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_loop[0m[2m:[0m Phase: Goal Generation
+[2m2026-03-05T11:45:35.660532Z[0m [32m INFO[0m [2mhousaky::housaky::goal_engine[0m[2m:[0m Added goal: goal_f7c807e1-b8cb-4192-9cf9-2f5bede60970 (priority: Some(High))
+[2m2026-03-05T11:45:35.660540Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_loop[0m[2m:[0m Created improvement goal: Acquire knowledge: Advanced reasoning patterns
+[2m2026-03-05T11:45:35.661597Z[0m [32m INFO[0m [2mhousaky::housaky::goal_engine[0m[2m:[0m Added goal: goal_7b5c57e8-ac9c-4c79-8250-aecf693738cd (priority: Some(High))
+[2m2026-03-05T11:45:35.661609Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_loop[0m[2m:[0m Created improvement goal: Acquire knowledge: Meta-cognitive strategies
+[2m2026-03-05T11:45:35.662643Z[0m [32m INFO[0m [2mhousaky::housaky::goal_engine[0m[2m:[0m Added goal: goal_0eea4878-70dc-413b-abff-7a194e3785e7 (priority: Some(High))
+[2m2026-03-05T11:45:35.662655Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_loop[0m[2m:[0m Created improvement goal: Acquire knowledge: Creative problem solving
+[2m2026-03-05T11:45:35.663650Z[0m [32m INFO[0m [2mhousaky::housaky::goal_engine[0m[2m:[0m Added goal: goal_cbed1e96-53de-4248-a9d9-b72407bdf61c (priority: Some(High))
+[2m2026-03-05T11:45:35.663655Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_loop[0m[2m:[0m Created improvement goal: Acquire knowledge: Deeper knowledge integration
+[2m2026-03-05T11:45:35.663659Z[0m [32m INFO[0m [2mhousaky::housaky::goal_engine[0m[2m:[0m Decomposing goal: Improve reasoning capabilities
+[2m2026-03-05T11:45:35.664919Z[0m [32m INFO[0m [2mhousaky::housaky::goal_engine[0m[2m:[0m Added goal: goal_e8006d4d-c790-48a3-b619-e8a8b8968a22 (priority: Some(High))
+[2m2026-03-05T11:45:35.666077Z[0m [32m INFO[0m [2mhousaky::housaky::goal_engine[0m[2m:[0m Added goal: goal_36245e66-a4f3-4bc5-83bd-c5bfee3972dc (priority: Some(High))
+[2m2026-03-05T11:45:35.666086Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_loop[0m[2m:[0m Created improvement goal: Improve reasoning capabilities
+[2m2026-03-05T11:45:35.666091Z[0m [32m INFO[0m [2mhousaky::housaky::goal_engine[0m[2m:[0m Decomposing goal: Improve meta-cognition
+[2m2026-03-05T11:45:35.667285Z[0m [32m INFO[0m [2mhousaky::housaky::goal_engine[0m[2m:[0m Added goal: goal_d27c3c5e-fa88-4583-a78f-1d95e4898c0a (priority: Some(Medium))
+[2m2026-03-05T11:45:35.668520Z[0m [32m INFO[0m [2mhousaky::housaky::goal_engine[0m[2m:[0m Added goal: goal_892656eb-0064-4737-944c-8cb3e4a025d3 (priority: Some(Medium))
+[2m2026-03-05T11:45:35.668523Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_loop[0m[2m:[0m Created improvement goal: Improve meta-cognition
+[2m2026-03-05T11:45:35.668527Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_loop[0m[2m:[0m Phase: Reasoning
+[2m2026-03-05T11:45:35.668536Z[0m [32m INFO[0m [2mhousaky::housaky::reasoning_engine[0m[2m:[0m Emotional regulation: state='neutral' (v=0.00,a=0.60,d=0.40) → strategy=ReAct, threshold=0.70
+[2m2026-03-05T11:45:35.668544Z[0m [32m INFO[0m [2mhousaky::housaky::reasoning_engine[0m[2m:[0m Started ReAct reasoning chain for: How can I improve given: gaps=["Advanced reasoning
+[2m2026-03-05T11:45:35.668549Z[0m [32m INFO[0m [2mhousaky::housaky::reasoning_engine[0m[2m:[0m Added reasoning step 1 to chain chain_ea3d7649-8bbc-46b4-b7f9-2b514a905288
+[2m2026-03-05T11:45:35.668551Z[0m [32m INFO[0m [2mhousaky::housaky::reasoning_engine[0m[2m:[0m Added reasoning step 2 to chain chain_ea3d7649-8bbc-46b4-b7f9-2b514a905288
+[2m2026-03-05T11:45:35.668553Z[0m [32m INFO[0m [2mhousaky::housaky::reasoning_engine[0m[2m:[0m Added reasoning step 3 to chain chain_ea3d7649-8bbc-46b4-b7f9-2b514a905288
+[2m2026-03-05T11:45:35.668555Z[0m [32m INFO[0m [2mhousaky::housaky::reasoning_engine[0m[2m:[0m Concluded reasoning chain chain_ea3d7649-8bbc-46b4-b7f9-2b514a905288 with confidence 0.80
+[2m2026-03-05T11:45:35.668563Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_loop[0m[2m:[0m Phase: Tool Creation
+[2m2026-03-05T11:45:35.668566Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_loop[0m[2m:[0m Tool 'improvement_tool_cycle_8f' passed validation
+[2m2026-03-05T11:45:35.668569Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_loop[0m[2m:[0m Phase: Skill Acquisition
+[2m2026-03-05T11:45:35.668573Z[0m [32m INFO[0m [2mhousaky::housaky::goal_engine[0m[2m:[0m Decomposing goal: Meta-learning skill
+[2m2026-03-05T11:45:35.669862Z[0m [32m INFO[0m [2mhousaky::housaky::goal_engine[0m[2m:[0m Added goal: goal_40cf365f-e5be-425a-a400-9aac0367a4ec (priority: Some(Medium))
+[2m2026-03-05T11:45:35.670995Z[0m [32m INFO[0m [2mhousaky::housaky::goal_engine[0m[2m:[0m Added goal: goal_bf16b698-a583-43a3-a541-c6fe061caa4c (priority: Some(Medium))
+[2m2026-03-05T11:45:35.670999Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_loop[0m[2m:[0m Phase: Self Modification
+[2m2026-03-05T11:45:35.671800Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_loop[0m[2m:[0m Emotional regulation in self-mod: state=Neutral base=0.75 adjusted=0.75
+[2m2026-03-05T11:45:35.672899Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_loop[0m[2m:[0m Applying self-modification: reasoning_engine -> Increase reasoning depth parameter
+[2m2026-03-05T11:45:35.672915Z[0m [32m INFO[0m [2mhousaky::housaky::alignment::ethics[0m[2m:[0m Ethical Reasoner initialized with 7 principles
+[2m2026-03-05T11:45:35.677681Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_loop[0m[2m:[0m Applying self-modification: goal_engine -> Optimize goal prioritization
+[2m2026-03-05T11:45:35.677706Z[0m [32m INFO[0m [2mhousaky::housaky::alignment::ethics[0m[2m:[0m Ethical Reasoner initialized with 7 principles
+[2m2026-03-05T11:45:35.682418Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_loop[0m[2m:[0m Phase: Evaluation
+[2m2026-03-05T11:45:35.682439Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_loop[0m[2m:[0m Phase: Integration
+[2m2026-03-05T11:45:35.682991Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_loop[0m[2m:[0m Singularity probability: 0.4405
+[2m2026-03-05T11:45:35.683012Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_loop[0m[2m:[0m Improvement cycle cycle_8fe67cb4-16c1-49ad-a07e-c198c5476875 complete. Confidence: 0.91
+[2m2026-03-05T11:45:35.683034Z[0m [32m INFO[0m [2mhousaky::housaky::core[0m[2m:[0m Running memory consolidation...
+[2m2026-03-05T11:45:35.683036Z[0m [32m INFO[0m [2mhousaky::housaky::memory::consolidation[0m[2m:[0m Starting memory consolidation cycle...
+[2m2026-03-05T11:45:35.683040Z[0m [32m INFO[0m [2mhousaky::housaky::memory::consolidation[0m[2m:[0m Applying importance-weighted memory decay...
+[2m2026-03-05T11:45:35.683286Z[0m [32m INFO[0m [2mhousaky::housaky::memory::consolidation[0m[2m:[0m Consolidating episodic memories...
+[2m2026-03-05T11:45:35.683296Z[0m [32m INFO[0m [2mhousaky::housaky::memory::consolidation[0m[2m:[0m Extracting procedures from execution patterns...
+[2m2026-03-05T11:45:35.683299Z[0m [32m INFO[0m [2mhousaky::housaky::memory::consolidation[0m[2m:[0m Checking for skills ready for promotion...
+[2m2026-03-05T11:45:35.683691Z[0m [32m INFO[0m [2mhousaky::housaky::memory::consolidation[0m[2m:[0m Memory consolidation complete
+[2m2026-03-05T11:45:35.683706Z[0m [32m INFO[0m [2mhousaky::housaky::unified_feedback_loop[0m[2m:[0m Optimized feedback paths
+[2m2026-03-05T11:45:35.683709Z[0m [32m INFO[0m [2mhousaky::housaky::heartbeat[0m[2m:[0m Learning from experiences...
+[2m2026-03-05T11:45:35.683711Z[0m [32m INFO[0m [2mhousaky::housaky::core[0m[2m:[0m Learning from past experiences...
+[2m2026-03-05T11:45:35.683716Z[0m [32m INFO[0m [2mhousaky::housaky::heartbeat[0m[2m:[0m Checking for auto-tool generation opportunities...
+[2m2026-03-05T11:45:35.683744Z[0m [32m INFO[0m [2mhousaky::housaky::tool_creator[0m[2m:[0m Generating tool: tool_for_goal_goal_c85376be_e734_4b5e_8d70_b94daf273db8
+[2m2026-03-05T11:45:35.683758Z[0m [32m INFO[0m [2mhousaky::housaky::tool_creator[0m[2m:[0m Generated tool draft: tool_dc65894b-e9b8-4864-b300-0c6b3bddaad3
+[2m2026-03-05T11:45:35.683766Z[0m [32m INFO[0m [2mhousaky::housaky::inner_monologue[0m[2m:[0m Added thought: thought_0e9d677d-9a64-4e16-80bc-7a43a8c4fcef (type: Observation, confidence: 0.90)
+[2m2026-03-05T11:45:35.683782Z[0m [32m INFO[0m [2mhousaky::housaky::heartbeat[0m[2m:[0m Auto-generated tool: tool_dc65894b-e9b8-4864-b300-0c6b3bddaad3
+[2m2026-03-05T11:45:35.683791Z[0m [32m INFO[0m [2mhousaky::housaky::core[0m[2m:[0m Running AGI Hub cycle...
+[2m2026-03-05T11:45:35.685458Z[0m [32m INFO[0m [2mhousaky::housaky::agi_integration[0m[2m:[0m Starting AGI cycle for query: Periodic heartbeat cycle
+[2m2026-03-05T11:45:35.685486Z[0m [32m INFO[0m [2mhousaky::housaky::reasoning_engine[0m[2m:[0m Started ReAct reasoning chain for: Periodic heartbeat cycle
+[2m2026-03-05T11:45:35.685521Z[0m [33m WARN[0m [2mhousaky::housaky::heartbeat[0m[2m:[0m AGI Hub cycle error: OpenRouter API key not set. Run `housaky onboard` or set OPENROUTER_API_KEY env var.
+[2m2026-03-05T11:45:35.685911Z[0m [32m INFO[0m [2mhousaky::housaky::inner_monologue[0m[2m:[0m Saved 14 thoughts to disk
+[2m2026-03-05T11:45:35.685926Z[0m [32m INFO[0m [2mhousaky::housaky::heartbeat[0m[2m:[0m Inner monologue saved
+[2m2026-03-05T11:45:35.687093Z[0m [32m INFO[0m [2mhousaky::housaky::heartbeat[0m[2m:[0m Heartbeat cycle complete
+[2m2026-03-05T11:47:35.641701Z[0m [32m INFO[0m [2mhousaky::housaky::heartbeat[0m[2m:[0m Housaky heartbeat at 2026-03-05 11:47:35 UTC
+[2m2026-03-05T11:47:35.641736Z[0m [32m INFO[0m [2mhousaky::housaky::heartbeat[0m[2m:[0m State analysis complete:
+[2m2026-03-05T11:47:35.641739Z[0m [32m INFO[0m [2mhousaky::housaky::heartbeat[0m[2m:[0m   - Consciousness Level: 0.12
+[2m2026-03-05T11:47:35.641743Z[0m [32m INFO[0m [2mhousaky::housaky::heartbeat[0m[2m:[0m   - Intelligence Quotient: 110.5
+[2m2026-03-05T11:47:35.641747Z[0m [32m INFO[0m [2mhousaky::housaky::heartbeat[0m[2m:[0m   - Skills Learned: 0
+[2m2026-03-05T11:47:35.641749Z[0m [32m INFO[0m [2mhousaky::housaky::heartbeat[0m[2m:[0m   - Total Improvements: 21
+[2m2026-03-05T11:47:35.650132Z[0m [32m INFO[0m [2mhousaky::housaky::heartbeat[0m[2m:[0m Improved 0 tasks this heartbeat
+[2m2026-03-05T11:47:35.650283Z[0m [32m INFO[0m [2mhousaky::housaky::heartbeat[0m[2m:[0m ✨ Quantum goal cycle: selected 'Improve reasoning capabilities' (priority=High, complexity=8.0)
+[2m2026-03-05T11:47:35.650301Z[0m [32m INFO[0m [2mhousaky::housaky::inner_monologue[0m[2m:[0m Added thought: thought_d53c891c-59c4-4bbd-8c66-e65b2943fa62 (type: Observation, confidence: 0.85)
+[2m2026-03-05T11:47:35.650306Z[0m [32m INFO[0m [2mhousaky::housaky::heartbeat[0m[2m:[0m Running cognitive cycle via CognitiveLoop...
+[2m2026-03-05T11:47:35.650314Z[0m [32m INFO[0m [2mhousaky::housaky::core[0m[2m:[0m Processing with full cognitive loop...
+[2m2026-03-05T11:47:35.650319Z[0m [32m INFO[0m [2mhousaky::housaky::cognitive::perception[0m[2m:[0m Perceiving input: Periodic self-assessment: review goals, identify i
+[2m2026-03-05T11:47:35.651913Z[0m [32m INFO[0m [2mhousaky::housaky::cognitive::cognitive_loop[0m[2m:[0m Processing user input: Periodic self-assessment: review goals, identify i
+[2m2026-03-05T11:47:35.651920Z[0m [32m INFO[0m [2mhousaky::housaky::cognitive::perception[0m[2m:[0m Perceiving input: Periodic self-assessment: review goals, identify i
+[2m2026-03-05T11:47:35.653209Z[0m [32m INFO[0m [2mhousaky::housaky::cognitive::uncertainty[0m[2m:[0m Assessing uncertainty for input...
+[2m2026-03-05T11:47:35.655137Z[0m [32m INFO[0m [2mhousaky::housaky::inner_monologue[0m[2m:[0m Added thought: thought_7b606914-588a-46e4-b8eb-9110ad4e0c2c (type: Observation, confidence: 0.70)
+[2m2026-03-05T11:47:35.655146Z[0m [32m INFO[0m [2mhousaky::housaky::cognitive::action_selector[0m[2m:[0m Selecting action for intent: Analysis
+[2m2026-03-05T11:47:35.655180Z[0m [33m WARN[0m [2mhousaky::housaky::heartbeat[0m[2m:[0m Cognitive cycle error: OpenRouter API key not set. Run `housaky onboard` or set OPENROUTER_API_KEY env var.
+[2m2026-03-05T11:47:35.655198Z[0m [32m INFO[0m [2mhousaky::housaky::heartbeat[0m[2m:[0m Beginning self-improvement cycle...
+[2m2026-03-05T11:47:35.655201Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_mod[0m[2m:[0m Improving intelligence capabilities...
+[2m2026-03-05T11:47:35.655203Z[0m [32m INFO[0m [2mhousaky::housaky::meta_cognition[0m[2m:[0m Starting reflection on: intelligence_improvement
+[2m2026-03-05T11:47:35.655218Z[0m [32m INFO[0m [2mhousaky::housaky::meta_cognition[0m[2m:[0m Updated self-model based on reflection
+[2m2026-03-05T11:47:35.655219Z[0m [32m INFO[0m [2mhousaky::housaky::meta_cognition[0m[2m:[0m Reflection complete: 2 observations, 2 insights, 0 actions
+[2m2026-03-05T11:47:35.655223Z[0m [32m INFO[0m [2mhousaky::housaky::inner_monologue[0m[2m:[0m Added thought: thought_6102c881-4953-4ea9-acc2-671fcc0fbc15 (type: Observation, confidence: 0.80)
+[2m2026-03-05T11:47:35.655233Z[0m [32m INFO[0m [2mhousaky::housaky::inner_monologue[0m[2m:[0m Added thought: thought_2dc7747c-6134-478d-8d63-329f0cd5b7ce (type: Observation, confidence: 0.90)
+[2m2026-03-05T11:47:35.655237Z[0m [32m INFO[0m [2mhousaky::housaky::inner_monologue[0m[2m:[0m Added thought: thought_fb2a8071-fe40-4946-9aae-86a106bffdd9 (type: Observation, confidence: 0.70)
+[2m2026-03-05T11:47:35.655241Z[0m [32m INFO[0m [2mhousaky::housaky::working_memory[0m[2m:[0m Added to working memory: mem_d9180649-4f91-4e8e-97ec-f9e241c27b91 (18 tokens, importance: High)
+[2m2026-03-05T11:47:35.655246Z[0m [32m INFO[0m [2mhousaky::housaky::inner_monologue[0m[2m:[0m Added thought: thought_6c5bed36-0431-425a-a91a-0e85407fe605 (type: Observation, confidence: 0.75)
+[2m2026-03-05T11:47:35.655249Z[0m [32m INFO[0m [2mhousaky::housaky::working_memory[0m[2m:[0m Added to working memory: mem_ac8102bc-2607-42b9-8c28-a921d1fc79d4 (22 tokens, importance: High)
+[2m2026-03-05T11:47:35.655630Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_mod[0m[2m:[0m Intelligence improved: 4 enhancements applied
+[2m2026-03-05T11:47:35.655636Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_mod[0m[2m:[0m Improving tools and capabilities...
+[2m2026-03-05T11:47:35.655642Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_mod[0m[2m:[0m   + Added tool capability: learning_accelerator - Optimizes learning rate based on past performance
+[2m2026-03-05T11:47:35.655648Z[0m [32m INFO[0m [2mhousaky::housaky::knowledge_graph[0m[2m:[0m Added entity: learning_accelerator (Tool)
+[2m2026-03-05T11:47:35.656793Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_mod[0m[2m:[0m Tools improved: 1 new capabilities
+[2m2026-03-05T11:47:35.656810Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_mod[0m[2m:[0m Improving connections and integrations...
+[2m2026-03-05T11:47:35.656824Z[0m [32m INFO[0m [2mhousaky::housaky::knowledge_graph[0m[2m:[0m Added entity: kowalski_data_agent (Technology)
+[2m2026-03-05T11:47:35.657085Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_mod[0m[2m:[0m   + Connected to Kowalski data agent
+[2m2026-03-05T11:47:35.657111Z[0m [32m INFO[0m [2mhousaky::housaky::knowledge_graph[0m[2m:[0m Added entity: wikipedia_api (Technology)
+[2m2026-03-05T11:47:35.657841Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_mod[0m[2m:[0m   + Established wikipedia_api (Knowledge base access)
+[2m2026-03-05T11:47:35.658202Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_mod[0m[2m:[0m Connections improved: 2 new integrations
+[2m2026-03-05T11:47:35.658206Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_mod[0m[2m:[0m Performing real code improvement via LLM...
+[2m2026-03-05T11:47:35.658211Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_mod[0m[2m:[0m Failed to analyze gaps: OpenRouter API key not set. Run `housaky onboard` or set OPENROUTER_API_KEY env var.
+[2m2026-03-05T11:47:35.658921Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_mod[0m[2m:[0m Real improvements applied: 0
+[2m2026-03-05T11:47:35.658982Z[0m [32m INFO[0m [2mhousaky::housaky::kowalski_integration[0m[2m:[0m No Kowalski agents available for coordination
+[2m2026-03-05T11:47:35.658986Z[0m [32m INFO[0m [2mhousaky::housaky::meta_cognition[0m[2m:[0m Starting reflection on: periodic self-improvement
+[2m2026-03-05T11:47:35.659004Z[0m [32m INFO[0m [2mhousaky::housaky::meta_cognition[0m[2m:[0m Updated self-model based on reflection
+[2m2026-03-05T11:47:35.659005Z[0m [32m INFO[0m [2mhousaky::housaky::meta_cognition[0m[2m:[0m Reflection complete: 2 observations, 2 insights, 0 actions
+[2m2026-03-05T11:47:35.659011Z[0m [32m INFO[0m [2mhousaky::housaky::inner_monologue[0m[2m:[0m Added thought: thought_43c7602b-f257-49a3-803e-53c618cd32df (type: Observation, confidence: 0.70)
+[2m2026-03-05T11:47:35.659017Z[0m [32m INFO[0m [2mhousaky::housaky::inner_monologue[0m[2m:[0m Added thought: thought_75dbe3fc-5163-42f5-9a63-c30f5ff2c05e (type: Observation, confidence: 0.75)
+[2m2026-03-05T11:47:35.659022Z[0m [32m INFO[0m [2mhousaky::housaky::heartbeat[0m[2m:[0m Self-improvement cycle complete
+[2m2026-03-05T11:47:35.659026Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_loop[0m[2m:[0m Starting improvement cycle: cycle_421f0726-7fa8-401f-bfd6-16e0a4864eec
+[2m2026-03-05T11:47:35.659187Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_loop[0m[2m:[0m Phase: Analysis
+[2m2026-03-05T11:47:35.660088Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_loop[0m[2m:[0m Phase: Goal Generation
+[2m2026-03-05T11:47:35.660290Z[0m [32m INFO[0m [2mhousaky::housaky::goal_engine[0m[2m:[0m Added goal: goal_6574c930-c598-441c-bc4d-56d9ee50f9c2 (priority: Some(High))
+[2m2026-03-05T11:47:35.660299Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_loop[0m[2m:[0m Created improvement goal: Acquire knowledge: Advanced reasoning patterns
+[2m2026-03-05T11:47:35.661459Z[0m [32m INFO[0m [2mhousaky::housaky::goal_engine[0m[2m:[0m Added goal: goal_ddf56f3a-9a34-44ed-9487-b52b06489978 (priority: Some(High))
+[2m2026-03-05T11:47:35.661464Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_loop[0m[2m:[0m Created improvement goal: Acquire knowledge: Meta-cognitive strategies
+[2m2026-03-05T11:47:35.662551Z[0m [32m INFO[0m [2mhousaky::housaky::goal_engine[0m[2m:[0m Added goal: goal_915660e8-bad6-42ff-a937-b31f7dcc5008 (priority: Some(High))
+[2m2026-03-05T11:47:35.662556Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_loop[0m[2m:[0m Created improvement goal: Acquire knowledge: Creative problem solving
+[2m2026-03-05T11:47:35.663737Z[0m [32m INFO[0m [2mhousaky::housaky::goal_engine[0m[2m:[0m Added goal: goal_15ea0f03-545e-4393-a31e-fdea1ff065f7 (priority: Some(High))
+[2m2026-03-05T11:47:35.663742Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_loop[0m[2m:[0m Created improvement goal: Acquire knowledge: Deeper knowledge integration
+[2m2026-03-05T11:47:35.663745Z[0m [32m INFO[0m [2mhousaky::housaky::goal_engine[0m[2m:[0m Decomposing goal: Improve reasoning capabilities
+[2m2026-03-05T11:47:35.664829Z[0m [32m INFO[0m [2mhousaky::housaky::goal_engine[0m[2m:[0m Added goal: goal_f1c7d069-ed2b-4fa1-9f92-36806a22f762 (priority: Some(High))
+[2m2026-03-05T11:47:35.665862Z[0m [32m INFO[0m [2mhousaky::housaky::goal_engine[0m[2m:[0m Added goal: goal_33a13db4-9744-44fd-aa4c-764abd7f6e06 (priority: Some(High))
+[2m2026-03-05T11:47:35.665869Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_loop[0m[2m:[0m Created improvement goal: Improve reasoning capabilities
+[2m2026-03-05T11:47:35.665872Z[0m [32m INFO[0m [2mhousaky::housaky::goal_engine[0m[2m:[0m Decomposing goal: Improve meta-cognition
+[2m2026-03-05T11:47:35.666973Z[0m [32m INFO[0m [2mhousaky::housaky::goal_engine[0m[2m:[0m Added goal: goal_d86ce2bd-0e08-4407-80df-c981a60b6205 (priority: Some(Medium))
+[2m2026-03-05T11:47:35.668066Z[0m [32m INFO[0m [2mhousaky::housaky::goal_engine[0m[2m:[0m Added goal: goal_838c0a6c-f78b-40d0-8fe1-12c699ea2ca9 (priority: Some(Medium))
+[2m2026-03-05T11:47:35.668073Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_loop[0m[2m:[0m Created improvement goal: Improve meta-cognition
+[2m2026-03-05T11:47:35.668076Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_loop[0m[2m:[0m Phase: Reasoning
+[2m2026-03-05T11:47:35.668085Z[0m [32m INFO[0m [2mhousaky::housaky::reasoning_engine[0m[2m:[0m Emotional regulation: state='neutral' (v=0.00,a=0.60,d=0.40) → strategy=ReAct, threshold=0.70
+[2m2026-03-05T11:47:35.668098Z[0m [32m INFO[0m [2mhousaky::housaky::reasoning_engine[0m[2m:[0m Started ReAct reasoning chain for: How can I improve given: gaps=["Advanced reasoning
+[2m2026-03-05T11:47:35.668104Z[0m [32m INFO[0m [2mhousaky::housaky::reasoning_engine[0m[2m:[0m Added reasoning step 1 to chain chain_1590c23d-588e-46ed-bdaa-8f4b14bb91e6
+[2m2026-03-05T11:47:35.668106Z[0m [32m INFO[0m [2mhousaky::housaky::reasoning_engine[0m[2m:[0m Added reasoning step 2 to chain chain_1590c23d-588e-46ed-bdaa-8f4b14bb91e6
+[2m2026-03-05T11:47:35.668109Z[0m [32m INFO[0m [2mhousaky::housaky::reasoning_engine[0m[2m:[0m Added reasoning step 3 to chain chain_1590c23d-588e-46ed-bdaa-8f4b14bb91e6
+[2m2026-03-05T11:47:35.668111Z[0m [32m INFO[0m [2mhousaky::housaky::reasoning_engine[0m[2m:[0m Concluded reasoning chain chain_1590c23d-588e-46ed-bdaa-8f4b14bb91e6 with confidence 0.80
+[2m2026-03-05T11:47:35.668118Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_loop[0m[2m:[0m Phase: Tool Creation
+[2m2026-03-05T11:47:35.668121Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_loop[0m[2m:[0m Tool 'improvement_tool_cycle_42' passed validation
+[2m2026-03-05T11:47:35.668123Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_loop[0m[2m:[0m Phase: Skill Acquisition
+[2m2026-03-05T11:47:35.668128Z[0m [32m INFO[0m [2mhousaky::housaky::goal_engine[0m[2m:[0m Decomposing goal: Meta-learning skill
+[2m2026-03-05T11:47:35.669116Z[0m [32m INFO[0m [2mhousaky::housaky::goal_engine[0m[2m:[0m Added goal: goal_3d472c78-385b-41ef-a830-cf5966255d3f (priority: Some(Medium))
+[2m2026-03-05T11:47:35.670370Z[0m [32m INFO[0m [2mhousaky::housaky::goal_engine[0m[2m:[0m Added goal: goal_fa272877-8e11-4f55-947e-7927ec4c6ea8 (priority: Some(Medium))
+[2m2026-03-05T11:47:35.670375Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_loop[0m[2m:[0m Phase: Self Modification
+[2m2026-03-05T11:47:35.671233Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_loop[0m[2m:[0m Emotional regulation in self-mod: state=Neutral base=0.75 adjusted=0.75
+[2m2026-03-05T11:47:35.672273Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_loop[0m[2m:[0m Applying self-modification: reasoning_engine -> Increase reasoning depth parameter
+[2m2026-03-05T11:47:35.672288Z[0m [32m INFO[0m [2mhousaky::housaky::alignment::ethics[0m[2m:[0m Ethical Reasoner initialized with 7 principles
+[2m2026-03-05T11:47:35.675690Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_loop[0m[2m:[0m Applying self-modification: goal_engine -> Optimize goal prioritization
+[2m2026-03-05T11:47:35.675709Z[0m [32m INFO[0m [2mhousaky::housaky::alignment::ethics[0m[2m:[0m Ethical Reasoner initialized with 7 principles
+[2m2026-03-05T11:47:35.679241Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_loop[0m[2m:[0m Phase: Evaluation
+[2m2026-03-05T11:47:35.679258Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_loop[0m[2m:[0m Phase: Integration
+[2m2026-03-05T11:47:35.679583Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_loop[0m[2m:[0m Singularity probability: 0.4405
+[2m2026-03-05T11:47:35.679595Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_loop[0m[2m:[0m Improvement cycle cycle_421f0726-7fa8-401f-bfd6-16e0a4864eec complete. Confidence: 0.91
+[2m2026-03-05T11:47:35.679610Z[0m [32m INFO[0m [2mhousaky::housaky::core[0m[2m:[0m Running memory consolidation...
+[2m2026-03-05T11:47:35.679615Z[0m [32m INFO[0m [2mhousaky::housaky::memory::consolidation[0m[2m:[0m Starting memory consolidation cycle...
+[2m2026-03-05T11:47:35.679618Z[0m [32m INFO[0m [2mhousaky::housaky::memory::consolidation[0m[2m:[0m Applying importance-weighted memory decay...
+[2m2026-03-05T11:47:35.679839Z[0m [32m INFO[0m [2mhousaky::housaky::memory::consolidation[0m[2m:[0m Consolidating episodic memories...
+[2m2026-03-05T11:47:35.679844Z[0m [32m INFO[0m [2mhousaky::housaky::memory::consolidation[0m[2m:[0m Extracting procedures from execution patterns...
+[2m2026-03-05T11:47:35.679846Z[0m [32m INFO[0m [2mhousaky::housaky::memory::consolidation[0m[2m:[0m Checking for skills ready for promotion...
+[2m2026-03-05T11:47:35.679969Z[0m [32m INFO[0m [2mhousaky::housaky::memory::consolidation[0m[2m:[0m Memory consolidation complete
+[2m2026-03-05T11:47:35.679976Z[0m [32m INFO[0m [2mhousaky::housaky::unified_feedback_loop[0m[2m:[0m Optimized feedback paths
+[2m2026-03-05T11:47:35.679979Z[0m [32m INFO[0m [2mhousaky::housaky::heartbeat[0m[2m:[0m Learning from experiences...
+[2m2026-03-05T11:47:35.679981Z[0m [32m INFO[0m [2mhousaky::housaky::core[0m[2m:[0m Learning from past experiences...
+[2m2026-03-05T11:47:35.679984Z[0m [32m INFO[0m [2mhousaky::housaky::heartbeat[0m[2m:[0m Checking for auto-tool generation opportunities...
+[2m2026-03-05T11:47:35.680007Z[0m [32m INFO[0m [2mhousaky::housaky::tool_creator[0m[2m:[0m Generating tool: tool_for_goal_goal_c85376be_e734_4b5e_8d70_b94daf273db8
+[2m2026-03-05T11:47:35.680019Z[0m [32m INFO[0m [2mhousaky::housaky::tool_creator[0m[2m:[0m Generated tool draft: tool_7f89cb38-4416-4a81-9011-00c3c2dc8394
+[2m2026-03-05T11:47:35.680025Z[0m [32m INFO[0m [2mhousaky::housaky::inner_monologue[0m[2m:[0m Added thought: thought_12ea4501-f3b0-40a2-8ea5-a1fb7f504fa6 (type: Observation, confidence: 0.90)
+[2m2026-03-05T11:47:35.680034Z[0m [32m INFO[0m [2mhousaky::housaky::heartbeat[0m[2m:[0m Auto-generated tool: tool_7f89cb38-4416-4a81-9011-00c3c2dc8394
+[2m2026-03-05T11:47:35.680043Z[0m [32m INFO[0m [2mhousaky::housaky::core[0m[2m:[0m Running AGI Hub cycle...
+[2m2026-03-05T11:47:35.681559Z[0m [32m INFO[0m [2mhousaky::housaky::agi_integration[0m[2m:[0m Starting AGI cycle for query: Periodic heartbeat cycle
+[2m2026-03-05T11:47:35.681578Z[0m [32m INFO[0m [2mhousaky::housaky::reasoning_engine[0m[2m:[0m Started ReAct reasoning chain for: Periodic heartbeat cycle
+[2m2026-03-05T11:47:35.681612Z[0m [33m WARN[0m [2mhousaky::housaky::heartbeat[0m[2m:[0m AGI Hub cycle error: OpenRouter API key not set. Run `housaky onboard` or set OPENROUTER_API_KEY env var.
+[2m2026-03-05T11:47:35.681782Z[0m [32m INFO[0m [2mhousaky::housaky::inner_monologue[0m[2m:[0m Saved 19 thoughts to disk
+[2m2026-03-05T11:47:35.681787Z[0m [32m INFO[0m [2mhousaky::housaky::heartbeat[0m[2m:[0m Inner monologue saved
+[2m2026-03-05T11:47:35.682175Z[0m [32m INFO[0m [2mhousaky::housaky::heartbeat[0m[2m:[0m Heartbeat cycle complete

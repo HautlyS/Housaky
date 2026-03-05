@@ -368,7 +368,7 @@ async fn main() -> Result<()> {
                                 }
                             }
                             KeyCommands::Add { provider, key } => {
-                                match keys_manager.add_key(&provider, key, None).await {
+                                match keys_manager.add_key(&provider, key, None, None).await {
                                     Ok(()) => {
                                         println!("Added key to provider: {}", provider);
                                         keys_manager.save().await.ok();
@@ -550,6 +550,120 @@ async fn main() -> Result<()> {
 
                 Commands::Quantum { quantum_command } => {
                     housaky::cli::quantum::handle_quantum(&config, quantum_command).await
+                }
+
+                Commands::A2A { action, message, task_id, task_action, params, category, confidence, file, timeout } => {
+                    use housaky::housaky::a2a::{A2AManager, A2AMessage, A2AMessageType, A2ASelfImprove};
+                    
+                    let shared_dir = config.collaboration.shared_dir.clone();
+                    let instance = &config.collaboration.instance_name;
+                    let peer = &config.collaboration.peer_instance;
+                    
+                    let manager = A2AManager::new(shared_dir.clone(), instance, peer);
+                    let a2a = A2ASelfImprove::new(shared_dir, instance, peer);
+                    
+                    let action = action.unwrap_or_else(|| "ping".to_string());
+                    
+                    match action.as_str() {
+                        "ping" => {
+                            match a2a.ping_peer().await {
+                                Ok(true) => {
+                                    println!("✅ Peer {} is alive!", peer);
+                                    Ok(())
+                                }
+                                Ok(false) => {
+                                    println!("❌ Peer {} is not responding", peer);
+                                    Ok(())
+                                }
+                                Err(e) => {
+                                    println!("❌ Ping failed: {}", e);
+                                    Ok(())
+                                }
+                            }
+                        }
+                        "sync" => {
+                            match a2a.sync_with_peer(timeout).await {
+                                Ok(Some(resp)) => {
+                                    println!("📡 Sync response: {:?}", resp.msg);
+                                    Ok(())
+                                }
+                                Ok(None) => {
+                                    println!("⏱️ Sync timed out after {}s", timeout);
+                                    Ok(())
+                                }
+                                Err(e) => {
+                                    anyhow::bail!("Sync error: {}", e)
+                                }
+                            }
+                        }
+                        "send" => {
+                            let msg = message.unwrap_or_else(|| "Hello from Housaky".to_string());
+                            manager.send(&A2AMessage::new(instance, peer, A2AMessageType::Context {
+                                memory_type: "message".to_string(),
+                                data: serde_json::json!({ "text": msg }),
+                            })).await?;
+                            println!("📤 Message sent to {}", peer);
+                            Ok(())
+                        }
+                        "recv" => {
+                            let messages = manager.read_from(peer)?;
+                            for msg in &messages {
+                                println!("📥 From {}: {:?}", msg.from, msg.msg);
+                            }
+                            if messages.is_empty() {
+                                println!("📭 No messages from {}", peer);
+                            }
+                            Ok(())
+                        }
+                        "delegate" => {
+                            let tid = task_id.unwrap_or_else(|| "task-1".to_string());
+                            let act = task_action.unwrap_or_else(|| "analyze".to_string());
+                            let ps = params.as_ref()
+                                .and_then(|p| serde_json::from_str(p).ok())
+                                .unwrap_or(serde_json::json!({}));
+                            a2a.delegate_task(&tid, &act, ps).await?;
+                            println!("📋 Task {} ({}) delegated to {}", tid, act, peer);
+                            Ok(())
+                        }
+                        "learn" => {
+                            let cat = category.unwrap_or_else(|| "general".to_string());
+                            let cont = message.unwrap_or_else(|| "No content".to_string());
+                            let conf = confidence.unwrap_or(0.8);
+                            a2a.share_learning(&cat, &cont, conf).await?;
+                            println!("📚 Learning shared with {}: {} (conf: {})", peer, cat, conf);
+                            Ok(())
+                        }
+                        "review" => {
+                            let f = file.as_ref().ok_or_else(|| anyhow::anyhow!("--file required for review"))?;
+                            let diff = std::fs::read_to_string(f).unwrap_or_default();
+                            a2a.request_code_review(f, &diff).await?;
+                            println!("🔍 Code review requested for {}", f);
+                            Ok(())
+                        }
+                        "process" => {
+                            let responses = manager.process()?;
+                            let count = responses.len();
+                            for resp in responses.iter() {
+                                println!("📤 Response: {:?}", resp.msg);
+                                manager.send(resp).await?;
+                            }
+                            println!("✅ Processed {} messages", count);
+                            Ok(())
+                        }
+                        _ => {
+                            println!("Usage: housaky a2a <action> [options]");
+                            println!("Actions:");
+                            println!("  ping          - Check if peer is alive");
+                            println!("  sync          - Request state sync with peer");
+                            println!("  send          - Send message to peer");
+                            println!("  recv          - Receive messages from peer");
+                            println!("  delegate      - Delegate task to peer");
+                            println!("  learn         - Share learning with peer");
+                            println!("  review        - Request code review from peer");
+                            println!("  process       - Process incoming messages");
+                            Ok(())
+                        }
+                    }
                 }
 
                 Commands::Onboard { .. } => {

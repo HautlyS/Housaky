@@ -230,6 +230,7 @@ pub struct KeyEntry {
     pub tags: Vec<String>,
     pub usage: KeyUsage,
     pub rate_limit: Option<RateLimitConfig>,
+    pub url: Option<String>,
 }
 
 impl KeyEntry {
@@ -247,6 +248,7 @@ impl KeyEntry {
             tags: Vec::new(),
             usage: KeyUsage::default(),
             rate_limit: None,
+            url: None,
         }
     }
 
@@ -659,12 +661,14 @@ impl KeysManager {
         provider_name: &str,
         key: String,
         name: Option<String>,
+        url: Option<String>,
     ) -> Result<()> {
         let mut store = self.store.write().await;
         if let Some(provider) = store.providers.get_mut(provider_name) {
             let key_name = name.unwrap_or_else(|| format!("key-{}", provider.keys.len() + 1));
             let mut entry = KeyEntry::new(key, key_name);
             entry.priority = (provider.keys.len() + 1) as u32;
+            entry.url = url;
             provider.keys.push(entry);
             provider.metadata.updated_at = Utc::now();
             drop(store);
@@ -916,6 +920,31 @@ impl KeysManager {
         if !provider.models.iter().any(|m| m == model) {
             provider.models.push(model.to_string());
         }
+        provider.metadata.updated_at = Utc::now();
+        drop(store);
+        self.save().await
+    }
+
+    pub async fn update_provider_config(
+        &self,
+        provider_name: &str,
+        base_url: &str,
+        priority: ProviderPriority,
+        enabled: bool,
+    ) -> Result<()> {
+        let mut store = self.store.write().await;
+        let provider = store
+            .providers
+            .get_mut(provider_name)
+            .ok_or_else(|| anyhow::anyhow!("Provider '{}' not found", provider_name))?;
+
+        if !base_url.is_empty() {
+            provider.base_url = Some(base_url.to_string());
+        } else {
+            provider.base_url = None;
+        }
+        provider.priority = priority;
+        provider.enabled = enabled;
         provider.metadata.updated_at = Utc::now();
         drop(store);
         self.save().await

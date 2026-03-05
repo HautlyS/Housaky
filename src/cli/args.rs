@@ -314,6 +314,45 @@ pub enum Commands {
         #[command(subcommand)]
         quantum_command: QuantumCommands,
     },
+
+    /// Agent-to-Agent direct communication with OpenClaw (efficient binary/JSON)
+    A2A {
+        /// Subcommand: ping, send, recv, sync, delegate, learn, review
+        #[arg(value_name = "ACTION")]
+        action: Option<String>,
+
+        /// Message or content to send
+        #[arg(short, long)]
+        message: Option<String>,
+
+        /// Task ID for delegation
+        #[arg(long)]
+        task_id: Option<String>,
+
+        /// Action to delegate (analyze, review, improve, test)
+        #[arg(long)]
+        task_action: Option<String>,
+
+        /// JSON parameters for task
+        #[arg(long)]
+        params: Option<String>,
+
+        /// Category for learning (code, reasoning, memory, etc.)
+        #[arg(long)]
+        category: Option<String>,
+
+        /// Confidence level (0.0-1.0)
+        #[arg(long)]
+        confidence: Option<f32>,
+
+        /// File path for code review
+        #[arg(long)]
+        file: Option<String>,
+
+        /// Timeout in seconds
+        #[arg(short, long, default_value = "30")]
+        timeout: u64,
+    },
 }
 
 impl Commands {

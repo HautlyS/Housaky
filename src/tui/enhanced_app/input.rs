@@ -298,14 +298,14 @@ impl InputBar {
         };
 
         let title_style = if focused { style_title() } else { style_dim() };
-        let title = format!(" ◉ {} {} ", mode_str, count_str);
+        let title = format!(" ⌖ {} {} ", mode_str, count_str);
 
         let hint = if self.is_command() {
-            "Enter=send  Esc=cancel  Tab=complete"
+            "↵=send  Esc=cancel  ⇥=complete"
         } else if focused {
-            "Enter=send  ↑↓=history  Ctrl+P=palette  Esc=blur"
+            "↵=send  ↑↓=history  ⌘P=palette  Esc=blur"
         } else {
-            "Press i to type  Ctrl+P=palette  ?=help"
+            "Press i to type  ⌘P=palette  ?=help"
         };
 
         let block = Block::default()
@@ -323,9 +323,9 @@ impl InputBar {
         let max_height = inner.height.saturating_sub(1).max(min_height);
         let required_height = (text_lines as u16).min(max_height).max(min_height);
 
-        // Render text with cursor
+        // Render text with cursor - 2077 style
         let display_text = if self.text.is_empty() && !focused {
-            Span::styled("  Type a message or /command…", style_muted())
+            Span::styled("  Type message or /command…", style_muted())
         } else {
             let text_style = if focused {
                 style_input_focused()
@@ -349,25 +349,28 @@ impl InputBar {
                 String::new()
             };
 
-            let command_hint_color = if self.is_command() {
-                Palette::CYAN
+            // Command mode = cyan cursor, normal = white cursor
+            let command_cursor_color = if self.is_command() {
+                Palette::PINK
             } else {
-                Palette::TEXT_BRIGHT
+                Palette::CYAN
             };
 
             Line::from(vec![
                 Span::styled(
                     before.to_string(),
-                    ratatui::style::Style::default().fg(command_hint_color),
+                    ratatui::style::Style::default().fg(Palette::TEXT),
                 ),
                 Span::styled(
                     cursor_char,
                     ratatui::style::Style::default()
-                        .fg(Palette::BG)
-                        .bg(Palette::CYAN)
+                        .fg(command_cursor_color)
                         .add_modifier(Modifier::BOLD),
                 ),
-                Span::styled(after, ratatui::style::Style::default().fg(Palette::TEXT)),
+                Span::styled(
+                    after,
+                    ratatui::style::Style::default().fg(Palette::TEXT_DIM),
+                ),
             ])
         } else {
             Line::from(display_text)

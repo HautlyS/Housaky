@@ -94,6 +94,10 @@ pub struct KeysAddKeyArgs {
     /// Optional human-friendly name for the key.
     #[arg(long)]
     pub name: Option<String>,
+
+    /// Optional URL endpoint for this key.
+    #[arg(long)]
+    pub url: Option<String>,
 }
 
 #[derive(Debug, Args, Clone)]
@@ -256,7 +260,7 @@ pub async fn handle_keys_manager_command(
         }
         KeysManagerCommands::AddKey(args) => {
             manager
-                .add_key(&args.provider, args.key, args.name.clone())
+                .add_key(&args.provider, args.key, args.name.clone(), args.url)
                 .await?;
             println!("Added key to {}", args.provider);
             Ok(())

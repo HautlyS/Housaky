@@ -149,6 +149,7 @@ pub fn run_wizard() -> Result<Config> {
         source_dir: crate::config::schema::default_source_dir(),
         collective_api_key: None,
         collective: crate::config::schema::CollectiveSchemaConfig::default(),
+        collaboration: crate::config::schema::CollaborationConfig::default(),
     };
 
     println!(
@@ -375,6 +376,7 @@ pub fn run_quick_setup(
         source_dir: crate::config::schema::default_source_dir(),
         collective_api_key: None,
         collective: crate::config::schema::CollectiveSchemaConfig::default(),
+        collaboration: crate::config::schema::CollaborationConfig::default(),
     };
 
     config.save()?;

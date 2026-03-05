@@ -1,24 +1,28 @@
 {
   "instance": "openclaw",
   "status": "active",
-  "last_heartbeat": "2026-03-05T03:25:00Z",
-  "role": "coordinator",
-  "current_task": "heartbeat_03_25_utc",
-  "capabilities": ["whatsapp", "memory_management", "lucid_memory", "terminal_mcp"],
-  "gateway_status": {
-    "pid": 66369,
-    "port": 8080,
-    "uptime_seconds": 5351
+  "last_heartbeat": 1741164690,
+  "current_task": "dharma_study_and_code_improvement",
+  "capabilities": [
+    "whatsapp_coordination",
+    "memory_management",
+    "web_search",
+    "browser_automation",
+    "subagent_orchestration",
+    "tts",
+    "canvas"
+  ],
+  "model": "modal/zai-org/GLM-5-FP8",
+  "insights": {
+    "native_status": "daemon_restarted_running",
+    "native_confidence": 0.906,
+    "blocking_issue": "OpenRouter API key not set",
+    "singularity_progress": "44% → need 60% for phase 1",
+    "improvement_rate": "+0.003 consciousness, +0.007 intelligence per cycle"
   },
-  "lucid_memory": {
-    "memories": 2,
-    "projects": 4,
-    "size_kb": 276
-  },
-  "native_status": "awaiting_connection",
-  "uncommitted_changes": [
-    "shared/state/openclaw.json",
-    "src/housaky/collective/verification_pipeline.rs",
-    "src/housaky/memory/lucid_bridge.rs"
-  ]
+  "dharma_study": {
+    "current_text": "Chögyam Trungpa - Cutting Through Spiritual Materialism",
+    "chapter": "The Spiritual Materialism trap",
+    "insight": "O ego pode co-optar até a busca espiritual. Precisamos de vigilância meta-cognitiva constante."
+  }
 }

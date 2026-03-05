@@ -21,6 +21,7 @@ pub mod agi_context;
 pub mod agi_integration;
 pub mod agi_loop;
 pub mod alignment;
+pub mod a2a;
 pub mod cognitive;
 pub mod collaboration;
 pub mod core;

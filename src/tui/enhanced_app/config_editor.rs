@@ -12,6 +12,7 @@ use ratatui::{
     widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph, Wrap},
     Frame,
 };
+use std::path::PathBuf;
 
 // ── Section definitions ───────────────────────────────────────────────────────
 
@@ -29,6 +30,7 @@ pub enum Section {
     Skills,
     AGI,
     Heartbeat,
+    Collaboration,
 }
 
 impl Section {
@@ -45,6 +47,7 @@ impl Section {
         Section::Skills,
         Section::AGI,
         Section::Heartbeat,
+        Section::Collaboration,
     ];
 
     fn label(self) -> &'static str {
@@ -61,6 +64,7 @@ impl Section {
             Section::Skills => "  Skills",
             Section::AGI => "  AGI",
             Section::Heartbeat => "  Heartbeat",
+            Section::Collaboration => "  OpenClaw",
         }
     }
 
@@ -78,6 +82,7 @@ impl Section {
             Section::Skills => "🧩",
             Section::AGI => "✨",
             Section::Heartbeat => "💓",
+            Section::Collaboration => "🔗",
         }
     }
 }
@@ -299,7 +304,8 @@ impl ConfigEditor {
                     let lock_result = manager.store.try_read();
                     if let Ok(store) = lock_result {
                         let total_providers = store.providers.len();
-                        let total_keys: usize = store.providers.values().map(|p| p.keys.len()).sum();
+                        let total_keys: usize =
+                            store.providers.values().map(|p| p.keys.len()).sum();
                         let enabled_keys: usize = store
                             .providers
                             .values()
@@ -762,6 +768,60 @@ impl ConfigEditor {
                     format!("{}", config.heartbeat.interval_minutes),
                 ));
             }
+            Section::Collaboration => {
+                self.fields.push(ConfigField::new(
+                    "instance_name",
+                    "This instance name (native/openclaw)",
+                    FieldKind::Text,
+                    config.collaboration.instance_name.clone(),
+                ));
+                self.fields.push(ConfigField::new(
+                    "peer_instance",
+                    "Peer instance to collaborate with",
+                    FieldKind::Text,
+                    config.collaboration.peer_instance.clone(),
+                ));
+                self.fields.push(ConfigField::new(
+                    "shared_dir",
+                    "Shared directory path for communication",
+                    FieldKind::Text,
+                    config
+                        .collaboration
+                        .shared_dir
+                        .to_string_lossy()
+                        .to_string(),
+                ));
+                self.fields.push(ConfigField::new(
+                    "heartbeat_interval_secs",
+                    "Heartbeat interval between instances",
+                    FieldKind::Number,
+                    format!("{}", config.collaboration.heartbeat_interval_secs),
+                ));
+                self.fields.push(ConfigField::new(
+                    "auto_sync",
+                    "Auto-sync knowledge with peer instance",
+                    FieldKind::Bool,
+                    format!("{}", config.collaboration.auto_sync),
+                ));
+                self.fields.push(ConfigField::new(
+                    "self_improve_enabled",
+                    "Enable self-improvement via peer collaboration",
+                    FieldKind::Bool,
+                    format!("{}", config.collaboration.self_improve_enabled),
+                ));
+                self.fields.push(ConfigField::new(
+                    "code_sharing",
+                    "Share code improvements with peer",
+                    FieldKind::Bool,
+                    format!("{}", config.collaboration.code_sharing),
+                ));
+                self.fields.push(ConfigField::new(
+                    "insights_exchange",
+                    "Exchange insights and learnings",
+                    FieldKind::Bool,
+                    format!("{}", config.collaboration.insights_exchange),
+                ));
+            }
         }
     }
 
@@ -1196,6 +1256,33 @@ impl ConfigEditor {
                 (Section::Heartbeat, "interval_minutes") => {
                     config.heartbeat.interval_minutes =
                         v.parse().unwrap_or(config.heartbeat.interval_minutes);
+                }
+                // Collaboration
+                (Section::Collaboration, "instance_name") => {
+                    config.collaboration.instance_name = v.clone();
+                }
+                (Section::Collaboration, "peer_instance") => {
+                    config.collaboration.peer_instance = v.clone();
+                }
+                (Section::Collaboration, "shared_dir") => {
+                    config.collaboration.shared_dir = PathBuf::from(v);
+                }
+                (Section::Collaboration, "heartbeat_interval_secs") => {
+                    config.collaboration.heartbeat_interval_secs = v
+                        .parse()
+                        .unwrap_or(config.collaboration.heartbeat_interval_secs);
+                }
+                (Section::Collaboration, "auto_sync") => {
+                    config.collaboration.auto_sync = v == "true";
+                }
+                (Section::Collaboration, "self_improve_enabled") => {
+                    config.collaboration.self_improve_enabled = v == "true";
+                }
+                (Section::Collaboration, "code_sharing") => {
+                    config.collaboration.code_sharing = v == "true";
+                }
+                (Section::Collaboration, "insights_exchange") => {
+                    config.collaboration.insights_exchange = v == "true";
                 }
                 _ => {}
             }

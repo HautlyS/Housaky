@@ -9,6 +9,15 @@ use ratatui::{
     Frame,
 };
 use std::io;
+use std::time::Instant;
+
+fn truncate_str(s: &str, max_len: usize) -> String {
+    if s.len() <= max_len {
+        s.to_string()
+    } else {
+        format!("{}...", &s[..max_len.saturating_sub(3)])
+    }
+}
 
 // ─── State ────────────────────────────────────────────────────────────────────
 
@@ -18,6 +27,10 @@ enum KeysView {
     AddProvider,
     AddKey,
     Detail,
+    EditModel,
+    EditProvider,
+    ConfirmDelete,
+    HealthCheck,
 }
 
 #[derive(Debug, Clone)]
@@ -30,6 +43,8 @@ struct ProviderRow {
     total_requests: u64,
     failed_requests: u64,
     rate_limited: u64,
+    base_url: Option<String>,
+    enabled: bool,
 }
 
 struct KeysTui {
@@ -39,20 +54,47 @@ struct KeysTui {
     view: KeysView,
     notification: Option<(String, std::time::Instant)>,
     should_quit: bool,
+    delete_target: Option<DeleteTarget>,
+    edit_model_value: String,
+    edit_model_field: usize,
+    edit_provider_name: String,
+    edit_provider_url: String,
+    edit_provider_priority: String,
+    edit_provider_enabled: bool,
+    edit_provider_field: usize,
+    health_check_result: Option<HealthCheckResult>,
+    health_check_loading: bool,
 
     // Add provider form
     form_name: String,
     form_template: String,
     form_key: String,
     form_priority: String,
-    form_field: usize, // 0=name,1=template,2=key,3=priority
+    form_url: String,
+    form_field: usize, // 0=name,1=template,2=key,3=priority,4=url
 
     // Add key form
     addkey_provider: String,
     addkey_value: String,
-    addkey_field: usize, // 0=provider,1=key
+    addkey_url: String,
+    addkey_field: usize, // 0=provider,1=key,2=url
 
     status: String,
+}
+
+#[derive(Debug, Clone)]
+enum DeleteTarget {
+    Provider(String),
+    Key(String, String), // (provider_name, key_id)
+}
+
+#[derive(Debug, Clone)]
+struct HealthCheckResult {
+    provider: String,
+    success: bool,
+    status_code: u16,
+    message: String,
+    latency_ms: u64,
 }
 
 impl KeysTui {
@@ -64,18 +106,30 @@ impl KeysTui {
             view: KeysView::List,
             notification: None,
             should_quit: false,
+            delete_target: None,
+            edit_model_value: String::new(),
+            edit_model_field: 0,
+            edit_provider_name: String::new(),
+            edit_provider_url: String::new(),
+            edit_provider_priority: String::new(),
+            edit_provider_enabled: true,
+            edit_provider_field: 0,
+            health_check_result: None,
+            health_check_loading: false,
 
             form_name: String::new(),
             form_template: "openai".to_string(),
             form_key: String::new(),
             form_priority: "50".to_string(),
+            form_url: String::new(),
             form_field: 0,
 
             addkey_provider: String::new(),
             addkey_value: String::new(),
+            addkey_url: String::new(),
             addkey_field: 0,
 
-            status: "Keys Manager — Housaky 2026".to_string(),
+            status: "Keys Manager — Housaky 2077".to_string(),
         }
     }
 
@@ -98,6 +152,8 @@ impl KeysTui {
                     total_requests: total,
                     failed_requests: failed,
                     rate_limited: rl,
+                    base_url: p.base_url.clone(),
+                    enabled: p.enabled,
                 }
             })
             .collect();
@@ -133,6 +189,10 @@ impl KeysTui {
             KeysView::Detail => self.draw_detail_view(f, layout[1]),
             KeysView::AddProvider => self.draw_add_provider_form(f, layout[1]),
             KeysView::AddKey => self.draw_add_key_form(f, layout[1]),
+            KeysView::EditModel => self.draw_edit_model_form(f, layout[1]),
+            KeysView::EditProvider => self.draw_edit_provider_form(f, layout[1]),
+            KeysView::ConfirmDelete => self.draw_confirm_delete(f, layout[1]),
+            KeysView::HealthCheck => self.draw_health_check(f, layout[1]),
         }
 
         self.draw_footer(f, layout[2]);
@@ -172,10 +232,14 @@ impl KeysTui {
 
     fn draw_footer(&self, f: &mut Frame, area: Rect) {
         let hint = match self.view {
-            KeysView::List => " ↑↓/jk=navigate  Enter/d=detail  a=add provider  k=add key  R=rotate  D=delete  s=save  q=quit ",
-            KeysView::Detail => " q/Esc=back  R=rotate key  s=save ",
+            KeysView::List => " ↑↓/jk=navigate  Enter/d=detail  a=add provider  k=add key  R=rotate  D=delete  t=test  e=edit  m=model  s=save  q=quit ",
+            KeysView::Detail => " q/Esc=back  R=rotate key  s=save  e=edit config  m=default model  t=health check  D=delete provider ",
             KeysView::AddProvider => " Tab=next field  Enter=submit  Esc=cancel ",
             KeysView::AddKey      => " Tab=next field  Enter=submit  Esc=cancel ",
+            KeysView::EditModel   => " Tab=next  Enter=save  Esc=cancel ",
+            KeysView::EditProvider => " Tab=next  Space=toggle  Enter=save  Esc=cancel ",
+            KeysView::ConfirmDelete => " y=confirm  n=cancel ",
+            KeysView::HealthCheck => " r=re-test  q/Esc=back ",
         };
         f.render_widget(
             Paragraph::new(Span::styled(hint, Style::default().fg(Color::DarkGray))),
@@ -231,11 +295,15 @@ impl KeysTui {
                 .iter()
                 .enumerate()
                 .map(|(i, p)| {
-                    let health_color = if p.enabled_count > 0 {
+                    let health_color = if p.enabled && p.enabled_count > 0 {
                         Color::Green
+                    } else if p.enabled {
+                        Color::Yellow
                     } else {
                         Color::Red
                     };
+                    let status_icon = if p.enabled { "●" } else { "○" };
+                    let status_text = if p.enabled { "ON" } else { "OFF" };
                     let selected = i == self.selected;
                     let row_bg = if selected {
                         Color::Rgb(30, 30, 50)
@@ -249,16 +317,20 @@ impl KeysTui {
                     };
 
                     ListItem::new(vec![Line::from(vec![
-                        Span::styled("● ", Style::default().fg(health_color)),
+                        Span::styled(status_icon, Style::default().fg(health_color)),
                         Span::styled(
-                            format!("{:22}", p.name),
+                            format!(" {:20} ", p.name),
                             Style::default()
                                 .fg(Color::White)
                                 .bg(row_bg)
                                 .add_modifier(row_mod),
                         ),
                         Span::styled(
-                            format!(" {}/{}", p.enabled_count, p.key_count),
+                            format!("[{}] ", status_text),
+                            Style::default().fg(health_color).bg(row_bg).add_modifier(Modifier::BOLD),
+                        ),
+                        Span::styled(
+                            format!("{}/{}k", p.enabled_count, p.key_count),
                             Style::default().fg(Color::Gray).bg(row_bg),
                         ),
                     ])])
@@ -338,6 +410,13 @@ impl KeysTui {
                     ),
                 ]),
                 Line::from(vec![
+                    Span::styled("  Base URL:     ", Style::default().fg(Color::DarkGray)),
+                    Span::styled(
+                        p.base_url.clone().unwrap_or_else(|| " —".into()),
+                        Style::default().fg(Color::Cyan),
+                    ),
+                ]),
+                Line::from(vec![
                     Span::styled("  Requests:     ", Style::default().fg(Color::DarkGray)),
                     Span::styled(
                         format!("{} total", p.total_requests),
@@ -414,8 +493,8 @@ impl KeysTui {
     }
 
     fn draw_add_provider_form(&self, f: &mut Frame, area: Rect) {
-        let width = 60u16.min(area.width.saturating_sub(4));
-        let height = 18u16;
+        let width = 70u16.min(area.width.saturating_sub(4));
+        let height = 22u16;
         let popup = Rect::new(
             (area.width.saturating_sub(width)) / 2,
             (area.height.saturating_sub(height)) / 2,
@@ -444,6 +523,7 @@ impl KeysTui {
                 Constraint::Length(3), // template
                 Constraint::Length(3), // key
                 Constraint::Length(3), // priority
+                Constraint::Length(3), // url
                 Constraint::Length(1), // hint
             ])
             .split(inner);
@@ -465,6 +545,7 @@ impl KeysTui {
             ),
             ("API key", &self.form_key, 2),
             ("Priority (0-100, higher=preferred)", &self.form_priority, 3),
+            ("Base URL (optional, e.g. https://api.openai.com/v1)", &self.form_url, 4),
         ];
 
         for (idx, (label, value, field_idx)) in field_data.iter().enumerate() {
@@ -493,13 +574,13 @@ impl KeysTui {
                 "Tab=next field  Enter=submit  Esc=cancel",
                 Style::default().fg(Color::DarkGray),
             )),
-            fields[5],
+            fields[6],
         );
     }
 
     fn draw_add_key_form(&self, f: &mut Frame, area: Rect) {
-        let width = 58u16.min(area.width.saturating_sub(4));
-        let height = 12u16;
+        let width = 65u16.min(area.width.saturating_sub(4));
+        let height = 16u16;
         let popup = Rect::new(
             (area.width.saturating_sub(width)) / 2,
             (area.height.saturating_sub(height)) / 2,
@@ -526,13 +607,14 @@ impl KeysTui {
                 Constraint::Length(1),
                 Constraint::Length(3),
                 Constraint::Length(3),
+                Constraint::Length(3),
                 Constraint::Length(1),
             ])
             .split(inner);
 
         f.render_widget(
             Paragraph::new(Span::styled(
-                "Enter provider name and API key:",
+                "Enter provider name, API key, and optional URL endpoint:",
                 Style::default().fg(Color::Gray),
             )),
             fields[0],
@@ -541,6 +623,7 @@ impl KeysTui {
         let field_data = [
             ("Provider name", &self.addkey_provider, 0),
             ("API key value", &self.addkey_value, 1),
+            ("URL endpoint (optional)", &self.addkey_url, 2),
         ];
         for (idx, (label, value, field_idx)) in field_data.iter().enumerate() {
             let is_active = self.addkey_field == *field_idx;
@@ -567,8 +650,335 @@ impl KeysTui {
                 "Tab=next field  Enter=submit  Esc=cancel",
                 Style::default().fg(Color::DarkGray),
             )),
-            fields[3],
+            fields[4],
         );
+    }
+
+    fn draw_edit_model_form(&self, f: &mut Frame, area: Rect) {
+        let width = 65u16.min(area.width.saturating_sub(4));
+        let height = 14u16;
+        let popup = Rect::new(
+            (area.width.saturating_sub(width)) / 2,
+            (area.height.saturating_sub(height)) / 2,
+            width,
+            height,
+        );
+        f.render_widget(Clear, popup);
+
+        let block = Block::default()
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(Color::Magenta))
+            .title(Span::styled(
+                " Edit Default Model ",
+                Style::default()
+                    .fg(Color::Magenta)
+                    .add_modifier(Modifier::BOLD),
+            ));
+        let inner = block.inner(popup);
+        f.render_widget(block, popup);
+
+        let provider = self.providers.get(self.selected);
+        let provider_name_for_edit = provider.map(|p| p.name.clone()).unwrap_or_else(|| "?".to_string());
+        let current_model = provider.and_then(|p| p.default_model.clone()).unwrap_or_default();
+        
+        let fields_layout = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(1),
+                Constraint::Length(3),
+                Constraint::Length(3),
+                Constraint::Length(1),
+            ])
+            .split(inner);
+
+        f.render_widget(
+            Paragraph::new(Span::styled(
+                format!("Provider: {} | Current: {}", provider_name_for_edit, current_model),
+                Style::default().fg(Color::Gray),
+            )),
+            fields_layout[0],
+        );
+
+        let is_active = self.edit_model_field == 0;
+        let border_color = if is_active { Color::Yellow } else { Color::DarkGray };
+        let display = if is_active {
+            format!("{}|", self.edit_model_value)
+        } else {
+            self.edit_model_value.clone()
+        };
+        
+        let model_suggestions = vec![
+            "gpt-4o", "gpt-4o-mini", "o1-preview", "o1-mini",
+            "claude-opus-4-20250514", "claude-sonnet-4-20250514", "claude-3-5-sonnet-20241022",
+            "anthropic/claude-3.5-sonnet", "google/gemini-2.0-flash",
+            "deepseek-chat", "grok-2-1212",
+        ];
+        let suggestions_str = model_suggestions.join(", ");
+        
+        f.render_widget(
+            Paragraph::new(display.as_str()).block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(border_color))
+                    .title(Span::styled(
+                        format!("Model ({})", suggestions_str),
+                        Style::default().fg(border_color),
+                    )),
+            ),
+            fields_layout[1],
+        );
+
+        f.render_widget(
+            Paragraph::new(Span::styled(
+                "Tab=next  Enter=save  Esc=cancel",
+                Style::default().fg(Color::DarkGray),
+            )),
+            fields_layout[3],
+        );
+    }
+
+    fn draw_edit_provider_form(&self, f: &mut Frame, area: Rect) {
+        let width = 75u16.min(area.width.saturating_sub(4));
+        let height = 20u16;
+        let popup = Rect::new(
+            (area.width.saturating_sub(width)) / 2,
+            (area.height.saturating_sub(height)) / 2,
+            width,
+            height,
+        );
+        f.render_widget(Clear, popup);
+
+        let block = Block::default()
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(Color::Yellow))
+            .title(Span::styled(
+                " Edit Provider Config ",
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
+            ));
+        let inner = block.inner(popup);
+        f.render_widget(block, popup);
+
+        let provider = self.providers.get(self.selected);
+        let provider_name = provider.map(|p| p.name.as_str()).unwrap_or("?");
+        
+        let fields_layout = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(1),
+                Constraint::Length(3),
+                Constraint::Length(3),
+                Constraint::Length(3),
+                Constraint::Length(1),
+            ])
+            .split(inner);
+
+        f.render_widget(
+            Paragraph::new(Span::styled(
+                format!("Editing provider: {}", provider_name),
+                Style::default().fg(Color::Gray),
+            )),
+            fields_layout[0],
+        );
+
+        // Field 0: Base URL
+        let is_active_0 = self.edit_provider_field == 0;
+        let border_0 = if is_active_0 { Color::Cyan } else { Color::DarkGray };
+        let url_display = if is_active_0 {
+            format!("{}|", self.edit_provider_url)
+        } else {
+            self.edit_provider_url.clone()
+        };
+        f.render_widget(
+            Paragraph::new(url_display.as_str()).block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(border_0))
+                    .title(Span::styled("Base URL (leave empty for default)", Style::default().fg(border_0))),
+            ),
+            fields_layout[1],
+        );
+
+        // Field 1: Priority
+        let is_active_1 = self.edit_provider_field == 1;
+        let border_1 = if is_active_1 { Color::Cyan } else { Color::DarkGray };
+        let prio_display = if is_active_1 {
+            format!("{}|", self.edit_provider_priority)
+        } else {
+            self.edit_provider_priority.clone()
+        };
+        f.render_widget(
+            Paragraph::new(prio_display.as_str()).block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(border_1))
+                    .title(Span::styled("Priority (1=Primary, 2=Secondary, 99=Disabled)", Style::default().fg(border_1))),
+            ),
+            fields_layout[2],
+        );
+
+        // Field 2: Enabled toggle
+        let is_active_2 = self.edit_provider_field == 2;
+        let border_2 = if is_active_2 { Color::Cyan } else { Color::DarkGray };
+        let enabled_status = if self.edit_provider_enabled { "ENABLED" } else { "DISABLED" };
+        let enabled_color = if self.edit_provider_enabled { Color::Green } else { Color::Red };
+        f.render_widget(
+            Paragraph::new(Span::styled(
+                format!("[{}] ", enabled_status),
+                Style::default().fg(enabled_color).add_modifier(Modifier::BOLD),
+            )).block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(border_2))
+                    .title(Span::styled("Enabled (Space to toggle)", Style::default().fg(border_2))),
+            ),
+            fields_layout[3],
+        );
+
+        f.render_widget(
+            Paragraph::new(Span::styled(
+                "Tab=next  Space=toggle  Enter=save  Esc=cancel",
+                Style::default().fg(Color::DarkGray),
+            )),
+            fields_layout[4],
+        );
+    }
+
+    fn draw_confirm_delete(&self, f: &mut Frame, area: Rect) {
+        let width = 55u16.min(area.width.saturating_sub(4));
+        let height = 10u16;
+        let popup = Rect::new(
+            (area.width.saturating_sub(width)) / 2,
+            (area.height.saturating_sub(height)) / 2,
+            width,
+            height,
+        );
+        f.render_widget(Clear, popup);
+
+        let (target_text, target_type) = match &self.delete_target {
+            Some(DeleteTarget::Provider(name)) => (name.clone(), "provider"),
+            Some(DeleteTarget::Key(provider, _)) => (format!("key in {}", provider), "key"),
+            None => ("unknown".to_string(), "unknown"),
+        };
+
+        let block = Block::default()
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(Color::Red))
+            .title(Span::styled(
+                " Confirm Delete ",
+                Style::default()
+                    .fg(Color::Red)
+                    .add_modifier(Modifier::BOLD),
+            ));
+        let inner = block.inner(popup);
+        f.render_widget(block, popup);
+
+        let message = vec![
+            Line::from(""),
+            Line::from(Span::styled(
+                format!("  Delete {} '{}'?", target_type, target_text),
+                Style::default().fg(Color::White),
+            )),
+            Line::from(""),
+            Line::from(Span::styled(
+                "  This action cannot be undone!",
+                Style::default().fg(Color::Yellow),
+            )),
+            Line::from(""),
+            Line::from(Span::styled(
+                "  [y]es  [n]o",
+                Style::default().fg(Color::DarkGray),
+            )),
+        ];
+        f.render_widget(Paragraph::new(message), inner);
+    }
+
+    fn draw_health_check(&self, f: &mut Frame, area: Rect) {
+        let width = 70u16.min(area.width.saturating_sub(4));
+        let height = 18u16;
+        let popup = Rect::new(
+            (area.width.saturating_sub(width)) / 2,
+            (area.height.saturating_sub(height)) / 2,
+            width,
+            height,
+        );
+        f.render_widget(Clear, popup);
+
+        let block = Block::default()
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(Color::Cyan))
+            .title(Span::styled(
+                " Health Check ",
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            ));
+        let inner = block.inner(popup);
+        f.render_widget(block, popup);
+
+        let provider = self.providers.get(self.selected);
+        let provider_name = provider.map(|p| p.name.as_str()).unwrap_or("?");
+
+        let mut lines: Vec<Line> = vec![
+            Line::from(""),
+            Line::from(vec![
+                Span::styled("  Provider: ", Style::default().fg(Color::DarkGray)),
+                Span::styled(provider_name, Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+            ]),
+            Line::from(""),
+        ];
+
+        if self.health_check_loading {
+            lines.push(Line::from(Span::styled(
+                "  Testing connectivity...",
+                Style::default().fg(Color::Yellow),
+            )));
+            lines.push(Line::from(Span::styled(
+                "  ⏳",
+                Style::default().fg(Color::Yellow),
+            )));
+        } else if let Some(ref result) = self.health_check_result {
+            let status_icon = if result.success { "✓" } else { "✗" };
+            let status_color = if result.success { Color::Green } else { Color::Red };
+            
+            lines.push(Line::from(vec![
+                Span::styled("  Status: ", Style::default().fg(Color::DarkGray)),
+                Span::styled(status_icon, Style::default().fg(status_color).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    format!(" HTTP {}", result.status_code),
+                    Style::default().fg(status_color),
+                ),
+            ]));
+            lines.push(Line::from(vec![
+                Span::styled("  Latency: ", Style::default().fg(Color::DarkGray)),
+                Span::styled(
+                    format!("{}ms", result.latency_ms),
+                    Style::default().fg(if result.latency_ms < 500 { Color::Green } else { Color::Yellow }),
+                ),
+            ]));
+            lines.push(Line::from(""));
+            lines.push(Line::from(vec![
+                Span::styled("  Response: ", Style::default().fg(Color::DarkGray)),
+                Span::styled(
+                    truncate_str(&result.message, 40),
+                    Style::default().fg(if result.success { Color::Green } else { Color::Red }),
+                ),
+            ]));
+        } else {
+            lines.push(Line::from(Span::styled(
+                "  Press 'r' to run health check",
+                Style::default().fg(Color::DarkGray),
+            )));
+        }
+
+        lines.push(Line::from(""));
+        lines.push(Line::from(Span::styled(
+            "  r=re-test  q/Esc=back",
+            Style::default().fg(Color::DarkGray),
+        )));
+
+        f.render_widget(Paragraph::new(lines), inner);
     }
 
     fn draw_toast(&self, f: &mut Frame, msg: &str) {
@@ -644,6 +1054,16 @@ async fn run_keys_loop(
                             manager.save().await?;
                             app.notify("Saved.");
                         }
+                        KeyCode::Char('e') => {
+                            if let Some(provider) = app.providers.get(app.selected) {
+                                app.edit_provider_name = provider.name.clone();
+                                app.edit_provider_url = provider.base_url.clone().unwrap_or_default();
+                                app.edit_provider_priority = provider.priority.to_string();
+                                app.edit_provider_enabled = provider.enabled;
+                                app.edit_provider_field = 0;
+                                app.view = KeysView::EditProvider;
+                            }
+                        }
                         _ => {}
                     },
                     KeysView::AddProvider => {
@@ -651,6 +1071,18 @@ async fn run_keys_loop(
                     }
                     KeysView::AddKey => {
                         handle_add_key_key(app, key, manager).await?;
+                    }
+                    KeysView::EditModel => {
+                        handle_edit_model_key(app, key, manager).await?;
+                    }
+                    KeysView::EditProvider => {
+                        handle_edit_provider_key(app, key, manager).await?;
+                    }
+                    KeysView::ConfirmDelete => {
+                        handle_confirm_delete_key(app, key, manager).await?;
+                    }
+                    KeysView::HealthCheck => {
+                        handle_health_check_key(app, key, manager).await;
                     }
                 }
             }
@@ -702,6 +1134,7 @@ async fn handle_list_key(
             app.form_template = "openai".to_string();
             app.form_key.clear();
             app.form_priority = "50".to_string();
+            app.form_url.clear();
             app.form_field = 0;
             app.view = KeysView::AddProvider;
         }
@@ -712,6 +1145,7 @@ async fn handle_list_key(
                 .map(|p| p.name.clone())
                 .unwrap_or_default();
             app.addkey_value.clear();
+            app.addkey_url.clear();
             app.addkey_field = 0;
             app.view = KeysView::AddKey;
         }
@@ -727,8 +1161,28 @@ async fn handle_list_key(
             app.notify("Saved.");
         }
         (_, KeyCode::Char('D')) => {
-            // delete selected provider (future: confirm dialog)
-            app.notify("Use CLI: housaky keys manager — delete not yet implemented in TUI.");
+            if let Some(provider) = app.providers.get(app.selected) {
+                app.delete_target = Some(DeleteTarget::Provider(provider.name.clone()));
+                app.view = KeysView::ConfirmDelete;
+            }
+        }
+        (_, KeyCode::Char('t')) => {
+            if !app.providers.is_empty() {
+                app.health_check_result = None;
+                app.health_check_loading = true;
+                app.view = KeysView::HealthCheck;
+                let provider_name = app.providers.get(app.selected).map(|p| p.name.clone()).unwrap_or_default();
+                run_health_check(app, manager, provider_name).await;
+            }
+        }
+        (_, KeyCode::Char('m')) => {
+            if !app.providers.is_empty() {
+                if let Some(provider) = app.providers.get(app.selected) {
+                    app.edit_model_value = provider.default_model.clone().unwrap_or_default();
+                    app.edit_model_field = 0;
+                    app.view = KeysView::EditModel;
+                }
+            }
         }
         _ => {}
     }
@@ -745,17 +1199,17 @@ async fn handle_add_provider_key(
             app.view = KeysView::List;
         }
         KeyCode::Tab => {
-            app.form_field = (app.form_field + 1) % 4;
+            app.form_field = (app.form_field + 1) % 5;
         }
         KeyCode::BackTab => {
             app.form_field = if app.form_field == 0 {
-                3
+                4
             } else {
                 app.form_field - 1
             };
         }
         KeyCode::Enter => {
-            if app.form_field < 3 {
+            if app.form_field < 4 {
                 app.form_field += 1;
             } else {
                 // Submit
@@ -763,6 +1217,7 @@ async fn handle_add_provider_key(
                 let template = app.form_template.trim().to_string();
                 let key_val = app.form_key.trim().to_string();
                 let priority_val: u32 = app.form_priority.trim().parse().unwrap_or(50);
+                let base_url = app.form_url.trim().to_string();
 
                 if name.is_empty() {
                     app.notify("Provider name is required.");
@@ -776,14 +1231,24 @@ async fn handle_add_provider_key(
                 } else {
                     vec![key_val]
                 };
+                
+                // First add the provider with template
                 match manager
                     .add_provider_with_template(&name, &template, keys, priority)
                     .await
                 {
                     Ok(_) => {
+                        // Then set the base_url if provided
+                        if !base_url.is_empty() {
+                            if let Ok(mut store) = manager.store.try_write() {
+                                if let Some(provider) = store.providers.get_mut(&name) {
+                                    provider.base_url = Some(base_url.clone());
+                                }
+                            }
+                        }
                         manager.save().await?;
                         app.reload(manager).await;
-                        app.notify(&format!("Added provider: {}", name));
+                        app.notify(&format!("Added provider: {} ({})", name, if base_url.is_empty() { "default URL" } else { &base_url }));
                         app.view = KeysView::List;
                     }
                     Err(e) => {
@@ -798,6 +1263,7 @@ async fn handle_add_provider_key(
                 1 => &mut app.form_template,
                 2 => &mut app.form_key,
                 3 => &mut app.form_priority,
+                4 => &mut app.form_url,
                 _ => return Ok(()),
             };
             field.pop();
@@ -808,6 +1274,7 @@ async fn handle_add_provider_key(
                 1 => &mut app.form_template,
                 2 => &mut app.form_key,
                 3 => &mut app.form_priority,
+                4 => &mut app.form_url,
                 _ => return Ok(()),
             };
             field.push(c);
@@ -827,22 +1294,24 @@ async fn handle_add_key_key(
             app.view = KeysView::List;
         }
         KeyCode::Tab => {
-            app.addkey_field = (app.addkey_field + 1) % 2;
+            app.addkey_field = (app.addkey_field + 1) % 3;
         }
         KeyCode::BackTab => {
-            app.addkey_field = if app.addkey_field == 0 { 1 } else { 0 };
+            app.addkey_field = if app.addkey_field == 0 { 2 } else { app.addkey_field - 1 };
         }
         KeyCode::Enter => {
-            if app.addkey_field == 0 {
-                app.addkey_field = 1;
+            if app.addkey_field < 2 {
+                app.addkey_field += 1;
             } else {
                 let provider = app.addkey_provider.trim().to_string();
                 let key_val = app.addkey_value.trim().to_string();
+                let url_val = app.addkey_url.trim().to_string();
                 if provider.is_empty() || key_val.is_empty() {
-                    app.notify("Both fields are required.");
+                    app.notify("Provider and key are required.");
                     return Ok(());
                 }
-                match manager.add_key(&provider, key_val, None).await {
+                let url_opt = if url_val.is_empty() { None } else { Some(url_val) };
+                match manager.add_key(&provider, key_val, None, url_opt).await {
                     Ok(_) => {
                         manager.save().await?;
                         app.reload(manager).await;
@@ -856,17 +1325,19 @@ async fn handle_add_key_key(
             }
         }
         KeyCode::Backspace => {
-            if app.addkey_field == 0 {
-                app.addkey_provider.pop();
-            } else {
-                app.addkey_value.pop();
+            match app.addkey_field {
+                0 => { app.addkey_provider.pop(); }
+                1 => { app.addkey_value.pop(); }
+                2 => { app.addkey_url.pop(); }
+                _ => {}
             }
         }
         KeyCode::Char(c) => {
-            if app.addkey_field == 0 {
-                app.addkey_provider.push(c);
-            } else {
-                app.addkey_value.push(c);
+            match app.addkey_field {
+                0 => { app.addkey_provider.push(c); }
+                1 => { app.addkey_value.push(c); }
+                2 => { app.addkey_url.push(c); }
+                _ => {}
             }
         }
         _ => {}
@@ -882,6 +1353,293 @@ async fn rotate_selected(app: &mut KeysTui, manager: &KeysManager) {
             app.notify(&format!("Rotated {} → …{}", name, tail));
         } else {
             app.notify(&format!("No next key available for {}", name));
+        }
+    }
+}
+
+async fn handle_edit_model_key(
+    app: &mut KeysTui,
+    key: crossterm::event::KeyEvent,
+    manager: &KeysManager,
+) -> Result<()> {
+    match key.code {
+        KeyCode::Esc => {
+            app.view = KeysView::Detail;
+        }
+        KeyCode::Tab => {
+            app.edit_model_field = (app.edit_model_field + 1) % 1;
+        }
+        KeyCode::Enter => {
+            let model = app.edit_model_value.trim().to_string();
+            if model.is_empty() {
+                app.notify("Model name is required.");
+                return Ok(());
+            }
+            if let Some(provider) = app.providers.get(app.selected) {
+                let provider_name = provider.name.clone();
+                match manager.set_default_model(&provider_name, &model).await {
+                    Ok(_) => {
+                        manager.save().await?;
+                        app.reload(manager).await;
+                        app.notify(&format!("Default model set to: {}", model));
+                        app.view = KeysView::Detail;
+                    }
+                    Err(e) => {
+                        app.notify(&format!("Error: {}", e));
+                    }
+                }
+            }
+        }
+        KeyCode::Backspace => {
+            app.edit_model_value.pop();
+        }
+        KeyCode::Char(c) => {
+            app.edit_model_value.push(c);
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
+async fn handle_edit_provider_key(
+    app: &mut KeysTui,
+    key: crossterm::event::KeyEvent,
+    manager: &KeysManager,
+) -> Result<()> {
+    match key.code {
+        KeyCode::Esc => {
+            app.view = KeysView::Detail;
+        }
+        KeyCode::Tab => {
+            app.edit_provider_field = (app.edit_provider_field + 1) % 3;
+        }
+        KeyCode::BackTab => {
+            app.edit_provider_field = if app.edit_provider_field == 0 {
+                2
+            } else {
+                app.edit_provider_field - 1
+            };
+        }
+        KeyCode::Char(' ') => {
+            if app.edit_provider_field == 2 {
+                app.edit_provider_enabled = !app.edit_provider_enabled;
+            }
+        }
+        KeyCode::Enter => {
+            if app.edit_provider_field < 2 {
+                app.edit_provider_field += 1;
+            } else {
+                let provider_name = app.edit_provider_name.clone();
+                let new_url = app.edit_provider_url.trim().to_string();
+                let new_priority: u32 = app.edit_provider_priority.trim().parse().unwrap_or(1);
+                let new_enabled = app.edit_provider_enabled;
+
+                use crate::keys_manager::manager::ProviderPriority;
+                let priority = ProviderPriority::from_str(&new_priority.to_string()).unwrap_or_default();
+
+                match manager.update_provider_config(&provider_name, &new_url, priority, new_enabled).await {
+                    Ok(_) => {
+                        manager.save().await?;
+                        app.reload(manager).await;
+                        app.notify(&format!("Updated provider: {}", provider_name));
+                        app.view = KeysView::Detail;
+                    }
+                    Err(e) => {
+                        app.notify(&format!("Error: {}", e));
+                    }
+                }
+            }
+        }
+        KeyCode::Backspace => {
+            match app.edit_provider_field {
+                0 => { app.edit_provider_url.pop(); }
+                1 => { app.edit_provider_priority.pop(); }
+                _ => {}
+            }
+        }
+        KeyCode::Char(c) => {
+            match app.edit_provider_field {
+                0 => { app.edit_provider_url.push(c); }
+                1 => { app.edit_provider_priority.push(c); }
+                _ => {}
+            }
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
+async fn handle_confirm_delete_key(
+    app: &mut KeysTui,
+    key: crossterm::event::KeyEvent,
+    manager: &KeysManager,
+) -> Result<()> {
+    match key.code {
+        KeyCode::Char('y') | KeyCode::Char('Y') => {
+            let target = app.delete_target.clone();
+            app.view = KeysView::List;
+            app.delete_target = None;
+            
+            if let Some(t) = target {
+                match t {
+                    DeleteTarget::Provider(name) => {
+                        match manager.remove_provider(&name).await {
+                            Ok(_) => {
+                                manager.save().await?;
+                                app.reload(manager).await;
+                                app.notify(&format!("Deleted provider: {}", name));
+                            }
+                            Err(e) => {
+                                app.notify(&format!("Error: {}", e));
+                            }
+                        }
+                    }
+                    DeleteTarget::Key(_provider_name, _key_id) => {
+                        app.notify("Key deletion - use detail view");
+                    }
+                }
+            }
+        }
+        KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc => {
+            app.view = KeysView::List;
+            app.delete_target = None;
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
+async fn handle_health_check_key(
+    app: &mut KeysTui,
+    key: crossterm::event::KeyEvent,
+    manager: &KeysManager,
+) {
+    match key.code {
+        KeyCode::Char('r') | KeyCode::Char('R') => {
+            app.health_check_loading = true;
+            app.health_check_result = None;
+            if let Some(provider) = app.providers.get(app.selected) {
+                let provider_name = provider.name.clone();
+                run_health_check(app, manager, provider_name).await;
+            }
+        }
+        KeyCode::Char('q') | KeyCode::Esc => {
+            app.view = KeysView::Detail;
+            app.health_check_result = None;
+            app.health_check_loading = false;
+        }
+        _ => {}
+    }
+}
+
+async fn run_health_check(app: &mut KeysTui, manager: &KeysManager, provider_name: String) {
+    let store = match manager.store.try_read() {
+        Ok(s) => s,
+        _ => {
+            app.health_check_loading = false;
+            app.health_check_result = Some(HealthCheckResult {
+                provider: provider_name.clone(),
+                success: false,
+                status_code: 0,
+                message: "Failed to access store".to_string(),
+                latency_ms: 0,
+            });
+            return;
+        }
+    };
+
+    let provider = match store.providers.get(&provider_name) {
+        Some(p) => p,
+        None => {
+            app.health_check_loading = false;
+            app.health_check_result = Some(HealthCheckResult {
+                provider: provider_name.clone(),
+                success: false,
+                status_code: 0,
+                message: "Provider not found".to_string(),
+                latency_ms: 0,
+            });
+            return;
+        }
+    };
+
+    let base_url = provider.base_url.clone().unwrap_or_else(|| {
+        manager.provider_templates
+            .get(&provider.template.clone().unwrap_or_default())
+            .map(|t| t.base_url.clone())
+            .unwrap_or_default()
+    });
+
+    let key = match provider.keys.iter().find(|k| k.enabled) {
+        Some(k) => k.key.clone(),
+        None => {
+            app.health_check_loading = false;
+            app.health_check_result = Some(HealthCheckResult {
+                provider: provider_name.clone(),
+                success: false,
+                status_code: 0,
+                message: "No enabled keys".to_string(),
+                latency_ms: 0,
+            });
+            return;
+        }
+    };
+
+    drop(store);
+
+    let start = Instant::now();
+    let client = reqwest::Client::new();
+    
+    let test_url = format!("{}/models", base_url);
+    let auth_value = if base_url.contains("anthropic") {
+        format!("Bearer {}", key)
+    } else {
+        key.clone()
+    };
+
+    let result = client.get(&test_url)
+        .header("Authorization", auth_value)
+        .header("Content-Type", "application/json")
+        .send()
+        .await;
+
+    let latency = start.elapsed().as_millis() as u64;
+
+    match result {
+        Ok(response) => {
+            let status = response.status().as_u16();
+            let success = status == 200;
+            let body = response.text().await.unwrap_or_default();
+            
+            app.health_check_loading = false;
+            app.health_check_result = Some(HealthCheckResult {
+                provider: provider_name.clone(),
+                success,
+                status_code: status,
+                message: if success {
+                    "Connection successful".to_string()
+                } else {
+                    truncate_str(&body, 50)
+                },
+                latency_ms: latency,
+            });
+
+            if success {
+                app.notify(&format!("Health check OK ({}ms)", latency));
+            } else {
+                app.notify(&format!("Health check failed: HTTP {}", status));
+            }
+        }
+        Err(e) => {
+            app.health_check_loading = false;
+            app.health_check_result = Some(HealthCheckResult {
+                provider: provider_name.clone(),
+                success: false,
+                status_code: 0,
+                message: truncate_str(&e.to_string(), 40),
+                latency_ms: latency,
+            });
+            app.notify(&format!("Health check error: {}", e));
         }
     }
 }

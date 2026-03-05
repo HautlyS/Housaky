@@ -145,6 +145,10 @@ pub struct Config {
     /// Global collective intelligence configuration.
     #[serde(default)]
     pub collective: CollectiveSchemaConfig,
+
+    /// OpenClaw collaboration configuration.
+    #[serde(default)]
+    pub collaboration: CollaborationConfig,
 }
 
 // ── Collective Configuration (config.toml schema) ─────────────────────────────
@@ -172,6 +176,71 @@ pub struct CollectiveSchemaConfig {
     /// Cast autonomous votes on evaluated proposals.
     #[serde(default = "default_true")]
     pub autonomous_voting: bool,
+}
+
+// ── Collaboration Configuration (OpenClaw) ─────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CollaborationConfig {
+    /// This instance name (native/openclaw)
+    #[serde(default = "default_instance_name")]
+    pub instance_name: String,
+    /// Peer instance to collaborate with
+    #[serde(default = "default_peer_instance")]
+    pub peer_instance: String,
+    /// Shared directory path for communication
+    #[serde(default = "default_shared_dir")]
+    pub shared_dir: PathBuf,
+    /// Heartbeat interval between instances (seconds)
+    #[serde(default = "default_collab_heartbeat")]
+    pub heartbeat_interval_secs: u64,
+    /// Auto-sync knowledge with peer instance
+    #[serde(default)]
+    pub auto_sync: bool,
+    /// Enable self-improvement via peer collaboration
+    #[serde(default)]
+    pub self_improve_enabled: bool,
+    /// Share code improvements with peer
+    #[serde(default)]
+    pub code_sharing: bool,
+    /// Exchange insights and learnings
+    #[serde(default)]
+    pub insights_exchange: bool,
+}
+
+impl Default for CollaborationConfig {
+    fn default() -> Self {
+        Self {
+            instance_name: default_instance_name(),
+            peer_instance: default_peer_instance(),
+            shared_dir: default_shared_dir(),
+            heartbeat_interval_secs: default_collab_heartbeat(),
+            auto_sync: true,
+            self_improve_enabled: true,
+            code_sharing: true,
+            insights_exchange: true,
+        }
+    }
+}
+
+fn default_instance_name() -> String {
+    "native".to_string()
+}
+
+fn default_peer_instance() -> String {
+    "openclaw".to_string()
+}
+
+fn default_shared_dir() -> PathBuf {
+    if let Some(user_dirs) = UserDirs::new() {
+        user_dirs.home_dir().join("housaky").join("shared")
+    } else {
+        PathBuf::from("shared")
+    }
+}
+
+fn default_collab_heartbeat() -> u64 {
+    60
 }
 
 pub fn default_source_dir() -> PathBuf {
@@ -3033,6 +3102,7 @@ impl Default for Config {
             source_dir: home.join("housaky"),
             collective_api_key: None,
             collective: CollectiveSchemaConfig::default(),
+            collaboration: CollaborationConfig::default(),
         }
     }
 }
@@ -3734,6 +3804,7 @@ mod tests {
             source_dir: PathBuf::from("/tmp/test/housaky"),
             collective_api_key: None,
             collective: CollectiveSchemaConfig::default(),
+            collaboration: CollaborationConfig::default(),
         };
 
         let toml_str = toml::to_string_pretty(&config).unwrap();
@@ -3902,6 +3973,7 @@ tool_dispatcher = "xml"
             source_dir: PathBuf::from("/tmp/test/housaky"),
             collective_api_key: None,
             collective: CollectiveSchemaConfig::default(),
+            collaboration: CollaborationConfig::default(),
         };
 
         config.save().unwrap();

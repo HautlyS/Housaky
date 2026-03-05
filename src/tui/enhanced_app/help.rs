@@ -18,15 +18,14 @@ const SECTIONS: &[Section] = &[
     Section {
         title: "Navigation",
         binds: &[
-            ("Tab / Shift+Tab", "Cycle tabs forward / backward"),
-            ("← / →", "Go back / forward in tab history"),
-            ("1-7", "Jump directly to tab"),
-            ("v", "Cycle view mode (Full / Split / Dashboard)"),
+            ("Tab / Shift+Tab", "Cycle tabs forward/backward"),
+            ("← / →", "Go back/forward in tab history"),
+            ("1-8", "Jump directly to tab"),
+            ("v", "Cycle view mode"),
             ("b", "Toggle sidebar"),
             ("Ctrl+P", "Open command palette"),
-            ("?  or  F1", "Toggle this help"),
-            ("q  or  Esc", "Quit / Go to Chat"),
-            ("Mouse click", "Switch tabs, select items"),
+            ("? or F1", "Toggle this help"),
+            ("q or Esc", "Quit / Go to Chat"),
         ],
     },
     Section {
@@ -38,18 +37,18 @@ const SECTIONS: &[Section] = &[
             ("/ + Enter", "Execute slash-command"),
             ("Ctrl+K", "Kill line (clear input)"),
             ("Ctrl+W", "Delete last word"),
-            ("Home / End", "Move cursor to start / end"),
+            ("Home / End", "Move cursor to start/end"),
             ("PageUp / PageDown", "Scroll chat messages"),
             ("a", "Toggle auto-scroll"),
-            ("s", "Export chat to markdown file"),
+            ("s", "Export chat to markdown"),
         ],
     },
     Section {
         title: "Search",
         binds: &[
-            ("Ctrl+F  or  /", "Open inline search"),
+            ("Ctrl+F or /", "Open inline search"),
             ("n", "Next search result"),
-            ("N  (Shift+n)", "Previous search result"),
+            ("N (Shift+n)", "Previous search result"),
             ("Esc", "Close search"),
         ],
     },
@@ -69,7 +68,7 @@ const SECTIONS: &[Section] = &[
         title: "Slash Commands",
         binds: &[
             ("/clear", "Clear conversation"),
-            ("/export", "Export chat to .md file"),
+            ("/export", "Export chat to .md"),
             ("/model <name>", "Switch AI model"),
             ("/goals", "Jump to Goals tab"),
             ("/skills", "Jump to Skills tab"),
@@ -122,18 +121,15 @@ impl HelpOverlay {
         }
 
         let area = f.area();
-        let popup = centered_rect(72, 82, area);
+        let popup = centered_rect(70, 80, area);
 
         f.render_widget(Clear, popup);
 
         let block = Block::default()
             .borders(Borders::ALL)
             .border_style(style_border_focus())
-            .title(Span::styled(
-                " ◈ HOUSAKY — Keyboard Reference ",
-                style_title(),
-            ))
-            .title_bottom(Span::styled(" ↑↓ scroll  any key to close ", style_muted()));
+            .title(Span::styled(" ◆ KEYBOARD REFERENCE ", style_title()))
+            .title_bottom(Span::styled(" ↕ scroll  any key to close ", style_muted()));
 
         let inner = block.inner(popup);
         f.render_widget(block, popup);
@@ -142,24 +138,27 @@ impl HelpOverlay {
         lines.push(Line::from(""));
 
         for section in SECTIONS {
-            // Section header
+            // 2077 cyberpunk section header
             lines.push(Line::from(Span::styled(
-                format!("  ── {} ", section.title),
+                format!(" ═══ {} ═══ ", section.title),
                 ratatui::style::Style::default()
-                    .fg(Palette::CYAN)
-                    .add_modifier(Modifier::BOLD | Modifier::UNDERLINED),
+                    .fg(Palette::PINK)
+                    .add_modifier(Modifier::BOLD),
             )));
             lines.push(Line::from(""));
 
             for (key, desc) in section.binds {
                 lines.push(Line::from(vec![
                     Span::styled(
-                        format!("    {:<22}", key),
+                        format!("  {:18}", key),
                         ratatui::style::Style::default()
-                            .fg(Palette::VIOLET)
+                            .fg(Palette::CYAN)
                             .add_modifier(Modifier::BOLD),
                     ),
-                    Span::styled(*desc, ratatui::style::Style::default().fg(Palette::TEXT)),
+                    Span::styled(
+                        *desc,
+                        ratatui::style::Style::default().fg(Palette::TEXT_DIM),
+                    ),
                 ]));
             }
             lines.push(Line::from(""));

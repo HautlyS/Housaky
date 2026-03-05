@@ -1,7 +1,8 @@
 use crate::tui::enhanced_app::theme::{
-    style_assistant_msg, style_border, style_border_focus, style_code_block, style_code_inline,
-    style_dim, style_muted, style_streaming_cursor, style_system_msg, style_title, style_user_msg,
-    Palette,
+    style_assistant_badge, style_assistant_msg, style_border, style_border_focus, style_code_block,
+    style_code_inline, style_dim, style_muted, style_streaming_cursor, style_system_badge,
+    style_system_msg, style_title, style_user_badge, style_user_msg, Palette, ICON_ASSISTANT,
+    ICON_SEARCH, ICON_SYSTEM, ICON_USER,
 };
 use chrono::Local;
 use ratatui::{
@@ -560,15 +561,23 @@ impl ChatPane {
         };
         let title_style = style_title();
 
+        // 2077-style title with message count
         let title = if !self.search_query.is_empty() {
             format!(
-                " 💬 Chat  /{} [{}/{}] ",
+                " {} Chat /{} [{}/{}] ",
+                ICON_SEARCH,
                 self.search_query,
                 self.search_cursor + 1,
                 self.search_results.len()
             )
+        } else if self.messages.is_empty() {
+            " {} Chat — waiting for input... ".to_string()
         } else {
-            format!(" 💬 Chat  {} msgs ", self.messages.len())
+            format!(
+                " {} Chat  {} messages ",
+                ICON_ASSISTANT,
+                self.messages.len()
+            )
         };
 
         let block = Block::default()
@@ -579,8 +588,47 @@ impl ChatPane {
         let inner = block.inner(area);
         f.render_widget(block, area);
 
+        // Empty state - cyberpunk styled
+        if self.messages.is_empty() && !self.is_streaming {
+            let empty_lines = vec![
+                Line::from(""),
+                Line::from(""),
+                Line::from(Span::styled(
+                    " ══════════════════════════════════════════════════════════════ ",
+                    Style::default().fg(Palette::CYAN_DIM),
+                )),
+                Line::from(""),
+                Line::from(Span::styled(
+                    "                    NEURAL LINK DISCONNECTED",
+                    Style::default()
+                        .fg(Palette::PINK)
+                        .add_modifier(Modifier::BOLD),
+                )),
+                Line::from(""),
+                Line::from(Span::styled(
+                    "     Type a message to initialize communication...",
+                    style_muted(),
+                )),
+                Line::from(""),
+                Line::from(Span::styled(
+                    " ══════════════════════════════════════════════════════════════ ",
+                    Style::default().fg(Palette::CYAN_DIM),
+                )),
+                Line::from(""),
+                Line::from(Span::styled(
+                    "  Shortcuts:  /cmd  ↵ send  ↑↓ history  ? help",
+                    style_dim(),
+                )),
+            ];
+            f.render_widget(
+                Paragraph::new(empty_lines).alignment(ratatui::layout::Alignment::Center),
+                inner,
+            );
+            return;
+        }
+
         let mut lines: Vec<Line> = Vec::new();
-        let mut raw_lines: Vec<String> = Vec::new(); // For selection support
+        let mut raw_lines: Vec<String> = Vec::new();
 
         let visible: Vec<_> = self.messages.iter().skip(self.scroll_offset).collect();
 
@@ -589,34 +637,67 @@ impl ChatPane {
             let hit_current =
                 is_search_hit && self.search_results.get(self.search_cursor) == Some(&msg.id);
 
-            let (role_style, bracket_color) = match msg.role {
-                Role::User => (style_user_msg(), Palette::USER),
-                Role::Assistant => (style_assistant_msg(), Palette::ASSISTANT),
-                Role::System => (style_system_msg(), Palette::SYSTEM),
+            // 2077-style role badge
+            let (role_icon, role_style, badge_style) = match msg.role {
+                Role::User => (ICON_USER, style_user_msg(), style_user_badge()),
+                Role::Assistant => (
+                    ICON_ASSISTANT,
+                    style_assistant_msg(),
+                    style_assistant_badge(),
+                ),
+                Role::System => (ICON_SYSTEM, style_system_msg(), style_system_badge()),
             };
 
-            // Header line
-            let header_text = format!(" {}  {} ", msg.role.label(), msg.timestamp);
-            let mut header_spans = vec![
-                Span::styled(
-                    format!(" {} ", msg.role.label()),
-                    role_style.add_modifier(Modifier::BOLD),
-                ),
-                Span::styled(format!(" {} ", msg.timestamp), style_muted()),
+            // Header with cyberpunk styling
+            let header_spans = vec![
+                Span::styled(" ", style_muted()),
+                Span::styled(format!("[{}]", role_icon), badge_style),
+                Span::styled(" ", style_muted()),
+                Span::styled(msg.role.label(), role_style.add_modifier(Modifier::BOLD)),
+                Span::styled("  ", style_muted()),
+                Span::styled(format!("{} ", msg.timestamp), style_muted()),
             ];
+
+            // Token count if available
             if let Some(t) = msg.tokens {
-                header_spans.push(Span::styled(
-                    format!(" {}t ", t),
-                    Style::default()
-                        .fg(bracket_color)
-                        .add_modifier(Modifier::DIM),
-                ));
+                let token_spans = vec![
+                    Span::styled(" │ ", style_muted()),
+                    Span::styled(
+                        format!("{} tokens", t),
+                        Style::default()
+                            .fg(Palette::VIOLET)
+                            .add_modifier(Modifier::DIM),
+                    ),
+                ];
+                let mut combined = header_spans;
+                combined.extend(token_spans);
+                lines.push(Line::from(combined));
+            } else {
+                lines.push(Line::from(header_spans));
             }
+
+            raw_lines.push(format!(
+                "[{}] {} {}",
+                role_icon,
+                msg.role.label(),
+                msg.timestamp
+            ));
+
             if hit_current {
-                header_spans.push(Span::styled(" ◀ ", Style::default().fg(Palette::WARNING)));
+                lines.push(Line::from(Span::styled(
+                    "        ◀ SEARCH HIT",
+                    Style::default()
+                        .fg(Palette::WARNING)
+                        .add_modifier(Modifier::BOLD),
+                )));
             }
-            lines.push(Line::from(header_spans));
-            raw_lines.push(header_text);
+
+            // Separator line
+            lines.push(Line::from(Span::styled(
+                "───────────────",
+                Style::default().fg(Palette::BORDER),
+            )));
+            raw_lines.push("───────────────".to_string());
 
             // Content with markdown rendering
             let (content_lines, content_raw) =
@@ -627,33 +708,49 @@ impl ChatPane {
             raw_lines.push(String::new());
         }
 
-        // Streaming buffer
+        // Streaming buffer with cyberpunk styling
         if self.is_streaming && !self.streaming_buf.is_empty() {
-            let header_text = " Housaky ".to_string();
+            lines.push(Line::from(vec![
+                Span::styled(" ", style_muted()),
+                Span::styled("[", style_assistant_badge()),
+                Span::styled(ICON_ASSISTANT, style_assistant_badge()),
+                Span::styled("]", style_assistant_badge()),
+                Span::styled("  ", style_muted()),
+                Span::styled(
+                    "Housaky",
+                    style_assistant_msg().add_modifier(Modifier::BOLD),
+                ),
+                Span::styled("  ", style_muted()),
+                Span::styled(Local::now().format("%H:%M").to_string(), style_muted()),
+            ]));
             lines.push(Line::from(Span::styled(
-                header_text.clone(),
-                style_assistant_msg().add_modifier(Modifier::BOLD),
+                "───────────────",
+                Style::default().fg(Palette::BORDER),
             )));
-            raw_lines.push(header_text);
+
             let (content_lines, content_raw) =
                 render_markdown_with_raw(&self.streaming_buf, false, "");
             lines.extend(content_lines);
             raw_lines.extend(content_raw);
-            // blinking cursor
+
+            // Blinking cursor
             lines.push(Line::from(Span::styled("▌", style_streaming_cursor())));
             raw_lines.push("▌".to_string());
-            lines.push(Line::from(""));
-            raw_lines.push(String::new());
         } else if self.is_streaming {
-            let header_text = " Housaky ".to_string();
+            // Just the cursor while waiting
             lines.push(Line::from(vec![
+                Span::styled(" ", style_muted()),
+                Span::styled("[", style_assistant_badge()),
+                Span::styled(ICON_ASSISTANT, style_assistant_badge()),
+                Span::styled("]", style_assistant_badge()),
+                Span::styled("  ", style_muted()),
                 Span::styled(
-                    header_text.clone(),
+                    "Housaky",
                     style_assistant_msg().add_modifier(Modifier::BOLD),
                 ),
+                Span::styled(" ", style_muted()),
                 Span::styled("▌", style_streaming_cursor()),
             ]));
-            raw_lines.push(format!("{}▌", header_text));
         }
 
         // Store rendered lines for selection
@@ -669,7 +766,7 @@ impl ChatPane {
             .scroll((self.scroll_offset as u16, 0));
         f.render_widget(para, inner);
 
-        // Scrollbar
+        // Scrollbar with 2077 styling
         if !self.messages.is_empty() {
             let total = self.messages.len() + if self.is_streaming { 1 } else { 0 };
             let mut sb_state = ScrollbarState::new(total).position(self.scroll_offset);
@@ -677,8 +774,9 @@ impl ChatPane {
                 .orientation(ScrollbarOrientation::VerticalRight)
                 .begin_symbol(Some("▲"))
                 .end_symbol(Some("▼"))
-                .thumb_symbol("█")
-                .track_symbol(Some("│"));
+                .thumb_symbol("│")
+                .track_symbol(None)
+                .style(Style::default().fg(Palette::CYAN_DIM));
             f.render_stateful_widget(sb, inner, &mut sb_state);
         }
     }

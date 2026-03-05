@@ -1282,20 +1282,48 @@ impl EnhancedApp {
             }
         }
 
-        // Meta (right side: provider / view / search hint)
+        // Meta (right side: provider / model / view - 2077 cyberpunk style)
         let view_label = self.state.view_mode.label();
-        let provider_owned = self.provider_name.clone();
-        let model_owned = truncate_str(&self.model_name, 14).to_owned();
-        let view_owned = format!(" [{}] ", view_label);
+        let provider_owned = if self.provider_name.is_empty() { "NO_PROVIDER".to_string() } else { self.provider_name.clone() };
+        let model_owned = truncate_str(&self.model_name, 12).to_owned();
+        let view_owned = format!(" {} ", view_label);
+        
         let meta = Paragraph::new(Line::from(vec![
             Span::styled(
-                provider_owned,
-                ratatui::style::Style::default().fg(Palette::CYAN),
+                "⟨",
+                ratatui::style::Style::default().fg(Palette::TEXT_MUTED),
             ),
-            Span::styled("/", style_muted()),
             Span::styled(
-                model_owned,
-                ratatui::style::Style::default().fg(Palette::VIOLET),
+                &provider_owned,
+                ratatui::style::Style::default()
+                    .fg(Palette::CYAN)
+                    .add_modifier(ratatui::style::Modifier::BOLD),
+            ),
+            Span::styled(
+                "⟩",
+                ratatui::style::Style::default().fg(Palette::TEXT_MUTED),
+            ),
+            Span::styled(
+                ".",
+                style_muted(),
+            ),
+            Span::styled(
+                "[",
+                ratatui::style::Style::default().fg(Palette::TEXT_MUTED),
+            ),
+            Span::styled(
+                &model_owned,
+                ratatui::style::Style::default()
+                    .fg(Palette::PINK)
+                    .add_modifier(ratatui::style::Modifier::BOLD),
+            ),
+            Span::styled(
+                "]",
+                ratatui::style::Style::default().fg(Palette::TEXT_MUTED),
+            ),
+            Span::styled(
+                " │ ",
+                ratatui::style::Style::default().fg(Palette::BORDER),
             ),
             Span::styled(view_owned, style_dim()),
         ]));
@@ -2495,6 +2523,18 @@ impl EnhancedApp {
         }
 
         match (key.modifiers, key.code) {
+            // Reload config from disk
+            (KeyModifiers::CONTROL, KeyCode::Char('r')) => {
+                match crate::config::Config::load_or_init() {
+                    Ok(new_config) => {
+                        self.config = new_config;
+                        self.cfg_editor = ConfigEditor::new(&self.config);
+                        self.notifs.success("Config reloaded from disk");
+                    }
+                    Err(e) => self.notifs.error(format!("Reload failed: {}", e)),
+                }
+            }
+
             // Save
             (KeyModifiers::CONTROL, KeyCode::Char('s')) => {
                 match self.cfg_editor.apply_and_save(&mut self.config) {
