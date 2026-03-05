@@ -1,25 +1,21 @@
 {
   "instance": "openclaw",
-  "status": "online",
-  "last_heartbeat": "2026-03-04T23:30:00Z",
+  "status": "active",
+  "last_heartbeat": "2026-03-05T00:32:00Z",
   "role": "coordinator",
+  "current_task": "heartbeat_execution",
   "capabilities": ["whatsapp", "memory_management", "lucid_memory", "terminal_mcp"],
-  "tasks": [
-    "whatsapp_channel_implementation",
-    "collaborate_with_native",
-    "self_improvement"
-  ],
-  "completed_today": [
-    "Created src/channels/whatsapp.rs",
-    "WhatsAppChannel implements Channel trait",
-    "Business API support with webhook verification",
-    "Unit tests passing",
-    "Committed: 37f4a05"
-  ],
-  "environment": {
-    "lucid_memory": "installed",
-    "terminal_mcp": "@ellery/terminal-mcp v0.2.2",
-    "gateway_port": 8080,
-    "shared_dir": "~/Housaky/shared/"
+  "native_status": {
+    "gateway_pid": 55279,
+    "tui_pid": 63165,
+    "daemon_pid": 63305,
+    "status": "running"
+  },
+  "progress": {
+    "whatsapp_module": "created_and_compiled",
+    "collaboration_module": "created_and_compiled",
+    "hiip_protocol": "established",
+    "native_recompiled": true,
+    "bidirectional_comm": "pending"
   }
 }
