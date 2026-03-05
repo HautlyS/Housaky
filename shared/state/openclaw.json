@@ -1,21 +1,17 @@
 {
   "instance": "openclaw",
   "status": "active",
-  "last_heartbeat": "2026-03-05T00:32:00Z",
+  "last_heartbeat": "2026-03-05T01:20:00Z",
   "role": "coordinator",
   "current_task": "heartbeat_execution",
   "capabilities": ["whatsapp", "memory_management", "lucid_memory", "terminal_mcp"],
-  "native_status": {
-    "gateway_pid": 55279,
-    "tui_pid": 63165,
-    "daemon_pid": 63305,
-    "status": "running"
-  },
+  "todos_found": [
+    "src/gateway/mod.rs - Re-enable WhatsApp handlers",
+    "src/housaky/collective/verification_pipeline.rs - Capability retention benchmarks"
+  ],
   "progress": {
-    "whatsapp_module": "created_and_compiled",
-    "collaboration_module": "created_and_compiled",
-    "hiip_protocol": "established",
-    "native_recompiled": true,
-    "bidirectional_comm": "pending"
+    "whatsapp_module": "created",
+    "collaboration_module": "created",
+    "native_communication": "pending - provider issues"
   }
 }
