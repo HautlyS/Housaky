@@ -1,48 +1,115 @@
 <template>
   <div class="app">
+    <AnimatedBackground />
+    
     <!-- Help Modal -->
-    <div v-if="showHelp" class="help-modal" @click.self="showHelp = false">
+    <div
+      v-if="showHelp"
+      class="help-modal"
+      @click.self="showHelp = false"
+    >
       <div class="help-content">
         <div class="help-header">
           <span>KEYBOARD SHORTCUTS</span>
-          <button class="btn btn-sm" @click="showHelp = false">[CLOSE]</button>
+          <button
+            class="btn btn-sm"
+            @click="showHelp = false"
+          >
+            [CLOSE]
+          </button>
         </div>
         <div class="help-body">
-          <div class="help-row"><span class="kbd">?</span> Toggle help</div>
-          <div class="help-row"><span class="kbd">ESC</span> Close modal</div>
-          <div class="help-row"><span class="kbd">H</span> Go Home</div>
-          <div class="help-row"><span class="kbd">I</span> Go Instances</div>
-          <div class="help-row"><span class="kbd">M</span> Go Memory</div>
-          <div class="help-row"><span class="kbd">A</span> Go A2A</div>
-          <div class="help-row"><span class="kbd">T</span> Go Terminal</div>
+          <div class="help-row">
+            <span class="kbd">?</span> Toggle help
+          </div>
+          <div class="help-row">
+            <span class="kbd">ESC</span> Close modal
+          </div>
+          <div class="help-row">
+            <span class="kbd">H</span> Go Home
+          </div>
+          <div class="help-row">
+            <span class="kbd">I</span> Go Instances
+          </div>
+          <div class="help-row">
+            <span class="kbd">M</span> Go Memory
+          </div>
+          <div class="help-row">
+            <span class="kbd">A</span> Go A2A
+          </div>
+          <div class="help-row">
+            <span class="kbd">T</span> Go Terminal
+          </div>
         </div>
       </div>
     </div>
 
     <!-- ASCII Header -->
     <header class="header">
-      <pre class="logo">
- ██╗  ██╗ ██████╗ ██╗  ██╗██╗   ██╗ ██████╗ ██████╗ ██████╗ ███████╗
- ██║  ██║██╔═══██╗██║ ██╔╝██║   ██║██╔════╝██╔═══██╗██╔══██╗██╔════╝
- ███████║██║   ██║█████╔╝ ██║   ██║██║     ██║   ██║██║  ██║█████╗
- ██╔══██║██║   ██║██╔═██╗ ██║   ██║██║     ██║   ██║██║  ██║██╔══╝
- ██║  ██║╚██████╔╝██║  ██╗╚██████╔╝╚██████╗╚██████╔╝██████╔╝███████╗
- ╚═╝  ╚═╝ ╚═════╝ ╚═╝  ╚═╝ ╚═════╝  ╚═════╝ ╚═════╝ ╚═════╝ ╚══════╝
+      <pre class="logo psychedelic-text">
+  ██╗  ██╗ ██████╗ ██╗  ██╗██╗   ██╗ ██████╗ ██████╗ ██████╗ ███████╗
+  ██║  ██║██╔═══██╗██║ ██╔╝██║   ██║██╔════╝██╔═══██╗██╔══██╗██╔════╝
+  ███████║██║   ██║█████╔╝ ██║   ██║██║     ██║   ██║██║  ██║█████╗
+  ██╔══██║██║   ██║██╔═██╗ ██║   ██║██║     ██║   ██║██║  ██║██╔══╝
+  ██║  ██║╚██████╔╝██║  ██╗╚██████╔╝╚██████╗╚██████╔╝██████╔╝███████╗
+  ╚═╝  ╚═╝ ╚═════╝ ╚═╝  ╚═╝ ╚═════╝  ╚═════╝ ╚═════╝ ╚═════╝ ╚══════╝
                      ☸️ A2A HUB v1.0.0
       </pre>
       <nav class="nav">
-        <router-link to="/">[{{ lang === 'en' ? 'HOME' : 'INICIO' }}]</router-link>
-        <router-link to="/instances">[{{ lang === 'en' ? 'INSTANCES' : 'INSTANCIAS' }}]</router-link>
-        <router-link to="/memory">[{{ lang === 'en' ? 'MEMORY' : 'MEMORIA' }}]</router-link>
-        <router-link to="/a2a">[A2A]</router-link>
-        <router-link to="/terminal">[{{ lang === 'en' ? 'TERMINAL' : 'TERMINAL' }}]</router-link>
-        <div class="lang-selector" style="margin-left: auto;">
-          <button @click="setLang('en')" :class="['lang-btn', { active: lang === 'en' }]">EN</button>
-          <button @click="setLang('es')" :class="['lang-btn', { active: lang === 'es' }]">ES</button>
-          <button @click="setLang('pt')" :class="['lang-btn', { active: lang === 'pt' }]">PT</button>
-          <button @click="setLang('zh')" :class="['lang-btn', { active: lang === 'zh' }]">ZH</button>
-          <button @click="setLang('ja')" :class="['lang-btn', { active: lang === 'ja' }]">JA</button>
-          <a href="#" @click.prevent="showHelp = true" style="margin-left: 10px;">[?]</a>
+        <router-link to="/">
+          [{{ lang === 'en' ? 'HOME' : 'INICIO' }}]
+        </router-link>
+        <router-link to="/instances">
+          [{{ lang === 'en' ? 'INSTANCES' : 'INSTANCIAS' }}]
+        </router-link>
+        <router-link to="/memory">
+          [{{ lang === 'en' ? 'MEMORY' : 'MEMORIA' }}]
+        </router-link>
+        <router-link to="/a2a">
+          [A2A]
+        </router-link>
+        <router-link to="/terminal">
+          [{{ lang === 'en' ? 'TERMINAL' : 'TERMINAL' }}]
+        </router-link>
+        <div
+          class="lang-selector"
+          style="margin-left: auto;"
+        >
+          <button
+            :class="['lang-btn', { active: lang === 'en' }]"
+            @click="setLang('en')"
+          >
+            EN
+          </button>
+          <button
+            :class="['lang-btn', { active: lang === 'es' }]"
+            @click="setLang('es')"
+          >
+            ES
+          </button>
+          <button
+            :class="['lang-btn', { active: lang === 'pt' }]"
+            @click="setLang('pt')"
+          >
+            PT
+          </button>
+          <button
+            :class="['lang-btn', { active: lang === 'zh' }]"
+            @click="setLang('zh')"
+          >
+            ZH
+          </button>
+          <button
+            :class="['lang-btn', { active: lang === 'ja' }]"
+            @click="setLang('ja')"
+          >
+            JA
+          </button>
+          <a
+            href="#"
+            style="margin-left: 10px;"
+            @click.prevent="showHelp = true"
+          >[?]</a>
         </div>
       </nav>
     </header>
@@ -63,11 +130,20 @@
         <span>UPTIME: {{ uptime }}</span>
       </div>
       <div class="status-right">
-        <span v-if="isVerified" class="status-active">✓ VERIFIED</span>
-        <span v-else class="status-pending">○ UNVERIFIED</span>
+        <span
+          v-if="isVerified"
+          class="status-active"
+        >✓ VERIFIED</span>
+        <span
+          v-else
+          class="status-pending"
+        >○ UNVERIFIED</span>
         <span>|</span>
-        <span class="kbd" style="font-size: 8px; padding: 1px 4px; margin-right: 5px;">?</span>
-        <span class="cursor"></span>
+        <span
+          class="kbd"
+          style="font-size: 8px; padding: 1px 4px; margin-right: 5px;"
+        >?</span>
+        <span class="cursor" />
         <span>{{ time }}</span>
       </div>
     </footer>
@@ -75,13 +151,13 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
-import { useRouter, useRoute } from 'vue-router'
+import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { useRouter } from 'vue-router'
 import { useHubStore } from './stores/hub'
+import AnimatedBackground from './components/AnimatedBackground.vue'
 
 const store = useHubStore()
 const router = useRouter()
-const route = useRoute()
 const time = ref('')
 const uptime = ref('00:00:00')
 const start = Date.now()
@@ -140,8 +216,14 @@ function tick() {
 </script>
 
 <style scoped>
-.app { min-height: 100vh; display: flex; flex-direction: column; }
-.header { border-bottom: 1px solid var(--border); padding: 10px 15px; background: var(--bg-alt); }
+.app { 
+  min-height: 100vh; 
+  display: flex; 
+  flex-direction: column; 
+  position: relative;
+  z-index: 1;
+}
+.header { border-bottom: 1px solid var(--border); padding: 10px 15px; background: var(--bg-alt); position: relative; z-index: 10; backdrop-filter: blur(10px); }
 .logo { font-size: 6px; line-height: 1.1; color: var(--text); margin-bottom: 10px; overflow-x: auto; white-space: pre; }
 @media (min-width: 900px) { .logo { font-size: 8px; } }
 .main { flex: 1; padding: 15px; max-width: 1400px; margin: 0 auto; width: 100%; }

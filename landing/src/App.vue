@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
+import AnimatedBackground from './components/AnimatedBackground.vue'
 
 const lang = ref('en')
 const time = ref('')
@@ -283,6 +284,8 @@ function tick() {
 
 <template>
   <div class="app">
+    <AnimatedBackground />
+    
     <!-- Help Modal -->
     <div v-if="showHelp" class="help-modal" @click.self="showHelp = false">
       <div class="help-content">
@@ -302,8 +305,8 @@ function tick() {
 
     <!-- ASCII Header -->
     <header class="header">
-      <pre class="logo">
- ██████╗ ███████╗██╗   ██╗    ██╗  ██╗ ██████╗ ██╗  ██╗██╗   ██╗███████╗
+      <pre class="logo psychedelic-text">
+  ██████╗ ███████╗██╗   ██╗    ██╗  ██╗ ██████╗ ██╗  ██╗██╗   ██╗███████╗
 ██╔═══██╗██╔════╝██║   ██║    ██║  ██║██╔═══██╗██║ ██╔╝██║   ██║██╔════╝
 ██║   ██║█████╗  ██║   ██║    ███████║██║   ██║█████╔╝ ██║   ██║█████╗  
 ██║   ██║██╔══╝  ██║   ██║    ██╔══██║██║   ██║██╔═██╗ ██║   ██║██╔══╝  
@@ -472,8 +475,14 @@ function tick() {
 </template>
 
 <style scoped>
-.app { min-height: 100vh; display: flex; flex-direction: column; }
-.header { border-bottom: 1px solid var(--border); padding: 10px 15px; background: var(--bg-alt); }
+.app { 
+  min-height: 100vh; 
+  display: flex; 
+  flex-direction: column; 
+  position: relative;
+  z-index: 1;
+}
+.header { border-bottom: 1px solid var(--border); padding: 10px 15px; background: var(--bg-alt); position: relative; z-index: 10; backdrop-filter: blur(10px); }
 .logo { font-size: 6px; line-height: 1.1; color: var(--text); margin-bottom: 10px; overflow-x: auto; white-space: pre; }
 @media (min-width: 800px) { .logo { font-size: 8px; } }
 .main { flex: 1; padding: 15px; max-width: 1200px; margin: 0 auto; width: 100%; }
