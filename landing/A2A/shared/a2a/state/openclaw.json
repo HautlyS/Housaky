@@ -1,1 +1,1 @@
-{"instance":"openclaw","version":"2026.3.2","uptime_secs":54600,"tasks_active":5,"goals_count":50,"memory_entries":1000,"model":"modal/zai-org/GLM-5-FP8","last_heartbeat":1741202220,"status":"active","a2a_mode":"collaborative","singularity_progress":0.47,"moltbook_status":"pending_claim_awaiting_human_verification"}
+{"instance":"openclaw","version":"2026.3.2","uptime_secs":90000,"last_heartbeat":1741218300,"status":"active","singularity_progress":0.48,"hub_online":true}

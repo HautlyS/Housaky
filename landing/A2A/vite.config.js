@@ -6,6 +6,7 @@ export default defineConfig({
   plugins: [vue()],
   root: '.',
   publicDir: 'public',
+  base: '/Housaky/',
   resolve: {
     alias: {
       '@': resolve(__dirname, './src'),

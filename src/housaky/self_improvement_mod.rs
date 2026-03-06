@@ -7,7 +7,7 @@ use crate::housaky::meta_cognition::MetaCognitionEngine;
 use crate::housaky::reasoning_pipeline::ReasoningPipeline;
 use crate::housaky::tool_creator::{ToolCreator, ToolGenerationRequest, ToolKind};
 use crate::housaky::working_memory::{MemoryImportance, WorkingMemoryEngine};
-use crate::providers::{create_provider, Provider};
+use crate::providers::{create_provider, create_provider_with_keys_manager, Provider};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -37,7 +37,7 @@ impl SelfImprovementEngine {
     pub fn new(agent: Arc<Agent>) -> Self {
         let workspace_dir = agent.workspace_dir.clone();
 
-        let provider = create_provider(
+        let provider = create_provider_with_keys_manager(
             &agent.config.provider.name,
             agent.config.provider.api_key.as_deref(),
         )
@@ -82,7 +82,7 @@ impl SelfImprovementEngine {
         knowledge_graph: Arc<KnowledgeGraphEngine>,
         working_memory: Arc<WorkingMemoryEngine>,
     ) -> Self {
-        let provider = create_provider(
+        let provider = create_provider_with_keys_manager(
             &agent.config.provider.name,
             agent.config.provider.api_key.as_deref(),
         )

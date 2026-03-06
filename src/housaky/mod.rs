@@ -510,7 +510,7 @@ async fn handle_self_mod_command(command: SelfModCommands, config: &Config) -> R
                 .or_else(|| config.default_model.clone())
                 .unwrap_or_else(|| "arcee-ai/trinity-large-preview:free".to_string());
 
-            let provider_instance = match crate::providers::create_provider(
+            let provider_instance = match crate::providers::create_provider_with_keys_manager(
                 &provider_name,
                 config.api_key.as_deref(),
             ) {
@@ -724,13 +724,13 @@ async fn handle_self_mod_command(command: SelfModCommands, config: &Config) -> R
 
 async fn handle_gsd_command(command: GSDCommands, config: &Config) -> Result<()> {
     use crate::housaky::gsd_orchestration::GSDExecutionEngine;
-    use crate::providers::create_provider;
+    use crate::providers::create_provider_with_keys_manager;
     use crate::providers::Provider;
 
     println!("🚀 GSD Orchestration System");
     println!("============================\n");
 
-    let provider = create_provider(
+    let provider = create_provider_with_keys_manager(
         config.default_provider.as_deref().unwrap_or("openrouter"),
         config.api_key.as_deref(),
     )?;

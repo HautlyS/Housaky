@@ -8,7 +8,7 @@ use crate::housaky::memory::consolidation::MemoryConsolidator;
 use crate::housaky::self_improvement_loop::SelfImprovementLoop;
 use crate::housaky::self_improvement_mod::SelfImprovementEngine;
 use crate::housaky::skills::{SkillCreator, SkillRegistry};
-use crate::providers::{create_provider, Provider};
+use crate::providers::{create_provider, create_provider_with_keys_manager, Provider};
 use crate::util::write_toml_file;
 use anyhow::Result;
 use std::collections::HashSet;
@@ -58,7 +58,7 @@ fn create_heartbeat_components(
 
     let memory_consolidator = core.memory_consolidator.clone();
 
-    let self_improvement_provider = create_provider(
+    let self_improvement_provider = create_provider_with_keys_manager(
         &agent.config.provider.name,
         agent.config.provider.api_key.as_deref(),
     )
@@ -107,7 +107,7 @@ impl HousakyHeartbeat {
         }));
 
         let model = agent.config.provider.model.clone();
-        let provider = create_provider(
+        let provider = create_provider_with_keys_manager(
             &agent.config.provider.name,
             agent.config.provider.api_key.as_deref(),
         )
@@ -133,7 +133,7 @@ impl HousakyHeartbeat {
 
     pub fn with_core(agent: Arc<Agent>, core: Arc<HousakyCore>, config: &Config) -> Self {
         let model = agent.config.provider.model.clone();
-        let provider = create_provider(
+        let provider = create_provider_with_keys_manager(
             &agent.config.provider.name,
             agent.config.provider.api_key.as_deref(),
         )
