@@ -3,14 +3,13 @@
 //! Quick access popup for switching providers, models, and managing API keys.
 
 use ratatui::{
-    layout::{Alignment, Constraint, Direction, Layout, Margin, Rect},
-    style::Modifier,
+    layout::{Alignment, Margin, Rect},
     text::{Line, Span},
     widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph},
     Frame,
 };
 
-use super::theme::{self, Theme};
+use super::theme;
 
 /// Provider entry
 #[derive(Debug, Clone)]

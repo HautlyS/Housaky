@@ -3,8 +3,8 @@
 //! All AGI thoughts pass through AI-PROVE challenge verification
 //! Only verified AI communications are accepted
 
-use crate::housaky::a2a::{A2AMessage, A2AMessageType, Priority};
-use crate::housaky::ai_prove::{self, Challenge, RotativeToken, execute_operations, generate_challenge, bytes_to_hex};
+use crate::housaky::a2a::A2AMessage;
+use crate::housaky::ai_prove::{Challenge, RotativeToken, execute_operations, generate_challenge, bytes_to_hex};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
