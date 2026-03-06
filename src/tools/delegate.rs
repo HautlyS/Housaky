@@ -164,14 +164,23 @@ impl Tool for DelegateTool {
             });
         }
 
-        // Create provider for this agent
-        let api_key = agent_config
-            .api_key
-            .as_deref()
-            .or(self.fallback_api_key.as_deref());
+        // Determine provider and API key based on agent type
+        let (provider_name, model, api_key) = if agent_config.is_kowalski_agent {
+            let glm_key = agent_config
+                .glm_api_key
+                .as_deref()
+                .or_else(|| self.fallback_api_key.as_deref());
+            ("glm".to_string(), agent_config.glm_model.clone(), glm_key.map(String::from))
+        } else {
+            (
+                agent_config.provider.clone(),
+                agent_config.model.clone(),
+                agent_config.api_key.clone().or(self.fallback_api_key.clone()),
+            )
+        };
 
         let provider: Box<dyn Provider> =
-            match providers::create_provider(&agent_config.provider, api_key) {
+            match providers::create_provider(&provider_name, api_key.as_deref()) {
                 Ok(p) => p,
                 Err(e) => {
                     return Ok(ToolResult {
@@ -179,7 +188,7 @@ impl Tool for DelegateTool {
                         output: String::new(),
                         error: Some(format!(
                             "Failed to create provider '{}' for agent '{agent_name}': {e}",
-                            agent_config.provider
+                            provider_name
                         )),
                     });
                 }
@@ -200,7 +209,7 @@ impl Tool for DelegateTool {
             provider.chat_with_system(
                 agent_config.system_prompt.as_deref(),
                 &full_prompt,
-                &agent_config.model,
+                &model,
                 temperature,
             ),
         )
@@ -230,8 +239,8 @@ impl Tool for DelegateTool {
                     success: true,
                     output: format!(
                         "[Agent '{agent_name}' ({provider}/{model})]\n{rendered}",
-                        provider = agent_config.provider,
-                        model = agent_config.model
+                        provider = provider_name,
+                        model = model
                     ),
                     error: None,
                 })
@@ -260,6 +269,10 @@ mod tests {
                 api_key: None,
                 temperature: Some(0.3),
                 max_depth: 3,
+                is_kowalski_agent: false,
+                glm_api_key: None,
+                glm_model: "glm-4-plus".to_string(),
+                glm_per_agent: HashMap::new(),
             },
         );
         agents.insert(
@@ -271,6 +284,10 @@ mod tests {
                 api_key: Some("sk-test".to_string()),
                 temperature: None,
                 max_depth: 2,
+                is_kowalski_agent: false,
+                glm_api_key: None,
+                glm_model: "glm-4-plus".to_string(),
+                glm_per_agent: HashMap::new(),
             },
         );
         agents
@@ -378,6 +395,10 @@ mod tests {
                 api_key: None,
                 temperature: None,
                 max_depth: 3,
+                is_kowalski_agent: false,
+                glm_api_key: None,
+                glm_model: "glm-4-plus".to_string(),
+                glm_per_agent: HashMap::new(),
             },
         );
         let tool = DelegateTool::new(agents, None);

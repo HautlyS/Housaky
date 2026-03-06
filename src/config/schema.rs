@@ -498,6 +498,33 @@ pub struct DelegateAgentConfig {
     /// Max recursion depth for nested delegation
     #[serde(default = "default_max_depth")]
     pub max_depth: u32,
+    /// Whether this is a Kowalski-style agent (for the Kowalski integration bridge)
+    #[serde(default)]
+    pub is_kowalski_agent: bool,
+    /// GLM API key for Kowalski agents
+    #[serde(default)]
+    pub glm_api_key: Option<String>,
+    /// GLM model to use (default: "glm-4-plus")
+    #[serde(default = "default_glm_model")]
+    pub glm_model: String,
+    /// Per-agent GLM configuration (key = agent type: code, web, academic, data, federation)
+    #[serde(default)]
+    pub glm_per_agent: HashMap<String, GlmAgentConfig>,
+}
+
+fn default_glm_model() -> String {
+    "glm-4-plus".to_string()
+}
+
+/// GLM configuration for a specific Kowalski agent type
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GlmAgentConfig {
+    /// GLM API key for this specific agent
+    #[serde(default)]
+    pub glm_api_key: Option<String>,
+    /// GLM model for this specific agent
+    #[serde(default = "default_glm_model")]
+    pub glm_model: String,
 }
 
 fn default_max_depth() -> u32 {

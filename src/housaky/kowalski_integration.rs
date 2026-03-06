@@ -1,6 +1,9 @@
+use crate::config::DelegateAgentConfig;
 use crate::housaky::agent::KowalskiIntegrationConfig;
 use anyhow::{bail, Context, Result};
+use reqwest;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::process::Stdio;
 use std::time::Duration;
@@ -590,6 +593,162 @@ impl KowalskiBridge {
             let stderr = String::from_utf8_lossy(&output.stderr);
             Err(anyhow::anyhow!("Kowalski tests failed: {}", stderr))
         }
+    }
+
+    fn get_glm_key_for_agent_type(&self, agent_type: &KowalskiAgentType) -> Option<String> {
+        match agent_type {
+            KowalskiAgentType::Code => self.config.code_agent_glm_key.clone(),
+            KowalskiAgentType::Web => self.config.web_agent_glm_key.clone(),
+            KowalskiAgentType::Academic => self.config.academic_agent_glm_key.clone(),
+            KowalskiAgentType::Data => self.config.data_agent_glm_key.clone(),
+            KowalskiAgentType::Federated => self.config.federation_glm_key.clone(),
+        }
+    }
+
+    fn get_system_prompt_for_agent_type(&self, agent_type: &KowalskiAgentType) -> String {
+        match agent_type {
+            KowalskiAgentType::Code => {
+                "You are a specialized code analysis agent. Your role is to analyze, refactor, \
+                and document code. You have deep knowledge of programming patterns, best practices, \
+                and can understand complex codebases. Provide clear, actionable insights.".to_string()
+            }
+            KowalskiAgentType::Web => {
+                "You are a specialized web research agent. Your role is to search, retrieve, and \
+                synthesize information from the web. You are skilled at finding relevant information \
+                and presenting it in a clear, organized manner.".to_string()
+            }
+            KowalskiAgentType::Academic => {
+                "You are a specialized academic research agent. Your role is to help with academic \
+                research, paper analysis, and scholarly inquiry. You have knowledge of academic \
+                databases, citation styles, and research methodologies.".to_string()
+            }
+            KowalskiAgentType::Data => {
+                "You are a specialized data analysis agent. Your role is to process, analyze, and \
+                transform data. You have expertise in data manipulation, statistical analysis, and \
+                data visualization.".to_string()
+            }
+            KowalskiAgentType::Federated => {
+                "You are a federated coordination agent. Your role is to coordinate multiple \
+                specialized agents to work together on complex tasks. You can delegate subtasks \
+                to other agents and synthesize their results.".to_string()
+            }
+        }
+    }
+
+    pub fn to_delegate_agent_config(
+        &self,
+        agent_type: &KowalskiAgentType,
+        _name: &str,
+    ) -> Option<DelegateAgentConfig> {
+        let glm_key = self.get_glm_key_for_agent_type(agent_type)?;
+        let system_prompt = self.get_system_prompt_for_agent_type(agent_type);
+
+        Some(DelegateAgentConfig {
+            provider: "glm".to_string(),
+            model: if self.config.glm_model.is_empty() {
+                "glm-4-plus".to_string()
+            } else {
+                self.config.glm_model.clone()
+            },
+            system_prompt: Some(system_prompt),
+            api_key: None,
+            temperature: None,
+            max_depth: 3,
+            is_kowalski_agent: true,
+            glm_api_key: Some(glm_key),
+            glm_model: if self.config.glm_model.is_empty() {
+                "glm-4-plus".to_string()
+            } else {
+                self.config.glm_model.clone()
+            },
+            glm_per_agent: HashMap::new(),
+        })
+    }
+
+    pub fn get_delegate_configs(&self) -> HashMap<String, DelegateAgentConfig> {
+        let mut configs = HashMap::new();
+
+        for agent in &self.agents {
+            if !matches!(agent.status, AgentStatus::Available | AgentStatus::Offline) {
+                continue;
+            }
+
+            if let Some(config) = self.to_delegate_agent_config(&agent.agent_type, &agent.name) {
+                configs.insert(agent.name.clone(), config);
+            }
+        }
+
+        configs
+    }
+
+    pub async fn execute_with_glm(
+        &self,
+        agent_type: &KowalskiAgentType,
+        task: &str,
+    ) -> Result<String> {
+        let glm_key = self
+            .get_glm_key_for_agent_type(agent_type)
+            .context("GLM API key not configured for this agent type")?;
+
+        let model = if self.config.glm_model.is_empty() {
+            "glm-4-plus".to_string()
+        } else {
+            self.config.glm_model.clone()
+        };
+
+        let system_prompt = self.get_system_prompt_for_agent_type(agent_type);
+
+        info!(
+            "Executing task with GLM (model: {}) for agent type: {:?}",
+            model, agent_type
+        );
+
+        let request_body = serde_json::json!({
+            "model": model,
+            "messages": [
+                {
+                    "role": "system",
+                    "content": system_prompt
+                },
+                {
+                    "role": "user",
+                    "content": task
+                }
+            ],
+            "temperature": 0.7,
+            "max_tokens": 4096
+        });
+
+        let client = reqwest::Client::new();
+        let response = client
+            .post("https://open.bigmodel.cn/api/paas/v4/chat/completions")
+            .header("Authorization", format!("Bearer {}", glm_key))
+            .header("Content-Type", "application/json")
+            .json(&request_body)
+            .send()
+            .await
+            .context("Failed to send request to GLM API")?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let error_text = response.text().await.unwrap_or_default();
+            bail!("GLM API request failed with status {}: {}", status, error_text);
+        }
+
+        let response_body: serde_json::Value = response
+            .json()
+            .await
+            .context("Failed to parse GLM API response")?;
+
+        let content = response_body["choices"]
+            .as_array()
+            .and_then(|arr| arr.first())
+            .and_then(|choice| choice.get("message"))
+            .and_then(|msg| msg.get("content"))
+            .and_then(|c| c.as_str())
+            .context("Invalid response format from GLM API")?;
+
+        Ok(content.to_string())
     }
 }
 

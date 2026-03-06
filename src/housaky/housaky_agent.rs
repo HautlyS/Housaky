@@ -66,6 +66,13 @@ pub struct KowalskiIntegrationConfig {
     pub enable_web_agent: bool,
     pub enable_academic_agent: bool,
     pub enable_data_agent: bool,
+    pub glm_api_key: Option<String>,
+    pub glm_model: String,
+    pub code_agent_glm_key: Option<String>,
+    pub web_agent_glm_key: Option<String>,
+    pub academic_agent_glm_key: Option<String>,
+    pub data_agent_glm_key: Option<String>,
+    pub federation_glm_key: Option<String>,
 }
 
 /// EC2 awareness configuration
@@ -211,6 +218,13 @@ impl Agent {
                 enable_web_agent: true,
                 enable_academic_agent: true,
                 enable_data_agent: true,
+                glm_api_key: None,
+                glm_model: "glm-4-plus".to_string(),
+                code_agent_glm_key: None,
+                web_agent_glm_key: None,
+                academic_agent_glm_key: None,
+                data_agent_glm_key: None,
+                federation_glm_key: None,
             },
             ec2_awareness: Ec2AwarenessConfig {
                 enabled: true,

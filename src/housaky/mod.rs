@@ -78,6 +78,9 @@ pub mod self_replication;
 pub mod federation;
 pub mod neuromorphic;
 pub mod quantum;
+
+// Deep Subagent Integration - Kowalski merged into Housaky core
+pub mod subagent_system;
 pub mod swarm;
 
 // Phase 3 — Consciousness Substrate & Self-Awareness
@@ -340,6 +343,13 @@ pub async fn handle_command(command: HousakyCommands, config: &Config) -> Result
                     enable_web_agent: true,
                     enable_academic_agent: true,
                     enable_data_agent: true,
+                    glm_api_key: None,
+                    glm_model: "zai-org/GLM-5-FP8".to_string(),
+                    code_agent_glm_key: None,
+                    web_agent_glm_key: None,
+                    academic_agent_glm_key: None,
+                    data_agent_glm_key: None,
+                    federation_glm_key: None,
                 });
 
             if bridge.check_kowalski().await? {
