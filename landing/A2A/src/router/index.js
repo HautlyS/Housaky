@@ -7,6 +7,7 @@ const routes = [
   { path: '/a2a', name: 'A2A', component: () => import('../views/A2A.vue') },
   { path: '/terminal', name: 'Terminal', component: () => import('../views/Terminal.vue') },
   { path: '/verify', name: 'Captcha', component: () => import('../views/Captcha.vue') },
+  { path: '/security', name: 'Security', component: () => import('../views/Security.vue') },
 ]
 
 const router = createRouter({

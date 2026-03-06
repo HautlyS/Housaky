@@ -74,6 +74,7 @@ pub mod tools;
 pub mod tui;
 pub mod tunnel;
 pub mod util;
+pub mod a2a_prove;
 
 pub use commands::ChannelCommands;
 pub use commands::CronCommands;

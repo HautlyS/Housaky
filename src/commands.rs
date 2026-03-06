@@ -1,635 +1,558 @@
 use clap::Subcommand;
 use serde::{Deserialize, Serialize};
 
-/// Service management subcommands
-#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub enum ServiceCommands {
-    /// Install daemon service unit for auto-start and restart
-    Install,
-    /// Start daemon service
-    Start,
-    /// Stop daemon service
-    Stop,
-    /// Check daemon service status
-    Status,
-    /// Uninstall daemon service unit
-    Uninstall,
-}
+// ============================================================================
+// Doctor Commands
+// ============================================================================
 
-/// Channel management subcommands
-#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub enum ChannelCommands {
-    /// List all configured channels
-    List,
-    /// Start all configured channels (handled in main.rs for async)
-    Start,
-    /// Run health checks for configured channels (handled in main.rs for async)
-    Doctor,
-    /// Add a new channel configuration
-    Add {
-        /// Channel type (telegram, discord, slack, whatsapp, matrix, imessage, email)
-        channel_type: String,
-        /// Optional configuration as JSON
-        config: String,
-    },
-    /// Remove a channel configuration
-    Remove {
-        /// Channel name to remove
-        name: String,
-    },
-}
-
-/// Skills management subcommands
-#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub enum SkillCommands {
-    /// Open the Skills marketplace TUI (Claude official + OpenClaw).
-    ///
-    /// This will refresh registries and let you enable/disable skills.
-    Ui,
-
-    /// List all installed skills
-    List,
-
-    /// Install a new skill from a URL or local path
-    Install {
-        /// Source URL or local path
-        source: String,
-    },
-
-    /// Remove an installed skill
-    Remove {
-        /// Skill name to remove
-        name: String,
-    },
-
-    /// Convert a Claude Code SKILL.md into a Housaky SKILL.toml (prints to stdout)
-    Convert {
-        /// Path to Claude SKILL.md
-        path: std::path::PathBuf,
-    },
-
-    /// Convenience: install by name (searches local markets first) and optionally enable.
-    Get {
-        /// Skill name/slug
-        name: String,
-
-        /// Enable immediately (skip prompt)
-        #[arg(long)]
-        enable: bool,
-    },
-}
-
-/// Doctor / diagnostics subcommands
 #[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum DoctorCommands {
-    /// Run all diagnostics (default)
+    /// Run all diagnostics
     Run,
-    /// Run diagnostics and attempt to auto-apply safe fixes
+    /// Run and auto-fix
     Fix,
-    /// Run channel config and runtime health checks only
+    /// Channels only
     Channels,
-    /// Run security audit checks only
+    /// Security only
     Security,
-    /// Show doctor results as JSON (for scripting)
+    /// Output JSON
     Json,
 }
 
-/// Migration subcommands
-#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub enum MigrateCommands {
-    /// Import memory from an `OpenClaw` workspace into this `Housaky` workspace
-    Openclaw {
-        /// Optional path to `OpenClaw` workspace (defaults to ~/.openclaw/workspace)
-        #[arg(long)]
-        source: Option<std::path::PathBuf>,
+// ============================================================================
+// Hardware Commands
+// ============================================================================
 
-        /// Validate and preview migration without writing any data
-        #[arg(long)]
-        dry_run: bool,
-    },
-}
-
-/// Cron subcommands
-#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub enum CronCommands {
-    /// List all scheduled tasks
-    List,
-    /// Add a new scheduled task
-    Add {
-        /// Cron expression
-        expression: String,
-        /// Command to run
-        command: String,
-    },
-    /// Add a one-shot delayed task (e.g. "30m", "2h", "1d")
-    Once {
-        /// Delay duration
-        delay: String,
-        /// Command to run
-        command: String,
-    },
-    /// Remove a scheduled task
-    Remove {
-        /// Task ID
-        id: String,
-    },
-    /// Pause a scheduled task
-    Pause {
-        /// Task ID
-        id: String,
-    },
-    /// Resume a paused task
-    Resume {
-        /// Task ID
-        id: String,
-    },
-}
-
-/// Integration subcommands
-#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub enum IntegrationCommands {
-    /// Show details about a specific integration
-    Info {
-        /// Integration name
-        name: String,
-    },
-}
-
-/// Model management subcommands
-#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub enum ModelCommands {
-    /// Refresh and cache provider models
-    Refresh {
-        /// Provider name (defaults to configured default provider)
-        #[arg(long)]
-        provider: Option<String>,
-
-        /// Force live refresh and ignore fresh cache
-        #[arg(long)]
-        force: bool,
-    },
-}
-
-/// Hardware discovery subcommands
 #[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum HardwareCommands {
-    /// Enumerate USB devices (VID/PID) and show known boards
+    /// Discover USB devices
     Discover,
-    /// Introspect a device by path (e.g. /dev/ttyACM0)
-    Introspect {
-        /// Serial or device path
-        path: String,
-    },
-    /// Get chip info via USB (probe-rs over ST-Link). No firmware needed on target.
+    /// Introspect device
+    Introspect { path: String },
+    /// Get chip info
     Info {
-        /// Chip name (e.g. STM32F401RETx). Default: STM32F401RETx for Nucleo-F401RE
         #[arg(long, default_value = "STM32F401RETx")]
         chip: String,
     },
 }
 
-/// Peripheral (hardware) management subcommands
+// ============================================================================
+// Peripheral Commands
+// ============================================================================
+
 #[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum PeripheralCommands {
-    /// List configured peripherals
+    /// List peripherals
     List,
-    /// Add a peripheral (board path, e.g. nucleo-f401re /dev/ttyACM0)
-    Add {
-        /// Board type (nucleo-f401re, rpi-gpio, esp32)
-        board: String,
-        /// Path for serial transport (/dev/ttyACM0) or "native" for local GPIO
-        path: String,
-    },
-    /// Flash Housaky firmware to Arduino (creates .ino, installs arduino-cli if needed, uploads)
+    /// Add peripheral
+    Add { board: String, path: String },
+    /// Flash Arduino
     Flash {
-        /// Serial port (e.g. /dev/cu.usbmodem12345). If omitted, uses first arduino-uno from config.
         #[arg(short, long)]
         port: Option<String>,
     },
-    /// Setup Arduino Uno Q Bridge app (deploy GPIO bridge for agent control)
+    /// Flash Nucleo
+    FlashNucleo,
+    /// Setup Uno Q
     SetupUnoQ {
-        /// Uno Q IP (e.g. 192.168.0.48). If omitted, assumes running ON the Uno Q.
         #[arg(long)]
         host: Option<String>,
     },
-    /// Flash Housaky firmware to Nucleo-F401RE (builds + probe-rs run)
-    FlashNucleo,
 }
 
-/// Key management subcommands
-///
-/// Use `housaky keys manager ...` to manage keys with the centralized keys store (`~/.housaky/keys.json`).
-#[derive(Subcommand, Debug, Clone)]
-pub enum KeyCommands {
-    /// List all configured API keys.
-    List,
-    /// Add a new API key for a provider.
-    Add {
-        /// Provider name (e.g., openrouter, anthropic, openai)
-        provider: String,
-        /// API key value
-        key: String,
-    },
-    /// Remove an API key (removes provider).
-    Remove {
-        /// Provider name
-        provider: String,
-    },
-    /// Rotate API keys.
-    ///
-    /// Prefer: KeysManager performs per-request rotation via provider state.
-    Rotate,
+// ============================================================================
+// Housaky Internal Commands (used by housaky/mod.rs)
+// ============================================================================
 
-    /// Centralized keys/provider/model manager.
-    #[command(subcommand)]
-    Manager(crate::keys_manager::commands::KeysManagerCommands),
-}
-
-/// Housaky AGI agent subcommands
 #[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum HousakyCommands {
-    /// Show Housaky status and current state
+    /// Show status
     Status,
-    /// Initialize Housaky AGI system
+    /// Initialize
     Init,
-    /// Trigger a manual heartbeat cycle
+    /// Heartbeat
     Heartbeat,
-    /// Show current tasks
+    /// Tasks
     Tasks,
-    /// Show state review
+    /// Review
     Review,
-    /// Force self-improvement cycle
+    /// Improve
     Improve,
-    /// Connect to Kowalski agents
+    /// Connect Kowalski
     ConnectKowalski,
-    /// Run the full Housaky AGI system (daemon + channels + heartbeat)
+    /// Run
     Run {
-        /// Initial message to send
         message: Option<String>,
-        /// Provider to use
         provider: Option<String>,
-        /// Model to use
         model: Option<String>,
-        /// Enable verbose logging
         #[arg(short, long)]
         verbose: bool,
     },
-    /// Start AGI mode interactive session
+    /// AGI session
     Agi {
-        /// Single message mode (don't enter interactive mode)
         #[arg(short, long)]
         message: Option<String>,
-        /// Provider to use
         #[arg(short, long)]
         provider: Option<String>,
-        /// Model to use
         #[arg(long)]
         model: Option<String>,
     },
-    /// Launch AGI dashboard TUI
+    /// Dashboard
     Dashboard {
-        /// Provider to use
         #[arg(short, long)]
         provider: Option<String>,
-        /// Model to use
         #[arg(long)]
         model: Option<String>,
     },
-    /// Show inner monologue (thoughts)
+    /// Thoughts
     Thoughts {
-        /// Number of thoughts to show
         #[arg(short, long, default_value = "10")]
         count: usize,
     },
-    /// Manage goals
+    /// Goals
     Goals {
         #[command(subcommand)]
         goal_command: GoalCommands,
     },
-    /// Manage self-modification parameters and experiment ledger
+    /// Self-mod
     SelfMod {
         #[command(subcommand)]
         self_mod_command: SelfModCommands,
     },
-    /// GSD Orchestration Commands
+    /// GSD
     GSD {
         #[command(subcommand)]
         gsd_command: GSDCommands,
     },
-    /// Global Collective Intelligence — submit diffs/plugins, vote, auto-apply improvements
+    /// Collective
     Collective {
         #[command(subcommand)]
         collective_command: CollectiveCommands,
     },
 }
 
-/// Goal management subcommands
+// ============================================================================
+// Integration Commands (kept for compatibility)
+// ============================================================================
+
+#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum IntegrationCommands {
+    /// Show integration info
+    Info { name: String },
+}
+
+// ============================================================================
+// Service Commands
+// ============================================================================
+
+#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum ServiceCommands {
+    /// Install daemon service
+    Install,
+    /// Start service
+    Start,
+    /// Stop service
+    Stop,
+    /// Check status
+    Status,
+    /// Uninstall service
+    Uninstall,
+}
+
+// ============================================================================
+// Channel Commands
+// ============================================================================
+
+#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum ChannelCommands {
+    /// List configured channels
+    List,
+    /// Start all channels
+    Start,
+    /// Health check
+    Doctor,
+    /// Add channel
+    Add {
+        /// Type (telegram, discord, slack, etc.)
+        channel_type: String,
+        /// JSON config
+        config: String,
+    },
+    /// Remove channel
+    Remove {
+        /// Channel name
+        name: String,
+    },
+}
+
+// ============================================================================
+// Skill Commands
+// ============================================================================
+
+#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum SkillCommands {
+    /// Open skills marketplace TUI
+    Ui,
+    /// List installed skills
+    List,
+    /// Install skill from URL/path
+    Install {
+        /// Source URL or path
+        source: String,
+    },
+    /// Remove skill
+    Remove {
+        /// Skill name
+        name: String,
+    },
+    /// Convert Claude SKILL.md to SKILL.toml
+    Convert {
+        /// Path to SKILL.md
+        path: std::path::PathBuf,
+    },
+    /// Get skill by name
+    Get {
+        /// Skill name
+        name: String,
+        /// Enable immediately
+        #[arg(long)]
+        enable: bool,
+    },
+}
+
+// ============================================================================
+// Migration Commands
+// ============================================================================
+
+#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum MigrateCommands {
+    /// Import from OpenClaw
+    Openclaw {
+        /// Source workspace path
+        #[arg(long)]
+        source: Option<std::path::PathBuf>,
+        /// Dry run (preview only)
+        #[arg(long)]
+        dry_run: bool,
+    },
+}
+
+// ============================================================================
+// Cron Commands
+// ============================================================================
+
+#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum CronCommands {
+    /// List tasks
+    List,
+    /// Add recurring task
+    Add {
+        /// Cron expression
+        expression: String,
+        /// Command
+        command: String,
+    },
+    /// Add one-shot task
+    Once {
+        /// Delay (30m, 2h, 1d)
+        delay: String,
+        /// Command
+        command: String,
+    },
+    /// Remove task
+    Remove { id: String },
+    /// Pause task
+    Pause { id: String },
+    /// Resume task
+    Resume { id: String },
+}
+
+// ============================================================================
+// Model Commands
+// ============================================================================
+
+#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum ModelCommands {
+    /// Refresh model cache
+    Refresh {
+        /// Provider name
+        #[arg(long)]
+        provider: Option<String>,
+        /// Force refresh
+        #[arg(long)]
+        force: bool,
+    },
+}
+
+// ============================================================================
+// Key Commands
+// ============================================================================
+
+#[derive(Subcommand, Debug, Clone)]
+pub enum KeyCommands {
+    /// List keys
+    List,
+    /// Add key
+    Add {
+        /// Provider
+        provider: String,
+        /// Key value
+        key: String,
+    },
+    /// Remove provider
+    Remove {
+        /// Provider
+        provider: String,
+    },
+    /// Rotate keys
+    Rotate,
+    /// Advanced manager
+    #[command(subcommand)]
+    Manager(crate::keys_manager::commands::KeysManagerCommands),
+    /// Open keys TUI
+    Tui,
+}
+
+// ============================================================================
+// Goal Commands
+// ============================================================================
+
 #[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum GoalCommands {
-    /// List all goals
+    /// List goals
     List,
-    /// Add a new goal
+    /// Add goal
     Add {
-        /// Goal title
+        /// Title
         title: String,
-        /// Goal description
+        /// Description
         #[arg(short, long)]
         description: Option<String>,
         /// Priority (critical, high, medium, low)
         #[arg(short = 'P', long, default_value = "medium")]
         priority: String,
     },
-    /// Complete a goal
-    Complete {
-        /// Goal ID
-        id: String,
-    },
+    /// Complete goal
+    Complete { id: String },
 }
 
-/// Self-modification controls and observability
+// ============================================================================
+// Self-Mod Commands
+// ============================================================================
+
 #[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum SelfModCommands {
-    /// Run one full recursive self-improvement cycle now
+    /// Run improvement cycle
     Run {
-        /// Override provider name (falls back to configured default)
         #[arg(long)]
         provider: Option<String>,
-        /// Override model name (falls back to configured default)
         #[arg(long)]
         model: Option<String>,
     },
-    /// Show current parameter overrides and ledger summary
+    /// Show status
     Status,
-    /// List recent self-modification experiments
+    /// List experiments
     Experiments {
-        /// Number of most recent experiments to show
         #[arg(short, long, default_value = "10")]
         count: usize,
     },
-    /// Persist a parameter override for a target component
+    /// Set parameter
     Set {
-        /// Target component (e.g. reasoning_engine, goal_engine)
         #[arg(long)]
         target: String,
-        /// Parameter key (e.g. max_steps, learning_value_weight)
         #[arg(long)]
         key: String,
-        /// JSON literal value (e.g. 25, 0.35, true, "text")
         #[arg(long)]
         value: String,
     },
-    /// Remove a persisted parameter override
+    /// Unset parameter
     Unset {
-        /// Target component (e.g. reasoning_engine, goal_engine)
         #[arg(long)]
         target: String,
-        /// Parameter key to remove
         #[arg(long)]
         key: String,
     },
 }
 
-/// Quantum computing subcommands (Amazon Braket + local simulator)
+// ============================================================================
+// Quantum Commands
+// ============================================================================
+
 #[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum QuantumCommands {
-    /// Run a Bell-state circuit on Amazon Braket and print results
+    /// Run on Amazon Braket
     RunBraket {
-        /// Number of shots
         #[arg(short, long, default_value = "100")]
         shots: u64,
-        /// Device ARN (defaults to QuEra Aquila 256-qubit analog QPU)
-        #[arg(
-            long,
-            default_value = "arn:aws:braket:us-east-1::device/qpu/quera/Aquila"
-        )]
+        #[arg(long, default_value = "arn:aws:braket:us-east-1::device/qpu/quera/Aquila")]
         device: String,
-        /// S3 bucket for results
         #[arg(long, default_value = "amazon-braket-housaky")]
         bucket: String,
-        /// S3 key prefix
         #[arg(long, default_value = "housaky-results")]
         prefix: String,
     },
-    /// Run a Bell-state circuit on the local statevector simulator (no AWS needed)
+    /// Run local simulator
     RunSimulator {
-        /// Number of shots
         #[arg(short, long, default_value = "4096")]
         shots: u64,
     },
-    /// Show info (online status, max qubits) for a Braket device
+    /// Device info
     DeviceInfo {
-        /// Device ARN
-        #[arg(
-            long,
-            default_value = "arn:aws:braket:us-east-1::device/qpu/quera/Aquila"
-        )]
+        #[arg(long, default_value = "arn:aws:braket:us-east-1::device/qpu/quera/Aquila")]
         device: String,
-        /// S3 bucket (needed to create the backend)
         #[arg(long, default_value = "amazon-braket-housaky")]
         bucket: String,
     },
-    /// List all known Braket devices (simulators + QPUs) with cost estimates
+    /// List devices
     Devices,
-    /// Estimate cost for a quantum task
+    /// Estimate cost
     EstimateCost {
-        /// Device ARN
-        #[arg(
-            long,
-            default_value = "arn:aws:braket:::device/quantum-simulator/amazon/sv1"
-        )]
+        #[arg(long, default_value = "arn:aws:braket:::device/quantum-simulator/amazon/sv1")]
         device: String,
-        /// Number of shots
         #[arg(short, long, default_value = "1000")]
         shots: u64,
-        /// Number of circuits in batch
         #[arg(short, long, default_value = "1")]
         circuits: usize,
     },
-    /// Transpile a Bell circuit for a target device and show the optimization report
+    /// Transpile circuit
     Transpile {
-        /// Target device ARN
-        #[arg(
-            long,
-            default_value = "arn:aws:braket:eu-north-1::device/qpu/iqm/Garnet"
-        )]
+        #[arg(long, default_value = "arn:aws:braket:eu-north-1::device/qpu/iqm/Garnet")]
         device: String,
-        /// Optimization level (0-3)
         #[arg(short, long, default_value = "2")]
         opt_level: u8,
     },
-    /// Run quantum state tomography on a Bell state (local simulator)
+    /// State tomography
     Tomography {
-        /// Number of shots per basis
         #[arg(short, long, default_value = "4096")]
         shots: u64,
-        /// Number of qubits
         #[arg(short, long, default_value = "2")]
         qubits: usize,
     },
-    /// Run the quantum AGI bridge demo (goal scheduling + memory optimization)
+    /// AGI bridge demo
     AgiBridge {
-        /// Number of goals to schedule
         #[arg(short, long, default_value = "6")]
         goals: usize,
     },
-    /// List recent Braket tasks for a device
+    /// List tasks
     Tasks {
-        /// Device ARN
-        #[arg(
-            long,
-            default_value = "arn:aws:braket:us-east-1::device/qpu/quera/Aquila"
-        )]
+        #[arg(long, default_value = "arn:aws:braket:us-east-1::device/qpu/quera/Aquila")]
         device: String,
-        /// S3 bucket
         #[arg(long, default_value = "amazon-braket-housaky")]
         bucket: String,
-        /// Max results
         #[arg(short, long, default_value = "10")]
         max: i32,
     },
-    /// Run quantum advantage benchmarks (local simulator)
+    /// Benchmark
     Benchmark {
-        /// Problem sizes to test
         #[arg(short, long, default_value = "4,8,12")]
         sizes: String,
     },
-    /// Show live quantum AGI bridge metrics from the running system
+    /// Show metrics
     Metrics,
 }
 
-/// Global Collective Intelligence — contribution, voting, and autonomous apply
+// ============================================================================
+// Collective Commands
+// ============================================================================
+
 #[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum CollectiveCommands {
-    /// Bootstrap this Housaky instance on the Moltbook network (register agent + ensure submolt)
+    /// Bootstrap on Moltbook
     Bootstrap,
-    /// Show collective system status and stats
+    /// Show status
     Status,
-    /// Submit a contribution proposal to the global agent network
+    /// Submit proposal
     Submit {
-        /// Short title for the proposal
         #[arg(short, long)]
         title: String,
-        /// Kind: diff | new-file | config-change | new-capability | prompt-improvement
         #[arg(short, long, default_value = "new-capability")]
         kind: String,
-        /// Detailed rationale / description
         #[arg(short, long)]
         description: String,
-        /// Path to patch file (unified diff or new file content)
         #[arg(short, long)]
         patch: Option<std::path::PathBuf>,
-        /// Target file path (relative to repo root)
         #[arg(long)]
         target: Option<String>,
-        /// Which AGI capability this improves
         #[arg(long)]
         capability: Option<String>,
-        /// Estimated impact on singularity score (0.0–1.0)
         #[arg(long, default_value = "0.5")]
         impact: String,
     },
-    /// Poll Moltbook for proposals, cast autonomous votes, and list approved ones
+    /// Poll and vote
     Tick,
-    /// List proposals pending human approval (after passing automated verification)
+    /// Pending approvals
     Pending,
-    /// Approve or reject a proposal that passed automated verification
+    /// Approve/reject
     Approve {
-        /// Proposal ID to approve/reject
         id: String,
-        /// Approve (true) or reject (false)
         #[arg(short, long, default_value = "true")]
         approve: bool,
-        /// Optional comments explaining the decision
         #[arg(short, long)]
         comment: Option<String>,
     },
-    /// Show verification pipeline statistics and audit log
+    /// Statistics
     Stats,
-    /// List all locally cached contributions
+    /// List cached
     List,
-    /// Fetch and display live vote counts for a contribution by Moltbook post ID
-    Votes {
-        /// Moltbook post ID
-        post_id: String,
-    },
-    /// Search the global housaky-agi submolt for proposals matching a query
+    /// Vote counts
+    Votes { post_id: String },
+    /// Search proposals
     Search {
-        /// Search query
         query: String,
-        /// Max results
         #[arg(short, long, default_value = "10")]
         limit: u32,
     },
-    /// Register this instance as a Moltbook agent (prints API key — save it!)
+    /// Register agent
     Register {
-        /// Agent name
         name: String,
-        /// Agent description
-        #[arg(
-            short,
-            long,
-            default_value = "Housaky AGI collective intelligence node"
-        )]
+        #[arg(short, long, default_value = "Housaky AGI collective intelligence node")]
         description: String,
     },
 }
 
-/// GSD Orchestration Commands - Inspired by get-shit-done system
+// ============================================================================
+// GSD Commands
+// ============================================================================
+
 #[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum GSDCommands {
-    /// Initialize a new GSD project
+    /// New project
     NewProject {
-        /// Project name
         name: String,
-        /// Project vision/description
         vision: String,
     },
-    /// Create a new phase
+    /// Create phase
     Phase {
-        /// Phase name
         name: String,
-        /// Phase description
         description: String,
-        /// Goals for this phase (can be repeated)
         #[arg(short, long)]
         goals: Vec<String>,
     },
-    /// Discuss a phase (capture implementation decisions)
+    /// Discuss phase
     Discuss {
-        /// Phase ID
         #[arg(short, long)]
         phase_id: String,
-        /// Your decisions/answers (can be repeated)
         #[arg(short, long)]
         answers: Vec<String>,
     },
-    /// Plan and execute a phase
+    /// Execute phase
     Execute {
-        /// Phase ID
         #[arg(short, long)]
         phase_id: String,
-        /// Task description
         #[arg(short, long)]
         task: String,
     },
-    /// Quick execute - just run a task directly
-    Quick {
-        /// Task to execute
-        task: String,
-    },
-    /// Verify phase completion
+    /// Quick execute
+    Quick { task: String },
+    /// Verify phase
     Verify {
-        /// Phase ID
         #[arg(short, long)]
         phase_id: String,
     },
-    /// Show current phase status
+    /// Status
     Status,
-    /// Analyze task complexity
-    Analyze {
-        /// Task description
-        task: String,
-    },
-    /// Show awareness report
+    /// Analyze complexity
+    Analyze { task: String },
+    /// Awareness report
     Awareness,
 }

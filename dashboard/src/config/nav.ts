@@ -9,6 +9,9 @@ import {
   Cpu,
   Terminal,
   Brain,
+  Shield,
+  Wifi,
+  Lock,
 } from 'lucide-vue-next'
 
 export interface NavItem {
@@ -16,6 +19,7 @@ export interface NavItem {
   icon: Component
   path: string
   badge?: string
+  category?: string
 }
 
 export const navItems: NavItem[] = [
@@ -26,6 +30,9 @@ export const navItems: NavItem[] = [
   { title: 'Channels', icon: Network, path: '/channels' },
   { title: 'Integrations', icon: Package, path: '/integrations' },
   { title: 'Hardware', icon: Cpu, path: '/hardware' },
+  { title: 'A2A Network', icon: Wifi, path: '/a2a-instances', category: 'A2A' },
+  { title: 'A2A Messages', icon: MessageSquare, path: '/a2a-messages', category: 'A2A' },
+  { title: 'Security', icon: Shield, path: '/security', category: 'Security' },
   { title: 'Config', icon: Settings, path: '/config' },
   { title: 'Terminal', icon: Terminal, path: '/terminal' },
 ]

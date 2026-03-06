@@ -48,6 +48,7 @@ pub mod working_memory;
 
 // New self-improving infrastructure
 pub mod capability_growth_tracker;
+pub mod ai_prove;
 pub mod knowledge_guided_goal_selector;
 pub mod recursive_self_modifier;
 pub mod self_improvement_loop;
@@ -233,9 +234,9 @@ pub async fn handle_command(command: HousakyCommands, config: &Config) -> Result
             println!("✓ AGI background process started (heartbeat every 2 minutes)");
             println!("✓ Self-improvement engine active");
             println!();
-            println!("Run 'housaky housaky status' to see current state.");
-            println!("Run 'housaky housaky goals' to manage goals.");
-            println!("Run 'housaky agent' for interactive AI chat.");
+            println!("Run 'housaky status' to see current state.");
+            println!("Run 'housaky goals list' to manage goals.");
+            println!("Run 'housaky' for interactive TUI.");
         }
 
         HousakyCommands::Heartbeat => {

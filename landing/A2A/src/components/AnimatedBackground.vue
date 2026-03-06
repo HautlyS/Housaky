@@ -49,9 +49,9 @@
       </div>
     </div>
 
-    <div class="grid-overlay"></div>
+    <div class="grid-overlay" />
 
-    <div class="psychedelic-wave"></div>
+    <div class="psychedelic-wave" />
   </div>
 </template>
 

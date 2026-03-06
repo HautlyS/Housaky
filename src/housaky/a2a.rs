@@ -2,7 +2,10 @@
 //!
 //! Direct, efficient binary/JSON communication channel between Housaky and OpenClaw instances.
 //! More efficient than human language - uses structured data with compact encoding.
+//!
+//! All AGI thoughts pass through AI-PROVE challenge verification
 
+use crate::housaky::ai_prove;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -51,6 +54,14 @@ pub enum A2AMessageType {
     Stop,
     /// Acknowledgment
     Ack { id: String },
+    /// AI-PROVE Challenge request
+    Challenge { challenge_id: u64, input_hex: String, operations: Vec<String>, complexity: u8 },
+    /// AI-PROVE Challenge response
+    ChallengeResponse { challenge_id: u64, result: String, compute_time_ms: u64, checksum: String },
+    /// AI-PROVE Challenge verification result
+    ChallengeVerify { challenge_id: u64, valid: bool, score: u8 },
+    /// AGI Thought with embedded challenge proof
+    AGIThought { thought_id: String, challenge_proof: String, content: String, confidence: f32 },
 }
 
 /// A2A State for sync

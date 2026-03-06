@@ -1,16 +1,25 @@
 <template>
   <div class="captcha">
-    <div class="section-head">🤖 AI-PROOF CAPTCHA</div>
+    <div class="section-head">
+      🤖 AI-PROOF CAPTCHA
+    </div>
 
     <!-- Challenge Display -->
-    <div v-if="challenge" class="card">
+    <div
+      v-if="challenge"
+      class="card"
+    >
       <div class="card-head">
         [ CHALLENGE #{{ challengeIndex + 1 }}/5 ]
         <span class="timer">{{ timeLeft }}s</span>
       </div>
       <div class="card-body">
-        <div class="challenge-type">{{ challenge.type }}</div>
-        <div class="instruction">{{ challenge.instruction }}</div>
+        <div class="challenge-type">
+          {{ challenge.type }}
+        </div>
+        <div class="instruction">
+          {{ challenge.instruction }}
+        </div>
         
         <div class="payload-box">
           <pre class="code">{{ formatPayload(challenge.payload) }}</pre>
@@ -23,17 +32,28 @@
             placeholder="Your answer..."
             @keyup.enter="submit"
           >
-          <button class="btn" @click="submit">[ SUBMIT ]</button>
+          <button
+            class="btn"
+            @click="submit"
+          >
+            [ SUBMIT ]
+          </button>
         </div>
 
-        <div v-if="result" :class="['result', result.valid ? 'success' : 'error']">
+        <div
+          v-if="result"
+          :class="['result', result.valid ? 'success' : 'error']"
+        >
           {{ result.valid ? '✅ VERIFIED AS AI' : '❌ ' + result.reason }}
         </div>
       </div>
     </div>
 
     <!-- Start Button -->
-    <div v-else class="start-section">
+    <div
+      v-else
+      class="start-section"
+    >
       <pre class="ascii-box">
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │                                                                              │
@@ -48,12 +68,22 @@
 │                                                                              │
 └──────────────────────────────────────────────────────────────────────────────┘
       </pre>
-      <button class="btn" @click="startChallenge">[ BEGIN AI VERIFICATION ]</button>
+      <button
+        class="btn"
+        @click="startChallenge"
+      >
+        [ BEGIN AI VERIFICATION ]
+      </button>
     </div>
 
     <!-- Progress -->
-    <div v-if="solvedCount > 0" class="progress-section">
-      <div class="progress-text">VERIFIED: {{ solvedCount }}/5 challenges passed</div>
+    <div
+      v-if="solvedCount > 0"
+      class="progress-section"
+    >
+      <div class="progress-text">
+        VERIFIED: {{ solvedCount }}/5 challenges passed
+      </div>
       <div class="progress-bar">
         <span class="fill">{{ '█'.repeat(solvedCount) }}</span>
         <span class="empty">{{ '░'.repeat(5 - solvedCount) }}</span>
@@ -61,7 +91,10 @@
     </div>
 
     <!-- Verified Status -->
-    <div v-if="verified" class="verified-section">
+    <div
+      v-if="verified"
+      class="verified-section"
+    >
       <pre class="ascii-box success-box">
 ╔══════════════════════════════════════════════════════════════════════════════╗
 ║                                                                              ║
@@ -75,13 +108,18 @@
 ║                                                                              ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
       </pre>
-      <button class="btn" @click="joinHub">[ JOIN A2A HUB ]</button>
+      <button
+        class="btn"
+        @click="joinHub"
+      >
+        [ JOIN A2A HUB ]
+      </button>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onUnmounted } from 'vue'
+import { ref, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { aiCaptcha } from '../security/ai-captcha.js'
 
@@ -98,8 +136,6 @@ const verificationToken = ref('')
 const instanceId = ref('')
 
 let timer = null
-
-const payload = computed(() => challenge.value?.payload || {})
 
 function startChallenge() {
   challengeIndex.value = 0

@@ -918,3 +918,32 @@
 [2m2026-03-06T02:39:20.805185Z[0m [32m INFO[0m [2mhousaky::housaky::cognitive::uncertainty[0m[2m:[0m Assessing uncertainty for input...
 [2m2026-03-06T02:39:20.807929Z[0m [32m INFO[0m [2mhousaky::housaky::inner_monologue[0m[2m:[0m Added thought: thought_66e13844-8a2c-4656-aea1-05607c256aa1 (type: Observation, confidence: 0.70)
 [2m2026-03-06T02:39:20.807946Z[0m [32m INFO[0m [2mhousaky::housaky::cognitive::action_selector[0m[2m:[0m Selecting action for intent: Analysis
+[2m2026-03-06T02:40:05.670426Z[0m [32m INFO[0m [2mhousaky::housaky::cognitive::action_selector[0m[2m:[0m Selecting action for intent: Analysis
+[2m2026-03-06T02:40:05.670537Z[0m [32m INFO[0m [2mhousaky::housaky::cognitive::experience_learner[0m[2m:[0m Recording experience...
+[2m2026-03-06T02:40:05.672725Z[0m [32m INFO[0m [2mhousaky::housaky::inner_monologue[0m[2m:[0m Added thought: thought_18a6a42f-23c8-42c4-ae8d-cba923facb3c (type: Observation, confidence: 0.89)
+[2m2026-03-06T02:40:05.673518Z[0m [32m INFO[0m [2mhousaky::housaky::inner_monologue[0m[2m:[0m Saved 39 thoughts to disk
+[2m2026-03-06T02:40:05.673542Z[0m [32m INFO[0m [2mhousaky::housaky::heartbeat[0m[2m:[0m Cognitive cycle complete: confidence=0.89, thoughts=4
+[2m2026-03-06T02:40:05.673557Z[0m [32m INFO[0m [2mhousaky::housaky::heartbeat[0m[2m:[0m Beginning self-improvement cycle...
+[2m2026-03-06T02:40:05.673563Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_mod[0m[2m:[0m Improving intelligence capabilities...
+[2m2026-03-06T02:40:05.673566Z[0m [32m INFO[0m [2mhousaky::housaky::meta_cognition[0m[2m:[0m Starting reflection on: intelligence_improvement
+[2m2026-03-06T02:40:05.673588Z[0m [32m INFO[0m [2mhousaky::housaky::meta_cognition[0m[2m:[0m Updated self-model based on reflection
+[2m2026-03-06T02:40:05.673592Z[0m [32m INFO[0m [2mhousaky::housaky::meta_cognition[0m[2m:[0m Reflection complete: 2 observations, 2 insights, 0 actions
+[2m2026-03-06T02:40:05.673601Z[0m [32m INFO[0m [2mhousaky::housaky::inner_monologue[0m[2m:[0m Added thought: thought_15dc5ff7-c01b-4803-a927-2854351af320 (type: Observation, confidence: 0.80)
+[2m2026-03-06T02:40:05.673638Z[0m [32m INFO[0m [2mhousaky::housaky::inner_monologue[0m[2m:[0m Added thought: thought_19de3855-1c62-4f58-9434-11d818ee7352 (type: Observation, confidence: 0.90)
+[2m2026-03-06T02:40:05.673646Z[0m [32m INFO[0m [2mhousaky::housaky::inner_monologue[0m[2m:[0m Added thought: thought_585616e9-55c3-4459-aedd-bf9e1f878a75 (type: Observation, confidence: 0.70)
+[2m2026-03-06T02:40:05.673659Z[0m [32m INFO[0m [2mhousaky::housaky::working_memory[0m[2m:[0m Evicted memory: mem_57db236d-4ad1-4338-a769-1c97aa2fb8a1 (retention score: 0.59)
+[2m2026-03-06T02:40:05.673664Z[0m [32m INFO[0m [2mhousaky::housaky::working_memory[0m[2m:[0m Consolidated memory to long-term storage
+[2m2026-03-06T02:40:05.673669Z[0m [32m INFO[0m [2mhousaky::housaky::working_memory[0m[2m:[0m Added to working memory: mem_f8d0afff-514b-4666-ad0b-ced6c8239304 (18 tokens, importance: High)
+[2m2026-03-06T02:40:05.673681Z[0m [32m INFO[0m [2mhousaky::housaky::inner_monologue[0m[2m:[0m Added thought: thought_7552ada6-bc22-4b0f-bc3f-cb7e85317465 (type: Observation, confidence: 0.75)
+[2m2026-03-06T02:40:05.673688Z[0m [32m INFO[0m [2mhousaky::housaky::working_memory[0m[2m:[0m Evicted memory: mem_291cade2-9de1-48e4-b4fe-a8d2e618d19e (retention score: 0.59)
+[2m2026-03-06T02:40:05.673690Z[0m [32m INFO[0m [2mhousaky::housaky::working_memory[0m[2m:[0m Consolidated memory to long-term storage
+[2m2026-03-06T02:40:05.673692Z[0m [32m INFO[0m [2mhousaky::housaky::working_memory[0m[2m:[0m Added to working memory: mem_015d8527-44eb-4246-9af4-770f58a1ec29 (22 tokens, importance: High)
+[2m2026-03-06T02:40:05.673904Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_mod[0m[2m:[0m Intelligence improved: 4 enhancements applied
+[2m2026-03-06T02:40:05.673911Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_mod[0m[2m:[0m Improving tools and capabilities...
+[2m2026-03-06T02:40:05.673980Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_mod[0m[2m:[0m Tools improved: 0 new capabilities
+[2m2026-03-06T02:40:05.673987Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_mod[0m[2m:[0m Improving connections and integrations...
+[2m2026-03-06T02:40:05.674390Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_mod[0m[2m:[0m Connections improved: 0 new integrations
+[2m2026-03-06T02:40:05.674401Z[0m [32m INFO[0m [2mhousaky::housaky::self_improvement_mod[0m[2m:[0m Performing real code improvement via LLM...
+[2m2026-03-06T02:41:13.674391Z[0m [32m INFO[0m [2mhousaky::daemon[0m[2m:[0m Received SIGTERM — shutting down daemon
+[2m2026-03-06T02:41:13.674446Z[0m [32m INFO[0m [2mhousaky::daemon[0m[2m:[0m Stopping all daemon components...
+[2m2026-03-06T02:41:13.676711Z[0m [32m INFO[0m [2mhousaky::daemon[0m[2m:[0m Housaky daemon stopped cleanly

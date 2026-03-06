@@ -7,12 +7,16 @@
     clippy::trivially_copy_pass_by_ref
 )]
 
+// New minimal TUI (default)
+pub mod minimal;
+
+// Legacy TUI modules (kept for compatibility)
 pub mod agi;
 pub mod app;
 pub mod chat;
 pub mod command;
 pub mod command_palette;
-pub mod enhanced_app; // now a folder: src/tui/enhanced_app/
+pub mod enhanced_app;
 pub mod help;
 pub mod live;
 pub mod output;
@@ -22,9 +26,12 @@ pub mod skills_market;
 pub mod state_panel;
 pub mod status_bar;
 
+// Re-export new minimal TUI as primary
+pub use minimal::{run_minimal_tui, MinimalApp};
+
+// Legacy exports
 pub use agi::AGIDashboard;
 pub use live::LiveAGIApp;
-
 pub use app::App;
 #[allow(unused_imports)]
 pub use command::{Command, CommandState, CommandSuggestion};

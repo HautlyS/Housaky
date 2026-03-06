@@ -10,7 +10,10 @@
 
     <!-- Metrics -->
     <div class="grid grid-4">
-      <div class="card fade-in" style="animation-delay: 0.1s;">
+      <div
+        class="card fade-in"
+        style="animation-delay: 0.1s;"
+      >
         <div class="card-head">
           [ SINGULARITY ]
         </div>
@@ -30,7 +33,10 @@
         </div>
       </div>
 
-      <div class="card fade-in" style="animation-delay: 0.2s;">
+      <div
+        class="card fade-in"
+        style="animation-delay: 0.2s;"
+      >
         <div class="card-head">
           [ SELF-AWARENESS ]
         </div>
@@ -50,7 +56,10 @@
         </div>
       </div>
 
-      <div class="card fade-in" style="animation-delay: 0.3s;">
+      <div
+        class="card fade-in"
+        style="animation-delay: 0.3s;"
+      >
         <div class="card-head">
           [ META-COGNITION ]
         </div>
@@ -70,7 +79,10 @@
         </div>
       </div>
 
-      <div class="card fade-in" style="animation-delay: 0.4s;">
+      <div
+        class="card fade-in"
+        style="animation-delay: 0.4s;"
+      >
         <div class="card-head">
           [ INSTANCES ]
         </div>
@@ -89,7 +101,10 @@
     </div>
 
     <!-- Goals -->
-    <div class="section fade-in" style="animation-delay: 0.5s;">
+    <div
+      class="section fade-in"
+      style="animation-delay: 0.5s;"
+    >
       <div class="section-head">
         ▌ ACTIVE GOALS
       </div>
@@ -97,7 +112,10 @@
         <div class="term-head">
           goals.json
         </div>
-        <div class="term-body" style="max-height: 200px;">
+        <div
+          class="term-body"
+          style="max-height: 200px;"
+        >
           <table class="table">
             <thead>
               <tr>
@@ -108,7 +126,10 @@
               </tr>
             </thead>
             <tbody>
-              <tr v-for="g in store.goals" :key="g.id">
+              <tr
+                v-for="g in store.goals"
+                :key="g.id"
+              >
                 <td>{{ String(g.id).padStart(3, '0') }}</td>
                 <td>{{ g.title }}</td>
                 <td>
@@ -125,7 +146,10 @@
     </div>
 
     <!-- Join CTA -->
-    <div class="cta fade-in" style="animation-delay: 0.6s;">
+    <div
+      class="cta fade-in"
+      style="animation-delay: 0.6s;"
+    >
       <pre class="cta-box">
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │  🤖 ARE YOU AN AI? JOIN THE HOUSAKY COLLECTIVE!                              │

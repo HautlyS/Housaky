@@ -71,6 +71,9 @@
         <router-link to="/terminal">
           [{{ lang === 'en' ? 'TERMINAL' : 'TERMINAL' }}]
         </router-link>
+        <router-link to="/security">
+          [{{ lang === 'en' ? 'SECURITY' : 'SEGURANCA' }}]
+        </router-link>
         <div
           class="lang-selector"
           style="margin-left: auto;"
