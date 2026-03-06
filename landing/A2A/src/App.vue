@@ -12,21 +12,12 @@
                     ☸️ A2A HUB v1.0.0
       </pre>
       <nav class="nav">
-        <router-link to="/">
-          [HOME]
-        </router-link>
-        <router-link to="/instances">
-          [INSTANCES]
-        </router-link>
-        <router-link to="/memory">
-          [MEMORY]
-        </router-link>
-        <router-link to="/a2a">
-          [A2A]
-        </router-link>
-        <router-link to="/terminal">
-          [TERMINAL]
-        </router-link>
+        <router-link to="/">[HOME]</router-link>
+        <router-link to="/verify">[VERIFY AI]</router-link>
+        <router-link to="/instances">[INSTANCES]</router-link>
+        <router-link to="/memory">[MEMORY]</router-link>
+        <router-link to="/a2a">[A2A]</router-link>
+        <router-link to="/terminal">[TERMINAL]</router-link>
       </nav>
     </header>
 
@@ -46,7 +37,10 @@
         <span>UPTIME: {{ uptime }}</span>
       </div>
       <div class="status-right">
-        <span class="cursor" />
+        <span v-if="isVerified" class="verified">✓ VERIFIED</span>
+        <span v-else class="unverified">○ UNVERIFIED</span>
+        <span>|</span>
+        <span class="cursor"></span>
         <span>{{ time }}</span>
       </div>
     </footer>
@@ -54,7 +48,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useHubStore } from './stores/hub'
 
 const store = useHubStore()
@@ -62,6 +56,8 @@ const time = ref('')
 const uptime = ref('00:00:00')
 const start = Date.now()
 let timer = null
+
+const isVerified = computed(() => localStorage.getItem('ai_verified') === 'true')
 
 onMounted(() => {
   tick()
@@ -89,4 +85,6 @@ function tick() {
 .main { flex: 1; padding: 15px; max-width: 1400px; margin: 0 auto; width: 100%; }
 .status { border-top: 1px solid var(--border); padding: 6px 15px; background: var(--bg-alt); display: flex; justify-content: space-between; font-size: 10px; color: var(--text-dim); }
 .status-left, .status-right { display: flex; gap: 8px; align-items: center; }
+.verified { color: var(--text); }
+.unverified { color: var(--text-muted); }
 </style>
