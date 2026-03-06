@@ -311,6 +311,48 @@ pub enum KeyCommands {
     Manager(crate::keys_manager::commands::KeysManagerCommands),
     /// Open keys TUI
     Tui,
+    /// Manage sub-agent key assignments
+    Subagent {
+        #[command(subcommand)]
+        action: SubagentCommands,
+    },
+}
+
+// ============================================================================
+// Subagent Commands
+// ============================================================================
+
+#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum SubagentCommands {
+    /// List sub-agent configurations
+    List,
+    /// Show sub-agent details
+    Show {
+        /// Sub-agent name (e.g., kowalski-code, kowalski-web)
+        name: String,
+    },
+    /// Assign a key to a sub-agent
+    Assign {
+        /// Sub-agent name
+        name: String,
+        /// Provider name
+        #[arg(long)]
+        provider: String,
+        /// Key name (from keys.json)
+        #[arg(long)]
+        key: String,
+        /// Model to use
+        #[arg(long)]
+        model: Option<String>,
+    },
+    /// Test sub-agent connection
+    Test {
+        /// Sub-agent name
+        name: String,
+        /// Test message
+        #[arg(short, long, default_value = "Hello, can you respond?")]
+        message: String,
+    },
 }
 
 // ============================================================================

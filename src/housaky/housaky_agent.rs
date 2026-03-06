@@ -205,7 +205,7 @@ impl Agent {
             max_parallel_tasks: 5,
             kowalski_integration: KowalskiIntegrationConfig {
                 enabled: true,
-                kowalski_path: PathBuf::from("/home/ubuntu/kowalski"),
+                kowalski_path: PathBuf::from("/home/ubuntu/Housaky/vendor/kowalski/kowalski-cli"),
                 enable_federation: true,
                 enable_code_agent: true,
                 enable_web_agent: true,

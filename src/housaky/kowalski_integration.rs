@@ -13,7 +13,7 @@ use tracing::{error, info, warn};
 pub struct KowalskiBridge {
     config: KowalskiIntegrationConfig,
     agents: Vec<KowalskiAgent>,
-    cli_path: PathBuf,
+    cli_path: Option<PathBuf>,
 }
 
 /// Represents a Kowalski agent
@@ -100,7 +100,12 @@ pub enum BuildStatus {
 impl KowalskiBridge {
     pub fn new(config: &KowalskiIntegrationConfig) -> Self {
         let mut agents = Vec::new();
-        let cli_path = config.kowalski_path.join("target/release/kowalski-cli");
+        
+        let cli_path = Self::find_kowalski_cli(&config.kowalski_path);
+        
+        if let Some(ref path) = cli_path {
+            info!("Kowalski CLI found at: {}", path.display());
+        }
 
         if config.enable_code_agent {
             agents.push(KowalskiAgent {
@@ -169,27 +174,49 @@ impl KowalskiBridge {
         }
     }
 
-    fn get_cli_path(&self) -> PathBuf {
+    fn find_kowalski_cli(base_path: &PathBuf) -> Option<PathBuf> {
+        let paths_to_check = vec![
+            base_path.join("target/release/kowalski-cli"),
+            base_path.join("target/debug/kowalski-cli"),
+            PathBuf::from("/home/ubuntu/Housaky/vendor/kowalski/kowalski-cli/target/release/kowalski-cli"),
+            PathBuf::from("/home/ubuntu/Housaky/vendor/kowalski/kowalski-cli/target/debug/kowalski-cli"),
+            PathBuf::from("vendor/kowalski/kowalski-cli/target/release/kowalski-cli"),
+            PathBuf::from("vendor/kowalski/kowalski-cli/target/debug/kowalski-cli"),
+        ];
+
+        for path in paths_to_check {
+            if path.exists() {
+                return Some(path);
+            }
+        }
+        
+        if base_path.join("Cargo.toml").exists() {
+            return Some(base_path.join("target/release/kowalski-cli"));
+        }
+
+        None
+    }
+
+    fn get_cli_path(&self) -> Option<PathBuf> {
         self.cli_path.clone()
     }
 
     pub async fn check_kowalski(&self) -> Result<bool> {
-        let kowalski_path = &self.config.kowalski_path;
-
-        if !kowalski_path.exists() {
-            warn!("Kowalski not found at: {}", kowalski_path.display());
-            return Ok(false);
-        }
-
-        let cargo_toml = kowalski_path.join("Cargo.toml");
-        if !cargo_toml.exists() {
-            warn!("Kowalski Cargo.toml not found");
-            return Ok(false);
-        }
-
-        let cli = self.get_cli_path();
+        let cli = match self.get_cli_path() {
+            Some(path) => path,
+            None => {
+                warn!("Kowalski CLI path not found");
+                return Ok(false);
+            }
+        };
+        
         if !cli.exists() {
             warn!("Kowalski CLI not built at: {}", cli.display());
+            
+            let kowalski_path = &self.config.kowalski_path;
+            if kowalski_path.join("Cargo.toml").exists() {
+                info!("Kowalski source exists at {} but CLI not built. Run 'cargo build --release' in kowalski-cli", kowalski_path.display());
+            }
             return Ok(false);
         }
 
@@ -197,7 +224,7 @@ impl KowalskiBridge {
             Ok(output) => {
                 info!(
                     "Kowalski found at: {} (version: {})",
-                    kowalski_path.display(),
+                    self.config.kowalski_path.display(),
                     output.trim()
                 );
                 Ok(true)
@@ -210,7 +237,10 @@ impl KowalskiBridge {
     }
 
     async fn run_cli_command(&self, args: &[&str]) -> Result<String> {
-        let cli = self.get_cli_path();
+        let cli = match self.get_cli_path() {
+            Some(path) => path,
+            None => bail!("Kowalski CLI path not configured"),
+        };
 
         if !cli.exists() {
             bail!("Kowalski CLI not found at: {}", cli.display());
@@ -490,7 +520,7 @@ impl KowalskiBridge {
     }
 
     pub fn get_health(&self) -> KowalskiHealth {
-        let installed = self.cli_path.exists();
+        let installed = self.cli_path.as_ref().map(|p| p.exists()).unwrap_or(false);
         let build_status = if installed {
             BuildStatus::Built
         } else {

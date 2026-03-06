@@ -334,7 +334,7 @@ pub async fn handle_command(command: HousakyCommands, config: &Config) -> Result
             let bridge =
                 kowalski_integration::KowalskiBridge::new(&agent::KowalskiIntegrationConfig {
                     enabled: true,
-                    kowalski_path: std::path::PathBuf::from("/home/ubuntu/kowalski"),
+                    kowalski_path: std::path::PathBuf::from("/home/ubuntu/Housaky/vendor/kowalski/kowalski-cli"),
                     enable_federation: true,
                     enable_code_agent: true,
                     enable_web_agent: true,

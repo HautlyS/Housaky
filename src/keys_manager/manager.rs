@@ -106,10 +106,19 @@ impl ProviderPriority {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SubAgentConfig {
+    pub provider: String,
+    pub model: String,
+    pub key_name: String,
+    pub max_concurrent: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct KeysStore {
     pub providers: HashMap<String, ProviderEntry>,
     pub settings: KeysSettings,
     pub version: String,
+    pub subagents: Option<HashMap<String, SubAgentConfig>>,
 }
 
 impl Default for KeysStore {
@@ -118,6 +127,7 @@ impl Default for KeysStore {
             providers: HashMap::new(),
             settings: KeysSettings::default(),
             version: env!("CARGO_PKG_VERSION").to_string(),
+            subagents: None,
         }
     }
 }
@@ -131,6 +141,8 @@ pub struct KeysSettings {
     pub max_concurrent_requests_per_provider: usize,
     pub failure_threshold: u32,
     pub success_threshold: u32,
+    pub enable_key_rotation: Option<bool>,
+    pub rotation_strategy: Option<String>,
 }
 
 impl Default for KeysSettings {
@@ -143,6 +155,8 @@ impl Default for KeysSettings {
             max_concurrent_requests_per_provider: 10,
             failure_threshold: 3,
             success_threshold: 2,
+            enable_key_rotation: Some(true),
+            rotation_strategy: Some("round_robin".to_string()),
         }
     }
 }
@@ -781,6 +795,79 @@ impl KeysManager {
         provider.metadata.last_used_at = Some(Utc::now());
 
         Some(key)
+    }
+
+    pub async fn get_key_for_subagent(&self, subagent_name: &str) -> Option<(String, KeyEntry)> {
+        let store = self.store.read().await;
+        
+        if let Some(subagents) = &store.subagents {
+            if let Some(config) = subagents.get(subagent_name) {
+                if let Some(provider) = store.providers.get(&config.provider) {
+                    let key = provider.keys.iter()
+                        .find(|k| k.name == config.key_name && k.enabled)
+                        .cloned()?;
+                    return Some((config.model.clone(), key));
+                }
+            }
+        }
+        
+        None
+    }
+
+    pub async fn get_subagent_config(&self, subagent_name: &str) -> Option<SubAgentConfig> {
+        let store = self.store.read().await;
+        store.subagents.as_ref()?.get(subagent_name).cloned()
+    }
+
+    pub async fn list_subagents(&self) -> Vec<(String, SubAgentConfig)> {
+        let store = self.store.read().await;
+        store.subagents
+            .as_ref()
+            .map(|s| s.iter().map(|(k, v)| (k.clone(), v.clone())).collect())
+            .unwrap_or_default()
+    }
+
+    pub async fn rotate_key_for_subagent(&self, subagent_name: &str) -> Option<(String, KeyEntry)> {
+        let store = self.store.read().await;
+        
+        // Extract the config info we need, then drop the borrow
+        let config_info = if let Some(subagents) = &store.subagents {
+            if let Some(config) = subagents.get(subagent_name) {
+                Some((config.provider.clone(), config.model.clone()))
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+        
+        let (provider_name, model) = config_info?;
+        
+        // Now get the key from the provider
+        if let Some(provider) = store.providers.get(&provider_name) {
+            let enabled_keys: Vec<_> = provider.keys.iter()
+                .filter(|k| k.enabled)
+                .collect();
+            
+            if !enabled_keys.is_empty() {
+                let idx = provider.state.current_key_index % enabled_keys.len();
+                let key = (*enabled_keys.get(idx)?).clone();
+                let key_count = enabled_keys.len();
+                
+                drop(store);
+                
+                let mut store = self.store.write().await;
+                if let Some(provider) = store.providers.get_mut(&provider_name) {
+                    provider.state.current_key_index = 
+                        (provider.state.current_key_index + 1) % key_count.max(1);
+                    provider.metadata.last_used_at = Some(Utc::now());
+                }
+                
+                return Some((model, key));
+            }
+        }
+        
+        None
     }
 
     pub async fn report_success(&self, provider_name: &str, key_id: &str) {

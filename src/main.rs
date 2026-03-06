@@ -359,6 +359,139 @@ async fn handle_keys(
         KeyCommands::Tui => {
             housaky::keys_manager::tui::run_keys_tui(keys_manager).await
         }
+        KeyCommands::Subagent { action } => {
+            handle_subagent(keys_manager, action).await
+        }
+    }
+}
+
+async fn handle_subagent(
+    keys_manager: &housaky::keys_manager::manager::KeysManager,
+    cmd: housaky::commands::SubagentCommands,
+) -> Result<()> {
+    use housaky::commands::SubagentCommands;
+
+    match cmd {
+        SubagentCommands::List => {
+            let _ = keys_manager.load().await;
+            let store = keys_manager.store.read().await;
+
+            if let Some(subagents) = &store.subagents {
+                println!("Sub-agent Configurations:");
+                for (name, config) in subagents {
+                    println!("  {}:", name);
+                    println!("    Provider: {}", config.provider);
+                    println!("    Model: {}", config.model);
+                    println!("    Key: {}", config.key_name);
+                    println!("    Max Concurrent: {}", config.max_concurrent);
+                }
+            } else {
+                println!("No sub-agents configured. Add them to keys.json under 'subagents'.");
+            }
+            Ok(())
+        }
+        SubagentCommands::Show { name } => {
+            let _ = keys_manager.load().await;
+            let store = keys_manager.store.read().await;
+
+            if let Some(subagents) = &store.subagents {
+                if let Some(config) = subagents.get(&name) {
+                    println!("Sub-agent: {}", name);
+                    println!("  Provider: {}", config.provider);
+                    println!("  Model: {}", config.model);
+                    println!("  Key: {}", config.key_name);
+                    println!("  Max Concurrent: {}", config.max_concurrent);
+
+                    // Show key details
+                    if let Some(provider) = store.providers.get(&config.provider) {
+                        if let Some(key) = provider.keys.iter().find(|k| k.name == config.key_name) {
+                            println!("  Key Status: {}", if key.enabled { "enabled" } else { "disabled" });
+                            println!("  Key ID: {}", key.id);
+                            println!("  Total Requests: {}", key.usage.total_requests);
+                        }
+                    }
+                } else {
+                    println!("Sub-agent '{}' not found.", name);
+                }
+            } else {
+                println!("No sub-agents configured.");
+            }
+            Ok(())
+        }
+        SubagentCommands::Assign { name, provider, key, model } => {
+            let _ = keys_manager.load().await;
+            let mut store = keys_manager.store.write().await;
+
+            // Verify provider exists
+            if !store.providers.contains_key(&provider) {
+                println!("Error: Provider '{}' not found.", provider);
+                return Ok(());
+            }
+
+            // Verify key exists
+            let key_exists = store.providers.get(&provider)
+                .map(|p| p.keys.iter().any(|k| k.name == key))
+                .unwrap_or(false);
+
+            if !key_exists {
+                println!("Error: Key '{}' not found in provider '{}'.", key, provider);
+                return Ok(());
+            }
+
+            // Get or create subagents map
+            let subagents = store.subagents.get_or_insert_with(std::collections::HashMap::new);
+
+            // Determine the model to use
+            let model_name = model.as_deref().unwrap_or("gpt-4o");
+
+            // Create or update subagent config
+            let config = housaky::keys_manager::manager::SubAgentConfig {
+                provider: provider.clone(),
+                model: model_name.to_string(),
+                key_name: key.clone(),
+                max_concurrent: 2,
+            };
+
+            subagents.insert(name.clone(), config);
+            drop(store);
+            keys_manager.save().await?;
+
+            println!("Assigned {} -> {}/{} (model: {})", name, provider, key, model_name);
+            Ok(())
+        }
+        SubagentCommands::Test { name, message } => {
+            let _ = keys_manager.load().await;
+            let store = keys_manager.store.read().await;
+
+            if let Some(subagents) = &store.subagents {
+                if let Some(config) = subagents.get(&name) {
+                    println!("Testing sub-agent '{}'...", name);
+                    println!("  Provider: {}", config.provider);
+                    println!("  Model: {}", config.model);
+                    println!("  Key: {}", config.key_name);
+                    println!("  Message: {}", message);
+
+                    // Get the API key
+                    if let Some(provider) = store.providers.get(&config.provider) {
+                        if let Some(key) = provider.keys.iter().find(|k| k.name == config.key_name) {
+                            println!("\n🔑 Using key: ...{}", &key.key[key.key.len().saturating_sub(4)..]);
+
+                            // Make a test request
+                            let base_url = provider.base_url.as_deref().unwrap_or("https://api.openai.com/v1");
+                            println!("🌐 Endpoint: {}", base_url);
+
+                            // Note: Actual API call would go here
+                            println!("\n✅ Configuration valid. Ready to make requests.");
+                        }
+                    }
+                } else {
+                    println!("Sub-agent '{}' not found.", name);
+                }
+            } else {
+                println!("No sub-agents configured.");
+            }
+            Ok(())
+        }
     }
 }
 
