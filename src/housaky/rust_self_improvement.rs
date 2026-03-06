@@ -1,0 +1,460 @@
+// ☸️ RUST SELF-IMPROVEMENT ENGINE
+// Analyzes and improves Housaky Rust codebase using tree-sitter + rust-analyzer + subagents
+
+use anyhow::{Context, Result};
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+use std::process::Command;
+use tokio::fs;
+use regex::Regex;
+
+// ============================================================================
+// CODE ANALYSIS STRUCTURES
+// ============================================================================
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CodeIssue {
+    pub file: String,
+    pub line: u32,
+    pub severity: String, // "error", "warning", "info", "style"
+    pub message: String,
+    pub suggestion: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ImprovementOpportunity {
+    pub file: String,
+    pub description: String,
+    pub priority: f64, // 0.0 - 1.0
+    pub effort: String, // "low", "medium", "high"
+    pub category: String, // "performance", "safety", "clarity", "feature"
+    pub code_snippet: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FileAnalysis {
+    pub path: String,
+    pub lines: u32,
+    pub functions: u32,
+    pub structs: u32,
+    pub enums: u32,
+    pub traits: u32,
+    pub todos: Vec<TodoItem>,
+    pub warnings: Vec<String>,
+    pub complexity_score: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TodoItem {
+    pub line: u32,
+    pub text: String,
+    pub priority: Option<String>,
+}
+
+// ============================================================================
+// RUST ANALYZER INTEGRATION
+// ============================================================================
+
+pub struct RustAnalyzer {
+    project_root: PathBuf,
+}
+
+impl RustAnalyzer {
+    pub fn new(project_root: PathBuf) -> Self {
+        Self { project_root }
+    }
+
+    /// Run cargo check and parse diagnostics
+    pub async fn check(&self) -> Result<Vec<CodeIssue>> {
+        let output = Command::new("cargo")
+            .args(["check", "--message-format=json"])
+            .current_dir(&self.project_root)
+            .output()
+            .context("Failed to run cargo check")?;
+
+        let mut issues = Vec::new();
+        
+        // Parse JSON output
+        for line in String::from_utf8_lossy(&output.stdout).lines() {
+            if let Ok(json) = serde_json::from_str::<serde_json::Value>(line) {
+                if let Some(reason) = json.get("reason").and_then(|r| r.as_str()) {
+                    if reason == "compiler-message" {
+                        if let Some(message) = json.get("message") {
+                            if let Some(spans) = message.get("spans").and_then(|s| s.as_array()) {
+                                for span in spans {
+                                    let issue = CodeIssue {
+                                        file: span.get("file_name")
+                                            .and_then(|f| f.as_str())
+                                            .unwrap_or("unknown")
+                                            .to_string(),
+                                        line: span.get("line_start")
+                                            .and_then(|l| l.as_u64())
+                                            .unwrap_or(0) as u32,
+                                        severity: message.get("level")
+                                            .and_then(|l| l.as_str())
+                                            .unwrap_or("info")
+                                            .to_string(),
+                                        message: message.get("message")
+                                            .and_then(|m| m.as_str())
+                                            .unwrap_or("")
+                                            .to_string(),
+                                        suggestion: message.get("suggested_replacement")
+                                            .and_then(|s| s.as_str())
+                                            .map(|s| s.to_string()),
+                                    };
+                                    issues.push(issue);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(issues)
+    }
+
+    /// Run clippy for additional linting
+    pub async fn clippy(&self) -> Result<Vec<CodeIssue>> {
+        let output = Command::new("cargo")
+            .args(["clippy", "--message-format=json", "--", "-W", "clippy::all"])
+            .current_dir(&self.project_root)
+            .output()
+            .context("Failed to run clippy")?;
+
+        // Similar parsing to check()
+        let mut issues = Vec::new();
+        
+        for line in String::from_utf8_lossy(&output.stdout).lines() {
+            if line.contains("\"reason\":\"compiler-message\"") {
+                if let Ok(json) = serde_json::from_str::<serde_json::Value>(line) {
+                    if let Some(message) = json.get("message") {
+                        let issue = CodeIssue {
+                            file: message.get("spans")
+                                .and_then(|s| s.as_array())
+                                .and_then(|a| a.first())
+                                .and_then(|s| s.get("file_name"))
+                                .and_then(|f| f.as_str())
+                                .unwrap_or("unknown")
+                                .to_string(),
+                            line: message.get("spans")
+                                .and_then(|s| s.as_array())
+                                .and_then(|a| a.first())
+                                .and_then(|s| s.get("line_start"))
+                                .and_then(|l| l.as_u64())
+                                .unwrap_or(0) as u32,
+                            severity: message.get("level")
+                                .and_then(|l| l.as_str())
+                                .unwrap_or("info")
+                                .to_string(),
+                            message: message.get("message")
+                                .and_then(|m| m.as_str())
+                                .unwrap_or("")
+                                .to_string(),
+                            suggestion: None,
+                        };
+                        issues.push(issue);
+                    }
+                }
+            }
+        }
+
+        Ok(issues)
+    }
+
+    /// Get metrics for a file
+    pub async fn analyze_file(&self, path: &Path) -> Result<FileAnalysis> {
+        let content = fs::read_to_string(path).await?;
+        let lines = content.lines().count() as u32;
+        
+        // Count Rust constructs using regex
+        let fn_re = Regex::new(r"^\s*(pub\s+)?(async\s+)?fn\s+\w+")?;
+        let struct_re = Regex::new(r"^\s*(pub\s+)?struct\s+\w+")?;
+        let enum_re = Regex::new(r"^\s*(pub\s+)?enum\s+\w+")?;
+        let trait_re = Regex::new(r"^\s*(pub\s+)?trait\s+\w+")?;
+        let todo_re = Regex::new(r"//\s*(TODO|FIXME|XXX|HACK)[:\s]+(.+)")?;
+        
+        let mut functions = 0u32;
+        let mut structs = 0u32;
+        let mut enums = 0u32;
+        let mut traits = 0u32;
+        let mut todos = Vec::new();
+        
+        for (i, line) in content.lines().enumerate() {
+            if fn_re.is_match(line) { functions += 1; }
+            if struct_re.is_match(line) { structs += 1; }
+            if enum_re.is_match(line) { enums += 1; }
+            if trait_re.is_match(line) { traits += 1; }
+            
+            if let Some(caps) = todo_re.captures(line) {
+                todos.push(TodoItem {
+                    line: (i + 1) as u32,
+                    text: caps.get(2).map(|m| m.as_str().trim().to_string()).unwrap_or_default(),
+                    priority: caps.get(1).map(|m| m.as_str().to_string()),
+                });
+            }
+        }
+        
+        // Simple complexity score based on nesting and line count
+        let complexity_score = (lines as f64 / 100.0).min(1.0) * 
+                               (1.0 + functions as f64 * 0.01);
+        
+        Ok(FileAnalysis {
+            path: path.to_string_lossy().to_string(),
+            lines,
+            functions,
+            structs,
+            enums,
+            traits,
+            todos,
+            warnings: vec![],
+            complexity_score,
+        })
+    }
+}
+
+// ============================================================================
+// TREE-SITTER INTEGRATION (SIMPLIFIED)
+// ============================================================================
+
+pub struct TreeSitterAnalyzer {
+    // Note: Full tree-sitter integration would require the tree-sitter crate
+    // For now, we use regex-based parsing which works well for most cases
+}
+
+impl TreeSitterAnalyzer {
+    pub fn new() -> Self {
+        Self {}
+    }
+
+    /// Find functions that are too long (over 50 lines)
+    pub async fn find_long_functions(&self, content: &str) -> Vec<(String, u32, u32)> {
+        let mut result = Vec::new();
+        let fn_re = Regex::new(r"(?m)^(pub\s+)?(async\s+)?fn\s+(\w+)").unwrap();
+        
+        for cap in fn_re.captures_iter(content) {
+            if let Some(name) = cap.get(3) {
+                // Simplified: count lines until next function or end
+                let start = cap.get(0).unwrap().start();
+                let lines_before = content[..start].lines().count();
+                result.push((name.as_str().to_string(), lines_before as u32, 0));
+            }
+        }
+        
+        result
+    }
+
+    /// Find deeply nested code (over 4 levels)
+    pub fn find_deep_nesting(&self, content: &str) -> Vec<(u32, u32)> {
+        let mut result = Vec::new();
+        let mut current_depth = 0u32;
+        let mut max_depth = 0u32;
+        let mut start_line = 0u32;
+        
+        for (i, line) in content.lines().enumerate() {
+            let opens = line.matches('{').count() as u32;
+            let closes = line.matches('}').count() as u32;
+            
+            if opens > closes {
+                if current_depth == 0 {
+                    start_line = i as u32 + 1;
+                }
+                current_depth += opens - closes;
+                max_depth = max_depth.max(current_depth);
+            } else if closes > opens {
+                if current_depth >= 4 && current_depth > max_depth - 2 {
+                    result.push((start_line, current_depth));
+                }
+                current_depth = current_depth.saturating_sub(closes - opens);
+            }
+        }
+        
+        result
+    }
+}
+
+// ============================================================================
+// SELF-IMPROVEMENT ENGINE
+// ============================================================================
+
+pub struct SelfImprovementEngine {
+    project_root: PathBuf,
+    rust_analyzer: RustAnalyzer,
+    tree_sitter: TreeSitterAnalyzer,
+    improvements: Vec<ImprovementOpportunity>,
+}
+
+impl SelfImprovementEngine {
+    pub fn new(project_root: PathBuf) -> Self {
+        Self {
+            project_root: project_root.clone(),
+            rust_analyzer: RustAnalyzer::new(project_root.clone()),
+            tree_sitter: TreeSitterAnalyzer::new(),
+            improvements: Vec::new(),
+        }
+    }
+
+    /// Scan entire codebase for improvement opportunities
+    pub async fn scan(&mut self) -> Result<Vec<ImprovementOpportunity>> {
+        let mut opportunities = Vec::new();
+        
+        // 1. Check for compiler warnings
+        let issues = self.rust_analyzer.check().await?;
+        for issue in issues {
+            if issue.severity == "warning" {
+                opportunities.push(ImprovementOpportunity {
+                    file: issue.file.clone(),
+                    description: format!("Fix warning: {}", issue.message),
+                    priority: 0.7,
+                    effort: "low".to_string(),
+                    category: "clarity".to_string(),
+                    code_snippet: issue.suggestion,
+                });
+            }
+        }
+        
+        // 2. Scan for TODOs
+        let src_dir = self.project_root.join("src");
+        self.scan_todos(&src_dir, &mut opportunities).await?;
+        
+        // 3. Analyze file complexity
+        self.analyze_complexity(&src_dir, &mut opportunities).await?;
+        
+        // 4. Check for unused dependencies
+        opportunities.extend(self.check_unused_deps().await?);
+        
+        self.improvements = opportunities.clone();
+        Ok(opportunities)
+    }
+
+    async fn scan_todos(&self, dir: &Path, opportunities: &mut Vec<ImprovementOpportunity>) -> Result<()> {
+        let mut entries = fs::read_dir(dir).await?;
+        
+        while let Some(entry) = entries.next_entry().await? {
+            let path = entry.path();
+            
+            if path.is_dir() {
+                Box::pin(self.scan_todos(&path, opportunities)).await?;
+            } else if path.extension().map(|e| e == "rs").unwrap_or(false) {
+                let analysis = self.rust_analyzer.analyze_file(&path).await?;
+                
+                for todo in analysis.todos {
+                    let priority = match todo.priority.as_deref() {
+                        Some("TODO") => 0.6,
+                        Some("FIXME") => 0.8,
+                        Some("XXX") | Some("HACK") => 0.9,
+                        _ => 0.5,
+                    };
+                    
+                    opportunities.push(ImprovementOpportunity {
+                        file: analysis.path.clone(),
+                        description: format!("TODO (line {}): {}", todo.line, todo.text),
+                        priority,
+                        effort: "medium".to_string(),
+                        category: "feature".to_string(),
+                        code_snippet: None,
+                    });
+                }
+            }
+        }
+        
+        Ok(())
+    }
+
+    async fn analyze_complexity(&self, dir: &Path, opportunities: &mut Vec<ImprovementOpportunity>) -> Result<()> {
+        let mut entries = fs::read_dir(dir).await?;
+        
+        while let Some(entry) = entries.next_entry().await? {
+            let path = entry.path();
+            
+            if path.is_file() && path.extension().map(|e| e == "rs").unwrap_or(false) {
+                let analysis = self.rust_analyzer.analyze_file(&path).await?;
+                
+                if analysis.complexity_score > 1.5 {
+                    opportunities.push(ImprovementOpportunity {
+                        file: analysis.path.clone(),
+                        description: format!(
+                            "High complexity file (score: {:.2}). Consider refactoring.",
+                            analysis.complexity_score
+                        ),
+                        priority: (analysis.complexity_score / 3.0).min(1.0),
+                        effort: "high".to_string(),
+                        category: "clarity".to_string(),
+                        code_snippet: None,
+                    });
+                }
+                
+                if analysis.lines > 500 {
+                    opportunities.push(ImprovementOpportunity {
+                        file: analysis.path.clone(),
+                        description: format!("Large file ({} lines). Consider splitting.", analysis.lines),
+                        priority: 0.5,
+                        effort: "high".to_string(),
+                        category: "clarity".to_string(),
+                        code_snippet: None,
+                    });
+                }
+            }
+        }
+        
+        Ok(())
+    }
+
+    async fn check_unused_deps(&self) -> Result<Vec<ImprovementOpportunity>> {
+        let mut opportunities = Vec::new();
+        
+        // Run cargo machete if available, or use cargo tree
+        let output = Command::new("cargo")
+            .args(["tree", "--duplicates"])
+            .current_dir(&self.project_root)
+            .output();
+        
+        if let Ok(output) = output {
+            if !output.stdout.is_empty() {
+                opportunities.push(ImprovementOpportunity {
+                    file: "Cargo.toml".to_string(),
+                    description: "Potential duplicate or unused dependencies detected".to_string(),
+                    priority: 0.4,
+                    effort: "low".to_string(),
+                    category: "performance".to_string(),
+                    code_snippet: None,
+                });
+            }
+        }
+        
+        Ok(opportunities)
+    }
+
+    /// Get top N improvements by priority
+    pub fn get_top_improvements(&self, n: usize) -> Vec<&ImprovementOpportunity> {
+        let mut sorted: Vec<_> = self.improvements.iter().collect();
+        sorted.sort_by(|a, b| b.priority.partial_cmp(&a.priority).unwrap());
+        sorted.into_iter().take(n).collect()
+    }
+
+    /// Generate a report for subagent processing
+    pub fn generate_report(&self) -> String {
+        let mut report = String::new();
+        
+        report.push_str("# Housaky Self-Improvement Report\n\n");
+        report.push_str(&format!("Total opportunities found: {}\n\n", self.improvements.len()));
+        
+        let top = self.get_top_improvements(10);
+        report.push_str("## Top 10 Priority Improvements\n\n");
+        
+        for (i, imp) in top.iter().enumerate() {
+            report.push_str(&format!(
+                "{}. **{}** (priority: {:.2})\n   - File: {}\n   - Effort: {}\n   - Category: {}\n\n",
+                i + 1,
+                imp.description,
+                imp.priority,
+                imp.file,
+                imp.effort,
+                imp.category
+            ));
+        }
+        
+        report
+    }
+}

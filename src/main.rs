@@ -260,7 +260,7 @@ async fn main() -> Result<()> {
                     housaky::housaky::handle_command(housaky::commands::HousakyCommands::Goals { goal_command: action }, &config).await
                 }
 
-                Commands::Improve { provider, model } => {
+                Commands::Improve { provider: _, model: _ } => {
                     housaky::housaky::handle_command(housaky::commands::HousakyCommands::Improve, &config).await
                 }
 

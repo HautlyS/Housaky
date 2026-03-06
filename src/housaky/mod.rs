@@ -81,6 +81,12 @@ pub mod quantum;
 
 // Deep Subagent Integration - Kowalski merged into Housaky core
 pub mod subagent_system;
+
+// Rust Self-Improvement Engine
+pub mod rust_self_improvement;
+
+// Unified Self-Improvement Orchestrator - connects all systems
+pub mod unified_improvement_orchestrator;
 pub mod swarm;
 
 // Phase 3 — Consciousness Substrate & Self-Awareness
