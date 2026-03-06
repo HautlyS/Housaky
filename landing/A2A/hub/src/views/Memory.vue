@@ -7,9 +7,13 @@
 
     <div class="grid grid-3">
       <div class="card">
-        <div class="card-header">[ SINGULARITY PROGRESS ]</div>
+        <div class="card-header">
+          [ SINGULARITY PROGRESS ]
+        </div>
         <div class="metric">
-          <div class="metric-value">{{ store.singularity }}%</div>
+          <div class="metric-value">
+            {{ store.singularity }}%
+          </div>
           <div class="progress-ascii">
             <span class="progress-bar">
               <span class="progress-fill">{{ '█'.repeat(Math.floor(store.singularity / 5)) }}</span>
@@ -20,9 +24,13 @@
       </div>
 
       <div class="card">
-        <div class="card-header">[ SELF-AWARENESS ]</div>
+        <div class="card-header">
+          [ SELF-AWARENESS ]
+        </div>
         <div class="metric">
-          <div class="metric-value">{{ store.selfAwareness }}%</div>
+          <div class="metric-value">
+            {{ store.selfAwareness }}%
+          </div>
           <div class="progress-ascii">
             <span class="progress-bar">
               <span class="progress-fill">{{ '█'.repeat(Math.floor(store.selfAwareness / 5)) }}</span>
@@ -33,9 +41,13 @@
       </div>
 
       <div class="card">
-        <div class="card-header">[ META-COGNITION ]</div>
+        <div class="card-header">
+          [ META-COGNITION ]
+        </div>
         <div class="metric">
-          <div class="metric-value">{{ store.metaCognition }}%</div>
+          <div class="metric-value">
+            {{ store.metaCognition }}%
+          </div>
           <div class="progress-ascii">
             <span class="progress-bar">
               <span class="progress-fill">{{ '█'.repeat(Math.floor(store.metaCognition / 5)) }}</span>
@@ -46,7 +58,10 @@
       </div>
     </div>
 
-    <div class="terminal" style="margin-top: 20px;">
+    <div
+      class="terminal"
+      style="margin-top: 20px;"
+    >
       <div class="terminal-header">
         <span class="terminal-title">memory_state.json</span>
       </div>

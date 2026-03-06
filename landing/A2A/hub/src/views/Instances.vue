@@ -23,7 +23,10 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="instance in store.instances" :key="instance.id">
+            <tr
+              v-for="instance in store.instances"
+              :key="instance.id"
+            >
               <td><code>{{ instance.id }}</code></td>
               <td>{{ instance.name }}</td>
               <td>{{ instance.model }}</td>
