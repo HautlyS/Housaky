@@ -3,7 +3,7 @@
 //! Clean chat interface with message history and streaming support.
 
 use ratatui::{
-    layout::{Alignment, Constraint, Direction, Layout, Rect},
+    layout::{Alignment, Rect},
     style::{Modifier, Style},
     text::{Line, Span, Text},
     widgets::{Block, Borders, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState, Wrap},
@@ -12,7 +12,7 @@ use ratatui::{
 use std::time::Instant;
 
 use super::agents::AgentType;
-use super::theme::{self, Theme};
+use super::theme::{self};
 
 /// Message role
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

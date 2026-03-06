@@ -17,10 +17,10 @@ use crate::config::Config;
 use crate::housaky::kowalski_integration::KowalskiBridge;
 use crate::housaky::housaky_agent::KowalskiIntegrationConfig;
 use crate::keys_manager::manager::get_global_keys_manager;
-use crate::providers::{create_provider_with_keys_manager, ChatMessage, Provider};
+use crate::providers::{create_provider_with_keys_manager, Provider};
 
 use super::agents::{AgentStatus, AgentType, AgentsPanel};
-use super::chat::{ChatPanel, Message, Role};
+use super::chat::{ChatPanel, Role};
 use super::input::InputBar;
 use super::keys_popup::{KeysPopup, ProviderEntry};
 use super::theme::{self, LOGO_MINI};

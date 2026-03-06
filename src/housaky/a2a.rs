@@ -5,7 +5,6 @@
 //!
 //! All AGI thoughts pass through AI-PROVE challenge verification
 
-use crate::housaky::ai_prove;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;

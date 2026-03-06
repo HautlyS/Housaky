@@ -4,13 +4,12 @@
 
 use ratatui::{
     layout::Rect,
-    style::Modifier,
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph},
     Frame,
 };
 
-use super::theme::{self, Theme};
+use super::theme::{self};
 
 /// Input bar state
 pub struct InputBar {

@@ -7,7 +7,7 @@ use crate::housaky::meta_cognition::MetaCognitionEngine;
 use crate::housaky::reasoning_pipeline::ReasoningPipeline;
 use crate::housaky::tool_creator::{ToolCreator, ToolGenerationRequest, ToolKind};
 use crate::housaky::working_memory::{MemoryImportance, WorkingMemoryEngine};
-use crate::providers::{create_provider, create_provider_with_keys_manager, Provider};
+use crate::providers::{create_provider_with_keys_manager, Provider};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;

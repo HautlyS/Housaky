@@ -8,7 +8,7 @@ use crate::housaky::memory::consolidation::MemoryConsolidator;
 use crate::housaky::self_improvement_loop::SelfImprovementLoop;
 use crate::housaky::self_improvement_mod::SelfImprovementEngine;
 use crate::housaky::skills::{SkillCreator, SkillRegistry};
-use crate::providers::{create_provider, create_provider_with_keys_manager, Provider};
+use crate::providers::{create_provider_with_keys_manager, Provider};
 use crate::util::write_toml_file;
 use anyhow::Result;
 use std::collections::HashSet;
