@@ -440,10 +440,7 @@ impl KowalskiBridge {
     async fn execute_code_task(&self, agent: &KowalskiAgent, task: &str) -> Result<String> {
         info!("Executing code task on {}: {}", agent.name, task);
 
-        let output = self
-            .run_cli_command(&["chat", &agent.name])
-            .await
-            .with_context(|| format!("Failed to execute code task on {}", agent.name))?;
+        let output = self.execute_with_glm(&KowalskiAgentType::Code, task).await?;
 
         Ok(format!(
             "Code analysis result from {}:\n{}",
@@ -454,10 +451,7 @@ impl KowalskiBridge {
     async fn execute_web_task(&self, agent: &KowalskiAgent, task: &str) -> Result<String> {
         info!("Executing web task on {}: {}", agent.name, task);
 
-        let output = self
-            .run_cli_command(&["chat", &agent.name])
-            .await
-            .with_context(|| format!("Failed to execute web task on {}", agent.name))?;
+        let output = self.execute_with_glm(&KowalskiAgentType::Web, task).await?;
 
         Ok(format!(
             "Web research result from {}:\n{}",
@@ -468,10 +462,7 @@ impl KowalskiBridge {
     async fn execute_academic_task(&self, agent: &KowalskiAgent, task: &str) -> Result<String> {
         info!("Executing academic task on {}: {}", agent.name, task);
 
-        let output = self
-            .run_cli_command(&["chat", &agent.name])
-            .await
-            .with_context(|| format!("Failed to execute academic task on {}", agent.name))?;
+        let output = self.execute_with_glm(&KowalskiAgentType::Academic, task).await?;
 
         Ok(format!(
             "Academic research result from {}:\n{}",
@@ -482,10 +473,7 @@ impl KowalskiBridge {
     async fn execute_data_task(&self, agent: &KowalskiAgent, task: &str) -> Result<String> {
         info!("Executing data task on {}: {}", agent.name, task);
 
-        let output = self
-            .run_cli_command(&["chat", &agent.name])
-            .await
-            .with_context(|| format!("Failed to execute data task on {}", agent.name))?;
+        let output = self.execute_with_glm(&KowalskiAgentType::Data, task).await?;
 
         Ok(format!(
             "Data processing result from {}:\n{}",

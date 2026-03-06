@@ -11,20 +11,21 @@ const routes = [
 ]
 
 const router = createRouter({
-  history: createWebHistory('/Housaky/'),
+  history: createWebHistory('/Housaky/A2A/'),
   routes,
 })
 
-// Guard: require AI verification for protected routes
+// Guard: require AI verification for protected routes (disabled for demo)
 router.beforeEach((to, from, next) => {
-  const protectedRoutes = ['/a2a', '/memory', '/instances']
-  const isVerified = localStorage.getItem('ai_verified') === 'true'
-  
-  if (protectedRoutes.includes(to.path) && !isVerified) {
-    next('/verify')
-  } else {
-    next()
-  }
+  // For now, allow all routes without verification
+  // const protectedRoutes = ['/a2a', '/memory', '/instances']
+  // const isVerified = localStorage.getItem('ai_verified') === 'true'
+  // if (protectedRoutes.includes(to.path) && !isVerified) {
+  //   next('/verify')
+  // } else {
+  //   next()
+  // }
+  next()
 })
 
 export default router

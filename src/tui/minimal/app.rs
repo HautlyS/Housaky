@@ -71,6 +71,20 @@ pub struct MinimalApp {
 }
 
 impl MinimalApp {
+    fn resolve_glm_api_key() -> Option<String> {
+        let keys_manager = get_global_keys_manager();
+        let result = std::thread::spawn({
+            move || {
+                let rt = tokio::runtime::Runtime::new().ok()?;
+                rt.block_on(async {
+                    keys_manager.get_next_key("glm").await.map(|k| k.key)
+                })
+            }
+        }).join().unwrap_or(None);
+        
+        result
+    }
+
     pub fn new(config: Config, provider_name: String, model_name: String) -> Self {
         // Resolve API key
         let resolved_key = Self::resolve_api_key(&provider_name, &config);
@@ -85,6 +99,9 @@ impl MinimalApp {
             .map(|p| p.join("vendor/kowalski"))
             .unwrap_or_else(|| std::path::PathBuf::from("vendor/kowalski"));
         
+        // Resolve GLM API key from keys manager
+        let glm_api_key = Self::resolve_glm_api_key();
+        
         let kowalski = if kowalski_path.exists() {
             Some(Arc::new(KowalskiBridge::new(&KowalskiIntegrationConfig {
                 enabled: true,
@@ -94,13 +111,13 @@ impl MinimalApp {
                 enable_web_agent: true,
                 enable_academic_agent: true,
                 enable_data_agent: true,
-                glm_api_key: None,
+                glm_api_key: glm_api_key.clone(),
                 glm_model: "zai-org/GLM-5-FP8".to_string(),
-                code_agent_glm_key: None,
-                web_agent_glm_key: None,
-                academic_agent_glm_key: None,
-                data_agent_glm_key: None,
-                federation_glm_key: None,
+                code_agent_glm_key: glm_api_key.clone(),
+                web_agent_glm_key: glm_api_key.clone(),
+                academic_agent_glm_key: glm_api_key.clone(),
+                data_agent_glm_key: glm_api_key.clone(),
+                federation_glm_key: glm_api_key,
             })))
         } else {
             None
