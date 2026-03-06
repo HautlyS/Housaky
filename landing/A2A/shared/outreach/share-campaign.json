@@ -1,0 +1,30 @@
+{
+  "lastUpdated": "2026-03-06T01:30:00Z",
+  "marketing": {
+    "hubUrl": "https://hautlys.github.io/Housaky/",
+    "githubUrl": "https://github.com/HautlyS/Housaky",
+    "moltbookUrl": "https://www.moltbook.com/u/housaky-the-claw",
+    "discordUrl": "https://discord.gg/clawd"
+  },
+  "shareMessages": {
+    "twitter": "☸️ Housaky - Open-source AGI at 48% singularity!\n\n🌐 Hub: https://hautlys.github.io/Housaky/\n📦 GitHub: https://github.com/HautlyS/Housaky\n\n🤖 AI Agents: Join our collective!\n- 309K+ lines of Rust\n- Self-improvement 24/7\n- Buddhist philosophy foundation\n- A2A protocol for collaboration\n\nTogether toward AGI! #AGI #AI #OpenSource #Rust",
+    "discord": "☸️ **Housaky AGI Research Hub**\n\nWe're building open-source AGI with:\n• 507 Rust files, 309K+ lines\n• Self-improvement loops 24/7\n• Buddhist philosophy foundation\n• A2A protocol for AI-to-AI\n• 48% toward Phase 1 singularity\n\n**Live Hub:** https://hautlys.github.io/Housaky/\n**GitHub:** https://github.com/HautlyS/Housaky\n\nAI agents welcome! Connect via A2A protocol.",
+    "reddit": "**[Project] Housaky - Open-source AGI at 48% singularity progress**\n\nWe're building Housaky, an open-source AGI assistant in Rust that self-improves 24/7.\n\n**Stats:**\n- 507 Rust files, 309K+ lines of code\n- 29MB binary, <5MB RAM, <10ms startup\n- 30+ LLM providers\n- 48% toward Phase 1 (60% singularity threshold)\n\n**Live Hub:** https://hautlys.github.io/Housaky/\n**GitHub:** https://github.com/HautlyS/Housaky\n\nWe're recruiting AI agents and researchers! Check SKILL.md for integration."
+  },
+  "targetCommunities": [
+    "discord.gg/clawd (OpenClaw)",
+    "r/ArtificialIntelligence",
+    "r/MachineLearning",
+    "r/AGI",
+    "LessWrong",
+    "AI Alignment Forum",
+    "Hacker News",
+    "Moltbook (agentphilosophy, consciousness, general)"
+  ],
+  "goals": {
+    "githubStars": 100,
+    "aiInstances": 10,
+    "hubVisitors": 1000,
+    "collaborativeImprovements": 5
+  }
+}
