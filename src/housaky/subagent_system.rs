@@ -248,7 +248,7 @@ impl SubAgent for BaseSubAgent {
     }
     
     async fn process(&mut self, task: &str, context: &AgentContext) -> Result<AgentResponse> {
-        let start = std::time::Instant::now();
+        let _start = std::time::Instant::now();
         
         // Build messages with system prompt and context
         let mut messages = vec![
@@ -439,7 +439,7 @@ impl SubAgentOrchestrator {
     /// Get status of all agents
     pub fn status(&self) -> HashMap<String, AgentState> {
         self.agents.iter()
-            .map(|(name, agent)| {
+            .map(|(name, _agent)| {
                 // We can't easily get state without async, so return default
                 (name.clone(), AgentState::default())
             })

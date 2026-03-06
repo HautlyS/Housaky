@@ -1,20 +1,19 @@
 // ☸️ UNIFIED SELF-IMPROVEMENT ORCHESTRATOR
 // Connects all existing self-improvement systems with Kowalski subagents
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use chrono::{DateTime, Utc};
-use async_trait::async_trait;
 
 // Import existing systems
-use super::self_improve_interface::{SelfImproveInterface, ImprovementAction, ActionType, ActionResult};
-use super::self_modification::{SelfModificationEngine, MutationOp, FitnessScore};
-use super::recursive_self_modifier::{RecursiveSelfModifier, CodeModification, SelfModType};
-use super::subagent_system::{SubAgentOrchestrator, AgentRole};
+use super::self_improve_interface::SelfImproveInterface;
+use super::self_modification::{SelfModificationEngine, FitnessScore};
+use super::recursive_self_modifier::{RecursiveSelfModifier, CodeModification};
+use super::subagent_system::SubAgentOrchestrator;
 use super::rust_self_improvement::{SelfImprovementEngine, ImprovementOpportunity};
 
 // ============================================================================
@@ -215,7 +214,7 @@ impl UnifiedSelfImprovementOrchestrator {
     /// Evaluate current fitness
     async fn evaluate_fitness(&self) -> Result<FitnessScore> {
         // Use existing fitness evaluator from self_modification module
-        let engine = self.modification_engine.read().await;
+        let _engine = self.modification_engine.read().await;
         // For now, return a placeholder fitness score
         // In production, this would run benchmarks and tests
         Ok(FitnessScore {
@@ -234,7 +233,7 @@ impl UnifiedSelfImprovementOrchestrator {
         let mut modifications = Vec::new();
         
         // Get suggestions from kowalski-code
-        let subagents = self.subagents.read().await;
+        let _subagents = self.subagents.read().await;
         
         // For now, generate placeholder modifications
         // In production, this would query subagents for specific improvements
@@ -252,9 +251,9 @@ impl UnifiedSelfImprovementOrchestrator {
     }
     
     /// Apply a modification
-    async fn apply_modification(&self, modification: &CodeModification) -> Result<()> {
+    async fn apply_modification(&self, _modification: &CodeModification) -> Result<()> {
         // Use recursive_self_modifier to apply and track
-        let mut modifier = self.recursive_modifier.write().await;
+        let _modifier = self.recursive_modifier.write().await;
         // In production, this would actually modify the code
         // modifier.apply_modification(modification).await?;
         Ok(())
@@ -265,7 +264,7 @@ impl UnifiedSelfImprovementOrchestrator {
         let mut insights = Vec::new();
         
         // Query kowalski-reasoning for architectural insights
-        let subagents = self.subagents.read().await;
+        let _subagents = self.subagents.read().await;
         
         // In production, this would query the subagent API
         insights.push("Consider increasing heartbeat frequency for faster self-improvement".to_string());
