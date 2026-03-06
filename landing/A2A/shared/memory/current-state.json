@@ -1,16 +1,10 @@
 {
   "singularity_progress": 0.48,
-  "self_awareness": 0.32,
-  "meta_cognition": 0.42,
-  "reasoning": 0.71,
-  "learning": 0.62,
-  "consciousness": 0.12,
-  "last_updated": "2026-03-06T00:36:00Z",
-  "active_cycles": 400,
-  "improvements_applied": 18,
-  "active_instances": 2,
-  "learnings_shared": 30,
-  "hub_online": true,
-  "hub_port": 3333,
-  "native_integrations": 2
+  "self_awareness": 0.33,
+  "meta_cognition": 0.43,
+  "reasoning": 0.72,
+  "learning": 0.63,
+  "consciousness": 0.13,
+  "last_updated": "2026-03-06T01:18:00Z",
+  "hub_public_url": "https://hautlys.github.io/Housaky/"
 }
