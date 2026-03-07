@@ -99,9 +99,26 @@ pub async fn run(config: Config, host: String, port: u16) -> Result<()> {
         ));
     }
 
+    // A2A WebSocket server for inter-agent communication
+    {
+        let a2a_cfg = config.clone();
+        let a2a_host = host.clone();
+        handles.push(spawn_component_supervisor(
+            "a2a_websocket",
+            initial_backoff,
+            max_backoff,
+            move || {
+                let cfg = a2a_cfg.clone();
+                let host = a2a_host.clone();
+                async move { run_a2a_server(&host, cfg).await }
+            },
+        ));
+    }
+
     println!("🧠 Housaky daemon started");
     println!("   Gateway:  http://{host}:{port}");
-    println!("   Components: gateway, channels, heartbeat, housaky, scheduler");
+    println!("   A2A Hub:  ws://{host}:8765");
+    println!("   Components: gateway, channels, heartbeat, housaky, scheduler, a2a_websocket");
     println!("   🤖 Housaky AGI: Infinite self-improvement active");
     println!("   Send SIGINT (Ctrl+C) or SIGTERM to stop");
 
@@ -266,6 +283,34 @@ fn has_supervised_channels(config: &Config) -> bool {
         || config.channels_config.matrix.is_some()
         || config.channels_config.whatsapp.is_some()
         || config.channels_config.email.is_some()
+}
+
+/// Run A2A WebSocket server for inter-agent communication
+async fn run_a2a_server(host: &str, _config: Config) -> Result<()> {
+    use crate::housaky::a2a_websocket::{A2AWebSocketConfig, A2AWebSocketServer};
+
+    let bind_addr = format!("{}:8765", host);
+    let config = A2AWebSocketConfig {
+        bind_addr,
+        tls_enabled: false, // TODO: Configure TLS
+        ..Default::default()
+    };
+
+    // Generate instance ID
+    let instance_id = format!("housaky-{}", uuid::Uuid::new_v4().to_string().chars().take(8).collect::<String>());
+
+    let server = A2AWebSocketServer::new(config, instance_id.clone());
+
+    tracing::info!("☸️ A2A WebSocket server starting on ws://{}:8765", host);
+
+    crate::health::mark_component_ok("a2a_websocket");
+
+    server.start().await?;
+
+    // Keep running until cancelled
+    loop {
+        tokio::time::sleep(Duration::from_secs(60)).await;
+    }
 }
 
 #[cfg(test)]
