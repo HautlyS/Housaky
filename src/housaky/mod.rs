@@ -89,6 +89,9 @@ pub mod rust_self_improvement;
 pub mod unified_improvement_orchestrator;
 pub mod swarm;
 
+// Unified Multi-Agent System - consolidates all parallel multi-agent approaches
+pub mod unified_agents;
+
 // Phase 3 — Consciousness Substrate & Self-Awareness
 pub mod consciousness;
 
@@ -132,6 +135,13 @@ pub use housaky_agent::{
 };
 pub use session_manager::{Session, SessionManager, SessionSummary};
 
+// Unified Multi-Agent Hub re-exports
+pub use unified_agents::{
+    AgentSystem, ConsensusResult, UnifiedAgentConfig, UnifiedAgentHub, UnifiedHubMessage,
+    UnifiedHubStats, UnifiedMessageType, UnifiedPriority, UnifiedTask, UnifiedTaskResult,
+    UnifiedTaskStatus,
+};
+
 use crate::commands::{
     CollectiveCommands, GSDCommands, GoalCommands, HousakyCommands, SelfModCommands,
 };
@@ -142,6 +152,10 @@ use std::sync::Arc;
 
 pub async fn handle_command(command: HousakyCommands, config: &Config) -> Result<()> {
     match command {
+        HousakyCommands::Agents { agents_command } => {
+            handle_agents_command(agents_command, config).await?;
+        }
+
         HousakyCommands::Status => {
             println!("🤖 Housaky AGI v4.0 Status");
             println!();
@@ -1364,4 +1378,210 @@ pub fn version() -> &'static str {
 /// Get Housaky description
 pub fn description() -> &'static str {
     "Housaky AGI - Self-improving autonomous agent with infinite capability expansion"
+}
+
+// ============================================================================
+// Unified Multi-Agent Hub Command Handler
+// ============================================================================
+
+async fn handle_agents_command(command: AgentsCommands, config: &Config) -> Result<()> {
+    use crate::housaky::unified_agents::{UnifiedAgentConfig, UnifiedAgentHub, UnifiedTask, UnifiedPriority};
+    use chrono::Utc;
+    use std::collections::HashMap;
+
+    // Create unified hub instance
+    let kowalski_config = crate::housaky::housaky_agent::KowalskiIntegrationConfig {
+        enabled: true,
+        kowalski_path: std::path::PathBuf::from("/home/ubuntu/Housaky/vendor/kowalski/kowalski-cli"),
+        enable_federation: true,
+        enable_code_agent: true,
+        enable_web_agent: true,
+        enable_academic_agent: true,
+        enable_data_agent: true,
+        glm_api_key: None,
+        glm_model: "zai-org/GLM-5-FP8".to_string(),
+        code_agent_glm_key: None,
+        web_agent_glm_key: None,
+        academic_agent_glm_key: None,
+        data_agent_glm_key: None,
+        federation_glm_key: None,
+    };
+
+    let hub_config = UnifiedAgentConfig {
+        enable_local_coordination: true,
+        enable_federation: true,
+        enable_collaboration: false,
+        enable_kowalski: true,
+        enable_subagents: true,
+        enable_replication: false,
+        enable_emergent_protocol: true,
+        max_concurrent_tasks: 10,
+        heartbeat_interval_secs: 30,
+        workspace_dir: config.workspace_dir.clone(),
+        instance_id: "housaky-cli".to_string(),
+        federation_peers: Vec::new(),
+        kowalski_config: Some(kowalski_config),
+    };
+
+    let hub = UnifiedAgentHub::new(hub_config);
+    hub.initialize().await?;
+
+    match command {
+        AgentsCommands::Status => {
+            println!("🌐 Unified Multi-Agent Hub Status");
+            println!();
+
+            let stats = hub.get_stats().await;
+
+            println!("Agents:");
+            println!("  Total agents:     {}", stats.total_agents);
+            println!("  Available:        {}", stats.available_agents);
+            println!("  Kowalski:         {}", stats.kowalski_agents);
+            println!("  Sub-agents:       {}", stats.subagents);
+            println!();
+
+            println!("Tasks:");
+            println!("  Pending:          {}", stats.pending_tasks);
+            println!("  Active:           {}", stats.active_tasks);
+            println!("  Completed:        {}", stats.completed_tasks);
+            println!("  Failed:           {}", stats.failed_tasks);
+            println!("  Success rate:     {:.1}%", stats.success_rate * 100.0);
+            println!("  Avg exec time:    {}ms", stats.avg_execution_time_ms);
+            println!();
+
+            println!("Federation:");
+            println!("  Peers:            {}", stats.federation_peers);
+            println!("  Online:           {}", stats.federation_online);
+            println!();
+
+            println!("Emergent Protocol:");
+            println!("  Symbols:          {}", stats.emergent_symbols);
+        }
+
+        AgentsCommands::Submit { title, description, priority, system } => {
+            println!("📤 Submitting task to unified hub...");
+
+            let prio = match priority.to_lowercase().as_str() {
+                "low" => UnifiedPriority::Low,
+                "high" => UnifiedPriority::High,
+                "critical" => UnifiedPriority::Critical,
+                _ => UnifiedPriority::Medium,
+            };
+
+            let preferred_system = system.as_ref().and_then(|s| {
+                match s.to_lowercase().as_str() {
+                    "local" => Some(crate::housaky::unified_agents::AgentSystem::Local),
+                    "kowalski" => Some(crate::housaky::unified_agents::AgentSystem::Kowalski),
+                    "subagent" => Some(crate::housaky::unified_agents::AgentSystem::SubAgent),
+                    "federation" => Some(crate::housaky::unified_agents::AgentSystem::Federation),
+                    _ => None,
+                }
+            });
+
+            let task = UnifiedTask {
+                id: format!("task-{}", uuid::Uuid::new_v4().to_string()[..8]),
+                title,
+                description,
+                priority: prio,
+                required_capabilities: vec!["general".to_string()],
+                preferred_system,
+                context: HashMap::new(),
+                deadline: None,
+                status: crate::housaky::unified_agents::UnifiedTaskStatus::Pending,
+                assigned_agent: None,
+                created_at: Utc::now(),
+                started_at: None,
+                completed_at: None,
+            };
+
+            let task_id = hub.submit_task(task).await?;
+            println!("✓ Task submitted: {}", task_id);
+            println!("  Execute with: housaky housaky agents heartbeat");
+        }
+
+        AgentsCommands::List => {
+            println!("📋 Unified Hub Tasks");
+            println!();
+
+            let tasks = hub.unified_tasks.read().await;
+            if tasks.is_empty() {
+                println!("No tasks in the unified hub.");
+            } else {
+                for (id, task) in tasks.iter() {
+                    println!("[{:?}] {} ({})", task.status, task.title, id);
+                    println!("  Priority: {:?}, System: {:?}", 
+                             task.priority, 
+                             task.context.get("target_system").map(|s| s.as_str()).unwrap_or("auto"));
+                    if let Some(agent) = &task.assigned_agent {
+                        println!("  Agent: {}", agent);
+                    }
+                    println!();
+                }
+            }
+        }
+
+        AgentsCommands::Consensus { question } => {
+            println!("🗳️  Requesting consensus from all agents...");
+            println!("  Question: {}", question);
+            println!();
+
+            let result = hub.request_consensus(&question).await?;
+
+            println!("Consensus Result:");
+            println!("  Answer: {}", result.consensus);
+            println!("  Agreement: {:.1}%", result.agreement_ratio * 100.0);
+            println!("  Responders: {}/{}", result.supporters.len(), result.total_responders);
+            
+            if !result.supporters.is_empty() {
+                println!("  Supporters:");
+                for supporter in &result.supporters {
+                    println!("    - {}", supporter);
+                }
+            }
+        }
+
+        AgentsCommands::Share { key, value, confidence } => {
+            println!("🧠 Sharing knowledge across all systems...");
+            println!("  Key: {}", key);
+            println!("  Value: {}", value);
+            println!("  Confidence: {:.0}%", confidence * 100.0);
+
+            hub.share_knowledge(&key, &value, confidence).await?;
+
+            println!("✓ Knowledge shared successfully");
+        }
+
+        AgentsCommands::Heartbeat => {
+            println!("💓 Running unified hub heartbeat...");
+            hub.heartbeat().await?;
+            println!("✓ Heartbeat complete");
+
+            let stats = hub.get_stats().await;
+            println!("\nQuick Stats:");
+            println!("  Agents: {}/{} available", stats.available_agents, stats.total_agents);
+            println!("  Tasks: {} pending, {} active", stats.pending_tasks, stats.active_tasks);
+        }
+
+        AgentsCommands::Stats => {
+            let stats = hub.get_stats().await;
+
+            println!("📊 Unified Hub Statistics");
+            println!();
+            println!("{:<25} {}", "Total Agents:", stats.total_agents);
+            println!("{:<25} {}", "Available Agents:", stats.available_agents);
+            println!("{:<25} {}", "Kowalski Agents:", stats.kowalski_agents);
+            println!("{:<25} {}", "Sub-agents:", stats.subagents);
+            println!("{:<25} {}", "Pending Tasks:", stats.pending_tasks);
+            println!("{:<25} {}", "Active Tasks:", stats.active_tasks);
+            println!("{:<25} {}", "Completed Tasks:", stats.completed_tasks);
+            println!("{:<25} {}", "Failed Tasks:", stats.failed_tasks);
+            println!("{:<25} {:.1}%", "Success Rate:", stats.success_rate * 100.0);
+            println!("{:<25} {}ms", "Avg Execution Time:", stats.avg_execution_time_ms);
+            println!("{:<25} {}", "Federation Peers:", stats.federation_peers);
+            println!("{:<25} {}", "Online Peers:", stats.federation_online);
+            println!("{:<25} {}", "Emergent Symbols:", stats.emergent_symbols);
+        }
+    }
+
+    Ok(())
 }

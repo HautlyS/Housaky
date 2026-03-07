@@ -1,4 +1,5 @@
 use anyhow::Result;
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -244,10 +245,10 @@ impl ActionExecutor {
             .and_then(|v| v.as_str())
             .ok_or_else(|| anyhow::anyhow!("Missing 'path' parameter for read action"))?;
 
-        // Basic path safety: restrict to relative paths or explicitly allowed prefixes
-        if path.contains("../") || path.contains("/etc/") || path.contains("/proc/") {
+        // Robust path safety check
+        if !Self::is_path_safe(path)? {
             return Err(anyhow::anyhow!(
-                "Path traversal detected - access denied: {}",
+                "Path access denied by security policy: {}",
                 path
             ));
         }
@@ -277,9 +278,10 @@ impl ActionExecutor {
             .and_then(|v| v.as_str())
             .ok_or_else(|| anyhow::anyhow!("Missing 'path' parameter for write action"))?;
 
-        if path.contains("../") || path.starts_with("/etc/") || path.starts_with("/proc/") {
+        // Robust path safety check
+        if !Self::is_path_safe(path)? {
             return Err(anyhow::anyhow!(
-                "Path traversal detected - access denied: {}",
+                "Path access denied by security policy: {}",
                 path
             ));
         }
@@ -306,7 +308,77 @@ impl ActionExecutor {
         Ok(format!("Written {} bytes to {}", content.len(), path))
     }
 
-    /// Execute a shell command with explicit sandboxing
+    /// Check if a path is safe to access
+    fn is_path_safe(path: &str) -> Result<bool> {
+        use std::path::Path;
+
+        // Normalize the path to resolve `.` and `..`
+        let path_obj = Path::new(path);
+        
+        // Get the canonical path if it exists, otherwise normalize manually
+        let normalized = if path_obj.exists() {
+            path_obj.canonicalize()
+                .map_err(|e| anyhow::anyhow!("Failed to canonicalize path: {}", e))?
+        } else {
+            // For non-existent paths, use lexical normalization
+            let mut normalized = std::path::PathBuf::new();
+            for component in path_obj.components() {
+                match component {
+                    std::path::Component::ParentDir => {
+                        // Don't allow going above root
+                        if !normalized.pop() {
+                            return Ok(false);
+                        }
+                    }
+                    std::path::Component::CurDir => {}
+                    c => normalized.push(c),
+                }
+            }
+            normalized
+        };
+
+        let normalized_str = normalized.to_string_lossy();
+
+        // Deny list of sensitive paths
+        let denied_prefixes = [
+            "/etc/passwd",
+            "/etc/shadow",
+            "/etc/sudoers",
+            "/proc/",
+            "/sys/",
+            "/dev/",
+            "/boot/",
+            "/root/",
+            "/var/log/",
+        ];
+
+        for prefix in &denied_prefixes {
+            if normalized_str.starts_with(prefix) {
+                return Ok(false);
+            }
+        }
+
+        // Also check for symlink attacks by verifying parent directories
+        if path_obj.exists() {
+            // Check if any parent is a symlink pointing outside allowed areas
+            for ancestor in path_obj.ancestors().skip(1) {
+                if ancestor.is_symlink() {
+                    if let Ok(target) = std::fs::read_link(ancestor) {
+                        let target_str = target.to_string_lossy();
+                        for prefix in &denied_prefixes {
+                            if target_str.starts_with(prefix) {
+                                return Ok(false);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(true)
+    }
+
+    /// Execute a shell command with robust sandboxing
     async fn execute_shell(&self, action: &Action) -> Result<String> {
         let command = action
             .parameters
@@ -314,22 +386,12 @@ impl ActionExecutor {
             .and_then(|v| v.as_str())
             .ok_or_else(|| anyhow::anyhow!("Missing 'command' parameter for execute action"))?;
 
-        // Deny dangerous shell patterns
-        let denied_patterns = [
-            "rm -rf",
-            "dd if=",
-            "mkfs",
-            ":(){ :|:& };:",
-            "> /dev/",
-            "chmod 777 /",
-        ];
-        for pattern in &denied_patterns {
-            if command.contains(pattern) {
-                return Err(anyhow::anyhow!(
-                    "Command blocked by safety policy: {}",
-                    command
-                ));
-            }
+        // Comprehensive command safety check
+        if !Self::is_command_safe(command) {
+            return Err(anyhow::anyhow!(
+                "Command blocked by security policy: {}",
+                command
+            ));
         }
 
         let timeout_secs = action
@@ -367,6 +429,113 @@ impl ActionExecutor {
                 stderr
             ))
         }
+    }
+
+    /// Check if a shell command is safe to execute
+    fn is_command_safe(command: &str) -> bool {
+        // Normalize command: collapse whitespace and convert to lowercase for pattern matching
+        let normalized: String = command
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ")
+            .to_lowercase();
+
+        // Dangerous command patterns (normalized)
+        let denied_patterns = [
+            // Destructive commands
+            "rm -rf /",
+            "rm -r -f /",
+            "rm -fr /",
+            "rm -f -r /",
+            "rm --recursive --force /",
+            "rm --force --recursive /",
+            // Disk operations
+            "dd if=",
+            "mkfs",
+            "fdisk",
+            "parted",
+            // Fork bomb and resource exhaustion
+            ":(){ :|:& };:",
+            // Device access
+            "> /dev/",
+            ">> /dev/",
+            "cat > /dev/",
+            "echo > /dev/",
+            // System permissions
+            "chmod 777 /",
+            "chmod -r 777 /",
+            "chown -r",
+            // Network exfiltration
+            "curl | sh",
+            "curl | bash",
+            "wget | sh",
+            "wget | bash",
+            // Dangerous subshell patterns
+            "eval",
+            // Process manipulation (dangerous in automation)
+            "kill -9 1",
+            "killall",
+            // Boot manipulation
+            "grub",
+            "initramfs",
+        ];
+
+        for pattern in &denied_patterns {
+            if normalized.contains(pattern) {
+                return false;
+            }
+        }
+
+        // Check for command substitution that might bypass filters
+        // These patterns could hide dangerous commands
+        if command.contains("$(") || command.contains("`") {
+            // Allow simple command substitution but block recursive/complex ones
+            let subcommand_count = command.matches("$(").count() + command.matches('`').count();
+            if subcommand_count > 2 {
+                return false;
+            }
+            
+            // Check if the substituted command itself contains dangerous patterns
+            // Extract content between $() or ``
+            let re_dollar = regex::Regex::new(r"\$\(([^)]+)\)").ok();
+            let re_backtick = regex::Regex::new(r"`([^`]+)`").ok();
+            
+            if let Some(re) = re_dollar {
+                for cap in re.captures_iter(command) {
+                    if let Some(inner) = cap.get(1) {
+                        if !Self::is_command_safe(inner.as_str()) {
+                            return false;
+                        }
+                    }
+                }
+            }
+            
+            if let Some(re) = re_backtick {
+                for cap in re.captures_iter(command) {
+                    if let Some(inner) = cap.get(1) {
+                        if !Self::is_command_safe(inner.as_str()) {
+                            return false;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Check for pipe chains that could be dangerous
+        if command.contains('|') {
+            let parts: Vec<&str> = command.split('|').collect();
+            // Check each part of the pipe for dangerous commands
+            for part in parts {
+                let trimmed = part.trim();
+                // Block piping to shells
+                if trimmed.starts_with("sh") || trimmed.starts_with("bash") || 
+                   trimmed.starts_with("/bin/sh") || trimmed.starts_with("/bin/bash") {
+                    return false;
+                }
+            }
+        }
+
+        true
     }
 
     /// Ask a question using the registered LLM tool or return the question itself

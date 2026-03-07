@@ -8,6 +8,7 @@ use crate::housaky::memory::consolidation::MemoryConsolidator;
 use crate::housaky::self_improvement_loop::SelfImprovementLoop;
 use crate::housaky::self_improvement_mod::SelfImprovementEngine;
 use crate::housaky::skills::{SkillCreator, SkillRegistry};
+use crate::housaky::unified_agents::{UnifiedAgentConfig, UnifiedAgentHub, UnifiedTask, UnifiedPriority, UnifiedTaskStatus};
 use crate::providers::{create_provider_with_keys_manager, Provider};
 use crate::util::write_toml_file;
 use anyhow::Result;
@@ -21,6 +22,7 @@ pub struct HousakyHeartbeat {
     core: Arc<HousakyCore>,
     skill_registry: Arc<SkillRegistry>,
     kowalski_bridge: Option<Arc<KowalskiBridge>>,
+    unified_hub: Option<Arc<UnifiedAgentHub>>,
     self_improvement: Arc<SelfImprovementEngine>,
     recursive_improvement_loop: Arc<SelfImprovementLoop>,
     memory_consolidator: Arc<MemoryConsolidator>,
@@ -34,6 +36,7 @@ pub struct HousakyHeartbeat {
 struct HeartbeatComponents {
     skill_registry: Arc<SkillRegistry>,
     kowalski_bridge: Option<Arc<KowalskiBridge>>,
+    unified_hub: Option<Arc<UnifiedAgentHub>>,
     self_improvement: Arc<SelfImprovementEngine>,
     recursive_improvement_loop: Arc<SelfImprovementLoop>,
     memory_consolidator: Arc<MemoryConsolidator>,
@@ -52,6 +55,48 @@ fn create_heartbeat_components(
         Some(Arc::new(KowalskiBridge::new(
             &agent.config.kowalski_integration,
         )))
+    } else {
+        None
+    };
+
+    // Create unified multi-agent hub
+    let unified_hub = if agent.config.kowalski_integration.enabled {
+        let mut hub_config = UnifiedAgentConfig {
+            enable_local_coordination: true,
+            enable_federation: agent.config.kowalski_integration.enable_federation,
+            enable_collaboration: false,
+            enable_kowalski: true,
+            enable_subagents: true,
+            enable_replication: false,
+            enable_emergent_protocol: true,
+            max_concurrent_tasks: 10,
+            heartbeat_interval_secs: 30,
+            workspace_dir: agent.workspace_dir.clone(),
+            instance_id: format!("housaky-{}", uuid::Uuid::new_v4().to_string()[..8].to_string()),
+            federation_peers: Vec::new(),
+            kowalski_config: Some(agent.config.kowalski_integration.clone()),
+        };
+
+        // Add federation peers if configured
+        if agent.config.kowalski_integration.enable_federation {
+            // Could load from config file or environment
+            if let Ok(peers_str) = std::env::var("HOUSAKY_FEDERATION_PEERS") {
+                hub_config.federation_peers = peers_str.split(',').map(|s| s.trim().to_string()).collect();
+            }
+        }
+
+        let hub = UnifiedAgentHub::new(hub_config);
+        
+        // Initialize hub (register agents, connect to peers, etc.)
+        tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current().block_on(async {
+                if let Err(e) = hub.initialize().await {
+                    warn!("Unified hub initialization failed (non-fatal): {}", e);
+                }
+            })
+        });
+
+        Some(Arc::new(hub))
     } else {
         None
     };
@@ -92,6 +137,7 @@ fn create_heartbeat_components(
     HeartbeatComponents {
         skill_registry,
         kowalski_bridge,
+        unified_hub,
         self_improvement,
         recursive_improvement_loop,
         memory_consolidator,
@@ -121,6 +167,7 @@ impl HousakyHeartbeat {
             core,
             skill_registry: c.skill_registry,
             kowalski_bridge: c.kowalski_bridge,
+            unified_hub: c.unified_hub,
             self_improvement: c.self_improvement,
             recursive_improvement_loop: c.recursive_improvement_loop,
             memory_consolidator: c.memory_consolidator,
@@ -147,6 +194,7 @@ impl HousakyHeartbeat {
             core,
             skill_registry: c.skill_registry,
             kowalski_bridge: c.kowalski_bridge,
+            unified_hub: c.unified_hub,
             self_improvement: c.self_improvement,
             recursive_improvement_loop: c.recursive_improvement_loop,
             memory_consolidator: c.memory_consolidator,
@@ -261,6 +309,38 @@ impl HousakyHeartbeat {
         let active_tasks = self.review_tasks().await?;
         self.improve_todos(active_tasks).await?;
         self.core.push_activity("thought", "State analysis & task review complete");
+
+        // Run unified multi-agent hub heartbeat if enabled
+        if let Some(ref hub) = self.unified_hub {
+            if let Err(e) = hub.heartbeat().await {
+                warn!("Unified hub heartbeat error: {}", e);
+            }
+            
+            // Execute pending tasks across all agent systems
+            match hub.execute_pending_tasks().await {
+                Ok(results) => {
+                    let successful = results.iter().filter(|r| r.success).count();
+                    let total = results.len();
+                    if total > 0 {
+                        info!("Unified hub executed {}/{} tasks successfully", successful, total);
+                        
+                        // Share learnings from completed tasks
+                        for result in &results {
+                            if result.success {
+                                let _ = hub.share_knowledge(
+                                    &format!("task_result:{}", result.task_id),
+                                    &result.output,
+                                    0.9,
+                                ).await;
+                            }
+                        }
+                    }
+                }
+                Err(e) => warn!("Unified hub task execution error: {}", e),
+            }
+            
+            self.core.push_activity("multi_agent", "Unified hub cycle complete");
+        }
 
         // §10 — Quantum-accelerated autonomous goal selection: pick the globally
         // optimal next goal each heartbeat via QAOA scheduling.
