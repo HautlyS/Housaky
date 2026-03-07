@@ -100,9 +100,10 @@ impl AgentRegistry {
         if let Some(agent) = agents.get_mut(agent_id) {
             agent.last_heartbeat = chrono::Utc::now();
             agent.available = true;
+            Ok(())
+        } else {
+            anyhow::bail!("Agent '{}' not found in registry", agent_id)
         }
-
-        Ok(())
     }
 
     pub async fn set_availability(&self, agent_id: &str, available: bool) -> Result<()> {
@@ -110,9 +111,10 @@ impl AgentRegistry {
 
         if let Some(agent) = agents.get_mut(agent_id) {
             agent.available = available;
+            Ok(())
+        } else {
+            anyhow::bail!("Agent '{}' not found in registry", agent_id)
         }
-
-        Ok(())
     }
 
     pub async fn update_agent_performance(&self, agent_id: &str, success: bool) {
@@ -139,9 +141,10 @@ impl AgentRegistry {
 
         if let Some(agent) = agents.get_mut(agent_id) {
             agent.current_task = task_id;
+            Ok(())
+        } else {
+            anyhow::bail!("Agent '{}' not found in registry", agent_id)
         }
-
-        Ok(())
     }
 
     pub async fn get_agent(&self, agent_id: &str) -> Option<AgentInfo> {
@@ -182,7 +185,11 @@ impl AgentRegistry {
 
         agents
             .values()
-            .filter(|a| a.available && a.capabilities.contains(&capability.to_string()))
+            .filter(|a| {
+                a.available
+                    && a.current_task.is_none()  // Not already working on a task
+                    && a.capabilities.contains(&capability.to_string())
+            })
             .max_by(|a, b| {
                 let a_score = a.performance_metrics.success_rate;
                 let b_score = b.performance_metrics.success_rate;
@@ -211,9 +218,10 @@ impl AgentRegistry {
 
         if let Some(sender) = senders.get(agent_id) {
             sender.send(message).await?;
+            Ok(())
+        } else {
+            anyhow::bail!("No message channel registered for agent '{}'", agent_id)
         }
-
-        Ok(())
     }
 
     pub async fn broadcast(&self, message: crate::housaky::multi_agent::message::AgentMessage) {
@@ -234,6 +242,14 @@ impl AgentRegistry {
             if elapsed > timeout_seconds && agent.available {
                 agent.available = false;
                 stale.push(id.clone());
+            }
+        }
+
+        // Clean up message channels for stale agents
+        if !stale.is_empty() {
+            let mut senders = self.agent_senders.write().await;
+            for stale_id in &stale {
+                senders.remove(stale_id);
             }
         }
 

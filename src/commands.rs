@@ -129,6 +129,59 @@ pub enum HousakyCommands {
         #[command(subcommand)]
         collective_command: CollectiveCommands,
     },
+    /// Multi-Agent Hub Management
+    Agents {
+        #[command(subcommand)]
+        agents_command: AgentsCommands,
+    },
+}
+
+// ============================================================================
+// Unified Multi-Agent Hub Commands
+// ============================================================================
+
+#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum AgentsCommands {
+    /// Show unified hub status
+    Status,
+    /// Submit a task to the unified hub
+    Submit {
+        /// Task title
+        #[arg(short, long)]
+        title: String,
+        /// Task description
+        #[arg(short, long)]
+        description: String,
+        /// Priority (low, medium, high, critical)
+        #[arg(short, long, default_value = "medium")]
+        priority: String,
+        /// Preferred agent system (local, kowalski, subagent, federation)
+        #[arg(short, long)]
+        system: Option<String>,
+    },
+    /// List pending and active tasks
+    List,
+    /// Request consensus from all agents
+    Consensus {
+        /// Question to ask agents
+        question: String,
+    },
+    /// Share knowledge across all systems
+    Share {
+        /// Knowledge key
+        #[arg(short, long)]
+        key: String,
+        /// Knowledge value
+        #[arg(short, long)]
+        value: String,
+        /// Confidence (0.0-1.0)
+        #[arg(short, long, default_value = "0.9")]
+        confidence: f64,
+    },
+    /// Trigger manual heartbeat
+    Heartbeat,
+    /// Show hub statistics
+    Stats,
 }
 
 // ============================================================================
