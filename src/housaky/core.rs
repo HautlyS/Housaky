@@ -13,6 +13,8 @@ use crate::housaky::cognitive::quantum_planning::QuantumPlanningEngine;
 use crate::housaky::cognitive::world_model::{Action, ActionResult, WorldModel};
 use crate::housaky::embodiment::EmbodimentController;
 use crate::housaky::goal_engine::{Goal, GoalEngine, GoalPriority, GoalStatus};
+use crate::housaky::goal_task_bridge::GoalTaskBridge;
+use crate::housaky::gsd_orchestration::GSDOrchestrator;
 use crate::housaky::inner_monologue::InnerMonologue;
 use crate::housaky::introspection::NaturalLanguageIntrospector;
 use crate::housaky::knowledge_acquisition::KnowledgeAcquisitionEngine;
@@ -52,6 +54,8 @@ use tracing::{info, warn};
 pub struct HousakyCore {
     pub agent: Arc<Agent>,
     pub goal_engine: Arc<GoalEngine>,
+    pub gsd_orchestrator: Arc<GSDOrchestrator>,
+    pub goal_task_bridge: Arc<GoalTaskBridge>,
     pub working_memory: Arc<WorkingMemoryEngine>,
     pub meta_cognition: Arc<MetaCognitionEngine>,
     pub knowledge_graph: Arc<KnowledgeGraphEngine>,
@@ -180,6 +184,14 @@ pub enum AGIAction {
         description: String,
         priority: GoalPriority,
     },
+    ExecutePhase {
+        phase_id: String,
+        goal_id: Option<String>,
+    },
+    PlanTask {
+        goal_id: String,
+        tasks: Vec<String>,
+    },
     Reflect {
         trigger: String,
     },
@@ -235,6 +247,14 @@ impl HousakyCore {
         let episodic_memory = Arc::new(EpisodicMemory::new(10_000));
 
         let core_config = HousakyCoreConfig::default();
+
+        // GSD Orchestrator - needs meta_cognition_base (will be finalized later with quantum)
+        // We create it here and finalize after meta_cognition is quantum-wired
+        let gsd_orchestrator_base = GSDOrchestrator::new(
+            workspace_dir.clone(),
+            Arc::new(meta_cognition_base.clone()),
+            goal_engine.clone(),
+        );
 
         // §10 — Initialize quantum-AGI bridge.
         // For `backend = "braket"` we need async AWS SDK init; use block_in_place
@@ -348,6 +368,15 @@ impl HousakyCore {
             UnifiedFeedbackLoop::new(goal_engine.clone(), meta_cognition.clone())
         });
 
+        // GSD Orchestrator - integrate with quantum-wired meta_cognition
+        let gsd_orchestrator = Arc::new(gsd_orchestrator_base);
+
+        // Goal-Task Bridge - connects GoalEngine with GSDOrchestrator
+        let goal_task_bridge = Arc::new(GoalTaskBridge::new(
+            goal_engine.clone(),
+            gsd_orchestrator.clone(),
+        ));
+
         // §10.4 — Finalise KnowledgeGraphEngine with optional quantum bridge (annealing clustering).
         let knowledge_graph = Arc::new(if let Some(ref bridge) = quantum_bridge {
             knowledge_graph_base.with_quantum(bridge.clone())
@@ -431,6 +460,8 @@ impl HousakyCore {
         Ok(Self {
             agent: Arc::new(agent),
             goal_engine,
+            gsd_orchestrator,
+            goal_task_bridge,
             working_memory,
             meta_cognition,
             knowledge_graph,
@@ -544,12 +575,48 @@ impl HousakyCore {
             warn!("Failed to load episodic memory: {e}");
         }
 
+        // Initialize GSD orchestrator
+        if let Err(e) = self.gsd_orchestrator.initialize().await {
+            warn!("Failed to initialize GSD orchestrator: {e}");
+        }
+
+        // Check for goals that need GSD phases
+        if let Err(e) = self.check_and_spawn_gsd_phases().await {
+            warn!("Failed to check/spawn GSD phases: {e}");
+        }
+
         info!("Housaky AGI Core initialized successfully");
         Ok(())
     }
 
     pub fn skill_invocation_engine(&self) -> Arc<SkillInvocationEngine> {
         self.skill_invocation_engine.clone()
+    }
+
+    pub async fn check_and_spawn_gsd_phases(&self) -> Result<Vec<String>> {
+        self.goal_task_bridge.check_and_spawn_phases().await
+    }
+
+    pub async fn execute_goal_phase(&self, goal_id: &str) -> Result<Option<String>> {
+        self.goal_task_bridge.execute_goal_phase(goal_id).await
+    }
+
+    pub async fn decompose_goal_into_tasks(
+        &self,
+        goal_id: &str,
+        subtasks: Vec<String>,
+    ) -> Result<Vec<String>> {
+        self.goal_task_bridge
+            .decompose_goal_into_tasks(goal_id, subtasks)
+            .await
+    }
+
+    pub async fn get_pending_gsd_phases(&self) -> Vec<String> {
+        self.goal_task_bridge.get_pending_executable_phases().await
+    }
+
+    pub async fn sync_gsd_progress(&self) -> Result<()> {
+        self.goal_task_bridge.sync_progress_to_goals().await
     }
 
     async fn recent_self_modification_insights(&self, limit: usize) -> Vec<String> {

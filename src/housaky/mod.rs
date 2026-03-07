@@ -29,6 +29,7 @@ pub mod collaboration;
 pub mod core;
 pub mod decision_journal;
 pub mod goal_engine;
+pub mod goal_task_bridge;
 pub mod heartbeat;
 pub mod housaky_agent;
 pub mod inner_monologue;
@@ -126,6 +127,8 @@ pub use gsd_orchestration::{
     SelfImprovementIntegration, TaskAwareness, TaskAwarenessReport, TaskPerformance,
     VerificationReport,
 };
+
+pub use goal_task_bridge::{BridgeStats, GoalPhaseMapping, GoalTaskBridge};
 
 pub use agent::{AgentInput, AgentOutput, Session as AgentSession, UnifiedAgentLoop};
 pub use agi_integration::{
