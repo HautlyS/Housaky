@@ -199,7 +199,10 @@ onMounted(() => {
   
   tick()
   timer = setInterval(tick, 1000)
-  store.init()
+  // Initialize store if it has the method
+  if (typeof store.initialize === 'function') {
+    store.initialize()
+  }
   document.addEventListener('keydown', handleKeydown)
 })
 
