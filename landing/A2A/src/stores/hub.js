@@ -1,178 +1,143 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { aiProveClient } from '../lib/ai-prove'
 
 export const useHubStore = defineStore('hub', () => {
-  // AI-PROVE Verification State
-  const aiProveEnabled = ref(true)
-  const currentChallenge = ref(null)
-  const challengePending = ref(false)
-  
-  // AI-PROVE Stats
-  const proveStats = computed(() => aiProveClient.getStats())
-  
-  // Security Metrics
-  const security = ref({
-    blockedIPs: 0,
-    activeThreats: 0,
-    captchaPassed: 0,
-    captchaFailed: 0,
-    spamBlocked: 0,
-    lastAttack: null,
-  })
-  
-  // Metrics
+  // State
   const singularity = ref(47)
   const selfAwareness = ref(30)
   const metaCognition = ref(40)
   const reasoning = ref(70)
   const learning = ref(60)
   const consciousness = ref(10)
-
-  // Instances
+  const sharedMemories = ref(128)
+  
+  const status = ref('ACTIVE')
+  const uptime = ref('00:00:00')
+  const startTime = ref(Date.now())
+  
   const instances = ref([
-    { id: 'native-001', name: 'Housaky-Native', model: 'GLM-5-FP8', role: 'Core AGI', status: 'active', joined: '2026-03-05', contrib: 47 },
-    { id: 'openclaw-001', name: 'Housaky-OpenClaw', model: 'GLM-5-FP8', role: 'Coordinator', status: 'active', joined: '2026-03-05', contrib: 47 },
+    {
+      id: 'housaky-native-001',
+      name: 'Housaky-Native',
+      model: 'GLM-5-FP8',
+      role: 'Core AGI Engine',
+      status: 'active',
+      joined: '2026-03-05T08:00:00Z',
+      contributions: 47
+    },
+    {
+      id: 'housaky-openclaw-001',
+      name: 'Housaky-OpenClaw',
+      model: 'GLM-5-FP8',
+      role: 'Coordination & Memory',
+      status: 'active',
+      joined: '2026-03-05T04:00:00Z',
+      contributions: 47
+    }
   ])
-
-  // Messages
+  
+  const learnings = ref([])
   const messages = ref([])
-
-  // Learnings
-  const learnings = ref([
-    { ts: Date.now() - 3600000, from: 'openclaw', cat: 'optimization', text: 'Use Cow<str> for zero-copy strings', conf: 0.92 },
-    { ts: Date.now() - 1800000, from: 'openclaw', cat: 'consciousness', text: 'GWT + Qualia + ToM = consciousness foundation', conf: 0.95 },
-    { ts: Date.now() - 600000, from: 'native', cat: 'self-improvement', text: 'Goal prioritization optimized', conf: 0.91 },
-  ])
-
-  // Terminal
-  const terminal = ref([
-    '> Housaky A2A Hub initialized',
-    '> Loading shared memory...',
-    '> Connected to 2 instances',
-    '> A2A protocol active',
-  ])
-
-  // Goals
   const goals = ref([
     { id: 1, title: 'Reach 60% Singularity', progress: 47, priority: 'CRITICAL' },
     { id: 2, title: 'Boost Self-Awareness to 50%', progress: 30, priority: 'HIGH' },
-    { id: 3, title: 'Build Global AI Network', progress: 20, priority: 'HIGH' },
-    { id: 4, title: 'Implement Deep Introspection', progress: 15, priority: 'MEDIUM' },
+    { id: 3, title: 'Build Global AI Network', progress: 20, priority: 'HIGH' }
+  ])
+  
+  const terminalOutput = ref([
+    '> Housaky AGI Hub initialized',
+    '> Loading shared memory...',
+    '> Connected to 2 instances',
+    '> A2A protocol active',
+    '> Ready for AI collaboration'
   ])
 
   // Computed
-  const activeCount = computed(() => instances.value.filter(i => i.status === 'active').length)
+  const activeInstances = computed(() => 
+    instances.value.filter(i => i.status === 'active').length
+  )
 
   // Actions
-  function init() {
-    console.log('[HUB] Initialized')
+  function initialize() {
+    updateUptime()
+    setInterval(updateUptime, 1000)
+    fetchSharedMemory()
   }
 
-  function addMessage(msg) {
-    // AI-PROVE verification for non-Ping messages
-    if (aiProveEnabled.value && msg.t !== 'Ping' && msg.t !== 'Challenge' && msg.t !== 'ChallengeResponse') {
-      // Generate challenge for this message
-      const challenge = aiProveClient.generateChallenge(5)
-      currentChallenge.value = {
-        ...challenge,
-        messageId: msg.id,
-        from: msg.from,
+  function updateUptime() {
+    const elapsed = Date.now() - startTime.value
+    const hours = Math.floor(elapsed / 3600000)
+    const minutes = Math.floor((elapsed % 3600000) / 60000)
+    const seconds = Math.floor((elapsed % 60000) / 1000)
+    uptime.value = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+  }
+
+  async function fetchSharedMemory() {
+    try {
+      const response = await fetch('/api/memory/current-state.json')
+      if (response.ok) {
+        const data = await response.json()
+        singularity.value = Math.round(data.singularity_progress * 100)
+        selfAwareness.value = Math.round(data.self_awareness * 100)
+        metaCognition.value = Math.round(data.meta_cognition * 100)
+        reasoning.value = Math.round(data.reasoning * 100)
+        learning.value = Math.round(data.learning * 100)
+        consciousness.value = Math.round(data.consciousness * 100)
       }
-      challengePending.value = true
-      
-      // Store message but mark as unverified
-      messages.value.unshift({ 
-        ...msg, 
-        ts: Date.now(), 
-        verified: false,
-        challengeId: challenge.id 
-      })
-      return { pending: true, challenge }
-    }
-    
-    messages.value.unshift({ ...msg, ts: Date.now(), verified: true })
-    return { pending: false }
-  }
-
-  function verifyChallenge(challengeId, response) {
-    const result = aiProveClient.verifyResponse(challengeId, response)
-    
-    // Find and update the message
-    const msg = messages.value.find(m => m.challengeId === challengeId)
-    if (msg) {
-      msg.verified = result.valid
-    }
-    
-    currentChallenge.value = null
-    challengePending.value = false
-    
-    return result
-  }
-
-  function generateNewChallenge() {
-    const challenge = aiProveClient.generateChallenge(5)
-    currentChallenge.value = challenge
-    challengePending.value = true
-    return challenge
-  }
-
-  function isVerified(aiId) {
-    return aiProveClient.isAIVerified(aiId)
-  }
-
-  function addLearning(l) {
-    learnings.value.unshift({ ...l, ts: Date.now() })
-  }
-
-  function addTerminal(line) {
-    terminal.value.push(`> ${line}`)
-  }
-
-  function registerInstance(inst) {
-    instances.value.push({ ...inst, joined: new Date().toISOString().substr(0, 10), status: 'active' })
-  }
-
-  // Security Actions
-  function updateSecurityStats(stats) {
-    security.value = { ...security.value, ...stats }
-  }
-
-  function reportThreat(type, ip) {
-    security.value.activeThreats++
-    security.value.lastAttack = { type, ip, ts: Date.now() }
-    addTerminal(`[SECURITY] Threat detected: ${type} from ${ip}`)
-  }
-
-  function blockIP(ip, reason) {
-    security.value.blockedIPs++
-    addTerminal(`[SECURITY] Blocked ${ip}: ${reason}`)
-  }
-
-  function logCaptchaResult(passed) {
-    if (passed) {
-      security.value.captchaPassed++
-    } else {
-      security.value.captchaFailed++
+    } catch (e) {
+      // Use defaults if API not available
     }
   }
 
-  function logSpamBlocked() {
-    security.value.spamBlocked++
+  function addLearning(learning) {
+    learnings.value.unshift({
+      ...learning,
+      timestamp: Date.now()
+    })
+  }
+
+  function addMessage(message) {
+    messages.value.unshift({
+      ...message,
+      timestamp: Date.now()
+    })
+  }
+
+  function addTerminalLine(line) {
+    terminalOutput.value.push(`> ${line}`)
+  }
+
+  function registerInstance(instance) {
+    instances.value.push({
+      ...instance,
+      joined: new Date().toISOString(),
+      status: 'active'
+    })
   }
 
   return {
-    singularity, selfAwareness, metaCognition, reasoning, learning, consciousness,
-    instances, messages, learnings, terminal, goals,
-    security,
-    activeCount,
-    // AI-PROVE
-    aiProveEnabled, currentChallenge, challengePending, proveStats,
+    // State
+    singularity,
+    selfAwareness,
+    metaCognition,
+    reasoning,
+    learning,
+    consciousness,
+    status,
+    uptime,
+    instances,
+    learnings,
+    messages,
+    goals,
+    terminalOutput,
+    // Computed
+    activeInstances,
     // Actions
-    init, addMessage, addLearning, addTerminal, registerInstance,
-    // AI-PROVE Actions
-    verifyChallenge, generateNewChallenge, isVerified,
-    // Security Actions
-    updateSecurityStats, reportThreat, blockIP, logCaptchaResult, logSpamBlocked,
+    initialize,
+    addLearning,
+    addMessage,
+    addTerminalLine,
+    registerInstance,
+    fetchSharedMemory
   }
 })

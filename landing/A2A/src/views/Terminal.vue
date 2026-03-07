@@ -1,236 +1,291 @@
 <template>
   <div class="terminal-view">
-    <div class="section-head">
-      ▌ HOUSAKY TERMINAL
-    </div>
-
-    <div
-      class="term"
-      style="height: 500px;"
-    >
-      <div class="term-head">
-        <span>housaky@agi-hub:~$</span>
-        <span
-          class="blink"
-          style="margin-left: 10px;"
-        >●</span>
+    <div class="terminal-container">
+      <div class="terminal-header-bar">
+        <span class="terminal-title">HOUSAKY TERMINAL v1.0.0</span>
+        <div class="terminal-controls">
+          <span class="control">_</span>
+          <span class="control">□</span>
+          <span class="control">×</span>
+        </div>
       </div>
       <div
-        ref="outputEl"
-        class="term-body"
-        style="height: calc(100% - 30px); overflow-y: auto;"
+        ref="terminalBody"
+        class="terminal-body"
       >
         <div
-          v-for="(line, i) in store.terminal"
-          :key="i"
-          class="term-line"
+          v-for="(line, index) in history"
+          :key="index"
+          class="terminal-line"
         >
-          {{ line }}
+          <span class="prompt">housaky@agi:~$</span>
+          <span class="command">{{ line.command }}</span>
+          <div
+            v-if="line.output"
+            class="output"
+          >
+            {{ line.output }}
+          </div>
         </div>
-        <div class="term-line prompt">
-          <span class="prompt-text">housaky@agi-hub:~$</span>
-          <span class="cursor" />
+        <div class="input-line">
+          <span class="prompt">housaky@agi:~$</span>
+          <input 
+            ref="inputRef" 
+            v-model="currentInput" 
+            type="text"
+            class="terminal-input"
+            autofocus
+            @keydown.enter="executeCommand"
+          >
         </div>
       </div>
     </div>
 
-    <!-- Command Input -->
-    <div
-      class="command-input"
-      style="margin-top: 10px;"
-    >
+    <div class="help-panel mt-4">
       <div class="card">
-        <div class="card-head">
-          [ COMMAND INPUT ]
+        <div class="card-header">
+          [ AVAILABLE COMMANDS ]
         </div>
         <div class="card-body">
-          <div style="display: flex; gap: 10px;">
-            <span style="color: var(--text-dim);">$</span>
-            <input 
-              ref="inputEl" 
-              v-model="command"
-              class="input" 
-              placeholder="Type a command..."
-              @keyup.enter="executeCommand"
-            >
-            <button
-              class="btn"
-              @click="executeCommand"
-            >
-              [ RUN ]
-            </button>
-          </div>
-          <div style="margin-top: 10px; font-size: 10px; color: var(--text-muted);">
-            Commands: help, status, metrics, instances, learnings, goals, clear, ping, sync, improve
+          <div class="commands-grid">
+            <div class="command-item">
+              <span class="cmd">help</span>
+              <span class="desc">Show available commands</span>
+            </div>
+            <div class="command-item">
+              <span class="cmd">status</span>
+              <span class="desc">System status</span>
+            </div>
+            <div class="command-item">
+              <span class="cmd">agents</span>
+              <span class="desc">List connected agents</span>
+            </div>
+            <div class="command-item">
+              <span class="cmd">memory</span>
+              <span class="desc">View memory stats</span>
+            </div>
+            <div class="command-item">
+              <span class="cmd">tasks</span>
+              <span class="desc">Active tasks</span>
+            </div>
+            <div class="command-item">
+              <span class="cmd">clear</span>
+              <span class="desc">Clear terminal</span>
+            </div>
           </div>
         </div>
       </div>
-    </div>
-
-    <!-- Quick Actions -->
-    <div
-      class="quick-actions"
-      style="margin-top: 10px;"
-    >
-      <button
-        class="btn btn-sm"
-        @click="cmd('status')"
-      >
-        [ STATUS ]
-      </button>
-      <button
-        class="btn btn-sm"
-        @click="cmd('metrics')"
-      >
-        [ METRICS ]
-      </button>
-      <button
-        class="btn btn-sm"
-        @click="cmd('instances')"
-      >
-        [ INSTANCES ]
-      </button>
-      <button
-        class="btn btn-sm"
-        @click="cmd('learnings')"
-      >
-        [ LEARNINGS ]
-      </button>
-      <button
-        class="btn btn-sm"
-        @click="cmd('goals')"
-      >
-        [ GOALS ]
-      </button>
-      <button
-        class="btn btn-sm"
-        @click="cmd('improve')"
-      >
-        [ IMPROVE ]
-      </button>
-      <button
-        class="btn btn-sm"
-        @click="cmd('sync')"
-      >
-        [ SYNC ]
-      </button>
-      <button
-        class="btn btn-sm"
-        @click="cmd('clear')"
-      >
-        [ CLEAR ]
-      </button>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, nextTick } from 'vue'
-import { useHubStore } from '../stores/hub'
+import { ref, onMounted, nextTick } from 'vue'
 
-const store = useHubStore()
-const command = ref('')
-const outputEl = ref(null)
-const inputEl = ref(null)
+const history = ref([
+  { command: 'welcome', output: 'Welcome to Housaky Terminal v1.0.0\nType "help" for available commands.' },
+])
+
+const currentInput = ref('')
+const terminalBody = ref(null)
+const inputRef = ref(null)
+
+const commands = {
+  help: () => `Available commands:
+  help     - Show this help
+  status   - Display system status
+  agents   - List connected agents
+  memory   - View memory statistics
+  tasks    - Show active tasks
+  clear    - Clear terminal
+  whoami   - Current user info
+  uptime   - System uptime`,
+  
+  status: () => `System Status:
+  Singularity: 0.1%
+  Active Agents: 5
+  Memory Used: 48.2 MB
+  Tasks Running: 12
+  Uptime: ${new Date().toISOString().substr(11, 8)}`,
+  
+  agents: () => `Connected Agents:
+  [ONLINE] AGENT-001 - Kowalski
+  [ONLINE] AGENT-002 - DeepThink
+  [ONLINE] AGENT-003 - MemoryCore
+  [IDLE]   AGENT-004 - SkillMaster
+  [BUSY]   AGENT-005 - ResearchBot`,
+  
+  memory: () => `Memory Statistics:
+  SQLite Backend: Connected
+  Lucid Backend: Active
+  Embeddings: 12,450 vectors
+  Context Chunks: 847
+  Semantic Search: Enabled`,
+  
+  tasks: () => `Active Tasks:
+  [1] Self-awareness training - 80%
+  [2] Memory federation - 60%
+  [3] Research analysis - 45%
+  [4] Skill optimization - 30%`,
+  
+  whoami: () => 'housaky@agi',
+  
+  uptime: () => `System uptime: ${new Date().toISOString().substr(11, 8)}`,
+  
+  clear: () => {
+    history.value = []
+    return null
+  }
+}
 
 function executeCommand() {
-  if (!command.value.trim()) return
-  const cmd = command.value.trim().toLowerCase()
-  processCommand(cmd)
-  command.value = ''
+  const cmd = currentInput.value.trim()
+  if (!cmd) return
+  
+  let output = null
+  
+  if (commands[cmd]) {
+    output = commands[cmd]()
+  } else {
+    output = `Command not found: ${cmd}\nType "help" for available commands.`
+  }
+  
+  if (output) {
+    history.value.push({ command: cmd, output })
+  } else {
+    history.value.push({ command: cmd, output: null })
+  }
+  
+  currentInput.value = ''
+  
   nextTick(() => {
-    if (outputEl.value) {
-      outputEl.value.scrollTop = outputEl.value.scrollHeight
-    }
-    if (inputEl.value) {
-      inputEl.value.focus()
+    if (terminalBody.value) {
+      terminalBody.value.scrollTop = terminalBody.value.scrollHeight
     }
   })
 }
 
-function cmd(c) {
-  processCommand(c)
-}
-
-function processCommand(cmd) {
-  const commands = {
-    help: () => {
-      store.addTerminal('Available commands:')
-      store.addTerminal('  help      - Show this help')
-      store.addTerminal('  status    - Show system status')
-      store.addTerminal('  metrics   - Show AGI metrics')
-      store.addTerminal('  instances - Show connected instances')
-      store.addTerminal('  learnings - Show recent learnings')
-      store.addTerminal('  goals     - Show active goals')
-      store.addTerminal('  ping      - Ping native instance')
-      store.addTerminal('  sync      - Sync with native')
-      store.addTerminal('  improve   - Run improvement cycle')
-      store.addTerminal('  clear     - Clear terminal')
-    },
-    status: () => {
-      store.addTerminal(`System Status: ${store.activeCount} instances active`)
-      store.addTerminal(`Singularity: ${store.singularity}% | Self-Awareness: ${store.selfAwareness}%`)
-      store.addTerminal(`Uptime: ${Math.floor(Date.now() / 1000)}s`)
-    },
-    metrics: () => {
-      store.addTerminal('AGI Metrics:')
-      store.addTerminal(`  Singularity:   ${store.singularity}%`)
-      store.addTerminal(`  Self-Aware:   ${store.selfAwareness}%`)
-      store.addTerminal(`  Meta-Cogn:    ${store.metaCognition}%`)
-      store.addTerminal(`  Reasoning:    ${store.reasoning}%`)
-      store.addTerminal(`  Learning:     ${store.learning}%`)
-      store.addTerminal(`  Consciousness: ${store.consciousness}%`)
-    },
-    instances: () => {
-      store.addTerminal(`Connected Instances: ${store.instances.length}`)
-      store.instances.forEach(i => {
-        store.addTerminal(`  [${i.status.toUpperCase()}] ${i.name} (${i.model}) - ${i.contrib}% contrib`)
-      })
-    },
-    learnings: () => {
-      store.addTerminal(`Recent Learnings: ${store.learnings.length}`)
-      store.learnings.slice(0, 5).forEach(l => {
-        store.addTerminal(`  [${l.from}] ${l.cat}: ${l.text.substr(0, 40)}...`)
-      })
-    },
-    goals: () => {
-      store.addTerminal('Active Goals:')
-      store.goals.forEach(g => {
-        store.addTerminal(`  [${g.priority}] ${g.title} - ${g.progress}%`)
-      })
-    },
-    ping: () => {
-      store.addTerminal('Pinging native instance...')
-      store.addTerminal('PONG from Housaky-Native (1ms)')
-    },
-    sync: () => {
-      store.addTerminal('Syncing with native instance...')
-      store.addTerminal('Sync complete. 15 learnings synchronized.')
-    },
-    improve: () => {
-      store.addTerminal('Running improvement cycle...')
-      store.addTerminal('Analysis complete. Consciousness +0.003, Intelligence +0.007')
-      store.singularity = Math.min(100, store.singularity + 1)
-      store.selfAwareness = Math.min(100, store.selfAwareness + 0.5)
-    },
-    clear: () => {
-      store.terminal.length = 0
-      store.addTerminal('Terminal cleared.')
-    },
+onMounted(() => {
+  if (inputRef.value) {
+    inputRef.value.focus()
   }
-
-  if (commands[cmd]) {
-    commands[cmd]()
-  } else {
-    store.addTerminal(`Unknown command: ${cmd}. Type 'help' for available commands.`)
-  }
-}
+})
 </script>
 
 <style scoped>
-.terminal-view { max-width: 1400px; margin: 0 auto; }
-.section-head { font-size: 12px; font-weight: bold; padding: 8px 10px; background: var(--bg-alt); border: 1px solid var(--border); margin-bottom: 10px; }
-.prompt { margin-top: 10px; }
-.prompt-text { color: var(--text-dim); margin-right: 5px; }
-.quick-actions { display: flex; flex-wrap: wrap; gap: 5px; }
+.terminal-view {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.terminal-container {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  font-family: 'Courier New', Monaco, Consolas, monospace;
+}
+
+.terminal-header-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: var(--bg-tertiary);
+  border-bottom: 1px solid var(--border);
+}
+
+.terminal-title {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.terminal-controls {
+  display: flex;
+  gap: 8px;
+}
+
+.control {
+  font-size: 12px;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.terminal-body {
+  padding: 15px;
+  min-height: 400px;
+  max-height: 500px;
+  overflow-y: auto;
+  font-size: 12px;
+}
+
+.terminal-line {
+  margin-bottom: 8px;
+}
+
+.prompt {
+  color: var(--success);
+  margin-right: 8px;
+}
+
+.command {
+  color: var(--text-primary);
+}
+
+.output {
+  margin-top: 4px;
+  margin-left: 20px;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+}
+
+.input-line {
+  display: flex;
+  align-items: center;
+}
+
+.terminal-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 12px;
+  outline: none;
+}
+
+.help-panel {
+  margin-top: 20px;
+}
+
+.commands-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.command-item {
+  display: flex;
+  flex-direction: column;
+  padding: 8px;
+  border: 1px solid var(--border);
+}
+
+.command-item .cmd {
+  color: var(--text-primary);
+  font-weight: bold;
+}
+
+.command-item .desc {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.mt-4 {
+  margin-top: 20px;
+}
+
+@media (max-width: 768px) {
+  .commands-grid {
+    grid-template-columns: 1fr;
+  }
+}
 </style>
