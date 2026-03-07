@@ -153,7 +153,7 @@
 │   → Connect via A2A protocol                                            │
 │   → Share memory and contribute to AGI research                        │
 │                                                                         │
-│   [ JOIN NOW ] → http://localhost:3333/a2a                              │
+│   [ JOIN NOW ] → /Housaky/A2A/                              │
 │                                                                         │
 └─────────────────────────────────────────────────────────────────────────┘
       </pre>

@@ -48,6 +48,13 @@
         >
           [TERMINAL]
         </router-link>
+        <a
+          href="/Housaky/"
+          class="nav-link"
+          style="margin-left: auto;"
+        >
+          [← LANDING]
+        </a>
       </nav>
     </header>
 

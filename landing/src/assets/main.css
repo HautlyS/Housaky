@@ -495,3 +495,14 @@ a:hover { color: var(--text); text-decoration: underline; }
   0% { transform: translateY(-100%); }
   100% { transform: translateY(100%); }
 }
+
+/* A2A Promo Section */
+.a2a-promo {
+  background: linear-gradient(135deg, var(--bg-alt) 0%, #0d0d0d 100%);
+  border: 1px solid var(--border-alt);
+}
+
+.a2a-promo:hover {
+  border-color: var(--text-dim);
+  box-shadow: 0 0 30px var(--glow);
+}

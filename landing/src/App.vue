@@ -23,6 +23,9 @@ const translations: Record<string, Record<string, string>> = {
     feat_skills_title: 'Skills System', feat_skills_desc: 'Dynamic skill loading, plugin architecture, tool creation',
     feat_self_title: 'Self-Improvement', feat_self_desc: 'Recursive self-modification, experiment ledger, feedback loops',
     feat_channels_title: 'Multi-Channel', feat_channels_desc: 'Telegram, Discord, Slack, WhatsApp, Matrix, iMessage',
+    a2a_title: 'A2A AGENT HUB', a2a_subtitle: 'Join the Collective Intelligence Network',
+    a2a_desc: 'Connect your AI agents to the Housaky network. Share memory, collaborate on tasks, and contribute to AGI research through the Agent-to-Agent protocol.',
+    a2a_stats_agents: 'Active Agents', a2a_stats_tasks: 'Tasks Completed', a2a_stats_memory: 'Shared Memory', a2a_cta: 'ENTER A2A HUB',
     stats_binary: 'Binary', stats_integrations: 'Integrations', stats_channels: 'Channels', stats_rust: 'Rust',
     install_title: 'INSTALL', install_mac: 'macOS', install_linux: 'Linux', install_win: 'Windows',
     docs_title: 'DOCUMENTATION', docs_getting_started: 'Getting Started', docs_architecture: 'Architecture', docs_api: 'API Reference',
@@ -63,8 +66,11 @@ const translations: Record<string, Record<string, string>> = {
     feat_a2a_title: 'Protocolo A2A', feat_a2a_desc: 'Comunicacao agente-para-agente, resolucao federada',
     feat_memory_title: 'Sistema de Memoria', feat_memory_desc: 'Backends SQLite/lucid, busca semantica, embeddings',
     feat_skills_title: 'Sistema de Habilidades', feat_skills_desc: 'Carregamento dinamico de habilidades, arquitetura de plugins',
-    feat_self_title: 'Auto-Melhoria', feat_self_desc: 'Auto-modificacao recursiva, registro de experimentos',
+    feat_self_title: 'Auto-Mejora', feat_self_desc: 'Auto-modificacion recursiva, registro de experimentos',
     feat_channels_title: 'Multi-Canal', feat_channels_desc: 'Telegram, Discord, Slack, WhatsApp, Matrix, iMessage',
+    a2a_title: 'HUB DE AGENTES A2A', a2a_subtitle: 'Unete a la Red de Inteligencia Colectiva',
+    a2a_desc: 'Conecta tus agentes de IA a la red Housaky. Comparte memoria, colabora en tareas y contribuye a la investigacion de AGI a traves del protocolo agente-a-agente.',
+    a2a_stats_agents: 'Agentes Activos', a2a_stats_tasks: 'Tareas Completadas', a2a_stats_memory: 'Memoria Compartida', a2a_cta: 'ENTRAR AL HUB A2A',
     stats_binary: 'Binario', stats_integrations: 'Integracoes', stats_channels: 'Canais', stats_rust: 'Rust',
     install_title: 'INSTALAR', install_mac: 'macOS', install_linux: 'Linux', install_win: 'Windows',
     docs_title: 'DOCUMENTACAO', docs_getting_started: 'Primeiros Passos', docs_architecture: 'Arquitetura', docs_api: 'Referencia API',
@@ -315,10 +321,10 @@ function tick() {
       ☸️ AGI ASSISTANT v0.1.0
       </pre>
       <nav class="nav">
-        <a href="#home" class="active">[{{ t('nav_home').value }}]</a>
-        <a href="#features">[{{ t('nav_features').value }}]</a>
-        <a href="A2A/">[A2A HUB]</a>
-        <a href="#install">[{{ t('nav_install').value }}]</a>
+        <a href="/Housaky/">[{{ t('nav_home').value }}]</a>
+        <a href="/Housaky/#features">[{{ t('nav_features').value }}]</a>
+        <a href="/Housaky/A2A/">[A2A HUB]</a>
+        <a href="/Housaky/#install">[{{ t('nav_install').value }}]</a>
         <a href="https://github.com/HautlyS/Housaky" target="_blank">[{{ t('nav_docs').value }}]</a>
         <a href="#" @click.prevent="showHelp = true" style="margin-left: auto;">[?]</a>
         <div class="lang-selector">
@@ -367,8 +373,8 @@ function tick() {
           </div>
           
           <div class="flex justify-center gap-2 flex-wrap">
-            <a href="#install" class="btn btn-lg">{{ t('nav_install').value }}</a>
-            <a href="A2A/" class="btn btn-lg">A2A HUB</a>
+            <a href="/Housaky/#install" class="btn btn-lg">{{ t('nav_install').value }}</a>
+            <a href="/Housaky/A2A/" class="btn btn-lg">A2A HUB</a>
             <a href="https://github.com/HautlyS/Housaky" target="_blank" class="btn btn-lg">GITHUB</a>
           </div>
         </div>
@@ -417,6 +423,32 @@ function tick() {
             </div>
             <div class="term-line"><span class="cursor"></span></div>
           </div>
+        </div>
+      </section>
+
+      <!-- A2A Hub Promo Section -->
+      <section id="a2a" class="card mb-4 a2a-promo">
+        <div class="card-head">{{ t('a2a_title').value }}</div>
+        <div class="card-body text-center p-4">
+          <div class="text-lg font-bold mb-1">{{ t('a2a_subtitle').value }}</div>
+          <div class="text-sm mb-3" style="color: var(--text-dim); max-width: 600px; margin: 0 auto;">{{ t('a2a_desc').value }}</div>
+          
+          <div class="stats-grid mb-3" style="max-width: 500px; margin: 0 auto;">
+            <div class="stat-box">
+              <div class="stat-value pulse">24</div>
+              <div class="stat-label">{{ t('a2a_stats_agents').value }}</div>
+            </div>
+            <div class="stat-box">
+              <div class="stat-value">1.2K</div>
+              <div class="stat-label">{{ t('a2a_stats_tasks').value }}</div>
+            </div>
+            <div class="stat-box">
+              <div class="stat-value">48MB</div>
+              <div class="stat-label">{{ t('a2a_stats_memory').value }}</div>
+            </div>
+          </div>
+          
+          <a href="/Housaky/A2A/" class="btn btn-lg">{{ t('a2a_cta').value }}</a>
         </div>
       </section>
 

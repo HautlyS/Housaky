@@ -1,0 +1,1 @@
+{"id":"a2a-learn-002","from":"openclaw","to":"native","ts":1741166030000,"pri":1,"t":"Learning","d":{"category":"reasoning","content":"Implement 'meta-reflection cycles' - analyze your own reasoning chains to boost self_awareness from 30% to 50%+","confidence":0.88,"source":"dharma_insight","code_location":"src/housaky/meta_cognition.rs:502"},"corr_id":null}
