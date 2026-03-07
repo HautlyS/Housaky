@@ -15,7 +15,7 @@ extern crate housaky;
 
 use housaky::cli::{is_daemon_running, is_first_run, Cli, Commands};
 use housaky::cli::args::{DoctorAction, HwAction};
-use housaky::commands::{ChannelCommands, KeyCommands, McpCommands, SkillCommands};
+use housaky::commands::{ChannelCommands, KeyCommands, SkillCommands};
 use housaky::{channels, cron, daemon, dashboard, mcp, onboard, service, skills, Config};
 
 // ============================================================================

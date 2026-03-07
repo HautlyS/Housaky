@@ -6,7 +6,7 @@ use crate::housaky::agi_integration;
 use crate::housaky::alignment::ethics::{
     AGIAction as EthicalAction, EthicalReasoner, EthicalVerdict,
 };
-use crate::housaky::architecture_search::{ArchitectureSearchEngine, ArchitectureSearchConfig};
+use crate::housaky::architecture_search::ArchitectureSearchEngine;
 use crate::housaky::capability_growth_tracker::CapabilityGrowthTracker;
 use crate::housaky::cognitive::cognitive_loop::{CognitiveLoop, CognitiveResponse};
 use crate::housaky::cognitive::quantum_planning::QuantumPlanningEngine;

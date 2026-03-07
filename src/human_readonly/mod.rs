@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-use crate::memory::{Memory, MemoryCategory, MemoryEntry};
+use crate::memory::{Memory, MemoryCategory};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HumanReadOnlyConfig {

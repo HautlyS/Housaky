@@ -158,7 +158,7 @@ impl RustCodeAnalyzer {
         }
     }
 
-    pub fn analyze(&mut self, source: &str) -> Result<CodeAnalysisResult> {
+    pub fn analyze(&mut self, _source: &str) -> Result<CodeAnalysisResult> {
         Ok(CodeAnalysisResult {
             file: String::new(),
             functions: Vec::new(),

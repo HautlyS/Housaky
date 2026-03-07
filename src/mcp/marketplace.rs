@@ -44,7 +44,7 @@ struct McpRegistry {
 }
 
 #[derive(Debug, Deserialize)]
-struct McpServerEntry {
+pub struct McpServerEntry {
     #[serde(default)]
     description: Option<String>,
     #[serde(default)]
@@ -79,21 +79,50 @@ impl McpMarketplace {
         let registry_path = cache_dir.join("registry.json");
 
         let content = if registry_path.exists() {
-            std::fs::read_to_string(&registry_path)?
+            let cached = std::fs::read_to_string(&registry_path)?;
+            if !cached.trim().is_empty() {
+                cached
+            } else {
+                // Empty file, try network
+                self.fetch_from_network(&registry_path)?
+            }
         } else {
-            let resp = reqwest::blocking::get(CLAUDE_MCP_REGISTRY_URL)
-                .with_context(|| "Failed to fetch MCP registry")?;
-            let text = resp
-                .text()
-                .with_context(|| "Failed to read registry response")?;
-            std::fs::write(&registry_path, &text)?;
-            text
+            self.fetch_from_network(&registry_path)?
         };
 
         let registry: McpRegistry =
             serde_json::from_str(&content).with_context(|| "Failed to parse MCP registry")?;
 
         Ok(registry.servers)
+    }
+
+    fn fetch_from_network(&self, registry_path: &Path) -> Result<String> {
+        match reqwest::blocking::get(CLAUDE_MCP_REGISTRY_URL) {
+            Ok(resp) => {
+                if resp.status().is_success() {
+                    let text = resp
+                        .text()
+                        .with_context(|| "Failed to read registry response")?;
+                    let _ = std::fs::write(registry_path, &text);
+                    Ok(text)
+                } else {
+                    Err(anyhow!("Failed to fetch registry: HTTP {}", resp.status()))
+                }
+            }
+            Err(e) => {
+                // Try to return cached content if available
+                if registry_path.exists() {
+                    let cached = std::fs::read_to_string(registry_path)?;
+                    if !cached.trim().is_empty() {
+                        return Ok(cached);
+                    }
+                }
+                Err(anyhow!(
+                    "Network error fetching registry: {}. No cached data available.",
+                    e
+                ))
+            }
+        }
     }
 
     pub fn list_available(&self) -> Result<Vec<McpPackage>> {
@@ -215,7 +244,7 @@ impl McpMarketplace {
         Ok(())
     }
 
-    fn install_python_deps(&self, name: &str, dir: &Path) -> Result<()> {
+    fn install_python_deps(&self, name: &str, _dir: &Path) -> Result<()> {
         if let Some(ref env) = self.get_mcp_server_env(name)? {
             if let Some(deps) = env.get("PYTHON_DEPS") {
                 let output = Command::new("pip")

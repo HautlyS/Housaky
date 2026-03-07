@@ -13,19 +13,18 @@
 //! - Knowledge sharing across instances
 //! - Consensus-based decision making
 
-use crate::housaky::collaboration::{CollaborationManager, HIIPMessage, MessageType, Priority};
+use crate::housaky::collaboration::{CollaborationManager, MessageType, Priority};
 use crate::housaky::federation::{
-    FederationConfig, FederationHub, FederationTransportLayer, KnowledgeDelta, KnowledgeEntry,
-    NetworkTransport, Peer, PeerStatus, SyncResult, TransportConfig,
+    FederationConfig, FederationHub, FederationTransportLayer, KnowledgeDelta, KnowledgeEntry, TransportConfig,
 };
-use crate::housaky::kowalski_integration::{KowalskiBridge, KowalskiAgentType, TaskResult as KowalskiTaskResult};
+use crate::housaky::kowalski_integration::{KowalskiBridge, KowalskiAgentType};
 use crate::housaky::multi_agent::agent_registry::{AgentInfo, AgentPerformance, AgentRegistry, AgentType};
 use crate::housaky::multi_agent::coordinator::{
-    AgentTask, CoordinationStrategy, MultiAgentCoordinator, TaskPriority, TaskResult, TaskStatus,
+    AgentTask, MultiAgentCoordinator, TaskPriority, TaskStatus,
 };
 use crate::housaky::multi_agent::emergent_protocol::EmergentProtocol;
 use crate::housaky::multi_agent::message::{AgentMessage, MessageType as AgentMessageType};
-use crate::housaky::multi_agent::replication::{AgentReplicator, ForkRequest, Specialization};
+use crate::housaky::multi_agent::replication::AgentReplicator;
 use crate::housaky::subagent_system::{AgentRole, SubAgentOrchestrator};
 use crate::housaky::federation::sync::{GSet, LWWRegister, VectorClock};
 use anyhow::{Context, Result};
@@ -35,7 +34,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::{broadcast, mpsc, RwLock};
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info, warn};
 
 /// Configuration for the unified multi-agent system
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -900,7 +899,7 @@ impl UnifiedAgentHub {
     /// Get unified hub statistics
     pub async fn get_stats(&self) -> UnifiedHubStats {
         let registry_stats = self.registry.get_registry_stats().await;
-        let coordinator_stats = self.coordinator.get_coordinator_stats().await;
+        let _coordinator_stats = self.coordinator.get_coordinator_stats().await;
         let tasks = self.unified_tasks.read().await;
         let completed = self.completed_tasks.read().await;
         let protocol_stats = self.emergent_protocol.get_stats().await;

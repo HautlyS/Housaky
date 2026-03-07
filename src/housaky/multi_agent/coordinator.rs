@@ -459,7 +459,7 @@ impl MultiAgentCoordinator {
         }
 
         // Create a proper response channel that won't be dropped
-        let (resp_tx, mut resp_rx) = tokio::sync::mpsc::channel::<String>(1);
+        let (_resp_tx, mut resp_rx) = tokio::sync::mpsc::channel::<String>(1);
         let resp_id = format!("resp_{}", uuid::Uuid::new_v4());
 
         // Store the sender in a shared map so the agent can reply back

@@ -21,6 +21,7 @@ use crate::keys_manager::manager::get_global_keys_manager;
 use crate::providers::{create_provider_with_keys_manager, Provider};
 
 use super::agents::{AgentStatus, AgentType, AgentsPanel};
+use super::a2a_panel::A2APanel;
 use super::chat::{ChatPanel, Role};
 use super::input::InputBar;
 use super::keys_popup::{KeysPopup, ProviderEntry};
@@ -32,6 +33,7 @@ pub enum Focus {
     Chat,
     Input,
     Agents,
+    A2A,
 }
 
 /// App state
@@ -45,6 +47,7 @@ pub struct MinimalApp {
     pub chat: ChatPanel,
     pub input: InputBar,
     pub agents: AgentsPanel,
+    pub a2a: A2APanel,
     pub keys_popup: KeysPopup,
 
     // State
@@ -192,6 +195,7 @@ impl MinimalApp {
             chat: ChatPanel::new(),
             input: InputBar::new(),
             agents: AgentsPanel::new(),
+            a2a: A2APanel::new(),
             keys_popup: KeysPopup::new(),
             focus: Focus::Input,
             quit: false,
@@ -451,8 +455,25 @@ impl MinimalApp {
     }
 
     fn draw_body(&mut self, frame: &mut Frame, area: Rect) {
-        // Split: chat (main) + agents sidebar (if visible)
-        if self.agents.visible {
+        // Split: chat (main) + agents sidebar + A2A panel
+        let agents_visible = self.agents.visible;
+        let a2a_visible = self.a2a.visible;
+
+        if agents_visible && a2a_visible {
+            // Three panels: chat, agents, A2A
+            let body_layout = Layout::default()
+                .direction(Direction::Horizontal)
+                .constraints([
+                    Constraint::Min(30),       // Chat
+                    Constraint::Length(20),    // Agents sidebar
+                    Constraint::Length(24),    // A2A panel
+                ])
+                .split(area);
+
+            self.chat.draw(frame, body_layout[0], self.focus == Focus::Chat);
+            self.agents.draw(frame, body_layout[1], self.focus == Focus::Agents);
+            self.a2a.draw(frame, body_layout[2]);
+        } else if agents_visible {
             let body_layout = Layout::default()
                 .direction(Direction::Horizontal)
                 .constraints([
@@ -463,6 +484,17 @@ impl MinimalApp {
 
             self.chat.draw(frame, body_layout[0], self.focus == Focus::Chat);
             self.agents.draw(frame, body_layout[1], self.focus == Focus::Agents);
+        } else if a2a_visible {
+            let body_layout = Layout::default()
+                .direction(Direction::Horizontal)
+                .constraints([
+                    Constraint::Min(40),       // Chat
+                    Constraint::Length(28),    // A2A panel
+                ])
+                .split(area);
+
+            self.chat.draw(frame, body_layout[0], self.focus == Focus::Chat);
+            self.a2a.draw(frame, body_layout[1]);
         } else {
             self.chat.draw(frame, area, self.focus == Focus::Chat);
         }
@@ -496,6 +528,11 @@ impl MinimalApp {
                 self.agents.toggle_visibility();
                 return Ok(());
             }
+            // Ctrl+P - toggle A2A panel
+            (KeyModifiers::CONTROL, KeyCode::Char('p')) => {
+                self.a2a.toggle();
+                return Ok(());
+            }
             _ => {}
         }
 
@@ -520,6 +557,7 @@ impl MinimalApp {
             Focus::Input => self.handle_input_key(key)?,
             Focus::Chat => self.handle_chat_key(key)?,
             Focus::Agents => self.handle_agents_key(key)?,
+            Focus::A2A => self.handle_a2a_key(key)?,
         }
 
         Ok(())
@@ -529,10 +567,11 @@ impl MinimalApp {
         match (key.modifiers, key.code) {
             // Navigation
             (_, KeyCode::Tab) => {
-                self.focus = if self.agents.visible {
-                    Focus::Agents
-                } else {
-                    Focus::Chat
+                self.focus = match self.focus {
+                    Focus::Input => if self.agents.visible { Focus::Agents } else { Focus::Chat },
+                    Focus::Agents => if self.a2a.visible { Focus::A2A } else { Focus::Chat },
+                    Focus::A2A => Focus::Chat,
+                    Focus::Chat => Focus::Input,
                 };
             }
             _ => {}
@@ -612,6 +651,53 @@ impl MinimalApp {
                         agent.agent_type.display(),
                         agent.agent_type.description()
                     ));
+                }
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+
+    fn handle_a2a_key(&mut self, key: KeyEvent) -> Result<()> {
+        match key.code {
+            KeyCode::Tab => self.focus = Focus::Input,
+            KeyCode::Up | KeyCode::Char('k') => {
+                if self.a2a.focus == 0 {
+                    self.a2a.prev_peer();
+                } else if self.a2a.focus == 1 {
+                    self.a2a.prev_message();
+                }
+            }
+            KeyCode::Down | KeyCode::Char('j') => {
+                if self.a2a.focus == 0 {
+                    self.a2a.next_peer();
+                } else if self.a2a.focus == 1 {
+                    self.a2a.next_message();
+                }
+            }
+            KeyCode::Left | KeyCode::Char('h') => {
+                self.a2a.focus = if self.a2a.focus == 0 { 2 } else { self.a2a.focus - 1 };
+            }
+            KeyCode::Right | KeyCode::Char('l') => {
+                self.a2a.focus = (self.a2a.focus + 1) % 3;
+            }
+            KeyCode::Enter => {
+                if self.a2a.focus == 2 {
+                    // Send input
+                    if let Some(msg) = self.a2a.send_input() {
+                        self.chat.push_system(&format!("A2A Send: {}", msg));
+                        // TODO: Actually send via WebSocket
+                    }
+                }
+            }
+            KeyCode::Backspace => {
+                if self.a2a.focus == 2 {
+                    self.a2a.handle_backspace();
+                }
+            }
+            KeyCode::Char(c) => {
+                if self.a2a.focus == 2 {
+                    self.a2a.handle_input(c);
                 }
             }
             _ => {}
