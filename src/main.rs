@@ -318,11 +318,6 @@ async fn main() -> Result<()> {
                 Commands::Tui { name, provider, model, temperature } => {
                     housaky::cli::run_tui_command(name, provider, model, temperature, config)
                 }
-
-                Commands::Help { topic } => {
-                    housaky::cli::HelpSystem::show_help(topic.as_deref());
-                    Ok(())
-                }
             }
         }
     }

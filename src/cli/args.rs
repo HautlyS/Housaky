@@ -5,9 +5,9 @@
 use clap::{Parser, Subcommand};
 
 use crate::commands::{
-    ChannelCommands, CollectiveCommands, CronCommands, GSDCommands, GoalCommands,
-    KeyCommands, McpCommands, MigrateCommands, ModelCommands, QuantumCommands, SelfModCommands,
-    ServiceCommands, SkillCommands,
+    ChannelCommands, CollectiveCommands, CronCommands, GSDCommands, GoalCommands, KeyCommands,
+    McpCommands, MigrateCommands, ModelCommands, QuantumCommands, SelfModCommands, ServiceCommands,
+    SkillCommands,
 };
 
 // ============================================================================
@@ -34,9 +34,8 @@ pub enum Commands {
     // ─────────────────────────────────────────────────────────────────────────
     // CORE: Chat & Interactive
     // ─────────────────────────────────────────────────────────────────────────
-
     /// Interactive chat with AI (TUI or one-shot)
-    /// 
+    ///
     /// Examples:
     ///   housaky chat              # Opens TUI
     ///   housaky chat -m "hello"   # One-shot message
@@ -62,9 +61,8 @@ pub enum Commands {
     // ─────────────────────────────────────────────────────────────────────────
     // SETUP & STATUS
     // ─────────────────────────────────────────────────────────────────────────
-
     /// Initialize workspace, config, and AGI system
-    /// 
+    ///
     /// Examples:
     ///   housaky init                    # Quick setup
     ///   housaky init --interactive      # Full wizard
@@ -118,7 +116,6 @@ pub enum Commands {
     // ─────────────────────────────────────────────────────────────────────────
     // RUNTIME: Daemon & Service
     // ─────────────────────────────────────────────────────────────────────────
-
     /// Manage the Housaky daemon (gateway + channels + heartbeat)
     Daemon {
         #[command(subcommand)]
@@ -176,7 +173,6 @@ pub enum Commands {
     // ─────────────────────────────────────────────────────────────────────────
     // KEYS & PROVIDERS
     // ─────────────────────────────────────────────────────────────────────────
-
     /// Manage API keys and providers
     Keys {
         #[command(subcommand)]
@@ -192,7 +188,6 @@ pub enum Commands {
     // ─────────────────────────────────────────────────────────────────────────
     // CHANNELS & INTEGRATIONS
     // ─────────────────────────────────────────────────────────────────────────
-
     /// Manage channels (telegram, discord, slack)
     Channel {
         #[command(subcommand)]
@@ -230,7 +225,6 @@ pub enum Commands {
     // ─────────────────────────────────────────────────────────────────────────
     // AGI: Goals & Self-Improvement
     // ─────────────────────────────────────────────────────────────────────────
-
     /// Manage goals
     Goal {
         #[command(subcommand)]
@@ -276,7 +270,6 @@ pub enum Commands {
     // ─────────────────────────────────────────────────────────────────────────
     // HARDWARE
     // ─────────────────────────────────────────────────────────────────────────
-
     /// Hardware management (USB, peripherals, flashing)
     Hw {
         #[command(subcommand)]
@@ -286,7 +279,6 @@ pub enum Commands {
     // ─────────────────────────────────────────────────────────────────────────
     // QUANTUM & A2A
     // ─────────────────────────────────────────────────────────────────────────
-
     /// Quantum computing (Amazon Braket)
     Quantum {
         #[command(subcommand)]
@@ -341,7 +333,6 @@ pub enum Commands {
     // ─────────────────────────────────────────────────────────────────────────
     // TUI: Unified Terminal Interface
     // ─────────────────────────────────────────────────────────────────────────
-
     /// Launch unified TUI (chat, skills, keys, etc.)
     Tui {
         /// TUI to launch: chat (default), skills, keys, config, doctor, agi
@@ -359,13 +350,6 @@ pub enum Commands {
         /// Temperature for chat TUI
         #[arg(short, long, default_value = "0.7")]
         temperature: f64,
-    },
-
-    /// Show help and tips
-    Help {
-        /// Topic: tips, commands, keys, skills, mcp, agi, quantum, all
-        #[arg(value_name = "TOPIC")]
-        topic: Option<String>,
     },
 }
 
@@ -483,12 +467,12 @@ pub enum HwAction {
 impl Commands {
     /// Returns true if this command should launch TUI
     pub fn requires_tui(&self) -> bool {
-        matches!(self, 
-            Commands::Chat { message: None, .. } | 
-            Commands::Tui { .. }
+        matches!(
+            self,
+            Commands::Chat { message: None, .. } | Commands::Tui { .. }
         )
     }
-    
+
     /// Returns true if this is the default command (no subcommand given)
     pub fn is_default(&self) -> bool {
         matches!(self, Commands::Chat { message: None, .. })

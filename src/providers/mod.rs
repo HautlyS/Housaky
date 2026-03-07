@@ -378,7 +378,21 @@ pub fn create_provider_with_keys_manager(
     create_provider(name, key.as_deref())
 }
 
+fn map_provider_name(provider: &str) -> &str {
+    if provider.starts_with("custom:") {
+        if let Some(url) = provider.strip_prefix("custom:") {
+            if url.contains("modal.direct") || url.contains("modal.com") {
+                return "modal";
+            }
+        }
+    }
+    provider
+}
+
 fn key_from_keys_manager(provider: &str) -> Option<String> {
+    // Map custom provider URLs to actual provider names in keys.json
+    let mapped_provider = map_provider_name(provider);
+
     let km = crate::keys_manager::manager::get_global_keys_manager();
     let rt = match tokio::runtime::Handle::try_current() {
         Ok(h) => h,
@@ -388,7 +402,7 @@ fn key_from_keys_manager(provider: &str) -> Option<String> {
     tokio::task::block_in_place(|| {
         rt.block_on(async {
             let _ = km.load().await;
-            km.get_next_key(provider).await.map(|k| k.key)
+            km.get_next_key(mapped_provider).await.map(|k| k.key)
         })
     })
 }
@@ -403,7 +417,8 @@ pub fn create_resilient_provider(
     let mut providers: Vec<(String, Box<dyn Provider>)> = Vec::new();
 
     let resolved_key = if use_keys_manager.unwrap_or(false) {
-        key_from_keys_manager(primary_name).or_else(|| api_key.map(|k| k.to_string()))
+        let mapped = map_provider_name(primary_name);
+        key_from_keys_manager(mapped).or_else(|| api_key.map(|k| k.to_string()))
     } else {
         api_key.map(|k| k.to_string())
     };
