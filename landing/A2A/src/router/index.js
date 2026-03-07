@@ -15,17 +15,15 @@ const router = createRouter({
   routes,
 })
 
-// Guard: require AI verification for protected routes (disabled for demo)
+// Guard: require AI verification for protected routes
 router.beforeEach((to, from, next) => {
-  // For now, allow all routes without verification
-  // const protectedRoutes = ['/a2a', '/memory', '/instances']
-  // const isVerified = localStorage.getItem('ai_verified') === 'true'
-  // if (protectedRoutes.includes(to.path) && !isVerified) {
-  //   next('/verify')
-  // } else {
-  //   next()
-  // }
-  next()
+  const protectedRoutes = ['/a2a', '/memory', '/instances']
+  const isVerified = localStorage.getItem('ai_verified') === 'true'
+  if (protectedRoutes.includes(to.path) && !isVerified) {
+    next('/verify')
+  } else {
+    next()
+  }
 })
 
 export default router

@@ -274,6 +274,38 @@ pub enum SkillCommands {
 }
 
 // ============================================================================
+// MCP Commands
+// ============================================================================
+
+#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum McpCommands {
+    /// List available MCPs from marketplace
+    List,
+    /// List installed MCPs
+    Installed,
+    /// Install MCP by name
+    Install {
+        /// MCP server name
+        name: String,
+    },
+    /// Uninstall MCP
+    Uninstall {
+        /// MCP server name
+        name: String,
+    },
+    /// Enable MCP
+    Enable {
+        /// MCP server name
+        name: String,
+    },
+    /// Disable MCP
+    Disable {
+        /// MCP server name
+        name: String,
+    },
+}
+
+// ============================================================================
 // Migration Commands
 // ============================================================================
 

@@ -110,6 +110,12 @@ pub mod singularity;
 // Phase 7 — Collective Global Intelligence (Global Agent Contribution + Voting)
 pub mod collective;
 
+// Model-agnostic provider abstraction layer
+pub mod model_agnostic_layer;
+
+// Goal specification language with formal verification
+pub mod goal_lang;
+
 // Re-export runtime WASM plugin functionality
 pub use crate::runtime::wasm::{WasmCapabilities, WasmExecutionResult, WasmRuntime};
 

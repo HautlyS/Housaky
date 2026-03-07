@@ -6,7 +6,7 @@ use clap::{Parser, Subcommand};
 
 use crate::commands::{
     ChannelCommands, CollectiveCommands, CronCommands, GSDCommands, GoalCommands,
-    KeyCommands, MigrateCommands, ModelCommands, QuantumCommands, SelfModCommands,
+    KeyCommands, McpCommands, MigrateCommands, ModelCommands, QuantumCommands, SelfModCommands,
     ServiceCommands, SkillCommands,
 };
 
@@ -209,6 +209,12 @@ pub enum Commands {
         action: Option<SkillCommands>,
     },
 
+    /// Manage MCP servers (Model Context Protocol)
+    Mcp {
+        #[command(subcommand)]
+        action: McpCommands,
+    },
+
     /// Manage scheduled tasks
     Cron {
         #[command(subcommand)]
@@ -331,6 +337,36 @@ pub enum Commands {
 
     /// Connect to Kowalski agents
     Kowalski,
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // TUI: Unified Terminal Interface
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /// Launch unified TUI (chat, skills, keys, etc.)
+    Tui {
+        /// TUI to launch: chat (default), skills, keys, config, doctor, agi
+        #[arg(value_name = "TUI")]
+        name: Option<String>,
+
+        /// Provider for chat TUI
+        #[arg(short, long)]
+        provider: Option<String>,
+
+        /// Model for chat TUI
+        #[arg(long)]
+        model: Option<String>,
+
+        /// Temperature for chat TUI
+        #[arg(short, long, default_value = "0.7")]
+        temperature: f64,
+    },
+
+    /// Show help and tips
+    Help {
+        /// Topic: tips, commands, keys, skills, mcp, agi, quantum, all
+        #[arg(value_name = "TOPIC")]
+        topic: Option<String>,
+    },
 }
 
 // ============================================================================
@@ -357,6 +393,33 @@ pub enum DaemonAction {
     },
     /// Show status
     Status,
+}
+
+#[derive(Subcommand, Debug, Clone)]
+pub enum TuiAction {
+    /// Chat TUI - Interactive AI chat
+    Chat {
+        #[arg(short, long)]
+        provider: Option<String>,
+        #[arg(long)]
+        model: Option<String>,
+        #[arg(short, long, default_value = "0.7")]
+        temperature: f64,
+    },
+    /// Skills marketplace TUI
+    Skills,
+    /// Keys management TUI
+    Keys,
+    /// Config editor TUI
+    Config,
+    /// Doctor/diagnostics TUI
+    Doctor,
+    /// AGI dashboard TUI
+    Agi,
+    /// Live thought stream TUI
+    Live,
+    /// Command palette
+    Commands,
 }
 
 #[derive(Subcommand, Debug, Clone)]
@@ -420,6 +483,14 @@ pub enum HwAction {
 impl Commands {
     /// Returns true if this command should launch TUI
     pub fn requires_tui(&self) -> bool {
+        matches!(self, 
+            Commands::Chat { message: None, .. } | 
+            Commands::Tui { .. }
+        )
+    }
+    
+    /// Returns true if this is the default command (no subcommand given)
+    pub fn is_default(&self) -> bool {
         matches!(self, Commands::Chat { message: None, .. })
     }
 }

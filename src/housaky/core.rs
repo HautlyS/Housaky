@@ -6,23 +6,34 @@ use crate::housaky::agi_integration;
 use crate::housaky::alignment::ethics::{
     AGIAction as EthicalAction, EthicalReasoner, EthicalVerdict,
 };
+use crate::housaky::architecture_search::{ArchitectureSearchEngine, ArchitectureSearchConfig};
 use crate::housaky::capability_growth_tracker::CapabilityGrowthTracker;
 use crate::housaky::cognitive::cognitive_loop::{CognitiveLoop, CognitiveResponse};
 use crate::housaky::cognitive::quantum_planning::QuantumPlanningEngine;
 use crate::housaky::cognitive::world_model::{Action, ActionResult, WorldModel};
+use crate::housaky::embodiment::EmbodimentController;
 use crate::housaky::goal_engine::{Goal, GoalEngine, GoalPriority, GoalStatus};
 use crate::housaky::inner_monologue::InnerMonologue;
+use crate::housaky::introspection::NaturalLanguageIntrospector;
+use crate::housaky::knowledge_acquisition::KnowledgeAcquisitionEngine;
 use crate::housaky::knowledge_graph::KnowledgeGraphEngine;
+use crate::housaky::knowledge_guided_goal_selector::KnowledgeGuidedGoalSelector;
 use crate::housaky::memory::consolidation::MemoryConsolidator;
 use crate::housaky::memory::episodic::{EpisodicEventType, EpisodicMemory};
 use crate::housaky::memory::hierarchical::{HierarchicalMemory, HierarchicalMemoryConfig};
 use crate::housaky::meta_cognition::MetaCognitionEngine;
+use crate::housaky::neuromorphic::{NeuromorphicEngine, NeuromorphicConfig};
+use crate::housaky::perception::PerceptualSystem;
 use crate::housaky::reasoning_pipeline::{ReasoningPipeline, ReasoningResult};
+use crate::housaky::rust_self_improvement::RustSelfImprovementEngine;
 use crate::housaky::self_improvement_loop::ImprovementExperiment;
 use crate::housaky::singularity::{SingularityEngine, SingularityPhaseStatus};
 use crate::housaky::streaming::streaming::StreamingManager;
+use crate::housaky::swarm::SwarmController;
+use crate::housaky::tool_chain_composer::ToolChainComposer;
 use crate::housaky::tool_creator::ToolCreator;
 use crate::housaky::unified_feedback_loop::UnifiedFeedbackLoop;
+use crate::housaky::unified_improvement_orchestrator::UnifiedImprovementOrchestrator;
 use crate::housaky::working_memory::{MemoryImportance, WorkingMemoryEngine};
 use crate::providers::Provider;
 use crate::quantum::backend::AmazonBraketBackend;
@@ -70,6 +81,28 @@ pub struct HousakyCore {
     state: Arc<RwLock<HousakyCoreState>>,
     config: HousakyCoreConfig,
     workspace_dir: PathBuf,
+    // Phase 2 - Neuromorphic computing
+    neuromorphic_engine: Arc<NeuromorphicEngine>,
+    // Phase 2 - Swarm intelligence
+    swarm_controller: Arc<SwarmController>,
+    // Phase 4 - Architecture search
+    architecture_search: Arc<ArchitectureSearchEngine>,
+    // Phase 4 - Knowledge acquisition
+    knowledge_acquirer: Arc<KnowledgeAcquisitionEngine>,
+    // Phase 5 - Embodiment (optional, requires hardware)
+    embodiment: Option<Arc<EmbodimentController>>,
+    // Phase 5 - Perception system
+    perception_system: Arc<PerceptualSystem>,
+    // Improvement orchestration
+    improvement_orchestrator: Arc<UnifiedImprovementOrchestrator>,
+    // Rust-specific self-improvement
+    rust_self_improvement: Arc<RustSelfImprovementEngine>,
+    // Tool chain composition
+    tool_chain_composer: Arc<ToolChainComposer>,
+    // Knowledge-guided goal selection
+    goal_selector: Arc<KnowledgeGuidedGoalSelector>,
+    // Natural language introspection
+    introspector: Arc<NaturalLanguageIntrospector>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -342,6 +375,68 @@ impl HousakyCore {
         // Skill invocation engine for automatic skill triggering
         let skill_invocation_engine = Arc::new(SkillInvocationEngine::new(&workspace_dir));
 
+        // Phase 2 - Neuromorphic Engine (spike-based sensory preprocessing)
+        let neuromorphic_engine = Arc::new(NeuromorphicEngine::new(NeuromorphicConfig::default()));
+
+        // Phase 2 - Swarm Controller (decentralized agent coordination)
+        let swarm_controller = Arc::new(SwarmController::new(Default::default()));
+
+        // Phase 4 - Architecture Search Engine (neural architecture optimization)
+        let architecture_search = Arc::new(ArchitectureSearchEngine::new(ArchitectureSearchConfig::default()));
+
+        // Phase 4 - Knowledge Acquisition Engine (active learning from text/interactions)
+        let knowledge_acquirer = Arc::new(KnowledgeAcquisitionEngine::new(
+            knowledge_graph.clone(),
+            hierarchical_memory.clone(),
+            Default::default(),
+        ));
+
+        // Phase 5 - Perception System (multi-modal sensory fusion)
+        let perception_system = Arc::new(PerceptualSystem::new(Default::default()));
+
+        // Phase 5 - Embodiment Controller (optional, requires hardware)
+        let embodiment = None; // Disabled by default - enable when ROS/hardware available
+
+        // Improvement Orchestration (coordinates all self-improvement systems)
+        let improvement_orchestrator = Arc::new(UnifiedImprovementOrchestrator::new(
+            Arc::new(crate::housaky::self_improvement_loop::SelfImprovementLoop::new(
+                &workspace_dir,
+                goal_engine.clone(),
+                meta_cognition.clone(),
+            )),
+            knowledge_graph.clone(),
+            meta_cognition.clone(),
+            Arc::new(crate::housaky::decision_journal::DecisionJournal::new(&workspace_dir)),
+            Default::default(),
+        ));
+
+        // Rust Self-Improvement Engine (Rust code analysis and modification)
+        let rust_self_improvement = Arc::new(RustSelfImprovementEngine::new(
+            Arc::new(crate::housaky::git_sandbox::GitSandbox::new(&workspace_dir)),
+            Arc::new(crate::housaky::code_parsing::tree_sitter::RustCodeAnalyzer::new()),
+            Arc::new(crate::housaky::rust_code_modifier::RustCodeModifier::new()),
+            Arc::new(crate::housaky::self_improvement_loop::TestRunner::new()),
+            Default::default(),
+        ));
+
+        // Tool Chain Composer (composes tool chains for complex tasks)
+        let tool_chain_composer = Arc::new(ToolChainComposer::new(
+            vec![], // Tools will be populated dynamically
+            Arc::new(crate::skills::SkillRegistry::new()),
+            Default::default(),
+        ));
+
+        // Knowledge-Guided Goal Selector (uses KG for intelligent goal selection)
+        let goal_selector = Arc::new(KnowledgeGuidedGoalSelector::new(
+            knowledge_graph.clone(),
+            goal_engine.clone(),
+            hierarchical_memory.clone(),
+            Default::default(),
+        ));
+
+        // Natural Language Introspector (NL queries about internal state)
+        let introspector = Arc::new(NaturalLanguageIntrospector::new());
+
         let state = Arc::new(RwLock::new(HousakyCoreState {
             is_active: true,
             total_turns: 0,
@@ -386,6 +481,21 @@ impl HousakyCore {
             state,
             config: core_config,
             workspace_dir,
+            // Phase 2 components
+            neuromorphic_engine,
+            swarm_controller,
+            // Phase 4 components
+            architecture_search,
+            knowledge_acquirer,
+            // Phase 5 components
+            perception_system,
+            embodiment,
+            // Improvement systems
+            improvement_orchestrator,
+            rust_self_improvement,
+            tool_chain_composer,
+            goal_selector,
+            introspector,
         })
     }
 

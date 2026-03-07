@@ -410,13 +410,35 @@ impl MinimalApp {
             format!("{} ready", spinner)
         };
 
+        // Get agent info
+        let agent_count = if self.kowalski.is_some() { 7 } else { 0 };
+        let selected_agent = self.agents.selected_type()
+            .map(|a| a.display())
+            .unwrap_or("main");
+
         let header_line = Line::from(vec![
             Span::styled(LOGO_MINI, theme::style_title()),
-            Span::raw("  "),
+            Span::raw(" "),
+            Span::styled("│", theme::style_dim()),
+            Span::raw(" "),
             Span::styled(&self.provider_name, theme::style_subtitle()),
             Span::raw("/"),
             Span::styled(&self.model_name, theme::style_dim()),
-            Span::raw("  "),
+            Span::raw(" "),
+            Span::styled("│", theme::style_dim()),
+            Span::raw(" "),
+            Span::styled(if selected_agent == "main" { 
+                "orchestrator" 
+            } else { 
+                selected_agent 
+            }, theme::style_agent_academic()),
+            Span::raw(" "),
+            Span::styled("│", theme::style_dim()),
+            Span::raw(" "),
+            Span::styled(format!("{} subagents", agent_count), theme::style_dim()),
+            Span::raw(" "),
+            Span::styled("│", theme::style_dim()),
+            Span::raw(" "),
             Span::styled(status, if self.streaming.load(Ordering::Relaxed) {
                 theme::style_warning()
             } else {
@@ -650,16 +672,32 @@ impl MinimalApp {
         match command {
             "/help" | "/h" | "/?" => {
                 self.chat.push_system(
-                    "Commands:\n\
-                     /help        - Show this help\n\
-                     /clear       - Clear chat\n\
-                     /keys        - Open keys popup (or Ctrl+K)\n\
-                     /agents      - Toggle agents panel (or Ctrl+A)\n\
-                     /agent <n>   - Select agent (code, web, academic, data)\n\
-                     /provider <n>- Switch provider\n\
-                     /model <n>   - Switch model\n\
-                     /status      - Show status\n\
-                     /quit        - Quit (or Ctrl+C)",
+                    "╔══════════════════════════════════════════════════════════════╗\n\
+                     ║                    HOUSAKY COMMANDS                      ║\n\
+                     ╠══════════════════════════════════════════════════════════════╣\n\
+                     ║  CHAT                                                       ║\n\
+                     ║    /help        - Show this help                          ║\n\
+                     ║    /clear       - Clear chat                             ║\n\
+                     ║    /status      - Show system status                     ║\n\
+                     ║    /quit        - Quit (or Ctrl+C)                       ║\n\
+                     ╠══════════════════════════════════════════════════════════════╣\n\
+                     ║  AGENTS                                                     ║\n\
+                     ║    /agents      - Toggle agents panel (or Ctrl+A)         ║\n\
+                     ║    /agent <n>   - Select: code, web, academic, data,      ║\n\
+                     ║                   creative, reasoning, federation           ║\n\
+                     ║    /agent main  - Return to main orchestrator            ║\n\
+                     ╠══════════════════════════════════════════════════════════════╣\n\
+                     ║  CONFIG                                                      ║\n\
+                     ║    /keys        - Open keys popup (or Ctrl+K)            ║\n\
+                     ║    /provider <n>- Switch provider                          ║\n\
+                     ║    /model <n>   - Switch model                            ║\n\
+                     ╠══════════════════════════════════════════════════════════════╣\n\
+                     ║  TIPS                                                        ║\n\
+                     ║    • Subagents share consciousness through inner monologue  ║\n\
+                     ║    • Use /agent federation to coordinate all agents        ║\n\
+                     ║    • Lucid memory enabled by default                      ║\n\
+                     ║    • Run 'housaky help' for CLI help                     ║\n\
+                     ╚══════════════════════════════════════════════════════════════╝",
                 );
             }
             "/clear" | "/c" => {
@@ -697,12 +735,32 @@ impl MinimalApp {
                             self.agents.list_state.select(Some(3));
                             self.chat.push_system("Selected: Data Agent");
                         }
+                        "creative" | "creativity" | "x" => {
+                            self.agents.selected = 4;
+                            self.agents.list_state.select(Some(4));
+                            self.chat.push_system("Selected: Creative Agent");
+                        }
+                        "reasoning" | "logic" | "r" => {
+                            self.agents.selected = 5;
+                            self.agents.list_state.select(Some(5));
+                            self.chat.push_system("Selected: Reasoning Agent");
+                        }
+                        "federation" | "fed" | "f" => {
+                            self.agents.selected = 6;
+                            self.agents.list_state.select(Some(6));
+                            self.chat.push_system("Selected: Federation Agent (coordinates all)");
+                        }
+                        "main" | "orchestrator" | "m" | "o" => {
+                            self.agents.selected = None;
+                            self.agents.list_state.select(None);
+                            self.chat.push_system("Selected: Main Orchestrator (default LLM)");
+                        }
                         _ => {
-                            self.chat.push_system("Unknown agent. Use: code, web, academic, data");
+                            self.chat.push_system("Unknown agent. Use: code, web, academic, data, creative, reasoning, federation, main");
                         }
                     }
                 } else {
-                    self.chat.push_system("Usage: /agent <code|web|academic|data>");
+                    self.chat.push_system("Usage: /agent <code|web|academic|data|creative|reasoning|federation|main>");
                 }
             }
             "/provider" => {
@@ -721,12 +779,26 @@ impl MinimalApp {
             }
             "/status" | "/s" => {
                 let kowalski_status = if self.kowalski.is_some() { "enabled" } else { "disabled" };
+                let current_agent = self.agents.selected_type()
+                    .map(|a| a.display())
+                    .unwrap_or("Main Orchestrator");
                 self.chat.push_system(&format!(
-                    "Provider: {}\nModel: {}\nKowalski: {}\nAgents: {}",
+                    "╔══════════════════════════════════════╗\n\
+                     ║         HOUSAKY STATUS              ║\n\
+                     ╠══════════════════════════════════════╣\n\
+                     ║ Provider:   {:<22}║\n\
+                     ║ Model:      {:<22}║\n\
+                     ║ Memory:     {:<22}║\n\
+                     ║ Subagents:  {:<22}║\n\
+                     ║ Current:    {:<22}║\n\
+                     ║ Kowalski:   {:<22}║\n\
+                     ╚══════════════════════════════════════╝",
                     self.provider_name,
                     self.model_name,
-                    kowalski_status,
-                    self.agents.agents.len()
+                    "lucid (default)",
+                    if self.kowalski.is_some() { "7 active" } else { "0 (not found)" },
+                    current_agent,
+                    kowalski_status
                 ));
             }
             "/quit" | "/q" | "/exit" => {

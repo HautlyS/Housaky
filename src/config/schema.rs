@@ -67,6 +67,12 @@ pub struct Config {
     pub memory: MemoryConfig,
 
     #[serde(default)]
+    pub mcp: McpConfig,
+
+    #[serde(default)]
+    pub human_readonly: HumanReadOnlyConfig,
+
+    #[serde(default)]
     pub tunnel: TunnelConfig,
 
     #[serde(default)]
@@ -474,6 +480,64 @@ impl Default for SkillsConfig {
         let mut enabled = HashMap::new();
         enabled.insert("get-shit-done".to_string(), true);
         Self { enabled }
+    }
+}
+
+// ── MCP Configuration ───────────────────────────────────────────────
+
+/// MCP (Model Context Protocol) configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct McpConfig {
+    /// Enable MCP support
+    #[serde(default)]
+    pub enabled: bool,
+    /// Map of MCP server name -> enabled
+    #[serde(default)]
+    pub servers: HashMap<String, bool>,
+}
+
+impl Default for McpConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            servers: HashMap::new(),
+        }
+    }
+}
+
+// ── Human Read-Only View Configuration ───────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HumanReadOnlyConfig {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default = "default_readonly_port")]
+    pub port: u16,
+    #[serde(default)]
+    pub host: String,
+    #[serde(default)]
+    pub readonly_token: Option<String>,
+    #[serde(default)]
+    pub allowed_categories: Vec<String>,
+}
+
+fn default_readonly_port() -> u16 {
+    9090
+}
+
+impl Default for HumanReadOnlyConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            port: 9090,
+            host: "0.0.0.0".to_string(),
+            readonly_token: None,
+            allowed_categories: vec![
+                "core".to_string(),
+                "daily".to_string(),
+                "conversation".to_string(),
+            ],
+        }
     }
 }
 
@@ -1592,7 +1656,7 @@ fn default_response_cache_max() -> usize {
 impl Default for MemoryConfig {
     fn default() -> Self {
         Self {
-            backend: "sqlite".into(),
+            backend: "lucid".into(),
             auto_save: true,
             hygiene_enabled: default_hygiene_enabled(),
             archive_after_days: default_archive_after_days(),
@@ -3107,6 +3171,8 @@ impl Default for Config {
             heartbeat: HeartbeatConfig::default(),
             channels_config: ChannelsConfig::default(),
             memory: MemoryConfig::default(),
+            mcp: McpConfig::default(),
+            human_readonly: HumanReadOnlyConfig::default(),
             tunnel: TunnelConfig::default(),
             gateway: GatewayConfig::default(),
             composio: ComposioConfig::default(),

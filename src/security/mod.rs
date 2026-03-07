@@ -1,3 +1,4 @@
+pub mod ai_captcha;
 pub mod audit;
 #[cfg(feature = "sandbox-bubblewrap")]
 pub mod bubblewrap;
@@ -12,6 +13,8 @@ pub mod policy;
 pub mod secrets;
 pub mod traits;
 
+#[allow(unused_imports)]
+pub use ai_captcha::{CaptchaChallenge, CaptchaGenerator, CaptchaResult};
 #[allow(unused_imports)]
 pub use audit::{AuditEvent, AuditEventType, AuditLogger};
 #[allow(unused_imports)]

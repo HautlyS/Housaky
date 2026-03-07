@@ -15,8 +15,8 @@ extern crate housaky;
 
 use housaky::cli::{is_daemon_running, is_first_run, Cli, Commands};
 use housaky::cli::args::{DoctorAction, HwAction};
-use housaky::commands::{ChannelCommands, KeyCommands, SkillCommands};
-use housaky::{channels, cron, daemon, dashboard, onboard, service, skills, Config};
+use housaky::commands::{ChannelCommands, KeyCommands, McpCommands, SkillCommands};
+use housaky::{channels, cron, daemon, dashboard, mcp, onboard, service, skills, Config};
 
 // ============================================================================
 // System Startup
@@ -149,7 +149,11 @@ async fn main() -> Result<()> {
 
     // Handle commands
     match cli.command {
-        None => unreachable!(),
+        None => {
+            // Default: launch unified TUI (same as housaky tui chat)
+            let config = Config::load_or_init()?;
+            housaky::tui::run_minimal_tui(config, None, None)
+        }
 
         Some(cmd) => {
             let mut config = Config::load_or_init()?;
@@ -247,6 +251,10 @@ async fn main() -> Result<()> {
                     skills::handle_command(cmd, &config.workspace_dir)
                 }
 
+                Commands::Mcp { action } => {
+                    mcp::marketplace::handle_mcp_command(action, &config.workspace_dir)
+                }
+
                 Commands::Cron { action } => cron::handle_command(action, &config),
 
                 Commands::Migrate { action } => {
@@ -302,6 +310,18 @@ async fn main() -> Result<()> {
 
                 Commands::Kowalski => {
                     housaky::housaky::handle_command(housaky::commands::HousakyCommands::ConnectKowalski, &config).await
+                }
+
+                // ─────────────────────────────────────────────────────────────
+                // TUI & HELP
+                // ─────────────────────────────────────────────────────────────
+                Commands::Tui { name, provider, model, temperature } => {
+                    housaky::cli::run_tui_command(name, provider, model, temperature, config)
+                }
+
+                Commands::Help { topic } => {
+                    housaky::cli::HelpSystem::show_help(topic.as_deref());
+                    Ok(())
                 }
             }
         }
