@@ -3,6 +3,7 @@ pub mod chunker;
 pub mod embeddings;
 pub mod hygiene;
 pub mod lucid;
+pub mod lucid_native;
 pub mod markdown;
 pub mod none;
 pub mod response_cache;
@@ -17,6 +18,7 @@ pub use backend::{
     selectable_memory_backends, MemoryBackendKind, MemoryBackendProfile,
 };
 pub use lucid::LucidMemory;
+pub use lucid_native::{LucidNativeMemory, LucidNativeConfig, LucidMemoryStats};
 pub use markdown::MarkdownMemory;
 pub use none::NoneMemory;
 pub use response_cache::ResponseCache;
@@ -41,16 +43,25 @@ where
     match classify_memory_backend(backend_name) {
         MemoryBackendKind::Sqlite => Ok(Box::new(sqlite_builder()?)),
         MemoryBackendKind::Lucid => {
-            let local = sqlite_builder()?;
-            Ok(Box::new(LucidMemory::new(workspace_dir, local)))
+            // Use LucidNativeMemory for pure Lucid integration (no SQLite fallback)
+            let config = LucidNativeConfig {
+                project_path: workspace_dir.to_path_buf(),
+                ..LucidNativeConfig::default()
+            };
+            Ok(Box::new(LucidNativeMemory::new(config)))
         }
         MemoryBackendKind::Markdown => Ok(Box::new(MarkdownMemory::new(workspace_dir))),
         MemoryBackendKind::None => Ok(Box::new(NoneMemory::new())),
         MemoryBackendKind::Unknown => {
             tracing::warn!(
-                "Unknown memory backend '{backend_name}'{unknown_context}, falling back to markdown"
+                "Unknown memory backend '{backend_name}'{unknown_context}, falling back to lucid-native"
             );
-            Ok(Box::new(MarkdownMemory::new(workspace_dir)))
+            // Default to Lucid instead of markdown
+            let config = LucidNativeConfig {
+                project_path: workspace_dir.to_path_buf(),
+                ..LucidNativeConfig::default()
+            };
+            Ok(Box::new(LucidNativeMemory::new(config)))
         }
     }
 }

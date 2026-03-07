@@ -263,6 +263,12 @@ pub fn create_provider(name: &str, api_key: Option<&str>) -> anyhow::Result<Box<
             key,
             AuthStyle::Bearer,
         ))),
+        "modal" => Ok(Box::new(OpenAiCompatibleProvider::new_no_responses_fallback(
+            "Modal",
+            "https://api.us-west-2.modal.direct/v1",
+            key,
+            AuthStyle::Bearer,
+        ))),
         "bedrock" | "aws-bedrock" => Ok(Box::new(OpenAiCompatibleProvider::new(
             "Amazon Bedrock",
             "https://bedrock-runtime.us-east-1.amazonaws.com",
@@ -468,7 +474,7 @@ pub fn create_routed_provider(
     // NOTE: `model_routes` is legacy and still supported.
     // `routing.subjects` is the preferred per-subject config.
     if model_routes.is_empty() && routing.subjects.is_empty() {
-        return create_resilient_provider(primary_name, api_key, reliability, None);
+        return create_resilient_provider(primary_name, api_key, reliability, Some(true));
     }
 
     // Collect unique provider names needed

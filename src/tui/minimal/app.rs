@@ -10,6 +10,7 @@ use ratatui::{
     widgets::{Block, Borders, Paragraph},
     Frame,
 };
+use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
@@ -77,12 +78,43 @@ impl MinimalApp {
             move || {
                 let rt = tokio::runtime::Runtime::new().ok()?;
                 rt.block_on(async {
-                    keys_manager.get_next_key("glm").await.map(|k| k.key)
+                    keys_manager.get_next_key("modal").await.map(|k| k.key)
                 })
             }
         }).join().unwrap_or(None);
         
         result
+    }
+
+    fn resolve_subagent_key(subagent_name: &str) -> Option<(String, String)> {
+        let keys_manager = get_global_keys_manager();
+        let result = std::thread::spawn({
+            let subagent = subagent_name.to_string();
+            move || {
+                let rt = tokio::runtime::Runtime::new().ok()?;
+                rt.block_on(async {
+                    keys_manager.get_key_for_subagent(&subagent).await.map(|(model, key)| (model, key.key))
+                })
+            }
+        }).join().unwrap_or(None);
+        
+        result
+    }
+
+    fn resolve_all_subagent_keys() -> HashMap<String, (String, String)> {
+        let mut keys = HashMap::new();
+        
+        let subagents = ["kowalski-code", "kowalski-web", "kowalski-academic", 
+                         "kowalski-data", "kowalski-creative", "kowalski-reasoning", 
+                         "kowalski-federation"];
+        
+        for subagent in subagents {
+            if let Some((model, key)) = Self::resolve_subagent_key(subagent) {
+                keys.insert(subagent.to_string(), (model, key));
+            }
+        }
+        
+        keys
     }
 
     pub fn new(config: Config, provider_name: String, model_name: String) -> Self {
@@ -94,13 +126,39 @@ impl MinimalApp {
             .ok()
             .map(Arc::from);
 
-        // Create Kowalski bridge - use vendor path
+        // Create Kowalski bridge - use vendor path from source directory
+        // workspace is ~/.housaky/workspace, so go up to find vendor/kowalski
         let kowalski_path = config.workspace_dir.parent()
-            .map(|p| p.join("vendor/kowalski"))
-            .unwrap_or_else(|| std::path::PathBuf::from("vendor/kowalski"));
+            .and_then(|p| p.parent())  // ~/.housaky -> ~
+            .map(|p| {
+                // Try both possible locations
+                let source_path = p.join("Housaky/vendor/kowalski");
+                if source_path.exists() {
+                    source_path
+                } else {
+                    p.join("housaky/vendor/kowalski")
+                }
+            })
+            .filter(|p| p.exists())
+            .unwrap_or_else(|| std::path::PathBuf::from("/home/ubuntu/Housaky/vendor/kowalski"));
         
-        // Resolve GLM API key from keys manager
-        let glm_api_key = Self::resolve_glm_api_key();
+        // Resolve subagent keys from keys manager
+        let subagent_keys = Self::resolve_all_subagent_keys();
+        
+        // Extract keys for each agent type from subagent config
+        let code_key = subagent_keys.get("kowalski-code").map(|(_, k)| k.clone());
+        let web_key = subagent_keys.get("kowalski-web").map(|(_, k)| k.clone());
+        let academic_key = subagent_keys.get("kowalski-academic").map(|(_, k)| k.clone());
+        let data_key = subagent_keys.get("kowalski-data").map(|(_, k)| k.clone());
+        let creative_key = subagent_keys.get("kowalski-creative").map(|(_, k)| k.clone());
+        let reasoning_key = subagent_keys.get("kowalski-reasoning").map(|(_, k)| k.clone());
+        let federation_key = subagent_keys.get("kowalski-federation").map(|(_, k)| k.clone());
+        
+        // Get model from first available subagent
+        let glm_model = subagent_keys.values()
+            .next()
+            .map(|(m, _)| m.clone())
+            .unwrap_or_else(|| "zai-org/GLM-5-FP8".to_string());
         
         let kowalski = if kowalski_path.exists() {
             Some(Arc::new(KowalskiBridge::new(&KowalskiIntegrationConfig {
@@ -111,13 +169,17 @@ impl MinimalApp {
                 enable_web_agent: true,
                 enable_academic_agent: true,
                 enable_data_agent: true,
-                glm_api_key: glm_api_key.clone(),
-                glm_model: "zai-org/GLM-5-FP8".to_string(),
-                code_agent_glm_key: glm_api_key.clone(),
-                web_agent_glm_key: glm_api_key.clone(),
-                academic_agent_glm_key: glm_api_key.clone(),
-                data_agent_glm_key: glm_api_key.clone(),
-                federation_glm_key: glm_api_key,
+                enable_creative_agent: true,
+                enable_reasoning_agent: true,
+                glm_api_key: federation_key.clone(),
+                glm_model: glm_model.clone(),
+                code_agent_glm_key: code_key,
+                web_agent_glm_key: web_key,
+                academic_agent_glm_key: academic_key,
+                data_agent_glm_key: data_key,
+                creative_agent_glm_key: creative_key,
+                reasoning_agent_glm_key: reasoning_key,
+                federation_glm_key: federation_key,
             })))
         } else {
             None

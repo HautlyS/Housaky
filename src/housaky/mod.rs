@@ -349,12 +349,16 @@ pub async fn handle_command(command: HousakyCommands, config: &Config) -> Result
                     enable_web_agent: true,
                     enable_academic_agent: true,
                     enable_data_agent: true,
+                    enable_creative_agent: true,
+                    enable_reasoning_agent: true,
                     glm_api_key: None,
                     glm_model: "zai-org/GLM-5-FP8".to_string(),
                     code_agent_glm_key: None,
                     web_agent_glm_key: None,
                     academic_agent_glm_key: None,
                     data_agent_glm_key: None,
+                    creative_agent_glm_key: None,
+                    reasoning_agent_glm_key: None,
                     federation_glm_key: None,
                 });
 

@@ -37,6 +37,8 @@ pub enum KowalskiAgentType {
     Web,
     Academic,
     Data,
+    Creative,
+    Reasoning,
     Federated,
 }
 
@@ -47,6 +49,8 @@ impl KowalskiAgentType {
             KowalskiAgentType::Web => "web",
             KowalskiAgentType::Academic => "academic",
             KowalskiAgentType::Data => "data",
+            KowalskiAgentType::Creative => "creative",
+            KowalskiAgentType::Reasoning => "reasoning",
             KowalskiAgentType::Federated => "federated",
         }
     }
@@ -57,6 +61,8 @@ impl KowalskiAgentType {
             KowalskiAgentType::Web => "Web research and information retrieval",
             KowalskiAgentType::Academic => "Academic research and paper analysis",
             KowalskiAgentType::Data => "Data analysis and processing",
+            KowalskiAgentType::Creative => "Creative synthesis and idea generation",
+            KowalskiAgentType::Reasoning => "Logical reasoning and deduction",
             KowalskiAgentType::Federated => "Multi-agent coordination and federation",
         }
     }
@@ -150,6 +156,30 @@ impl KowalskiBridge {
             agents.push(KowalskiAgent {
                 name: "kowalski-data".to_string(),
                 agent_type: KowalskiAgentType::Data,
+                enabled: true,
+                status: AgentStatus::Offline,
+                created_at: None,
+                last_task: None,
+                task_count: 0,
+            });
+        }
+
+        if config.enable_creative_agent {
+            agents.push(KowalskiAgent {
+                name: "kowalski-creative".to_string(),
+                agent_type: KowalskiAgentType::Creative,
+                enabled: true,
+                status: AgentStatus::Offline,
+                created_at: None,
+                last_task: None,
+                task_count: 0,
+            });
+        }
+
+        if config.enable_reasoning_agent {
+            agents.push(KowalskiAgent {
+                name: "kowalski-reasoning".to_string(),
+                agent_type: KowalskiAgentType::Reasoning,
                 enabled: true,
                 status: AgentStatus::Offline,
                 created_at: None,
@@ -433,6 +463,8 @@ impl KowalskiBridge {
             KowalskiAgentType::Web => self.execute_web_task(agent, task).await,
             KowalskiAgentType::Academic => self.execute_academic_task(agent, task).await,
             KowalskiAgentType::Data => self.execute_data_task(agent, task).await,
+            KowalskiAgentType::Creative => self.execute_creative_task(agent, task).await,
+            KowalskiAgentType::Reasoning => self.execute_reasoning_task(agent, task).await,
             KowalskiAgentType::Federated => self.execute_federated_task(agent, task),
         }
     }
@@ -477,6 +509,28 @@ impl KowalskiBridge {
 
         Ok(format!(
             "Data processing result from {}:\n{}",
+            agent.name, output
+        ))
+    }
+
+    async fn execute_creative_task(&self, agent: &KowalskiAgent, task: &str) -> Result<String> {
+        info!("Executing creative task on {}: {}", agent.name, task);
+
+        let output = self.execute_with_glm(&KowalskiAgentType::Creative, task).await?;
+
+        Ok(format!(
+            "Creative synthesis result from {}:\n{}",
+            agent.name, output
+        ))
+    }
+
+    async fn execute_reasoning_task(&self, agent: &KowalskiAgent, task: &str) -> Result<String> {
+        info!("Executing reasoning task on {}: {}", agent.name, task);
+
+        let output = self.execute_with_glm(&KowalskiAgentType::Reasoning, task).await?;
+
+        Ok(format!(
+            "Reasoning result from {}:\n{}",
             agent.name, output
         ))
     }
@@ -589,6 +643,8 @@ impl KowalskiBridge {
             KowalskiAgentType::Web => self.config.web_agent_glm_key.clone(),
             KowalskiAgentType::Academic => self.config.academic_agent_glm_key.clone(),
             KowalskiAgentType::Data => self.config.data_agent_glm_key.clone(),
+            KowalskiAgentType::Creative => self.config.creative_agent_glm_key.clone(),
+            KowalskiAgentType::Reasoning => self.config.reasoning_agent_glm_key.clone(),
             KowalskiAgentType::Federated => self.config.federation_glm_key.clone(),
         }
     }
@@ -614,6 +670,16 @@ impl KowalskiBridge {
                 "You are a specialized data analysis agent. Your role is to process, analyze, and \
                 transform data. You have expertise in data manipulation, statistical analysis, and \
                 data visualization.".to_string()
+            }
+            KowalskiAgentType::Creative => {
+                "You are a specialized creative synthesis agent. Your role is to generate novel \
+                ideas, creative solutions, and innovative approaches. You excel at brainstorming \
+                and thinking outside the box. Be imaginative and inspiring.".to_string()
+            }
+            KowalskiAgentType::Reasoning => {
+                "You are a specialized reasoning engine. Your role is to apply logical deduction, \
+                step-by-step analysis, and critical thinking to solve complex problems. You excel \
+                at breaking down complex issues and finding elegant solutions.".to_string()
             }
             KowalskiAgentType::Federated => {
                 "You are a federated coordination agent. Your role is to coordinate multiple \

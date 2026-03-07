@@ -134,14 +134,23 @@ impl Default for KeysStore {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct KeysSettings {
+    #[serde(default = "default_true")]
     pub auto_fallback_on_rate_limit: bool,
+    #[serde(default)]
     pub fallback_cooldown_secs: u64,
+    #[serde(default = "default_true")]
     pub health_check_enabled: bool,
+    #[serde(default)]
     pub health_check_interval_secs: u64,
+    #[serde(default)]
     pub max_concurrent_requests_per_provider: usize,
+    #[serde(default)]
     pub failure_threshold: u32,
+    #[serde(default)]
     pub success_threshold: u32,
+    #[serde(default)]
     pub enable_key_rotation: Option<bool>,
+    #[serde(default)]
     pub rotation_strategy: Option<String>,
 }
 
@@ -164,17 +173,29 @@ impl Default for KeysSettings {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProviderEntry {
     pub name: String,
+    #[serde(default)]
     pub template: Option<String>,
+    #[serde(default)]
     pub base_url: Option<String>,
+    #[serde(default)]
     pub auth_method: String,
+    #[serde(default)]
     pub keys: Vec<KeyEntry>,
+    #[serde(default)]
     pub models: Vec<String>,
+    #[serde(default)]
     pub default_model: Option<String>,
+    #[serde(default)]
     pub priority: ProviderPriority,
+    #[serde(default)]
     pub enabled: bool,
+    #[serde(default)]
     pub headers: HashMap<String, String>,
+    #[serde(default)]
     pub rate_limit: Option<RateLimitConfig>,
+    #[serde(default)]
     pub state: ProviderState,
+    #[serde(default)]
     pub metadata: ProviderMetadata,
 }
 
@@ -182,9 +203,13 @@ pub struct ProviderEntry {
 pub struct ProviderMetadata {
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    #[serde(default)]
     pub last_used_at: Option<DateTime<Utc>>,
+    #[serde(default)]
     pub total_requests: u64,
+    #[serde(default)]
     pub successful_requests: u64,
+    #[serde(default)]
     pub failed_requests: u64,
 }
 
@@ -203,16 +228,28 @@ impl Default for ProviderMetadata {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProviderState {
+    #[serde(default = "default_true")]
     pub is_healthy: bool,
+    #[serde(default)]
     pub consecutive_failures: u32,
+    #[serde(default)]
     pub consecutive_successes: u32,
+    #[serde(default)]
     pub last_failure_at: Option<DateTime<Utc>>,
+    #[serde(default)]
     pub last_success_at: Option<DateTime<Utc>>,
+    #[serde(default)]
     pub last_rate_limit_at: Option<DateTime<Utc>>,
+    #[serde(default)]
     pub current_key_index: usize,
+    #[serde(default = "default_false")]
     pub is_rate_limited: bool,
+    #[serde(default)]
     pub rate_limit_reset_at: Option<DateTime<Utc>>,
 }
+
+fn default_true() -> bool { true }
+fn default_false() -> bool { false }
 
 impl Default for ProviderState {
     fn default() -> Self {
@@ -235,15 +272,24 @@ pub struct KeyEntry {
     pub id: String,
     pub key: String,
     pub name: String,
+    #[serde(default)]
     pub description: String,
+    #[serde(default = "default_true")]
     pub enabled: bool,
+    #[serde(default)]
     pub priority: u32,
     pub created_at: DateTime<Utc>,
+    #[serde(default)]
     pub last_used_at: Option<DateTime<Utc>>,
+    #[serde(default)]
     pub expires_at: Option<DateTime<Utc>>,
+    #[serde(default)]
     pub tags: Vec<String>,
+    #[serde(default)]
     pub usage: KeyUsage,
+    #[serde(default)]
     pub rate_limit: Option<RateLimitConfig>,
+    #[serde(default)]
     pub url: Option<String>,
 }
 
@@ -277,11 +323,17 @@ impl KeyEntry {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct KeyUsage {
+    #[serde(default)]
     pub total_requests: u64,
+    #[serde(default)]
     pub successful_requests: u64,
+    #[serde(default)]
     pub failed_requests: u64,
+    #[serde(default)]
     pub rate_limited_count: u64,
+    #[serde(default)]
     pub tokens_used: u64,
+    #[serde(default)]
     pub last_request_at: Option<DateTime<Utc>>,
 }
 

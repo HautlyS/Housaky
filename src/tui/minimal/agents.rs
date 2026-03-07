@@ -19,6 +19,9 @@ pub enum AgentType {
     Web,
     Academic,
     Data,
+    Creative,
+    Reasoning,
+    Federation,
 }
 
 impl AgentType {
@@ -28,6 +31,9 @@ impl AgentType {
             Self::Web => "web",
             Self::Academic => "academic",
             Self::Data => "data",
+            Self::Creative => "creative",
+            Self::Reasoning => "reasoning",
+            Self::Federation => "federation",
         }
     }
 
@@ -37,6 +43,9 @@ impl AgentType {
             Self::Web => "Web Agent",
             Self::Academic => "Academic Agent",
             Self::Data => "Data Agent",
+            Self::Creative => "Creative Agent",
+            Self::Reasoning => "Reasoning Agent",
+            Self::Federation => "Federation Agent",
         }
     }
 
@@ -46,6 +55,9 @@ impl AgentType {
             Self::Web => "Web research & scraping",
             Self::Academic => "Paper analysis & citations",
             Self::Data => "Data processing & analysis",
+            Self::Creative => "Creative synthesis & ideas",
+            Self::Reasoning => "Logical reasoning & deduction",
+            Self::Federation => "Multi-agent coordination",
         }
     }
 
@@ -55,6 +67,9 @@ impl AgentType {
             Self::Web => "WWW",
             Self::Academic => "DOC",
             Self::Data => "CSV",
+            Self::Creative => "WIZ",
+            Self::Reasoning => "LOG",
+            Self::Federation => "NET",
         }
     }
 
@@ -64,11 +79,22 @@ impl AgentType {
             Self::Web => theme::style_agent_web(),
             Self::Academic => theme::style_agent_academic(),
             Self::Data => theme::style_agent_data(),
+            Self::Creative => theme::style_agent_code(),
+            Self::Reasoning => theme::style_agent_web(),
+            Self::Federation => theme::style_success(),
         }
     }
 
     pub fn all() -> &'static [AgentType] {
-        &[Self::Code, Self::Web, Self::Academic, Self::Data]
+        &[
+            Self::Code,
+            Self::Web,
+            Self::Academic,
+            Self::Data,
+            Self::Creative,
+            Self::Reasoning,
+            Self::Federation,
+        ]
     }
 }
 
@@ -139,10 +165,7 @@ pub struct AgentsPanel {
 
 impl AgentsPanel {
     pub fn new() -> Self {
-        let agents = AgentType::all()
-            .iter()
-            .map(|&t| Agent::new(t))
-            .collect();
+        let agents = AgentType::all().iter().map(|&t| Agent::new(t)).collect();
 
         let mut list_state = ListState::default();
         list_state.select(Some(0));

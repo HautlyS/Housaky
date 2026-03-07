@@ -29,10 +29,10 @@ const SQLITE_PROFILE: MemoryBackendProfile = MemoryBackendProfile {
 
 const LUCID_PROFILE: MemoryBackendProfile = MemoryBackendProfile {
     key: "lucid",
-    label: "Lucid Memory bridge — sync with local lucid-memory CLI, keep SQLite fallback",
+    label: "Lucid Memory (NATIVE) — ACT-R spreading activation, 2.7ms retrieval, reconstructive memory",
     auto_save_default: true,
-    uses_sqlite_hygiene: true,
-    sqlite_based: true,
+    uses_sqlite_hygiene: false,  // No SQLite dependency
+    sqlite_based: false,          // Pure Lucid
     optional_dependency: true,
 };
 
