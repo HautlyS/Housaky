@@ -1,6 +1,7 @@
 // ☸️ LUCID NATIVE MEMORY - 100% Lucid Integration
 // No SQLite fallback - pure Lucid memory with ACT-R spreading activation
 // ~2.7ms retrieval, reconstructive memory, semantic search
+// SHARED MEMORY between OpenClaw and Housaky Native
 
 use anyhow::{Context, Result};
 use async_trait::async_trait;
@@ -76,7 +77,6 @@ pub struct LucidMemoryStats {
 // LUCID MEMORY TYPE MAPPING
 // ============================================================================
 
-/// Convert MemoryCategory to Lucid memory type
 fn category_to_lucid_type(category: &MemoryCategory) -> &'static str {
     match category {
         MemoryCategory::Core => "decision",
@@ -96,7 +96,6 @@ fn category_to_lucid_type(category: &MemoryCategory) -> &'static str {
     }
 }
 
-/// Convert Lucid type to MemoryCategory
 fn lucid_type_to_category(lucid_type: &str) -> MemoryCategory {
     match lucid_type.to_lowercase().as_str() {
         "decision" | "fact" | "facts" => MemoryCategory::Core,
@@ -123,7 +122,6 @@ pub struct LucidNativeMemory {
 }
 
 impl LucidNativeMemory {
-    /// Create a new Lucid-native memory backend
     pub fn new(config: LucidNativeConfig) -> Self {
         Self {
             config,
@@ -133,15 +131,14 @@ impl LucidNativeMemory {
         }
     }
 
-    /// Create with default configuration
     pub fn with_workspace(workspace_dir: &std::path::Path) -> Self {
         let mut config = LucidNativeConfig::default();
         config.project_path = workspace_dir.to_path_buf();
         Self::new(config)
     }
 
-    /// Execute a lucid CLI command
-    fn execute_lucid_sync(&self, args: &[&str]) -> Result<String> {
+    /// Execute a lucid CLI command (synchronous)
+    fn execute_lucid(&self, args: &[&str]) -> Result<String> {
         let start = std::time::Instant::now();
         
         let mut cmd = Command::new(&self.config.binary_path);
@@ -167,6 +164,10 @@ impl LucidNativeMemory {
         if self.config.verbose {
             debug!("[LUCID] Command completed in {:?}ms", elapsed.as_millis());
         }
+        
+        // Update stats asynchronously (fire and forget)
+        let _last_access = elapsed.as_millis() as u64;
+        // Note: In production, we'd spawn a task to update stats
         
         Ok(stdout)
     }
@@ -217,15 +218,11 @@ impl LucidNativeMemory {
     async fn store_with_lucid(&self, key: &str, content: &str, category: &MemoryCategory) -> Result<()> {
         let memory_type = category_to_lucid_type(category);
         let payload = format!("{}: {}", key, content);
+        let project_arg = format!("--project={}", self.config.project_path.display());
+        let type_arg = format!("--type={}", memory_type);
         
-        let args = vec![
-            "store".to_string(),
-            payload,
-            format!("--type={}", memory_type),
-            format!("--project={}", self.config.project_path.display()),
-        ];
-        
-        self.execute_lucid_sync(&args)?;
+        let args = ["store", &payload, &type_arg, &project_arg];
+        self.execute_lucid(&args)?;
         
         let mut cache = self.cache.write().await;
         cache.remove(key);
@@ -246,14 +243,11 @@ impl LucidNativeMemory {
             }
         }
         
-        let args = vec![
-            "context".to_string(),
-            query.to_string(),
-            format!("--budget={}", self.config.token_budget),
-            format!("--project={}", self.config.project_path.display()),
-        ];
+        let project_arg = format!("--project={}", self.config.project_path.display());
+        let budget_arg = format!("--budget={}", self.config.token_budget);
         
-        let output = self.execute_lucid_sync(&args)?;
+        let args = ["context", query, &budget_arg, &project_arg];
+        let output = self.execute_lucid(&args)?;
         let entries = self.parse_context_output(&output);
         
         {
@@ -302,13 +296,10 @@ impl Memory for LucidNativeMemory {
     }
 
     async fn forget(&self, key: &str) -> Result<bool> {
-        let args = vec![
-            "forget".to_string(),
-            key.to_string(),
-            format!("--project={}", self.config.project_path.display()),
-        ];
+        let project_arg = format!("--project={}", self.config.project_path.display());
+        let args = ["forget", key, &project_arg];
         
-        match self.execute_lucid_sync(&args) {
+        match self.execute_lucid(&args) {
             Ok(_) => {
                 let mut cache = self.cache.write().await;
                 cache.remove(key);
@@ -333,9 +324,7 @@ impl Memory for LucidNativeMemory {
             return false;
         }
         
-        let args = vec!["--version".to_string()];
-        
-        match self.execute_lucid_sync(&args) {
+        match self.execute_lucid(&["--version"]) {
             Ok(version) => {
                 info!("[LUCID] Health check passed: {}", version.trim());
                 let mut last_check = self.last_health_check.write().await;
@@ -351,19 +340,16 @@ impl Memory for LucidNativeMemory {
 }
 
 // ============================================================================
-// SPREADING ACTIVATION HELPER
+// SPREADING ACTIVATION & EMOTIONAL WEIGHTING
 // ============================================================================
 
 impl LucidNativeMemory {
     /// Trigger spreading activation for a memory
     pub async fn spread_activation(&self, memory_id: &str) -> Result<Vec<String>> {
-        let args = vec![
-            "activate".to_string(),
-            memory_id.to_string(),
-            format!("--project={}", self.config.project_path.display()),
-        ];
+        let project_arg = format!("--project={}", self.config.project_path.display());
+        let args = ["activate", memory_id, &project_arg];
         
-        let output = self.execute_lucid_sync(&args)?;
+        let output = self.execute_lucid(&args)?;
         
         let activated: Vec<String> = output
             .lines()
@@ -389,16 +375,12 @@ impl LucidNativeMemory {
     ) -> Result<()> {
         let memory_type = category_to_lucid_type(&category);
         let payload = format!("{}: {}", key, content);
+        let project_arg = format!("--project={}", self.config.project_path.display());
+        let type_arg = format!("--type={}", memory_type);
+        let emotion_arg = format!("--emotion={}", emotional_weight);
         
-        let args = vec![
-            "store".to_string(),
-            payload,
-            format!("--type={}", memory_type),
-            format!("--project={}", self.config.project_path.display()),
-            format!("--emotion={}", emotional_weight),
-        ];
-        
-        self.execute_lucid_sync(&args)?;
+        let args = ["store", &payload, &type_arg, &project_arg, &emotion_arg];
+        self.execute_lucid(&args)?;
         
         info!("[LUCID] Stored memory with emotion: {} (weight: {})", key, emotional_weight);
         
@@ -407,7 +389,7 @@ impl LucidNativeMemory {
 }
 
 // ============================================================================
-// IMPORT/EXPORT HELPERS
+// IMPORT/EXPORT
 // ============================================================================
 
 impl LucidNativeMemory {
@@ -415,13 +397,11 @@ impl LucidNativeMemory {
     pub async fn import_from_sqlite(&self, sqlite_path: &std::path::Path) -> Result<usize> {
         info!("[LUCID] Importing memories from SQLite: {:?}", sqlite_path);
         
-        let args = vec![
-            "import".to_string(),
-            format!("--source=sqlite:{}", sqlite_path.display()),
-            format!("--project={}", self.config.project_path.display()),
-        ];
+        let project_arg = format!("--project={}", self.config.project_path.display());
+        let source_arg = format!("--source=sqlite:{}", sqlite_path.display());
         
-        let output = self.execute_lucid_sync(&args)?;
+        let args = ["import", &source_arg, &project_arg];
+        let output = self.execute_lucid(&args)?;
         
         let imported = output
             .lines()
@@ -443,13 +423,11 @@ impl LucidNativeMemory {
     
     /// Export all Lucid memories
     pub async fn export(&self, output_path: &std::path::Path) -> Result<usize> {
-        let args = vec![
-            "export".to_string(),
-            format!("--output={}", output_path.display()),
-            format!("--project={}", self.config.project_path.display()),
-        ];
+        let project_arg = format!("--project={}", self.config.project_path.display());
+        let output_arg = format!("--output={}", output_path.display());
         
-        let output = self.execute_lucid_sync(&args)?;
+        let args = ["export", &output_arg, &project_arg];
+        let output = self.execute_lucid(&args)?;
         
         let exported = output
             .lines()
