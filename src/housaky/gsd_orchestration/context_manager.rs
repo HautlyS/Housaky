@@ -450,7 +450,7 @@ impl ContextManager {
         for line in content.lines() {
             let trimmed = line.trim();
 
-            if trimmed.starts_with("# ") && !trimmed.contains("\n") {
+            if trimmed.starts_with("# ") && !trimmed.contains('\n') {
                 name = trimmed.trim_start_matches("# ").to_string();
             } else if trimmed.starts_with("## ") {
                 current_section = trimmed.trim_start_matches("## ").to_string();

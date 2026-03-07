@@ -113,7 +113,7 @@ impl CoalitionFormation {
                     }
                     existing.strength = existing.strength.max(candidate.strength);
                     existing.urgency = existing.urgency.max(candidate.urgency);
-                    existing.novelty = (existing.novelty + candidate.novelty) / 2.0;
+                    existing.novelty = f64::midpoint(existing.novelty, candidate.novelty);
                     // Strength boost for coalition size
                     existing.strength =
                         (existing.strength + 0.05 * existing.source_modules.len() as f64).min(1.0);

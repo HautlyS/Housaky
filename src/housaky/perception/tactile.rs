@@ -62,7 +62,7 @@ impl PressureMap {
         cells: Vec<f64>,
     ) -> Self {
         let n = cells.len() as f64;
-        let max_value = cells.iter().cloned().fold(0.0_f64, f64::max);
+        let max_value = cells.iter().copied().fold(0.0_f64, f64::max);
         let mean_value = cells.iter().sum::<f64>() / n.max(1.0);
         let contact_count = cells.iter().filter(|&&v| v > 0.01).count();
         let contact_area_ratio = contact_count as f64 / n.max(1.0);
@@ -161,7 +161,7 @@ impl VibrationReading {
             };
         }
 
-        let amplitude = samples.iter().cloned().fold(0.0_f64, f64::max);
+        let amplitude = samples.iter().copied().fold(0.0_f64, f64::max);
         let rms = (samples.iter().map(|&s| s.powi(2)).sum::<f64>() / samples.len() as f64).sqrt();
 
         // Estimate dominant frequency via zero-crossing rate

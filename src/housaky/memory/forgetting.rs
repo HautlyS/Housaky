@@ -70,7 +70,7 @@ impl AdaptiveForgetting {
         for ep in episodes.iter_mut() {
             let age_hours = (now - ep.timestamp).num_minutes() as f64 / 60.0;
             // Ebbinghaus forgetting curve: R = e^(-t/S) where S = stability
-            let stability = ep.importance * 100.0 + ep.retrieval_count as f64 * 5.0 + 1.0;
+            let stability = ep.importance * 100.0 + f64::from(ep.retrieval_count) * 5.0 + 1.0;
             let retention = (-age_hours / stability).exp().max(0.01);
             let new_vividness = ep.vividness * retention;
 

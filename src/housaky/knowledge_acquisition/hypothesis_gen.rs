@@ -101,7 +101,7 @@ impl Hypothesis {
         if self.tests_run == 0 {
             0.0
         } else {
-            self.tests_passed as f64 / self.tests_run as f64
+            f64::from(self.tests_passed) / f64::from(self.tests_run)
         }
     }
 }

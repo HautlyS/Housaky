@@ -1124,7 +1124,7 @@ async fn handle_list_key(
                 app.selected += 1;
             }
         }
-        (_, KeyCode::Enter) | (_, KeyCode::Char('d')) => {
+        (_, KeyCode::Enter | KeyCode::Char('d')) => {
             if !app.providers.is_empty() {
                 app.view = KeysView::Detail;
             }
@@ -1237,7 +1237,7 @@ async fn handle_add_provider_key(
                     .add_provider_with_template(&name, &template, keys, priority)
                     .await
                 {
-                    Ok(_) => {
+                    Ok(()) => {
                         // Then set the base_url if provided
                         if !base_url.is_empty() {
                             if let Ok(mut store) = manager.store.try_write() {
@@ -1312,7 +1312,7 @@ async fn handle_add_key_key(
                 }
                 let url_opt = if url_val.is_empty() { None } else { Some(url_val) };
                 match manager.add_key(&provider, key_val, None, url_opt).await {
-                    Ok(_) => {
+                    Ok(()) => {
                         manager.save().await?;
                         app.reload(manager).await;
                         app.notify(&format!("Added key to {}", provider));
@@ -1378,7 +1378,7 @@ async fn handle_edit_model_key(
             if let Some(provider) = app.providers.get(app.selected) {
                 let provider_name = provider.name.clone();
                 match manager.set_default_model(&provider_name, &model).await {
-                    Ok(_) => {
+                    Ok(()) => {
                         manager.save().await?;
                         app.reload(manager).await;
                         app.notify(&format!("Default model set to: {}", model));
@@ -1438,7 +1438,7 @@ async fn handle_edit_provider_key(
                 let priority = ProviderPriority::from_str(&new_priority.to_string()).unwrap_or_default();
 
                 match manager.update_provider_config(&provider_name, &new_url, priority, new_enabled).await {
-                    Ok(_) => {
+                    Ok(()) => {
                         manager.save().await?;
                         app.reload(manager).await;
                         app.notify(&format!("Updated provider: {}", provider_name));
@@ -1475,7 +1475,7 @@ async fn handle_confirm_delete_key(
     manager: &KeysManager,
 ) -> Result<()> {
     match key.code {
-        KeyCode::Char('y') | KeyCode::Char('Y') => {
+        KeyCode::Char('y' | 'Y') => {
             let target = app.delete_target.clone();
             app.view = KeysView::List;
             app.delete_target = None;
@@ -1484,7 +1484,7 @@ async fn handle_confirm_delete_key(
                 match t {
                     DeleteTarget::Provider(name) => {
                         match manager.remove_provider(&name).await {
-                            Ok(_) => {
+                            Ok(()) => {
                                 manager.save().await?;
                                 app.reload(manager).await;
                                 app.notify(&format!("Deleted provider: {}", name));
@@ -1500,7 +1500,7 @@ async fn handle_confirm_delete_key(
                 }
             }
         }
-        KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc => {
+        KeyCode::Char('n' | 'N') | KeyCode::Esc => {
             app.view = KeysView::List;
             app.delete_target = None;
         }
@@ -1515,7 +1515,7 @@ async fn handle_health_check_key(
     manager: &KeysManager,
 ) {
     match key.code {
-        KeyCode::Char('r') | KeyCode::Char('R') => {
+        KeyCode::Char('r' | 'R') => {
             app.health_check_loading = true;
             app.health_check_result = None;
             if let Some(provider) = app.providers.get(app.selected) {

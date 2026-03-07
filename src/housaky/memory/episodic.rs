@@ -330,8 +330,8 @@ impl EpisodicMemory {
     fn apply_forgetting(&self, episodes: &mut Vec<Episode>) {
         // Forgetting score: low importance + low retrieval count + high age
         episodes.sort_by(|a, b| {
-            let score_a = a.importance * 0.5 + (a.retrieval_count as f64 * 0.01).min(0.3);
-            let score_b = b.importance * 0.5 + (b.retrieval_count as f64 * 0.01).min(0.3);
+            let score_a = a.importance * 0.5 + (f64::from(a.retrieval_count) * 0.01).min(0.3);
+            let score_b = b.importance * 0.5 + (f64::from(b.retrieval_count) * 0.01).min(0.3);
             score_b
                 .partial_cmp(&score_a)
                 .unwrap_or(std::cmp::Ordering::Equal)

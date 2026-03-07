@@ -168,8 +168,8 @@ impl ROS2LaserScan {
                 let angle = self.angle_min + i as f64 * self.angle_increment;
                 LidarPoint {
                     angle_rad: angle,
-                    distance_m: r as f64,
-                    intensity: self.intensities.get(i).copied().unwrap_or(0.0) as f64,
+                    distance_m: f64::from(r),
+                    intensity: f64::from(self.intensities.get(i).copied().unwrap_or(0.0)),
                     valid: r >= self.range_min as f32
                         && r <= self.range_max as f32
                         && r.is_finite(),

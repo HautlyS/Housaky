@@ -517,12 +517,11 @@ pub fn load_active_generated_tools(
                     GeneratedJavaScriptTool::from_disk(security.clone(), workspace_dir, t.spec)
                         .map(|t| Box::new(t) as Box<dyn Tool>)
                 }
-                Some(crate::housaky::tool_creator::ToolKind::Python)
-                | Some(crate::housaky::tool_creator::ToolKind::HTTP)
-                | Some(crate::housaky::tool_creator::ToolKind::Composite)
-                | Some(crate::housaky::tool_creator::ToolKind::Rust)
-                | Some(crate::housaky::tool_creator::ToolKind::WASM)
-                | None => GeneratedPythonTool::from_disk(security.clone(), workspace_dir, t.spec)
+                Some(crate::housaky::tool_creator::ToolKind::Python |
+crate::housaky::tool_creator::ToolKind::HTTP |
+crate::housaky::tool_creator::ToolKind::Composite |
+crate::housaky::tool_creator::ToolKind::Rust |
+crate::housaky::tool_creator::ToolKind::WASM) | None => GeneratedPythonTool::from_disk(security.clone(), workspace_dir, t.spec)
                     .map(|t| Box::new(t) as Box<dyn Tool>),
             }
         })

@@ -793,7 +793,7 @@ impl SelfImprovementLoop {
             use crate::housaky::memory::emotional_tags::EmotionalTag;
             // Valence: maps from reasoning+self-awareness (higher = more positive)
             let valence =
-                (self_model.capabilities.reasoning + self_model.capabilities.self_awareness) / 2.0
+                f64::midpoint(self_model.capabilities.reasoning, self_model.capabilities.self_awareness)
                     - 0.5; // centre around 0
                            // Arousal: meta-cognition speed proxy (adaptability)
             let arousal = self_model.capabilities.adaptability.clamp(0.0, 1.0);
@@ -883,7 +883,7 @@ impl SelfImprovementLoop {
             }
         }
 
-        cycle.confidence = (cycle.confidence + 0.8) / 2.0;
+        cycle.confidence = f64::midpoint(cycle.confidence, 0.8);
         Ok(cycle)
     }
 
@@ -936,7 +936,7 @@ impl SelfImprovementLoop {
                     .knowledge_gaps
                     .first()
                     .unwrap()
-                    .replace(" ", "_")
+                    .replace(' ', "_")
             );
             cycle.outputs.new_skills.push(skill_name.clone());
             cycle
@@ -975,7 +975,7 @@ impl SelfImprovementLoop {
         let _goal_id = self.goal_engine.add_goal(meta_skill.clone()).await?;
         cycle.outputs.new_goals.push(meta_skill);
 
-        cycle.confidence = (cycle.confidence + 0.85) / 2.0;
+        cycle.confidence = f64::midpoint(cycle.confidence, 0.85);
         Ok(cycle)
     }
 
@@ -1057,7 +1057,7 @@ impl SelfImprovementLoop {
             ));
         }
 
-        cycle.confidence = (cycle.confidence + 0.9) / 2.0;
+        cycle.confidence = f64::midpoint(cycle.confidence, 0.9);
         Ok(cycle)
     }
 
@@ -1991,7 +1991,7 @@ impl SelfImprovementLoop {
         cycle.metrics.consciousness_delta = self_model.capabilities.self_awareness * 0.01;
         cycle.metrics.intelligence_delta = self_model.capabilities.reasoning * 0.01;
 
-        cycle.confidence = (cycle.confidence + 0.95) / 2.0;
+        cycle.confidence = f64::midpoint(cycle.confidence, 0.95);
         Ok(cycle)
     }
 

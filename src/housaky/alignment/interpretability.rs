@@ -444,7 +444,9 @@ impl InterpretabilityEngine {
         let cache = self.explanation_cache.read().await;
         let history = self.explanation_history.read().await;
 
-        let avg_confidence = if !history.is_empty() {
+        let avg_confidence = if history.is_empty() {
+            0.0
+        } else {
             history
                 .iter()
                 .flat_map(|e| e.confidence_annotations.iter().map(|a| a.confidence))
@@ -454,8 +456,6 @@ impl InterpretabilityEngine {
                     .map(|e| e.confidence_annotations.len())
                     .sum::<usize>()
                     .max(1) as f64
-        } else {
-            0.0
         };
 
         InterpretabilityStats {

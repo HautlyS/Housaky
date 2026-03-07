@@ -452,7 +452,7 @@ impl AGIIntegrationHub {
             // the GWT competition is seeded with real AGI context each heartbeat.
             let active_goals = self.goal_engine.get_active_goals().await;
             if let Some(top_goal) = active_goals.first() {
-                let urgency = top_goal.priority.clone() as u8 as f64 / 4.0;
+                let urgency = f64::from(top_goal.priority.clone() as u8) / 4.0;
                 self.consciousness
                     .set_active_goal(&top_goal.title, urgency)
                     .await;
@@ -665,7 +665,7 @@ impl AGIIntegrationHub {
                     self.inner_monologue
                         .add_thought(
                             &format!("Created tool '{}' from reasoning suggestion", tool_id),
-                            tool_suggestion.priority as f64 / 10.0,
+                            f64::from(tool_suggestion.priority) / 10.0,
                         )
                         .await?;
 

@@ -373,7 +373,7 @@ impl PhilosophicalReasoner {
                     description,
                     origin: GoalOrigin::PhilosophicalReasoning,
                     novelty_score: 0.9,
-                    expected_value: q.depth as f64 * 0.25,
+                    expected_value: f64::from(q.depth) * 0.25,
                     generated_at: Utc::now(),
                 }
             })

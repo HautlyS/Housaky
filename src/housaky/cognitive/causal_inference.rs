@@ -627,7 +627,7 @@ impl CausalInferenceEngine {
         }
 
         let mse = if count > 0 {
-            total_error / count as f64
+            total_error / f64::from(count)
         } else {
             0.0
         };
@@ -747,7 +747,7 @@ impl CausalInferenceEngine {
                         edge.strength = edge.strength * (1.0 - alpha) + actual_strength * alpha;
                         edge.strength = edge.strength.clamp(-1.0, 1.0);
                         // Confidence increases when predictions are accurate.
-                        edge.confidence = (edge.confidence + (1.0 - error.abs().min(1.0))) / 2.0;
+                        edge.confidence = f64::midpoint(edge.confidence, 1.0 - error.abs().min(1.0));
                         updates += 1;
                     }
                 }
@@ -785,7 +785,7 @@ impl CausalInferenceEngine {
             {
                 let alpha = 0.3;
                 edge.strength = edge.strength * (1.0 - alpha) + rel.estimated_strength * alpha;
-                edge.confidence = (edge.confidence + rel.confidence) / 2.0;
+                edge.confidence = f64::midpoint(edge.confidence, rel.confidence);
                 continue;
             }
 
@@ -818,11 +818,11 @@ impl CausalInferenceEngine {
                 discovered_at: Utc::now(),
             });
 
-            if !graph.is_dag() {
+            if graph.is_dag() {
+                added += 1;
+            } else {
                 // Remove the edge that created a cycle.
                 graph.edges.pop();
-            } else {
-                added += 1;
             }
         }
 
@@ -838,15 +838,15 @@ impl CausalInferenceEngine {
         let log = self.intervention_log.read().await;
         let obs = self.observation_buffer.read().await;
 
-        let avg_prediction_error = if !log.is_empty() {
+        let avg_prediction_error = if log.is_empty() {
+            0.0
+        } else {
             log.iter().filter_map(|i| i.prediction_error).sum::<f64>()
                 / log
                     .iter()
                     .filter(|i| i.prediction_error.is_some())
                     .count()
                     .max(1) as f64
-        } else {
-            0.0
         };
 
         CausalGraphStats {

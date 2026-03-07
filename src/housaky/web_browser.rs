@@ -617,7 +617,7 @@ impl WebBrowser {
         if let Some(last_time) = self.last_request_time {
             let elapsed = last_time.elapsed();
             if elapsed < self.config.rate_limit_delay {
-                let sleep_duration = self.config.rate_limit_delay - elapsed;
+                let sleep_duration = self.config.rate_limit_delay.checked_sub(elapsed).unwrap();
                 std::thread::sleep(sleep_duration);
             }
         }
@@ -1949,7 +1949,7 @@ impl WebBrowser {
                         "twitter:card" => metadata.twitter_card = Some(content.to_string()),
                         "twitter:title" => metadata.twitter_title = Some(content.to_string()),
                         "twitter:description" => {
-                            metadata.twitter_description = Some(content.to_string())
+                            metadata.twitter_description = Some(content.to_string());
                         }
                         "twitter:image" => metadata.twitter_image = Some(content.to_string()),
                         "twitter:site" => metadata.twitter_site = Some(content.to_string()),

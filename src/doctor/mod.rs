@@ -954,7 +954,13 @@ fn check_channels_config(config: &Config) -> Vec<CheckResult> {
 fn check_security(config: &Config) -> Vec<CheckResult> {
     let mut checks = Vec::new();
 
-    if !config.secrets.encrypt {
+    if config.secrets.encrypt {
+        checks.push(CheckResult::ok(
+            CheckCategory::Security,
+            "secrets-encryption",
+            "Secret encryption enabled (ChaCha20-Poly1305)",
+        ));
+    } else {
         checks.push(
             CheckResult::warn(
                 CheckCategory::Security,
@@ -963,12 +969,6 @@ fn check_security(config: &Config) -> Vec<CheckResult> {
             )
             .with_hint("Enable encryption: set [secrets] encrypt = true in config.toml"),
         );
-    } else {
-        checks.push(CheckResult::ok(
-            CheckCategory::Security,
-            "secrets-encryption",
-            "Secret encryption enabled (ChaCha20-Poly1305)",
-        ));
     }
 
     match config.autonomy.level {
@@ -1023,7 +1023,13 @@ fn check_security(config: &Config) -> Vec<CheckResult> {
         );
     }
 
-    if !config.gateway.require_pairing {
+    if config.gateway.require_pairing {
+        checks.push(CheckResult::ok(
+            CheckCategory::Security,
+            "gateway-pairing",
+            "Gateway pairing required (authenticated)",
+        ));
+    } else {
         checks.push(
             CheckResult::error(
                 CheckCategory::Security,
@@ -1032,12 +1038,6 @@ fn check_security(config: &Config) -> Vec<CheckResult> {
             )
             .with_hint("Set gateway.require_pairing = true in config.toml"),
         );
-    } else {
-        checks.push(CheckResult::ok(
-            CheckCategory::Security,
-            "gateway-pairing",
-            "Gateway pairing required (authenticated)",
-        ));
     }
 
     if config.gateway.paired_tokens.is_empty() {
@@ -1092,7 +1092,13 @@ fn check_security(config: &Config) -> Vec<CheckResult> {
     let config_path = &config.config_path;
     if config_path.exists() {
         if let Ok(perms) = secret_key_permissions(config_path) {
-            if !perms {
+            if perms {
+                checks.push(CheckResult::ok(
+                    CheckCategory::Security,
+                    "config-file-perms",
+                    "Config file permissions are appropriately restrictive",
+                ));
+            } else {
                 checks.push(
                     CheckResult::warn(
                         CheckCategory::Security,
@@ -1106,12 +1112,6 @@ fn check_security(config: &Config) -> Vec<CheckResult> {
                     .with_command(format!("chmod 600 {}", config_path.display()))
                     .auto_fixable(),
                 );
-            } else {
-                checks.push(CheckResult::ok(
-                    CheckCategory::Security,
-                    "config-file-perms",
-                    "Config file permissions are appropriately restrictive",
-                ));
             }
         }
     }
@@ -1141,7 +1141,13 @@ fn check_keys(config: &Config) -> Vec<CheckResult> {
         ));
 
         if let Ok(perms) = secret_key_permissions(&keys_path) {
-            if !perms {
+            if perms {
+                checks.push(CheckResult::ok(
+                    CheckCategory::Keys,
+                    "keys-file-perms",
+                    "Keys file permissions are appropriately restrictive (0600)",
+                ));
+            } else {
                 checks.push(
                     CheckResult::error(
                         CheckCategory::Security,
@@ -1155,12 +1161,6 @@ fn check_keys(config: &Config) -> Vec<CheckResult> {
                     .with_command(format!("chmod 600 {}", keys_path.display()))
                     .auto_fixable(),
                 );
-            } else {
-                checks.push(CheckResult::ok(
-                    CheckCategory::Keys,
-                    "keys-file-perms",
-                    "Keys file permissions are appropriately restrictive (0600)",
-                ));
             }
         }
 
@@ -1299,7 +1299,7 @@ fn parse_rfc3339(raw: &str) -> Option<DateTime<Utc>> {
 fn check_dir_writable(path: &std::path::Path) -> bool {
     let test = path.join(".housaky_writable_test");
     match std::fs::write(&test, b"") {
-        Ok(_) => {
+        Ok(()) => {
             let _ = std::fs::remove_file(&test);
             true
         }

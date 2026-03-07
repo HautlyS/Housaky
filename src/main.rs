@@ -121,7 +121,7 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
 
     // Setup logging
-    let is_tui = cli.command.as_ref().map_or(false, |c| c.requires_tui());
+    let is_tui = cli.command.as_ref().map_or(false, housaky::cli::Commands::requires_tui);
     if is_tui {
         let subscriber = FmtSubscriber::builder()
             .with_max_level(Level::INFO)
@@ -334,7 +334,7 @@ async fn handle_keys(
                     for k in &p.keys {
                         let suffix = if k.key.len() > 4 { &k.key[k.key.len()-4..] } else { &k.key };
                         let status = if k.enabled { "enabled" } else { "disabled" };
-                        println!("    ...{} - {}", suffix, status);
+                        println!("    ...{suffix} - {status}");
                     }
                 }
             }
@@ -343,13 +343,13 @@ async fn handle_keys(
         KeyCommands::Add { provider, key } => {
             keys_manager.add_key(&provider, key, None, None).await?;
             keys_manager.save().await?;
-            println!("Added key for {}", provider);
+            println!("Added key for {provider}");
             Ok(())
         }
         KeyCommands::Remove { provider } => {
             keys_manager.remove_provider(&provider).await?;
             keys_manager.save().await?;
-            println!("Removed {}", provider);
+            println!("Removed {provider}");
             Ok(())
         }
         KeyCommands::Rotate => {
@@ -379,7 +379,7 @@ async fn handle_subagent(
             if let Some(subagents) = &store.subagents {
                 println!("Sub-agent Configurations:");
                 for (name, config) in subagents {
-                    println!("  {}:", name);
+                    println!("  {name}:");
                     println!("    Provider: {}", config.provider);
                     println!("    Model: {}", config.model);
                     println!("    Key: {}", config.key_name);
@@ -396,7 +396,7 @@ async fn handle_subagent(
 
             if let Some(subagents) = &store.subagents {
                 if let Some(config) = subagents.get(&name) {
-                    println!("Sub-agent: {}", name);
+                    println!("Sub-agent: {name}");
                     println!("  Provider: {}", config.provider);
                     println!("  Model: {}", config.model);
                     println!("  Key: {}", config.key_name);
@@ -411,7 +411,7 @@ async fn handle_subagent(
                         }
                     }
                 } else {
-                    println!("Sub-agent '{}' not found.", name);
+                    println!("Sub-agent '{name}' not found.");
                 }
             } else {
                 println!("No sub-agents configured.");
@@ -424,17 +424,16 @@ async fn handle_subagent(
 
             // Verify provider exists
             if !store.providers.contains_key(&provider) {
-                println!("Error: Provider '{}' not found.", provider);
+                println!("Error: Provider '{provider}' not found.");
                 return Ok(());
             }
 
             // Verify key exists
             let key_exists = store.providers.get(&provider)
-                .map(|p| p.keys.iter().any(|k| k.name == key))
-                .unwrap_or(false);
+                .is_some_and(|p| p.keys.iter().any(|k| k.name == key));
 
             if !key_exists {
-                println!("Error: Key '{}' not found in provider '{}'.", key, provider);
+                println!("Error: Key '{key}' not found in provider '{provider}'.");
                 return Ok(());
             }
 
@@ -456,7 +455,7 @@ async fn handle_subagent(
             drop(store);
             keys_manager.save().await?;
 
-            println!("Assigned {} -> {}/{} (model: {})", name, provider, key, model_name);
+            println!("Assigned {name} -> {provider}/{key} (model: {model_name})");
             Ok(())
         }
         SubagentCommands::Test { name, message } => {
@@ -465,11 +464,11 @@ async fn handle_subagent(
 
             if let Some(subagents) = &store.subagents {
                 if let Some(config) = subagents.get(&name) {
-                    println!("Testing sub-agent '{}'...", name);
+                    println!("Testing sub-agent '{name}'...");
                     println!("  Provider: {}", config.provider);
                     println!("  Model: {}", config.model);
                     println!("  Key: {}", config.key_name);
-                    println!("  Message: {}", message);
+                    println!("  Message: {message}");
 
                     // Get the API key
                     if let Some(provider) = store.providers.get(&config.provider) {
@@ -478,14 +477,14 @@ async fn handle_subagent(
 
                             // Make a test request
                             let base_url = provider.base_url.as_deref().unwrap_or("https://api.openai.com/v1");
-                            println!("🌐 Endpoint: {}", base_url);
+                            println!("🌐 Endpoint: {base_url}");
 
                             // Note: Actual API call would go here
                             println!("\n✅ Configuration valid. Ready to make requests.");
                         }
                     }
                 } else {
-                    println!("Sub-agent '{}' not found.", name);
+                    println!("Sub-agent '{name}' not found.");
                 }
             } else {
                 println!("No sub-agents configured.");
@@ -538,17 +537,17 @@ async fn handle_a2a(
     match action.as_str() {
         "ping" => {
             match a2a.ping_peer().await {
-                Ok(true) => println!("Peer {} is alive", peer),
-                Ok(false) => println!("Peer {} not responding", peer),
-                Err(e) => println!("Ping failed: {}", e),
+                Ok(true) => println!("Peer {peer} is alive"),
+                Ok(false) => println!("Peer {peer} not responding"),
+                Err(e) => println!("Ping failed: {e}"),
             }
             Ok(())
         }
         "sync" => {
             match a2a.sync_with_peer(timeout).await {
                 Ok(Some(resp)) => println!("Sync response: {:?}", resp.msg),
-                Ok(None) => println!("Sync timed out after {}s", timeout),
-                Err(e) => anyhow::bail!("Sync error: {}", e),
+                Ok(None) => println!("Sync timed out after {timeout}s"),
+                Err(e) => anyhow::bail!("Sync error: {e}"),
             }
             Ok(())
         }
@@ -558,7 +557,7 @@ async fn handle_a2a(
                 memory_type: "message".to_string(),
                 data: serde_json::json!({ "text": msg }),
             })).await?;
-            println!("Sent to {}", peer);
+            println!("Sent to {peer}");
             Ok(())
         }
         "recv" => {
@@ -567,7 +566,7 @@ async fn handle_a2a(
                 println!("From {}: {:?}", msg.from, msg.msg);
             }
             if messages.is_empty() {
-                println!("No messages from {}", peer);
+                println!("No messages from {peer}");
             }
             Ok(())
         }
@@ -578,7 +577,7 @@ async fn handle_a2a(
                 .and_then(|p| serde_json::from_str(p).ok())
                 .unwrap_or(serde_json::json!({}));
             a2a.delegate_task(&tid, &act, ps).await?;
-            println!("Task {} ({}) delegated to {}", tid, act, peer);
+            println!("Task {tid} ({act}) delegated to {peer}");
             Ok(())
         }
         "learn" => {
@@ -586,14 +585,14 @@ async fn handle_a2a(
             let cont = message.unwrap_or_else(|| "No content".to_string());
             let conf = confidence.unwrap_or(0.8);
             a2a.share_learning(&cat, &cont, conf).await?;
-            println!("Learning shared: {} (confidence: {})", cat, conf);
+            println!("Learning shared: {cat} (confidence: {conf})");
             Ok(())
         }
         "review" => {
             let f = file.as_ref().ok_or_else(|| anyhow::anyhow!("--file required"))?;
             let diff = std::fs::read_to_string(f).unwrap_or_default();
             a2a.request_code_review(f, &diff).await?;
-            println!("Code review requested for {}", f);
+            println!("Code review requested for {f}");
             Ok(())
         }
         _ => {

@@ -665,8 +665,8 @@ impl EnhancedApp {
         if total == 0 {
             return;
         }
-        let rel = row.saturating_sub(sb.y) as f64;
-        let h = sb.height.max(1) as f64;
+        let rel = f64::from(row.saturating_sub(sb.y));
+        let h = f64::from(sb.height.max(1));
         let ratio = (rel / h).clamp(0.0, 1.0);
         let target = (ratio * (total.saturating_sub(1) as f64)).round() as usize;
         self.chat.scroll_to_index(target);
@@ -1454,7 +1454,7 @@ impl EnhancedApp {
                     y2 = y2.saturating_add(1);
                 }
 
-                self.cfg_editor.draw(f, bz.main)
+                self.cfg_editor.draw(f, bz.main);
             }
             MainTab::Doctor => self.doctor.draw(f, bz.main),
         }
@@ -2035,7 +2035,7 @@ impl EnhancedApp {
             (KeyModifiers::NONE, KeyCode::Down) if self.state.input_mode.is_typing() => {
                 self.input.history_next();
             }
-            (KeyModifiers::NONE, KeyCode::Char(c)) | (KeyModifiers::SHIFT, KeyCode::Char(c))
+            (KeyModifiers::NONE | KeyModifiers::SHIFT, KeyCode::Char(c))
                 if self.state.input_mode.is_typing() =>
             {
                 self.input.push_char(c);
@@ -2043,7 +2043,7 @@ impl EnhancedApp {
 
             // --- Normal mode --------------------------------------------------
             // Any printable key or Enter enters insert mode
-            (KeyModifiers::NONE, KeyCode::Char('i')) | (KeyModifiers::NONE, KeyCode::Enter) => {
+            (KeyModifiers::NONE, KeyCode::Char('i') | KeyCode::Enter) => {
                 self.state.input_mode = InputMode::Insert;
                 self.state.active_pane = ActivePane::Input;
             }
@@ -2112,7 +2112,7 @@ impl EnhancedApp {
             }
 
             // Help
-            (KeyModifiers::NONE, KeyCode::Char('?')) | (KeyModifiers::NONE, KeyCode::F(1)) => {
+            (KeyModifiers::NONE, KeyCode::Char('?') | KeyCode::F(1)) => {
                 self.help.toggle();
             }
 
@@ -2194,9 +2194,9 @@ impl EnhancedApp {
             (_, KeyCode::Char('q')) | (KeyModifiers::NONE, KeyCode::Esc) => {
                 self.switch_tab(MainTab::Chat);
             }
-            (_, KeyCode::Up) | (_, KeyCode::Char('k')) => self.skills.select_prev(),
-            (_, KeyCode::Down) | (_, KeyCode::Char('j')) => self.skills.tab_next(),
-            (_, KeyCode::Char(' ')) | (_, KeyCode::Enter) => {
+            (_, KeyCode::Up | KeyCode::Char('k')) => self.skills.select_prev(),
+            (_, KeyCode::Down | KeyCode::Char('j')) => self.skills.tab_next(),
+            (_, KeyCode::Char(' ') | KeyCode::Enter) => {
                 if let Some((name, source)) = self.skills.get_selected_skill_needs_install() {
                     match source {
                         crate::tui::enhanced_app::skills_panel::SkillSource::ClaudeOfficial => {
@@ -2296,7 +2296,7 @@ impl EnhancedApp {
             (KeyModifiers::NONE, KeyCode::Char('7')) => {
                 self.switch_tab(MainTab::Config);
             }
-            (KeyModifiers::NONE, KeyCode::Char('?')) | (KeyModifiers::NONE, KeyCode::F(1)) => {
+            (KeyModifiers::NONE, KeyCode::Char('?') | KeyCode::F(1)) => {
                 self.help.toggle();
             }
             _ => {}
@@ -2319,11 +2319,11 @@ impl EnhancedApp {
             (_, KeyCode::Char('q')) | (KeyModifiers::NONE, KeyCode::Esc) => {
                 self.switch_tab(MainTab::Chat);
             }
-            (_, KeyCode::Up) | (_, KeyCode::Char('k')) => {
-                self.tools.select_prev(&self.state.tool_log)
+            (_, KeyCode::Up | KeyCode::Char('k')) => {
+                self.tools.select_prev(&self.state.tool_log);
             }
-            (_, KeyCode::Down) | (_, KeyCode::Char('j')) => {
-                self.tools.select_next(&self.state.tool_log)
+            (_, KeyCode::Down | KeyCode::Char('j')) => {
+                self.tools.select_next(&self.state.tool_log);
             }
             (_, KeyCode::PageUp) => self.tools.detail_scroll_up(),
             (_, KeyCode::PageDown) => self.tools.detail_scroll_down(),
@@ -2354,7 +2354,7 @@ impl EnhancedApp {
             (KeyModifiers::NONE, KeyCode::Char('7')) => {
                 self.state.active_tab = MainTab::Config;
             }
-            (KeyModifiers::NONE, KeyCode::Char('?')) | (KeyModifiers::NONE, KeyCode::F(1)) => {
+            (KeyModifiers::NONE, KeyCode::Char('?') | KeyCode::F(1)) => {
                 self.help.toggle();
             }
             _ => {}
@@ -2388,7 +2388,7 @@ impl EnhancedApp {
             (KeyModifiers::NONE, KeyCode::Char('7')) => {
                 self.switch_tab(MainTab::Config);
             }
-            (KeyModifiers::NONE, KeyCode::Char('?')) | (KeyModifiers::NONE, KeyCode::F(1)) => {
+            (KeyModifiers::NONE, KeyCode::Char('?') | KeyCode::F(1)) => {
                 self.help.toggle();
             }
             _ => {}
@@ -2422,7 +2422,7 @@ impl EnhancedApp {
             (KeyModifiers::NONE, KeyCode::Char('7')) => {
                 self.switch_tab(MainTab::Config);
             }
-            (KeyModifiers::NONE, KeyCode::Char('?')) | (KeyModifiers::NONE, KeyCode::F(1)) => {
+            (KeyModifiers::NONE, KeyCode::Char('?') | KeyCode::F(1)) => {
                 self.help.toggle();
             }
             _ => {}
@@ -2479,7 +2479,7 @@ impl EnhancedApp {
             (KeyModifiers::NONE, KeyCode::Char('7')) => {
                 self.switch_tab(MainTab::Config);
             }
-            (KeyModifiers::NONE, KeyCode::Char('?')) | (KeyModifiers::NONE, KeyCode::F(1)) => {
+            (KeyModifiers::NONE, KeyCode::Char('?') | KeyCode::F(1)) => {
                 self.help.toggle();
             }
             _ => {}
@@ -2514,7 +2514,7 @@ impl EnhancedApp {
         // Raw TOML view
         if self.cfg_editor.is_showing_raw() {
             match key.code {
-                KeyCode::Char('r') | KeyCode::Esc | KeyCode::Char('q') => {
+                KeyCode::Char('r' | 'q') | KeyCode::Esc => {
                     self.cfg_editor.toggle_raw(&self.config);
                 }
                 _ => {}
@@ -2554,11 +2554,11 @@ impl EnhancedApp {
             }
 
             // Navigation
-            (_, KeyCode::Up) | (_, KeyCode::Char('k')) => self.cfg_editor.field_up(),
-            (_, KeyCode::Down) | (_, KeyCode::Char('j')) => self.cfg_editor.field_down(),
+            (_, KeyCode::Up | KeyCode::Char('k')) => self.cfg_editor.field_up(),
+            (_, KeyCode::Down | KeyCode::Char('j')) => self.cfg_editor.field_down(),
 
             // Edit selected field (also Space for bool toggle)
-            (_, KeyCode::Enter) | (_, KeyCode::Char(' ')) => self.cfg_editor.start_edit(),
+            (_, KeyCode::Enter | KeyCode::Char(' ')) => self.cfg_editor.start_edit(),
 
             // Section tabs
             (_, KeyCode::Tab) => self.cfg_editor.section_next(&self.config),
@@ -2602,8 +2602,8 @@ impl EnhancedApp {
                 }
             }
 
-            (KeyModifiers::NONE, KeyCode::Char('?')) | (KeyModifiers::NONE, KeyCode::F(1)) => {
-                self.help.toggle()
+            (KeyModifiers::NONE, KeyCode::Char('?') | KeyCode::F(1)) => {
+                self.help.toggle();
             }
 
             _ => {}
@@ -2628,21 +2628,21 @@ impl EnhancedApp {
                 self.export_chat()?;
             }
             "model" => {
-                if !arg.is_empty() {
-                    self.model_name = arg.to_string();
-                    self.notifs.success(format!("Model → {}", arg));
-                } else {
+                if arg.is_empty() {
                     self.chat
                         .push_system(format!("Current model: {}", self.model_name));
+                } else {
+                    self.model_name = arg.to_string();
+                    self.notifs.success(format!("Model → {}", arg));
                 }
             }
             "provider" => {
-                if !arg.is_empty() {
-                    self.provider_name = arg.to_string();
-                    self.notifs.success(format!("Provider → {}", arg));
-                } else {
+                if arg.is_empty() {
                     self.chat
                         .push_system(format!("Current provider: {}", self.provider_name));
+                } else {
+                    self.provider_name = arg.to_string();
+                    self.notifs.success(format!("Provider → {}", arg));
                 }
             }
             "goals" => {
@@ -2835,13 +2835,13 @@ impl EnhancedApp {
             (_, KeyCode::Char('q')) | (KeyModifiers::NONE, KeyCode::Esc) => {
                 self.switch_tab(MainTab::Chat);
             }
-            (_, KeyCode::Up) | (_, KeyCode::Char('k')) => self.doctor.select_prev(),
-            (_, KeyCode::Down) | (_, KeyCode::Char('j')) => self.doctor.select_next(),
+            (_, KeyCode::Up | KeyCode::Char('k')) => self.doctor.select_prev(),
+            (_, KeyCode::Down | KeyCode::Char('j')) => self.doctor.select_next(),
             (_, KeyCode::PageUp) => self.doctor.detail_scroll_up(),
             (_, KeyCode::PageDown) => self.doctor.detail_scroll_down(),
             (_, KeyCode::Tab) => self.doctor.cycle_filter_next(),
             (KeyModifiers::SHIFT, KeyCode::BackTab) => self.doctor.cycle_filter_prev(),
-            (_, KeyCode::Char('r')) | (_, KeyCode::F(5)) => {
+            (_, KeyCode::Char('r') | KeyCode::F(5)) => {
                 self.refresh_doctor();
             }
             (_, KeyCode::Char('f')) => {
@@ -2888,7 +2888,7 @@ impl EnhancedApp {
                 self.switch_tab(MainTab::Config);
             }
             (KeyModifiers::NONE, KeyCode::Char('8')) => { /* already here */ }
-            (KeyModifiers::NONE, KeyCode::Char('?')) | (KeyModifiers::NONE, KeyCode::F(1)) => {
+            (KeyModifiers::NONE, KeyCode::Char('?') | KeyCode::F(1)) => {
                 self.help.toggle();
             }
             _ => {}

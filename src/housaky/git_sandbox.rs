@@ -147,7 +147,7 @@ impl GitSandbox {
 
     pub fn create_session(&mut self, purpose: &str) -> Result<SandboxSession> {
         let session_id = uuid::Uuid::new_v4().to_string()[..8].to_string();
-        let branch_name = format!("self-improve/{}/{}", purpose.replace(" ", "-"), session_id);
+        let branch_name = format!("self-improve/{}/{}", purpose.replace(' ', "-"), session_id);
         let worktree_path = self
             .project_root
             .join(&self.config.worktree_path)
@@ -313,17 +313,17 @@ impl GitSandbox {
 
         validation.compiles = check_output.status.success();
 
-        if !validation.compiles {
-            validation
-                .errors
-                .push(String::from_utf8_lossy(&check_output.stderr).to_string());
-        } else {
+        if validation.compiles {
             let warnings = String::from_utf8_lossy(&check_output.stderr);
             for line in warnings.lines() {
                 if line.contains("warning") {
                     validation.warnings.push(line.to_string());
                 }
             }
+        } else {
+            validation
+                .errors
+                .push(String::from_utf8_lossy(&check_output.stderr).to_string());
         }
 
         if self.config.enable_testing && validation.compiles {
@@ -496,7 +496,7 @@ mod property_tests {{
 
         let insert_pos = content
             .find("#[cfg(test)]")
-            .or_else(|| content.rfind("}"))
+            .or_else(|| content.rfind('}'))
             .unwrap_or(content.len());
 
         let mut new_content = String::new();

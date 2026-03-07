@@ -479,10 +479,10 @@ impl UnifiedFeedbackLoop {
         let total_events = history.len();
         let success_events = history.iter().filter(|e| e.success).count();
 
-        let avg_latency: u64 = if !edges.is_empty() {
-            edges.iter().map(|e| e.latency_ms).sum::<u64>() / edges.len() as u64
-        } else {
+        let avg_latency: u64 = if edges.is_empty() {
             0
+        } else {
+            edges.iter().map(|e| e.latency_ms).sum::<u64>() / edges.len() as u64
         };
 
         FeedbackMetrics {

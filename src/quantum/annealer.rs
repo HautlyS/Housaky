@@ -33,12 +33,12 @@ impl IsingModel {
         let mut e = self.offset;
         for (&i, &h) in &self.linear {
             if i < spins.len() {
-                e += h * spins[i] as f64;
+                e += h * f64::from(spins[i]);
             }
         }
         for (&(i, j), &j_ij) in &self.quadratic {
             if i < spins.len() && j < spins.len() {
-                e += j_ij * spins[i] as f64 * spins[j] as f64;
+                e += j_ij * f64::from(spins[i]) * f64::from(spins[j]);
             }
         }
         e

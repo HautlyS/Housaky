@@ -141,7 +141,7 @@ impl CognitiveModule for MetaCognitionAdapter {
         // Meta-cognition integrates any broadcast to update its self-assessment.
         // The integration depth indicates how many modules were already involved,
         // which is a proxy for the richness of the cognitive event.
-        let richness = broadcast.integration_depth as f64 / 6.0;
+        let richness = f64::from(broadcast.integration_depth) / 6.0;
         let new_score = (broadcast.content.salience * 0.5 + richness * 0.5).clamp(0.0, 1.0);
         {
             let mut score = self.self_awareness_score.write().await;

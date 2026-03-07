@@ -1730,17 +1730,17 @@ impl HousakyCore {
             .tick(cycle, alignment_intact, &knowledge_gaps, &seed_concepts)
             .await;
 
-        if report.phase_status != SingularityPhaseStatus::Active {
-            warn!(
-                "Phase 6 status: {:?} — {} open-ended goal(s) generated",
-                report.phase_status, report.open_ended_goals_generated
-            );
-        } else {
+        if report.phase_status == SingularityPhaseStatus::Active {
             info!(
                 "Phase 6 tick: growth_rate={:.6}, acceleration={:.6}, goals={}",
                 report.explosion_stats.current_growth_rate,
                 report.explosion_stats.current_acceleration,
                 report.open_ended_goals_generated
+            );
+        } else {
+            warn!(
+                "Phase 6 status: {:?} — {} open-ended goal(s) generated",
+                report.phase_status, report.open_ended_goals_generated
             );
         }
 
@@ -1891,7 +1891,7 @@ impl HousakyCore {
         ];
         let current_values = vec![
             state.confidence_level,
-            (self.config.reasoning_depth as f64) / 10.0,
+            f64::from(self.config.reasoning_depth) / 10.0,
             0.8,
             0.7,
             0.5,

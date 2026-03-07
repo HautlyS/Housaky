@@ -102,9 +102,9 @@ impl HelpOverlay {
     }
     pub fn toggle(&mut self) {
         if self.visible {
-            self.hide()
+            self.hide();
         } else {
-            self.show()
+            self.show();
         }
     }
 

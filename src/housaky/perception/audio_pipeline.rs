@@ -40,7 +40,7 @@ impl AudioChunk {
         source: impl Into<String>,
     ) -> Self {
         let duration_ms = if sample_rate_hz > 0 && channels > 0 {
-            (samples.len() as u64 * 1000) / (sample_rate_hz as u64 * channels as u64)
+            (samples.len() as u64 * 1000) / (u64::from(sample_rate_hz) * u64::from(channels))
         } else {
             0
         };
@@ -59,14 +59,14 @@ impl AudioChunk {
         if self.samples.is_empty() {
             return 0.0;
         }
-        let sum_sq: f64 = self.samples.iter().map(|&s| (s as f64).powi(2)).sum();
+        let sum_sq: f64 = self.samples.iter().map(|&s| f64::from(s).powi(2)).sum();
         (sum_sq / self.samples.len() as f64).sqrt()
     }
 
     pub fn peak_amplitude(&self) -> f64 {
         self.samples
             .iter()
-            .map(|&s| s.abs() as f64)
+            .map(|&s| f64::from(s.abs()))
             .fold(0.0_f64, f64::max)
     }
 }
@@ -229,7 +229,7 @@ impl SpectralAnalyzer {
             .iter()
             .take(self.fft_size / 2)
             .enumerate()
-            .map(|(_, &s)| (s as f64).abs())
+            .map(|(_, &s)| f64::from(s).abs())
             .collect();
 
         let total_mag: f64 = magnitudes.iter().sum();
@@ -243,7 +243,7 @@ impl SpectralAnalyzer {
             .map(|(i, &m)| i as f64 * m)
             .sum();
 
-        let bin_hz = self.sample_rate as f64 / self.fft_size as f64;
+        let bin_hz = f64::from(self.sample_rate) / self.fft_size as f64;
         (weighted / total_mag) * bin_hz
     }
 
@@ -354,7 +354,9 @@ impl AudioPipeline {
         } else {
             // Speech segment ended — flush buffer
             let buf = self.speech_buffer.write().await;
-            if !buf.is_empty() {
+            if buf.is_empty() {
+                drop(buf);
+            } else {
                 let transcription = self.transcribe_buffer(&buf).await;
                 drop(buf);
 
@@ -366,8 +368,6 @@ impl AudioPipeline {
                 drop(transcriptions);
 
                 info!("Speech transcribed: \"{}\"", transcription.full_text);
-            } else {
-                drop(buf);
             }
 
             *self.speech_buffer.write().await = Vec::new();

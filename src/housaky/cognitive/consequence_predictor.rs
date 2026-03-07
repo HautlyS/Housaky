@@ -49,9 +49,9 @@ impl ConsequenceDelay {
         // Time-discounted value (hyperbolic discounting)
         match self {
             ConsequenceDelay::Immediate => 1.0,
-            ConsequenceDelay::ShortTerm { hours } => 1.0 / (1.0 + 0.01 * *hours as f64),
-            ConsequenceDelay::MediumTerm { days } => 1.0 / (1.0 + 0.05 * *days as f64),
-            ConsequenceDelay::LongTerm { weeks } => 1.0 / (1.0 + 0.1 * *weeks as f64),
+            ConsequenceDelay::ShortTerm { hours } => 1.0 / (1.0 + 0.01 * f64::from(*hours)),
+            ConsequenceDelay::MediumTerm { days } => 1.0 / (1.0 + 0.05 * f64::from(*days)),
+            ConsequenceDelay::LongTerm { weeks } => 1.0 / (1.0 + 0.1 * f64::from(*weeks)),
         }
     }
 }
@@ -467,14 +467,14 @@ impl ConsequencePredictor {
 
         let verified: Vec<&PredictionRecord> =
             history.iter().filter(|r| r.accuracy.is_some()).collect();
-        let avg_accuracy = if !verified.is_empty() {
+        let avg_accuracy = if verified.is_empty() {
+            0.0
+        } else {
             verified
                 .iter()
                 .map(|r| r.accuracy.unwrap_or(0.0))
                 .sum::<f64>()
                 / verified.len() as f64
-        } else {
-            0.0
         };
 
         ConsequenceStats {

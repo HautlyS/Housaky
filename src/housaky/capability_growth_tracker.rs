@@ -189,7 +189,7 @@ impl CapabilityGrowthTracker {
 
         let base_consciousness = self_awareness * 0.4 + meta_cognition * 0.3 + reasoning * 0.3;
 
-        (base_consciousness + self.baseline_consciousness) / 2.0
+        f64::midpoint(base_consciousness, self.baseline_consciousness)
     }
 
     pub async fn project_growth(&self, capability: &str, _cycles_ahead: u32) -> GrowthProjection {

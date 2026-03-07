@@ -239,7 +239,7 @@ impl RustCodeParser {
         let is_async = item_fn.sig.asyncness.is_some();
         let visibility = match &item_fn.vis {
             syn::Visibility::Public(_) => "pub".to_string(),
-            syn::Visibility::Inherited => "".to_string(),
+            syn::Visibility::Inherited => String::new(),
             _ => "pub".to_string(),
         };
 
@@ -325,7 +325,7 @@ impl RustCodeParser {
                             .collect::<Vec<_>>()
                             .join(", ")
                     ),
-                    syn::Fields::Unit => "".to_string(),
+                    syn::Fields::Unit => String::new(),
                 };
                 format!("{}{}{}", v.ident, fields, discriminant.unwrap_or_default())
             })
@@ -631,10 +631,10 @@ impl RustCodeModifier {
                 let stderr = String::from_utf8_lossy(&output.stderr);
                 CompileResult {
                     success: output.status.success(),
-                    error: if !output.status.success() {
-                        Some(stderr.to_string())
-                    } else {
+                    error: if output.status.success() {
                         None
+                    } else {
+                        Some(stderr.to_string())
                     },
                     warnings: stderr
                         .lines()

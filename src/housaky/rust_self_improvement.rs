@@ -196,8 +196,8 @@ impl RustAnalyzer {
         }
         
         // Simple complexity score based on nesting and line count
-        let complexity_score = (lines as f64 / 100.0).min(1.0) * 
-                               (1.0 + functions as f64 * 0.01);
+        let complexity_score = (f64::from(lines) / 100.0).min(1.0) * 
+                               (1.0 + f64::from(functions) * 0.01);
         
         Ok(FileAnalysis {
             path: path.to_string_lossy().to_string(),
@@ -342,7 +342,7 @@ impl SelfImprovementEngine {
                     let priority = match todo.priority.as_deref() {
                         Some("TODO") => 0.6,
                         Some("FIXME") => 0.8,
-                        Some("XXX") | Some("HACK") => 0.9,
+                        Some("XXX" | "HACK") => 0.9,
                         _ => 0.5,
                     };
                     

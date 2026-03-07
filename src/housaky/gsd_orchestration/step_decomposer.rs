@@ -545,10 +545,10 @@ impl StepDecomposer {
                     files: self.extract_files(part),
                     verification: self.generate_verification(part),
                     done_criteria: "Step completed".to_string(),
-                    dependencies: if !all_steps.is_empty() {
-                        vec![all_steps.last().unwrap().id.clone()]
-                    } else {
+                    dependencies: if all_steps.is_empty() {
                         Vec::new()
+                    } else {
+                        vec![all_steps.last().unwrap().id.clone()]
                     },
                     estimated_duration_mins: 20,
                     risk_level: 0.3,

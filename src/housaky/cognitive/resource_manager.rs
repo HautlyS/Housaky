@@ -82,9 +82,9 @@ impl CognitiveBudget {
     /// Scale the budget by a factor.
     pub fn scale(&self, factor: f64) -> Self {
         Self {
-            max_llm_calls: (self.max_llm_calls as f64 * factor).ceil() as u32,
-            max_reasoning_depth: (self.max_reasoning_depth as f64 * factor).ceil() as u32,
-            max_tool_invocations: (self.max_tool_invocations as f64 * factor).ceil() as u32,
+            max_llm_calls: (f64::from(self.max_llm_calls) * factor).ceil() as u32,
+            max_reasoning_depth: (f64::from(self.max_reasoning_depth) * factor).ceil() as u32,
+            max_tool_invocations: (f64::from(self.max_tool_invocations) * factor).ceil() as u32,
             max_tokens: (self.max_tokens as f64 * factor).ceil() as u64,
             max_duration: Duration::from_secs_f64(self.max_duration.as_secs_f64() * factor),
             escalation_allowed: self.escalation_allowed,
@@ -133,11 +133,11 @@ impl BudgetExecution {
     /// Get utilization ratio (0.0 to 1.0+).
     pub fn utilization(&self) -> f64 {
         let ratios = [
-            self.actual_llm_calls as f64 / self.allocated_budget.max_llm_calls.max(1) as f64,
-            self.actual_reasoning_depth as f64
-                / self.allocated_budget.max_reasoning_depth.max(1) as f64,
-            self.actual_tool_invocations as f64
-                / self.allocated_budget.max_tool_invocations.max(1) as f64,
+            f64::from(self.actual_llm_calls) / f64::from(self.allocated_budget.max_llm_calls.max(1)),
+            f64::from(self.actual_reasoning_depth)
+                / f64::from(self.allocated_budget.max_reasoning_depth.max(1)),
+            f64::from(self.actual_tool_invocations)
+                / f64::from(self.allocated_budget.max_tool_invocations.max(1)),
             self.actual_tokens as f64 / self.allocated_budget.max_tokens.max(1) as f64,
             self.actual_duration.as_secs_f64()
                 / self.allocated_budget.max_duration.as_secs_f64().max(0.001),
@@ -562,10 +562,10 @@ impl ResourceManager {
         let escalated = history.iter().filter(|e| e.escalated).count();
         let over_budget = history.iter().filter(|e| e.is_over_budget()).count();
 
-        let avg_utilization = if !history.is_empty() {
-            history.iter().map(|e| e.utilization()).sum::<f64>() / history.len() as f64
-        } else {
+        let avg_utilization = if history.is_empty() {
             0.0
+        } else {
+            history.iter().map(|e| e.utilization()).sum::<f64>() / history.len() as f64
         };
 
         let total_tokens: u64 = history.iter().map(|e| e.actual_tokens).sum();

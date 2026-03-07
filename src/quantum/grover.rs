@@ -165,7 +165,7 @@ impl GroverSearch {
 
         let threshold = fitness_scores
             .values()
-            .cloned()
+            .copied()
             .fold(f64::NEG_INFINITY, f64::max)
             * 0.8;
         let targets: Vec<String> = branches
@@ -349,7 +349,7 @@ impl GroverSearch {
         n_qubits: usize,
     ) -> Vec<String> {
         let mut found = Vec::new();
-        let top_count = result.counts.values().cloned().fold(0u64, u64::max);
+        let top_count = result.counts.values().copied().fold(0u64, u64::max);
         let threshold = (top_count as f64 * 0.3) as u64;
 
         for (bitstring, &count) in &result.counts {

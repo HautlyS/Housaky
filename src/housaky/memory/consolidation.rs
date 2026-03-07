@@ -135,7 +135,7 @@ impl MemoryConsolidator {
             // Build weak edges between records of the same kind (co-occurrence proxy).
             for (i, a) in records.iter().enumerate() {
                 for b in records.iter().skip(i + 1) {
-                    let weight = (a.importance + b.importance) / 2.0;
+                    let weight = f64::midpoint(a.importance, b.importance);
                     if weight > 0.4 {
                         edges.push((a.id.clone(), b.id.clone(), weight));
                     }

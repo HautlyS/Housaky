@@ -267,7 +267,7 @@ impl HybridSolver {
             .sum();
 
         let labels: HashMap<String, bool> =
-            vars.iter().cloned().zip(solution.iter().cloned()).collect();
+            vars.iter().cloned().zip(solution.iter().copied()).collect();
 
         ClassicalSolution {
             solution,

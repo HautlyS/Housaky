@@ -304,15 +304,15 @@ impl ProvenanceTracker {
         let evidence_factor = 1.0 - (1.0 / (1.0 + provenance.evidence.len() as f64));
 
         // Average evidence strength
-        let avg_evidence_strength = if !provenance.evidence.is_empty() {
+        let avg_evidence_strength = if provenance.evidence.is_empty() {
+            0.5
+        } else {
             provenance.evidence.iter().map(|e| e.strength).sum::<f64>()
                 / provenance.evidence.len() as f64
-        } else {
-            0.5
         };
 
         // Verification bonus
-        let verification_bonus = 0.05 * provenance.verification_count.min(5) as f64;
+        let verification_bonus = 0.05 * f64::from(provenance.verification_count.min(5));
 
         // Age penalty (very old provenance is less reliable)
         let age_hours = (Utc::now() - provenance.created_at).num_hours() as f64;

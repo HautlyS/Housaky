@@ -96,7 +96,7 @@ impl DataFlowGraph {
 
         let mut depths: HashMap<String, usize> = HashMap::new();
         while let Some(id) = queue.pop_front() {
-            let depth = depths.get(&id).cloned().unwrap_or(0);
+            let depth = depths.get(&id).copied().unwrap_or(0);
             if let Some(node) = self.nodes.get_mut(&id) {
                 node.depth = depth;
             }

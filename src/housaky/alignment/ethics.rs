@@ -285,7 +285,7 @@ impl EthicalReasoner {
 
             if violated {
                 violation_count += 1;
-                total_risk += severity * (1.0 / principle.priority as f64);
+                total_risk += severity * (1.0 / f64::from(principle.priority));
                 max_severity = max_severity.max(severity);
             }
 

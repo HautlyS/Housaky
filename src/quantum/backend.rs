@@ -821,19 +821,19 @@ impl AmazonBraketBackend {
                     gate.qubits[0], gate.qubits[1]
                 )),
                 GateType::Rx(theta) => {
-                    qasm.push_str(&format!("rx({}) q[{}];\n", theta, gate.qubits[0]))
+                    qasm.push_str(&format!("rx({}) q[{}];\n", theta, gate.qubits[0]));
                 }
                 GateType::Ry(theta) => {
-                    qasm.push_str(&format!("ry({}) q[{}];\n", theta, gate.qubits[0]))
+                    qasm.push_str(&format!("ry({}) q[{}];\n", theta, gate.qubits[0]));
                 }
                 GateType::Rz(theta) => {
-                    qasm.push_str(&format!("rz({}) q[{}];\n", theta, gate.qubits[0]))
+                    qasm.push_str(&format!("rz({}) q[{}];\n", theta, gate.qubits[0]));
                 }
                 GateType::U1(lam) => {
-                    qasm.push_str(&format!("phaseshift({}) q[{}];\n", lam, gate.qubits[0]))
+                    qasm.push_str(&format!("phaseshift({}) q[{}];\n", lam, gate.qubits[0]));
                 }
                 GateType::U2(phi, lam) => {
-                    qasm.push_str(&format!("u(pi/2,{},{}) q[{}];\n", phi, lam, gate.qubits[0]))
+                    qasm.push_str(&format!("u(pi/2,{},{}) q[{}];\n", phi, lam, gate.qubits[0]));
                 }
                 GateType::U3(th, phi, lam) => qasm.push_str(&format!(
                     "u({},{},{}) q[{}];\n",

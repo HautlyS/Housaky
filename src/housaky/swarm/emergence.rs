@@ -177,7 +177,7 @@ impl EmergenceDetector {
         };
 
         for (action, agents) in &action_groups {
-            let unique_agents: std::collections::HashSet<&str> = agents.iter().cloned().collect();
+            let unique_agents: std::collections::HashSet<&str> = agents.iter().copied().collect();
             if unique_agents.len() >= self.config.min_agents_for_collective {
                 let synchrony = unique_agents.len() as f64 / recent.len() as f64;
                 if synchrony >= self.config.synchrony_threshold {
@@ -213,7 +213,7 @@ impl EmergenceDetector {
                 }
                 f
             };
-            let max_freq = freq.values().cloned().max().unwrap_or(0);
+            let max_freq = freq.values().copied().max().unwrap_or(0);
             let specialization_ratio = max_freq as f64 / actions.len() as f64;
             if specialization_ratio > 0.6 {
                 specialized_agents.push(agent.clone());

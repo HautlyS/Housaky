@@ -290,9 +290,9 @@ impl PhenomenalSelfModel {
 
         // Compute awareness coherence (how well the agent can model itself)
         let coherence = {
-            let has_focus = attention.current_focus.is_some() as u8 as f64;
+            let has_focus = f64::from(u8::from(attention.current_focus.is_some()));
             let load_awareness = if load.current_load > 0.0 { 1.0 } else { 0.5 };
-            let feeling_awareness = if !feelings.is_empty() { 1.0 } else { 0.5 };
+            let feeling_awareness = if feelings.is_empty() { 0.5 } else { 1.0 };
             (has_focus + load_awareness + feeling_awareness) / 3.0
         };
 

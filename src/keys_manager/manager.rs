@@ -1077,10 +1077,10 @@ impl KeysManager {
             .get_mut(provider_name)
             .ok_or_else(|| anyhow::anyhow!("Provider '{}' not found", provider_name))?;
 
-        if !base_url.is_empty() {
-            provider.base_url = Some(base_url.to_string());
-        } else {
+        if base_url.is_empty() {
             provider.base_url = None;
+        } else {
+            provider.base_url = Some(base_url.to_string());
         }
         provider.priority = priority;
         provider.enabled = enabled;

@@ -527,10 +527,10 @@ impl MinimalApp {
 
             // Escape
             (_, KeyCode::Esc) => {
-                if !self.input.is_empty() {
-                    self.input.clear();
-                } else {
+                if self.input.is_empty() {
                     self.focus = Focus::Chat;
+                } else {
+                    self.input.clear();
                 }
             }
 
@@ -542,10 +542,10 @@ impl MinimalApp {
             (_, KeyCode::Left) => self.input.move_left(),
             (_, KeyCode::Right) => self.input.move_right(),
             (_, KeyCode::Home) | (KeyModifiers::CONTROL, KeyCode::Char('a')) => {
-                self.input.move_start()
+                self.input.move_start();
             }
             (_, KeyCode::End) | (KeyModifiers::CONTROL, KeyCode::Char('e')) => {
-                self.input.move_end()
+                self.input.move_end();
             }
             (KeyModifiers::CONTROL, KeyCode::Char('w')) => self.input.delete_word(),
             (KeyModifiers::CONTROL, KeyCode::Char('u')) => self.input.clear(),

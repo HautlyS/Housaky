@@ -511,10 +511,10 @@ impl TransferLearningEngine {
             total_analogies: analogies.len(),
             total_experiences: experiences.len(),
             known_domains: domains.keys().cloned().collect(),
-            avg_pattern_success_rate: if !patterns.is_empty() {
-                patterns.iter().map(|p| p.success_rate).sum::<f64>() / patterns.len() as f64
-            } else {
+            avg_pattern_success_rate: if patterns.is_empty() {
                 0.0
+            } else {
+                patterns.iter().map(|p| p.success_rate).sum::<f64>() / patterns.len() as f64
             },
         }
     }

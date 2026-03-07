@@ -300,7 +300,7 @@ impl EvolutionaryOptimizer {
         }
 
         if param_count > 0 {
-            total_std / param_count as f64
+            total_std / f64::from(param_count)
         } else {
             0.0
         }

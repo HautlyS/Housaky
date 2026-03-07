@@ -170,7 +170,7 @@ impl MutationLineage {
                 for b in n.id.bytes() {
                     h = h
                         .wrapping_mul(6_364_136_223_846_793_005)
-                        .wrapping_add(b as u64);
+                        .wrapping_add(u64::from(b));
                 }
             }
             // Map to [0, 1)

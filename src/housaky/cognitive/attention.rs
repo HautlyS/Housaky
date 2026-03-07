@@ -234,7 +234,7 @@ impl AttentionMechanism {
         let importance_score = item.importance;
 
         // Frequency: logarithmic scaling of access count
-        let frequency_score = (1.0 + item.access_count as f64).ln() / 5.0;
+        let frequency_score = (1.0 + f64::from(item.access_count)).ln() / 5.0;
         let frequency_score = frequency_score.min(1.0);
 
         // Goal alignment: relevance to current goal

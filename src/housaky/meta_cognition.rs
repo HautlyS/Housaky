@@ -242,7 +242,7 @@ impl MetaCognitionEngine {
                 );
                 // Write refined confidences back to the self-model
                 let mut model = self.self_model.write().await;
-                for belief in model.beliefs.iter_mut() {
+                for belief in &mut model.beliefs {
                     if let Some(&refined) = posteriors.get(&belief.id) {
                         let old = belief.confidence;
                         belief.confidence = refined;

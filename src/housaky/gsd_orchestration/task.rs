@@ -193,8 +193,7 @@ impl GSDTask {
                 self.files
                     .iter()
                     .map(|f| format!("\n    <file>{}</file>", f))
-                    .collect::<Vec<_>>()
-                    .join("")
+                    .collect::<String>()
             )
         };
 
@@ -206,8 +205,7 @@ impl GSDTask {
                 self.dependencies
                     .iter()
                     .map(|d| format!("\n    <dep>{}</dep>", d))
-                    .collect::<Vec<_>>()
-                    .join("")
+                    .collect::<String>()
             )
         };
 

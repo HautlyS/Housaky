@@ -350,7 +350,7 @@ impl TheoryOfMind {
         }
 
         // Question/clarification actions
-        if action_lower.contains("?")
+        if action_lower.contains('?')
             || action_lower.contains("clarif")
             || action_lower.contains("explain")
         {

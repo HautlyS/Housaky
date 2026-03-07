@@ -62,7 +62,7 @@ pub struct AirQualityIndex {
 
 impl AirQualityIndex {
     pub fn compute(components: HashMap<String, f64>) -> Self {
-        let overall = components.values().cloned().fold(0.0_f64, f64::max);
+        let overall = components.values().copied().fold(0.0_f64, f64::max);
         let category = AQICategory::from_normalized(overall);
         let dominant_pollutant = components
             .iter()

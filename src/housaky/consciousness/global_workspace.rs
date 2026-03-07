@@ -238,10 +238,10 @@ impl GlobalWorkspace {
                 .iter()
                 .map(|c| c.strength * 0.5 + c.urgency * 0.3 + c.novelty * 0.2)
                 .collect();
-            let max_score = scores.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+            let max_score = scores.iter().copied().fold(f64::NEG_INFINITY, f64::max);
             let second_max = scores
                 .iter()
-                .cloned()
+                .copied()
                 .filter(|&s| (s - max_score).abs() > 1e-9)
                 .fold(0.0_f64, f64::max);
             1.0 - (second_max / max_score.max(1e-9))

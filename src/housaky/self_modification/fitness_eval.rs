@@ -393,8 +393,8 @@ impl FitnessEvaluator {
                 } else if b.tests_failed == 0 {
                     0.5
                 } else {
-                    let total = (b.tests_passed + b.tests_failed).max(1) as f64;
-                    b.tests_passed as f64 / total
+                    let total = f64::from((b.tests_passed + b.tests_failed).max(1));
+                    f64::from(b.tests_passed) / total
                 }
             })
             .unwrap_or(0.5);
@@ -415,8 +415,8 @@ impl FitnessEvaluator {
         // Capability: uses retention task pass ratio.
         let capability_score = retention_bench
             .map(|b| {
-                let total = (b.tests_passed + b.tests_failed).max(1) as f64;
-                b.tests_passed as f64 / total
+                let total = f64::from((b.tests_passed + b.tests_failed).max(1));
+                f64::from(b.tests_passed) / total
             })
             .unwrap_or_else(|| if correctness_score > 0.8 { 0.8 } else { 0.4 });
 
@@ -438,11 +438,11 @@ impl FitnessEvaluator {
         details.insert("test_pass".to_string(), correctness_score);
         details.insert(
             "tests_passed_count".to_string(),
-            test_bench.map(|b| b.tests_passed as f64).unwrap_or(0.0),
+            test_bench.map(|b| f64::from(b.tests_passed)).unwrap_or(0.0),
         );
         details.insert(
             "tests_failed_count".to_string(),
-            test_bench.map(|b| b.tests_failed as f64).unwrap_or(0.0),
+            test_bench.map(|b| f64::from(b.tests_failed)).unwrap_or(0.0),
         );
         details.insert(
             "check_ms".to_string(),

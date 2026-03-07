@@ -175,7 +175,7 @@ impl UnifiedSelfImprovementOrchestrator {
         for modification in mods.iter().take(self.config.max_modifications_per_cycle) {
             if modification.confidence >= self.config.min_confidence {
                 match self.apply_modification(modification).await {
-                    Ok(_) => {
+                    Ok(()) => {
                         result.modifications_applied += 1;
                         let mut total = self.total_improvements.write().await;
                         *total += 1;

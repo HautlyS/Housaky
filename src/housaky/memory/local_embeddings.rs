@@ -186,7 +186,7 @@ impl LocalEmbeddingProvider {
     fn djb2_hash(&self, s: &str) -> u64 {
         let mut hash: u64 = 5381;
         for c in s.bytes() {
-            hash = hash.wrapping_mul(33).wrapping_add(c as u64);
+            hash = hash.wrapping_mul(33).wrapping_add(u64::from(c));
         }
         hash
     }

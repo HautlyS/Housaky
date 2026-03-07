@@ -210,7 +210,9 @@ impl PropertyChecker {
                 continue;
             }
             let result = self.check_invariant(inv, snapshot);
-            if !result.passed {
+            if result.passed {
+                debug!("Invariant '{}' OK", result.invariant_name);
+            } else {
                 match result.severity {
                     InvariantSeverity::Block => blocking += 1,
                     InvariantSeverity::Warn => warnings += 1,
@@ -220,8 +222,6 @@ impl PropertyChecker {
                     "Invariant '{}' VIOLATED: {:?}",
                     result.invariant_name, result.violation_message
                 );
-            } else {
-                debug!("Invariant '{}' OK", result.invariant_name);
             }
             results.push(result);
         }

@@ -955,7 +955,7 @@ impl KnowledgeGraphEngine {
         let mut graph = self.graph.write().await;
         let from = EntityId(from_id.to_string());
         let to = EntityId(to_id.to_string());
-        for rel in graph.relations.iter_mut() {
+        for rel in &mut graph.relations {
             if rel.from_entity == from && rel.to_entity == to {
                 rel.weight = (rel.weight + delta).min(1.0);
                 break;
@@ -969,7 +969,7 @@ impl KnowledgeGraphEngine {
         let mut graph = self.graph.write().await;
         let from = EntityId(from_id.to_string());
         let to = EntityId(to_id.to_string());
-        for rel in graph.relations.iter_mut() {
+        for rel in &mut graph.relations {
             if rel.from_entity == from && rel.to_entity == to {
                 rel.weight = (rel.weight - 0.1).max(0.0);
                 break;

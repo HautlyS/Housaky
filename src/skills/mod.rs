@@ -419,7 +419,11 @@ pub fn ensure_skills_for_message(
         let name_l = item.name.to_ascii_lowercase();
         if lower.contains(&name_l) {
             let target_dir = skills_dir(workspace_dir).join(&item.name);
-            if !target_dir.exists() {
+            if target_dir.exists() {
+                // Already present; just ensure enabled
+                config.skills.enabled.insert(item.name.clone(), true);
+                let _ = config.save();
+            } else {
                 if let Ok(installed) =
                     crate::skills::marketplace::install_claude_plugin(workspace_dir, &item.name)
                 {
@@ -428,10 +432,6 @@ pub fn ensure_skills_for_message(
                     }
                     let _ = config.save();
                 }
-            } else {
-                // Already present; just ensure enabled
-                config.skills.enabled.insert(item.name.clone(), true);
-                let _ = config.save();
             }
         }
     }

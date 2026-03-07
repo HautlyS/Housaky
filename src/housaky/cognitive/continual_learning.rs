@@ -261,7 +261,7 @@ impl ContinualLearner {
                     .unwrap_or(0.0);
 
                 let priority =
-                    ep.importance * (1.0 - recency_penalty) / (1.0 + ep.replay_count as f64 * 0.1);
+                    ep.importance * (1.0 - recency_penalty) / (1.0 + f64::from(ep.replay_count) * 0.1);
                 (i, priority)
             })
             .collect();
@@ -439,12 +439,12 @@ impl ContinualLearner {
             replay_buffer_size: buffer.len(),
             curriculum_items: curriculum.items.len(),
             curriculum_progress: curriculum.overall_progress,
-            avg_importance: if !weights.is_empty() {
-                weights.values().sum::<f64>() / weights.len() as f64
-            } else {
+            avg_importance: if weights.is_empty() {
                 0.0
+            } else {
+                weights.values().sum::<f64>() / weights.len() as f64
             },
-            total_replays: buffer.iter().map(|e| e.replay_count as u64).sum(),
+            total_replays: buffer.iter().map(|e| u64::from(e.replay_count)).sum(),
         }
     }
 }

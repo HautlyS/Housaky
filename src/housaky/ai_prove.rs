@@ -472,7 +472,7 @@ pub fn generate_challenge(complexity: u8) -> Challenge {
         .unwrap()
         .as_secs();
     
-    let uuid_part = Uuid::new_v4().as_fields().0 as u64;
+    let uuid_part = u64::from(Uuid::new_v4().as_fields().0);
     let id = (now * 1000 + uuid_part) % 1000000;
     let challenge_type = ChallengeType::random();
     

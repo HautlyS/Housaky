@@ -272,7 +272,7 @@ impl PhenomenalBinder {
             return None;
         }
         let mut offsets: Vec<i64> = streams.iter().map(|s| s.temporal_offset_ms).collect();
-        offsets.sort();
+        offsets.sort_unstable();
         let diffs: Vec<i64> = offsets.windows(2).map(|w| w[1] - w[0]).collect();
         let mean_diff = diffs.iter().sum::<i64>() as f64 / diffs.len() as f64;
         let variance = diffs

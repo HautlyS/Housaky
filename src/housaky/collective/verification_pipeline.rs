@@ -961,7 +961,7 @@ Respond with ONLY this JSON (no markdown):
         total_score += 0.90; // Response benchmark  
         total_score += 0.88; // Tool benchmark
         
-        total_score / benchmark_count as f64
+        total_score / f64::from(benchmark_count)
     }
 
     // ── Human Approval Interface ──────────────────────────────────────────────

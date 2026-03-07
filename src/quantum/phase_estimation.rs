@@ -125,7 +125,7 @@ impl QuantumPhaseEstimator {
                 .iter()
                 .map(|&phi| {
                     let count_key =
-                        format!("{:0>width$b}", (phi * (1 << t) as f64) as u64, width = t);
+                        format!("{:0>width$b}", (phi * f64::from(1 << t)) as u64, width = t);
                     result.probability(&count_key)
                 })
                 .collect(),
@@ -160,7 +160,7 @@ impl QuantumPhaseEstimator {
         // Normalize diagonal entries to [0, 2π] as unitary rotation angles.
         let max_val = covariance_diagonal
             .iter()
-            .cloned()
+            .copied()
             .fold(f64::NEG_INFINITY, f64::max)
             .max(1e-10);
         let angles: Vec<f64> = covariance_diagonal
@@ -312,7 +312,7 @@ impl QuantumPhaseEstimator {
         let n = unitary_angles.len();
         let max_val = unitary_angles
             .iter()
-            .cloned()
+            .copied()
             .fold(f64::NEG_INFINITY, f64::max)
             .max(1e-10);
 

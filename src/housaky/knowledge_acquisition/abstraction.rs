@@ -224,7 +224,7 @@ impl AbstractionEngine {
         // attempt to abstract a more general statement.
         let principles_snapshot = self.principles.clone();
         for (i, p1) in principles_snapshot.iter().enumerate() {
-            for p2 in principles_snapshot[i + 1..].iter() {
+            for p2 in &principles_snapshot[i + 1..] {
                 if p1.domain_of_origin == p2.domain_of_origin {
                     continue;
                 }
@@ -249,7 +249,7 @@ impl AbstractionEngine {
                 gen.applicable_domains =
                     vec![p1.domain_of_origin.clone(), p2.domain_of_origin.clone()];
                 gen.generality = 0.70 + similarity * 0.20;
-                gen.confidence = (p1.confidence + p2.confidence) / 2.0;
+                gen.confidence = f64::midpoint(p1.confidence, p2.confidence);
                 gen.supporting_examples
                     .extend(p1.supporting_examples.clone());
                 gen.supporting_examples
@@ -291,7 +291,7 @@ impl AbstractionEngine {
         let first = &examples[0].features;
         let mut common: HashMap<String, String> = first.clone();
 
-        for ex in examples[1..].iter() {
+        for ex in &examples[1..] {
             common.retain(|k, v| ex.features.get(k) == Some(v));
         }
 

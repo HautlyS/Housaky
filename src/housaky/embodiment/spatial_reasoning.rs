@@ -62,9 +62,9 @@ impl BoundingBox {
 
     pub fn center(&self) -> Point3D {
         Point3D::new(
-            (self.min.x + self.max.x) / 2.0,
-            (self.min.y + self.max.y) / 2.0,
-            (self.min.z + self.max.z) / 2.0,
+            f64::midpoint(self.min.x, self.max.x),
+            f64::midpoint(self.min.y, self.max.y),
+            f64::midpoint(self.min.z, self.max.z),
         )
     }
 }

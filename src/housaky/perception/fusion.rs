@@ -254,7 +254,9 @@ impl PerceptualFusion {
 
         // ─── Tactile ──────────────────────────────────────────────────────────
         let (tactile_summary, tactile_confidence, force_overload, thermal_warning) =
-            if !input.tactile_maps.is_empty() {
+            if input.tactile_maps.is_empty() {
+                ("No tactile input".to_string(), 0.0, false, false)
+            } else {
                 active_modalities.push(PerceptualModality::Tactile);
                 let contacts: Vec<_> = input
                     .tactile_maps
@@ -288,8 +290,6 @@ impl PerceptualFusion {
                     overload,
                     false,
                 )
-            } else {
-                ("No tactile input".to_string(), 0.0, false, false)
             };
 
         // ─── Olfactory ────────────────────────────────────────────────────────

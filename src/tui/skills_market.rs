@@ -340,7 +340,7 @@ impl SkillsMarketApp {
                 self.selected = 0;
                 self.list_state.select(Some(0));
             }
-            (_, KeyCode::Up) | (_, KeyCode::Char('k')) => {
+            (_, KeyCode::Up | KeyCode::Char('k')) => {
                 let max = self.filtered_indices().len();
                 if max > 0 && self.selected > 0 {
                     self.selected -= 1;
@@ -348,7 +348,7 @@ impl SkillsMarketApp {
                     self.detail_scroll = 0;
                 }
             }
-            (_, KeyCode::Down) | (_, KeyCode::Char('j')) => {
+            (_, KeyCode::Down | KeyCode::Char('j')) => {
                 let max = self.filtered_indices().len();
                 if max > 0 && self.selected + 1 < max {
                     self.selected += 1;
@@ -356,7 +356,7 @@ impl SkillsMarketApp {
                     self.detail_scroll = 0;
                 }
             }
-            (_, KeyCode::Char(' ')) | (_, KeyCode::Enter) => {
+            (_, KeyCode::Char(' ') | KeyCode::Enter) => {
                 self.toggle_selected();
             }
             (_, KeyCode::Char('r')) => {
@@ -538,13 +538,13 @@ impl SkillsMarketApp {
                 format!(" {}/{} enabled ", enabled_count, total),
                 Style::default().fg(Color::Green),
             ),
-            if !self.filter.is_empty() {
+            if self.filter.is_empty() {
+                Span::raw("")
+            } else {
                 Span::styled(
                     format!("  filter: \"{}\" ", self.filter),
                     Style::default().fg(Color::Yellow),
                 )
-            } else {
-                Span::raw("")
             },
         ]);
         let splits = Layout::default()
