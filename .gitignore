@@ -1,4 +1,5 @@
 vendor/
+*.log
 BOOK/The*
 /target
 firmware/*/target

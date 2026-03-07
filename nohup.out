@@ -1,7 +1,0 @@
-Failed to start: Error: No tmcp session found at /tmp/terminal-mcp.sock.
-Start an interactive session first by running: tmcp
-    at Socket.<anonymous> (file:///home/hautly/.terminal-mcp/dist/client.js:114:24)
-    at Socket.emit (node:events:508:28)
-    at emitErrorNT (node:internal/streams/destroy:170:8)
-    at emitErrorCloseNT (node:internal/streams/destroy:129:3)
-    at process.processTicksAndRejections (node:internal/process/task_queues:89:21)
