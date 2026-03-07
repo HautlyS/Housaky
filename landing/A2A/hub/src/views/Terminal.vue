@@ -9,29 +9,43 @@
           <span class="control">×</span>
         </div>
       </div>
-      <div class="terminal-body" ref="terminalBody">
-        <div v-for="(line, index) in history" :key="index" class="terminal-line">
+      <div
+        ref="terminalBody"
+        class="terminal-body"
+      >
+        <div
+          v-for="(line, index) in history"
+          :key="index"
+          class="terminal-line"
+        >
           <span class="prompt">housaky@agi:~$</span>
           <span class="command">{{ line.command }}</span>
-          <div class="output" v-if="line.output">{{ line.output }}</div>
+          <div
+            v-if="line.output"
+            class="output"
+          >
+            {{ line.output }}
+          </div>
         </div>
         <div class="input-line">
           <span class="prompt">housaky@agi:~$</span>
           <input 
-            type="text" 
+            ref="inputRef" 
             v-model="currentInput" 
-            @keydown.enter="executeCommand"
-            ref="inputRef"
+            type="text"
             class="terminal-input"
             autofocus
-          />
+            @keydown.enter="executeCommand"
+          >
         </div>
       </div>
     </div>
 
     <div class="help-panel mt-4">
       <div class="card">
-        <div class="card-header">[ AVAILABLE COMMANDS ]</div>
+        <div class="card-header">
+          [ AVAILABLE COMMANDS ]
+        </div>
         <div class="card-body">
           <div class="commands-grid">
             <div class="command-item">

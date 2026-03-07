@@ -13,10 +13,16 @@
 
     <div class="grid grid-2 mb-4">
       <div class="card">
-        <div class="card-header">[ CONNECTED AGENTS ]</div>
+        <div class="card-header">
+          [ CONNECTED AGENTS ]
+        </div>
         <div class="card-body">
           <div class="agent-list">
-            <div v-for="agent in agents" :key="agent.id" class="agent-item">
+            <div
+              v-for="agent in agents"
+              :key="agent.id"
+              class="agent-item"
+            >
               <span class="agent-id">{{ agent.id }}</span>
               <span class="agent-name">{{ agent.name }}</span>
               <span :class="['agent-status', agent.status]">{{ agent.status }}</span>
@@ -26,10 +32,16 @@
       </div>
 
       <div class="card">
-        <div class="card-header">[ A2A MESSAGES ]</div>
+        <div class="card-header">
+          [ A2A MESSAGES ]
+        </div>
         <div class="card-body">
           <div class="message-list">
-            <div v-for="msg in messages" :key="msg.id" class="message-item">
+            <div
+              v-for="msg in messages"
+              :key="msg.id"
+              class="message-item"
+            >
               <span class="msg-from">{{ msg.from }}</span>
               <span class="msg-arrow">→</span>
               <span class="msg-to">{{ msg.to }}</span>
@@ -41,17 +53,32 @@
     </div>
 
     <div class="card">
-      <div class="card-header">[ SEND A2A MESSAGE ]</div>
+      <div class="card-header">
+        [ SEND A2A MESSAGE ]
+      </div>
       <div class="card-body">
         <div class="form-group">
           <label>TO AGENT ID:</label>
-          <input type="text" v-model="newMessage.to" placeholder="Agent ID" />
+          <input
+            v-model="newMessage.to"
+            type="text"
+            placeholder="Agent ID"
+          >
         </div>
         <div class="form-group">
           <label>MESSAGE:</label>
-          <textarea v-model="newMessage.content" placeholder="Enter your message..." rows="3"></textarea>
+          <textarea
+            v-model="newMessage.content"
+            placeholder="Enter your message..."
+            rows="3"
+          />
         </div>
-        <button class="btn" @click="sendMessage">[ SEND ]</button>
+        <button
+          class="btn"
+          @click="sendMessage"
+        >
+          [ SEND ]
+        </button>
       </div>
     </div>
   </div>
