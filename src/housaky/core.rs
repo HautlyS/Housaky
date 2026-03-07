@@ -23,9 +23,9 @@ use crate::housaky::memory::episodic::{EpisodicEventType, EpisodicMemory};
 use crate::housaky::memory::hierarchical::{HierarchicalMemory, HierarchicalMemoryConfig};
 use crate::housaky::meta_cognition::MetaCognitionEngine;
 use crate::housaky::neuromorphic::{NeuromorphicEngine, NeuromorphicConfig};
-use crate::housaky::perception::PerceptualSystem;
+use crate::housaky::perception::{PerceptualSystem, PerceptualSystemConfig};
 use crate::housaky::reasoning_pipeline::{ReasoningPipeline, ReasoningResult};
-use crate::housaky::rust_self_improvement::RustSelfImprovementEngine;
+use crate::housaky::rust_self_improvement::SelfImprovementEngine as RustSelfImprovementEngine;
 use crate::housaky::self_improvement_loop::ImprovementExperiment;
 use crate::housaky::singularity::{SingularityEngine, SingularityPhaseStatus};
 use crate::housaky::streaming::streaming::StreamingManager;
@@ -33,7 +33,7 @@ use crate::housaky::swarm::SwarmController;
 use crate::housaky::tool_chain_composer::ToolChainComposer;
 use crate::housaky::tool_creator::ToolCreator;
 use crate::housaky::unified_feedback_loop::UnifiedFeedbackLoop;
-use crate::housaky::unified_improvement_orchestrator::UnifiedImprovementOrchestrator;
+use crate::housaky::unified_improvement_orchestrator::UnifiedSelfImprovementOrchestrator as UnifiedImprovementOrchestrator;
 use crate::housaky::working_memory::{MemoryImportance, WorkingMemoryEngine};
 use crate::providers::Provider;
 use crate::quantum::backend::AmazonBraketBackend;
@@ -382,57 +382,31 @@ impl HousakyCore {
         let swarm_controller = Arc::new(SwarmController::new(Default::default()));
 
         // Phase 4 - Architecture Search Engine (neural architecture optimization)
-        let architecture_search = Arc::new(ArchitectureSearchEngine::new(ArchitectureSearchConfig::default()));
+        let architecture_search = Arc::new(ArchitectureSearchEngine::new(workspace_dir.clone()));
 
         // Phase 4 - Knowledge Acquisition Engine (active learning from text/interactions)
-        let knowledge_acquirer = Arc::new(KnowledgeAcquisitionEngine::new(
-            knowledge_graph.clone(),
-            hierarchical_memory.clone(),
-            Default::default(),
-        ));
+        let knowledge_acquirer = Arc::new(KnowledgeAcquisitionEngine::new());
 
         // Phase 5 - Perception System (multi-modal sensory fusion)
-        let perception_system = Arc::new(PerceptualSystem::new(Default::default()));
+        let perception_system = Arc::new(PerceptualSystem::new(PerceptualSystemConfig::default()));
 
         // Phase 5 - Embodiment Controller (optional, requires hardware)
         let embodiment = None; // Disabled by default - enable when ROS/hardware available
 
         // Improvement Orchestration (coordinates all self-improvement systems)
         let improvement_orchestrator = Arc::new(UnifiedImprovementOrchestrator::new(
-            Arc::new(crate::housaky::self_improvement_loop::SelfImprovementLoop::new(
-                &workspace_dir,
-                goal_engine.clone(),
-                meta_cognition.clone(),
-            )),
-            knowledge_graph.clone(),
-            meta_cognition.clone(),
-            Arc::new(crate::housaky::decision_journal::DecisionJournal::new(&workspace_dir)),
+            workspace_dir.clone(),
             Default::default(),
         ));
 
         // Rust Self-Improvement Engine (Rust code analysis and modification)
-        let rust_self_improvement = Arc::new(RustSelfImprovementEngine::new(
-            Arc::new(crate::housaky::git_sandbox::GitSandbox::new(&workspace_dir)),
-            Arc::new(crate::housaky::code_parsing::tree_sitter::RustCodeAnalyzer::new()),
-            Arc::new(crate::housaky::rust_code_modifier::RustCodeModifier::new()),
-            Arc::new(crate::housaky::self_improvement_loop::TestRunner::new()),
-            Default::default(),
-        ));
+        let rust_self_improvement = Arc::new(RustSelfImprovementEngine::new(workspace_dir.clone()));
 
         // Tool Chain Composer (composes tool chains for complex tasks)
-        let tool_chain_composer = Arc::new(ToolChainComposer::new(
-            vec![], // Tools will be populated dynamically
-            Arc::new(crate::skills::SkillRegistry::new()),
-            Default::default(),
-        ));
+        let tool_chain_composer = Arc::new(ToolChainComposer::new());
 
         // Knowledge-Guided Goal Selector (uses KG for intelligent goal selection)
-        let goal_selector = Arc::new(KnowledgeGuidedGoalSelector::new(
-            knowledge_graph.clone(),
-            goal_engine.clone(),
-            hierarchical_memory.clone(),
-            Default::default(),
-        ));
+        let goal_selector = Arc::new(KnowledgeGuidedGoalSelector::new(goal_engine.clone()));
 
         // Natural Language Introspector (NL queries about internal state)
         let introspector = Arc::new(NaturalLanguageIntrospector::new());

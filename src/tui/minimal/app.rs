@@ -751,8 +751,8 @@ impl MinimalApp {
                             self.chat.push_system("Selected: Federation Agent (coordinates all)");
                         }
                         "main" | "orchestrator" | "m" | "o" => {
-                            self.agents.selected = None;
-                            self.agents.list_state.select(None);
+                            self.agents.selected = 0;
+                            self.agents.list_state.select(Some(0));
                             self.chat.push_system("Selected: Main Orchestrator (default LLM)");
                         }
                         _ => {

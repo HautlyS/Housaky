@@ -207,7 +207,7 @@ impl ModelAgnosticLayer {
             .await
             .ok_or_else(|| anyhow::anyhow!("Provider not found: {}", provider_name))?;
 
-        let capabilities = self.capability_detector.detect(provider.as_ref().await).await;
+        let capabilities = self.capability_detector.detect(provider.as_ref().as_ref()).await;
 
         let reasoning_config = self.adapt_reasoning(&capabilities);
         let tool_config = self.adapt_tools(&capabilities);
@@ -275,12 +275,12 @@ impl ModelAgnosticLayer {
     where
         F: FnMut(&str) -> Result<T>,
     {
-        if let Ok(result) = f(primary).await {
+        if let Ok(result) = f(primary) {
             return Ok(result);
         }
 
         for model in fallbacks {
-            if let Ok(result) = f(model).await {
+            if let Ok(result) = f(model) {
                 info!("Fallback succeeded to model: {}", model);
                 return Ok(result);
             }

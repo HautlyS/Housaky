@@ -1,4 +1,5 @@
 use anyhow::{anyhow, Context, Result};
+use serde::{Deserialize, Serialize};
 use std::path::Path;
 
 /// A lightweight wrapper around tree-sitter that focuses on what Housaky needs for
@@ -94,8 +95,14 @@ impl TsAnchor {
 }
 
 /// Find the smallest named node that fully covers the given (byte) range.
-pub fn covering_named_node(tree: &tree_sitter::Tree, start_byte: usize, end_byte: usize) -> Option<tree_sitter::Node<'_>> {
-    let mut node = tree.root_node().descendant_for_byte_range(start_byte, end_byte)?;
+pub fn covering_named_node(
+    tree: &tree_sitter::Tree,
+    start_byte: usize,
+    end_byte: usize,
+) -> Option<tree_sitter::Node<'_>> {
+    let mut node = tree
+        .root_node()
+        .descendant_for_byte_range(start_byte, end_byte)?;
     while !node.is_named() {
         node = node.parent()?;
     }
@@ -117,4 +124,52 @@ pub fn rust_language() -> Result<tree_sitter::Language> {
     Err(anyhow!(
         "Rust tree-sitter grammar not enabled. Add dependency `tree-sitter-rust` and enable feature `tree-sitter-rust`."
     ))
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CodeAnalysisResult {
+    pub file: String,
+    pub functions: Vec<FunctionInfo>,
+    pub structs: Vec<StructInfo>,
+    pub complexity: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FunctionInfo {
+    pub name: String,
+    pub line: usize,
+    pub complexity: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StructInfo {
+    pub name: String,
+    pub line: usize,
+}
+
+pub struct RustCodeAnalyzer {
+    parser: tree_sitter::Parser,
+}
+
+impl RustCodeAnalyzer {
+    pub fn new() -> Self {
+        Self {
+            parser: tree_sitter::Parser::new(),
+        }
+    }
+
+    pub fn analyze(&mut self, source: &str) -> Result<CodeAnalysisResult> {
+        Ok(CodeAnalysisResult {
+            file: String::new(),
+            functions: Vec::new(),
+            structs: Vec::new(),
+            complexity: 0.0,
+        })
+    }
+}
+
+impl Default for RustCodeAnalyzer {
+    fn default() -> Self {
+        Self::new()
+    }
 }

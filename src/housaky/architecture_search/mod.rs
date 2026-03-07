@@ -12,6 +12,8 @@ pub mod migration;
 pub mod module_genome;
 pub mod topology_search;
 
+use serde::{Deserialize, Serialize};
+
 pub use architecture_eval::{ArchitectureEvaluator, EvaluationResult, FitnessGates};
 pub use data_flow_graph::{DataFlowGraph, DataFlowSummary, GraphNode};
 pub use migration::{
@@ -24,6 +26,15 @@ pub use module_genome::{
 pub use topology_search::{
     CrossoverResult, TopologyMutation, TopologySearchConfig, TopologySearcher, ValidationResult,
 };
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ArchitectureSearchConfig {
+    pub enabled: bool,
+    pub max_generations: usize,
+    pub population_size: usize,
+    pub mutation_rate: f64,
+    pub crossover_rate: f64,
+}
 
 use anyhow::Result;
 use std::path::PathBuf;

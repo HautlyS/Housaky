@@ -1491,7 +1491,7 @@ async fn handle_agents_command(command: AgentsCommands, config: &Config) -> Resu
             });
 
             let task = UnifiedTask {
-                id: format!("task-{}", uuid::Uuid::new_v4().to_string()[..8]),
+                id: format!("task-{}", &uuid::Uuid::new_v4().to_string().chars().take(8).collect::<String>()),
                 title,
                 description,
                 priority: prio,
@@ -1556,9 +1556,10 @@ async fn handle_agents_command(command: AgentsCommands, config: &Config) -> Resu
             println!("🧠 Sharing knowledge across all systems...");
             println!("  Key: {}", key);
             println!("  Value: {}", value);
-            println!("  Confidence: {:.0}%", confidence * 100.0);
+            println!("  Confidence: {}%", confidence);
 
-            hub.share_knowledge(&key, &value, confidence).await?;
+            let conf_f64 = confidence as f64 / 100.0;
+            hub.share_knowledge(&key, &value, conf_f64).await?;
 
             println!("✓ Knowledge shared successfully");
         }

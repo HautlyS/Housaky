@@ -3,7 +3,10 @@ use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-const CLAUDE_MCP_REGISTRY_URL: &str = "https://github.com/anthropics/mcp-servers/raw/main/registry.json";
+use crate::commands::McpCommands;
+
+const CLAUDE_MCP_REGISTRY_URL: &str =
+    "https://github.com/anthropics/mcp-servers/raw/main/registry.json";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct McpPackage {
@@ -80,13 +83,15 @@ impl McpMarketplace {
         } else {
             let resp = reqwest::blocking::get(CLAUDE_MCP_REGISTRY_URL)
                 .with_context(|| "Failed to fetch MCP registry")?;
-            let text = resp.text().with_context(|| "Failed to read registry response")?;
+            let text = resp
+                .text()
+                .with_context(|| "Failed to read registry response")?;
             std::fs::write(&registry_path, &text)?;
             text
         };
 
-        let registry: McpRegistry = serde_json::from_str(&content)
-            .with_context(|| "Failed to parse MCP registry")?;
+        let registry: McpRegistry =
+            serde_json::from_str(&content).with_context(|| "Failed to parse MCP registry")?;
 
         Ok(registry.servers)
     }
@@ -230,9 +235,14 @@ impl McpMarketplace {
         Ok(())
     }
 
-    fn get_mcp_server_env(&self, name: &str) -> Result<Option<std::collections::HashMap<String, String>>> {
+    fn get_mcp_server_env(
+        &self,
+        name: &str,
+    ) -> Result<Option<std::collections::HashMap<String, String>>> {
         let servers = self.fetch_registry()?;
-        let entry = servers.get(name).ok_or_else(|| anyhow!("MCP server not found: {}", name))?;
+        let entry = servers
+            .get(name)
+            .ok_or_else(|| anyhow!("MCP server not found: {}", name))?;
         Ok(entry.env.clone())
     }
 
@@ -245,7 +255,11 @@ impl McpMarketplace {
     }
 
     pub fn enable(&self, name: &str) -> Result<()> {
-        let config_path = self.workspace_dir.join("mcp").join(name).join("config.json");
+        let config_path = self
+            .workspace_dir
+            .join("mcp")
+            .join(name)
+            .join("config.json");
         if !config_path.exists() {
             return Err(anyhow!("MCP not installed: {}", name));
         }
@@ -259,7 +273,11 @@ impl McpMarketplace {
     }
 
     pub fn disable(&self, name: &str) -> Result<()> {
-        let config_path = self.workspace_dir.join("mcp").join(name).join("config.json");
+        let config_path = self
+            .workspace_dir
+            .join("mcp")
+            .join(name)
+            .join("config.json");
         if !config_path.exists() {
             return Err(anyhow!("MCP not installed: {}", name));
         }
@@ -274,13 +292,13 @@ impl McpMarketplace {
 }
 
 pub fn handle_mcp_command(
-    command: crate::McpCommands,
+    command: McpCommands,
     workspace_dir: &std::path::Path,
 ) -> anyhow::Result<()> {
     let market = McpMarketplace::new(workspace_dir);
-    
+
     match command {
-        crate::McpCommands::List => {
+        McpCommands::List => {
             let available = market.list_available()?;
             if available.is_empty() {
                 println!("No MCPs available in marketplace.");
@@ -291,37 +309,41 @@ pub fn handle_mcp_command(
                 }
             }
         }
-        crate::McpCommands::Installed => {
+        McpCommands::Installed => {
             let installed = market.list_installed()?;
             if installed.is_empty() {
                 println!("No MCPs installed.");
             } else {
                 println!("Installed MCPs ({}):", installed.len());
                 for mcp in &installed {
-                    let status = if mcp.enabled { "✓ enabled" } else { "○ disabled" };
+                    let status = if mcp.enabled {
+                        "✓ enabled"
+                    } else {
+                        "○ disabled"
+                    };
                     println!("  {} — {} [{}]", mcp.name, mcp.description, status);
                 }
             }
         }
-        crate::McpCommands::Install { name } => {
+        McpCommands::Install { name } => {
             println!("Installing MCP: {}", name);
             let installed = market.install(&name)?;
             println!("✓ Installed MCP: {}", installed);
         }
-        crate::McpCommands::Uninstall { name } => {
+        McpCommands::Uninstall { name } => {
             println!("Uninstalling MCP: {}", name);
             market.uninstall(&name)?;
             println!("✓ Uninstalled MCP: {}", name);
         }
-        crate::McpCommands::Enable { name } => {
+        McpCommands::Enable { name } => {
             market.enable(&name)?;
             println!("✓ Enabled MCP: {}", name);
         }
-        crate::McpCommands::Disable { name } => {
+        McpCommands::Disable { name } => {
             market.disable(&name)?;
             println!("✓ Disabled MCP: {}", name);
         }
     }
-    
+
     Ok(())
 }

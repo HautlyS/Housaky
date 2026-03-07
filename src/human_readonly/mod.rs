@@ -102,11 +102,12 @@ impl HumanReadOnlyServer {
         all_entries.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
 
         let now = chrono::Utc::now().to_rfc3339();
+        let categories = self.config.allowed_categories.clone();
 
         Ok(HumanReadOnlyView {
-            memories: all_entries,
             total_count: all_entries.len(),
-            categories: self.config.allowed_categories.clone(),
+            memories: all_entries,
+            categories,
             generated_at: now,
         })
     }

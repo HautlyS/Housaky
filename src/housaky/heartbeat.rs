@@ -238,6 +238,7 @@ impl HousakyHeartbeat {
             core,
             skill_registry: c.skill_registry,
             kowalski_bridge: c.kowalski_bridge,
+            unified_hub: c.unified_hub,
             self_improvement: c.self_improvement,
             recursive_improvement_loop: c.recursive_improvement_loop,
             memory_consolidator: c.memory_consolidator,

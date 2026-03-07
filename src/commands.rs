@@ -64,7 +64,7 @@ pub enum PeripheralCommands {
 // Housaky Internal Commands (used by housaky/mod.rs)
 // ============================================================================
 
-#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum HousakyCommands {
     /// Show status
     Status,
@@ -140,7 +140,7 @@ pub enum HousakyCommands {
 // Unified Multi-Agent Hub Commands
 // ============================================================================
 
-#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum AgentsCommands {
     /// Show unified hub status
     Status,
@@ -174,9 +174,9 @@ pub enum AgentsCommands {
         /// Knowledge value
         #[arg(short, long)]
         value: String,
-        /// Confidence (0.0-1.0)
-        #[arg(short, long, default_value = "0.9")]
-        confidence: f64,
+        /// Confidence (0-100 as integer)
+        #[arg(short, long, default_value = "90")]
+        confidence: u8,
     },
     /// Trigger manual heartbeat
     Heartbeat,
@@ -511,7 +511,10 @@ pub enum QuantumCommands {
     RunBraket {
         #[arg(short, long, default_value = "100")]
         shots: u64,
-        #[arg(long, default_value = "arn:aws:braket:us-east-1::device/qpu/quera/Aquila")]
+        #[arg(
+            long,
+            default_value = "arn:aws:braket:us-east-1::device/qpu/quera/Aquila"
+        )]
         device: String,
         #[arg(long, default_value = "amazon-braket-housaky")]
         bucket: String,
@@ -525,7 +528,10 @@ pub enum QuantumCommands {
     },
     /// Device info
     DeviceInfo {
-        #[arg(long, default_value = "arn:aws:braket:us-east-1::device/qpu/quera/Aquila")]
+        #[arg(
+            long,
+            default_value = "arn:aws:braket:us-east-1::device/qpu/quera/Aquila"
+        )]
         device: String,
         #[arg(long, default_value = "amazon-braket-housaky")]
         bucket: String,
@@ -534,7 +540,10 @@ pub enum QuantumCommands {
     Devices,
     /// Estimate cost
     EstimateCost {
-        #[arg(long, default_value = "arn:aws:braket:::device/quantum-simulator/amazon/sv1")]
+        #[arg(
+            long,
+            default_value = "arn:aws:braket:::device/quantum-simulator/amazon/sv1"
+        )]
         device: String,
         #[arg(short, long, default_value = "1000")]
         shots: u64,
@@ -543,7 +552,10 @@ pub enum QuantumCommands {
     },
     /// Transpile circuit
     Transpile {
-        #[arg(long, default_value = "arn:aws:braket:eu-north-1::device/qpu/iqm/Garnet")]
+        #[arg(
+            long,
+            default_value = "arn:aws:braket:eu-north-1::device/qpu/iqm/Garnet"
+        )]
         device: String,
         #[arg(short, long, default_value = "2")]
         opt_level: u8,
@@ -562,7 +574,10 @@ pub enum QuantumCommands {
     },
     /// List tasks
     Tasks {
-        #[arg(long, default_value = "arn:aws:braket:us-east-1::device/qpu/quera/Aquila")]
+        #[arg(
+            long,
+            default_value = "arn:aws:braket:us-east-1::device/qpu/quera/Aquila"
+        )]
         device: String,
         #[arg(long, default_value = "amazon-braket-housaky")]
         bucket: String,
@@ -632,7 +647,11 @@ pub enum CollectiveCommands {
     /// Register agent
     Register {
         name: String,
-        #[arg(short, long, default_value = "Housaky AGI collective intelligence node")]
+        #[arg(
+            short,
+            long,
+            default_value = "Housaky AGI collective intelligence node"
+        )]
         description: String,
     },
 }
@@ -644,10 +663,7 @@ pub enum CollectiveCommands {
 #[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum GSDCommands {
     /// New project
-    NewProject {
-        name: String,
-        vision: String,
-    },
+    NewProject { name: String, vision: String },
     /// Create phase
     Phase {
         name: String,

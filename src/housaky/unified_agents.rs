@@ -270,6 +270,9 @@ pub enum UnifiedMessageType {
 }
 
 impl UnifiedAgentHub {
+    pub fn unified_tasks(&self) -> &Arc<RwLock<HashMap<String, UnifiedTask>>> {
+        &self.unified_tasks
+    }
     pub fn new(config: UnifiedAgentConfig) -> Self {
         let (message_bus, _) = broadcast::channel(512);
 
@@ -1106,18 +1109,6 @@ pub struct ConsensusResult {
     pub agreement_ratio: f64,
     pub total_responders: usize,
     pub supporters: Vec<String>,
-}
-
-impl KowalskiAgentType {
-    fn as_str(&self) -> &'static str {
-        match self {
-            KowalskiAgentType::Code => "code",
-            KowalskiAgentType::Web => "web",
-            KowalskiAgentType::Academic => "academic",
-            KowalskiAgentType::Data => "data",
-            KowalskiAgentType::Federated => "federation",
-        }
-    }
 }
 
 #[cfg(test)]

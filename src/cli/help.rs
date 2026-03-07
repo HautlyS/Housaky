@@ -5,7 +5,7 @@ pub struct HelpSystem;
 impl HelpSystem {
     pub fn show_help(topic: Option<&str>) {
         let topic = topic.unwrap_or("all");
-        
+
         match topic {
             "tips" | "t" => Self::show_tips(),
             "commands" | "cmd" => Self::show_commands(),
@@ -20,7 +20,8 @@ impl HelpSystem {
     }
 
     fn show_tips() {
-        println!(r#"
+        println!(
+            r#"
 ╔══════════════════════════════════════════════════════════════════════════════╗
 ║                           HOUSAKY TIPS & TRICKS                           ║
 ╠══════════════════════════════════════════════════════════════════════════════╣
@@ -51,11 +52,13 @@ impl HelpSystem {
 ║     housaky a2a learn <cat>       # Share learning                          ║
 ║                                                                              ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
-"#);
+"#
+        );
     }
 
     fn show_commands() {
-        println!(r#"
+        println!(
+            r#"
 ╔══════════════════════════════════════════════════════════════════════════════╗
 ║                            HOUSAKY COMMANDS                                 ║
 ╠══════════════════════════════════════════════════════════════════════════════╣
@@ -105,11 +108,13 @@ impl HelpSystem {
 ║    housaky heartbeat                Trigger heartbeat                        ║
 ║                                                                              ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
-"#);
+"#
+        );
     }
 
     fn show_keys_help() {
-        println!(r#"
+        println!(
+            r#"
 ╔══════════════════════════════════════════════════════════════════════════════╗
 ║                              KEYS MANAGEMENT                                 ║
 ╠══════════════════════════════════════════════════════════════════════════════╣
@@ -132,11 +137,13 @@ impl HelpSystem {
 ║    OpenAI:       housaky models list --provider openai                       ║
 ║                                                                              ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
-"#);
+"#
+        );
     }
 
     fn show_skills_help() {
-        println!(r#"
+        println!(
+            r#"
 ╔══════════════════════════════════════════════════════════════════════════════╗
 ║                              SKILLS SYSTEM                                   ║
 ╠══════════════════════════════════════════════════════════════════════════════╣
@@ -159,11 +166,13 @@ impl HelpSystem {
 ║    echo '# My Skill' > ~/.housaky/workspace/skills/my-skill/SKILL.md       ║
 ║                                                                              ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
-"#);
+"#
+        );
     }
 
     fn show_mcp_help() {
-        println!(r#"
+        println!(
+            r#"
 ╔══════════════════════════════════════════════════════════════════════════════╗
 ║                    MCP (Model Context Protocol)                              ║
 ╠══════════════════════════════════════════════════════════════════════════════╣
@@ -184,11 +193,13 @@ impl HelpSystem {
 ║    • postgres                      - PostgreSQL database                     ║
 ║                                                                              ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
-"#);
+"#
+        );
     }
 
     fn show_agi_help() {
-        println!(r#"
+        println!(
+            r#"
 ╔══════════════════════════════════════════════════════════════════════════════╗
 ║                         AGI & SELF-IMPROVEMENT                              ║
 ╠══════════════════════════════════════════════════════════════════════════════╣
@@ -217,11 +228,13 @@ impl HelpSystem {
 ║    • None                - No persistence                                   ║
 ║                                                                              ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
-"#);
+"#
+        );
     }
 
     fn show_quantum_help() {
-        println!(r#"
+        println!(
+            r#"
 ╔══════════════════════════════════════════════════════════════════════════════╗
 ║                          QUANTUM COMPUTING                                   ║
 ╠══════════════════════════════════════════════════════════════════════════════╣
@@ -242,7 +255,8 @@ impl HelpSystem {
 ║    • Hybrid classical-quantum solving                                       ║
 ║                                                                              ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
-"#);
+"#
+        );
     }
 
     fn show_all_help() {
@@ -260,14 +274,12 @@ pub fn run_tui_command(
     config: Config,
 ) -> anyhow::Result<()> {
     let tui_name = name.unwrap_or_else(|| "chat".to_string());
-    
+
     match tui_name.to_lowercase().as_str() {
-        "chat" | "c" => {
-            crate::tui::run_chat_tui(config, provider, model, None)
-        }
+        "chat" | "c" => crate::tui::run_chat_tui(config, provider, model, None),
         "skills" | "skill" | "s" => {
-            let repo_root = std::env::current_dir()
-                .unwrap_or_else(|_| config.workspace_dir.clone());
+            let repo_root =
+                std::env::current_dir().unwrap_or_else(|_| config.workspace_dir.clone());
             crate::tui::run_skills_market_tui(config, repo_root)
         }
         "keys" | "key" | "k" => {
@@ -280,14 +292,10 @@ pub fn run_tui_command(
             Ok(())
         }
         "doctor" | "diag" | "d" => {
-            housaky::cli::handle_doctor(&config, Some(housaky::commands::DoctorCommands::Run))
+            crate::cli::handle_doctor(&config, Some(crate::commands::DoctorCommands::Run))
         }
-        "agi" | "a" => {
-            crate::tui::run_agi_tui(config, provider, model, None)
-        }
-        "live" | "thoughts" | "t" => {
-            crate::tui::live::run_live_agi_tui(config, provider, model)
-        }
+        "agi" | "a" => crate::tui::run_agi_tui(config, provider, model, None),
+        "live" | "thoughts" | "t" => crate::tui::live::run_live_agi_tui(config, provider, model),
         "commands" | "cmd" | "palette" => {
             println!("Command palette: Ctrl+K in any TUI");
             Ok(())

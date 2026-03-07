@@ -171,6 +171,30 @@ pub struct SelfImprovementLoop {
     pub quantum_bridge: Option<Arc<QuantumAgiBridge>>,
 }
 
+pub struct TestRunner {
+    passed: u64,
+    failed: u64,
+}
+
+impl TestRunner {
+    pub fn new() -> Self {
+        Self {
+            passed: 0,
+            failed: 0,
+        }
+    }
+
+    pub fn run_tests(&mut self) -> Result<()> {
+        Ok(())
+    }
+}
+
+impl Default for TestRunner {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SelfImprovementLoop {
     pub fn new(
         workspace_dir: &PathBuf,
