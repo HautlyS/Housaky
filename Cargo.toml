@@ -98,6 +98,9 @@ glob = "0.3"
 tokio-tungstenite = { version = "0.24", features = ["rustls-tls-webpki-roots"] }
 futures-util = { version = "0.3", default-features = false, features = ["sink"] }
 hostname = "0.4.2"
+
+# X25519 key exchange for secure channels
+x25519-dalek = { version = "2.0", features = ["static_secrets"] }
 lettre = { version = "0.11.19", default-features = false, features = ["builder", "smtp-transport", "rustls-tls"] }
 mail-parser = "0.11.2"
 rustls = "0.23"

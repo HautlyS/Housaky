@@ -22,6 +22,8 @@ pub mod agi_integration;
 pub mod agi_loop;
 pub mod alignment;
 pub mod a2a;
+pub mod a2a_websocket;
+pub mod a2a_secure;
 pub mod cognitive;
 pub mod collaboration;
 pub mod core;
@@ -149,7 +151,7 @@ pub use unified_agents::{
 };
 
 use crate::commands::{
-    CollectiveCommands, GSDCommands, GoalCommands, HousakyCommands, SelfModCommands,
+    AgentsCommands, CollectiveCommands, GSDCommands, GoalCommands, HousakyCommands, SelfModCommands,
 };
 use crate::config::Config;
 use anyhow::Result;
@@ -1404,12 +1406,16 @@ async fn handle_agents_command(command: AgentsCommands, config: &Config) -> Resu
         enable_web_agent: true,
         enable_academic_agent: true,
         enable_data_agent: true,
+        enable_creative_agent: true,
+        enable_reasoning_agent: true,
         glm_api_key: None,
         glm_model: "zai-org/GLM-5-FP8".to_string(),
         code_agent_glm_key: None,
         web_agent_glm_key: None,
         academic_agent_glm_key: None,
         data_agent_glm_key: None,
+        creative_agent_glm_key: None,
+        reasoning_agent_glm_key: None,
         federation_glm_key: None,
     };
 
@@ -1509,7 +1515,7 @@ async fn handle_agents_command(command: AgentsCommands, config: &Config) -> Resu
             println!("📋 Unified Hub Tasks");
             println!();
 
-            let tasks = hub.unified_tasks.read().await;
+            let tasks = hub.unified_tasks().read().await;
             if tasks.is_empty() {
                 println!("No tasks in the unified hub.");
             } else {

@@ -6,8 +6,10 @@
 //! - Minimal chat-focused interface
 //! - Kowalski agent integration (code, web, academic, data)
 //! - Ctrl+K hotkey for quick provider/model switching
+//! - A2A WebSocket panel for inter-agent communication
 //! - AMOLED black & white aesthetic
 
+pub mod a2a_panel;
 pub mod agents;
 pub mod app;
 pub mod chat;
