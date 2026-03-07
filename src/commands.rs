@@ -499,6 +499,18 @@ pub enum SelfModCommands {
         #[arg(long)]
         key: String,
     },
+    /// Review own code for improvements
+    Review {
+        /// Specific file or directory to review
+        #[arg(short, long)]
+        path: Option<String>,
+        /// Maximum issues to show
+        #[arg(short = 'n', long, default_value = "20")]
+        max_issues: usize,
+        /// Include clippy warnings
+        #[arg(short, long, default_value = "true")]
+        clippy: bool,
+    },
 }
 
 // ============================================================================

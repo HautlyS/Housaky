@@ -278,8 +278,8 @@ impl TreeSitterAnalyzer {
 // ============================================================================
 
 pub struct SelfImprovementEngine {
-    project_root: PathBuf,
-    rust_analyzer: RustAnalyzer,
+    pub project_root: PathBuf,
+    pub rust_analyzer: RustAnalyzer,
     tree_sitter: TreeSitterAnalyzer,
     improvements: Vec<ImprovementOpportunity>,
 }

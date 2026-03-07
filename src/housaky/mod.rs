@@ -760,6 +760,124 @@ async fn handle_self_mod_command(command: SelfModCommands, config: &Config) -> R
                 println!("No override found for {}.{}", target, key);
             }
         }
+
+        SelfModCommands::Review { path, max_issues, clippy } => {
+            use crate::housaky::rust_self_improvement::SelfImprovementEngine;
+
+            println!("🔍 Housaky Self-Code Review");
+            println!("============================\n");
+
+            // Determine the project root - prefer the provided path or detect from Cargo.toml
+            let project_root = if let Some(ref p) = path {
+                let p = std::path::PathBuf::from(p);
+                if p.join("Cargo.toml").exists() {
+                    p
+                } else if p.parent().map(|parent| parent.join("Cargo.toml").exists()).unwrap_or(false) {
+                    p.parent().unwrap().to_path_buf()
+                } else {
+                    // Fall back to CWD if it has Cargo.toml
+                    let cwd = std::env::current_dir().unwrap_or_else(|_| config.workspace_dir.clone());
+                    if cwd.join("Cargo.toml").exists() {
+                        cwd
+                    } else {
+                        config.workspace_dir.clone()
+                    }
+                }
+            } else {
+                // Auto-detect: try CWD first, then workspace
+                let cwd = std::env::current_dir().unwrap_or_else(|_| config.workspace_dir.clone());
+                if cwd.join("Cargo.toml").exists() {
+                    cwd
+                } else {
+                    config.workspace_dir.clone()
+                }
+            };
+
+            let target_path = path
+                .as_ref()
+                .map(|p| std::path::PathBuf::from(p))
+                .unwrap_or_else(|| project_root.join("src"));
+
+            println!("Project root: {}", project_root.display());
+            println!("Scanning: {}", target_path.display());
+
+            let mut engine = SelfImprovementEngine::new(project_root.clone());
+
+            println!("Running cargo check...");
+            let mut opportunities = engine.scan().await?;
+
+            if clippy {
+                println!("Running clippy...");
+                if let Ok(clippy_issues) = engine.rust_analyzer.clippy().await {
+                    for issue in clippy_issues {
+                        opportunities.push(crate::housaky::rust_self_improvement::ImprovementOpportunity {
+                            file: issue.file,
+                            description: format!("Clippy: {}", issue.message),
+                            priority: match issue.severity.as_str() {
+                                "error" => 0.95,
+                                "warning" => 0.75,
+                                _ => 0.5,
+                            },
+                            effort: "low".to_string(),
+                            category: "clarity".to_string(),
+                            code_snippet: issue.suggestion,
+                        });
+                    }
+                }
+            }
+
+            opportunities.sort_by(|a, b| b.priority.partial_cmp(&a.priority).unwrap_or(std::cmp::Ordering::Equal));
+
+            let total = opportunities.len();
+            let shown = max_issues.min(total);
+
+            println!("\n📊 Analysis Complete");
+            println!("  Total issues found: {}", total);
+            println!("  Showing top: {}\n", shown);
+
+            if opportunities.is_empty() {
+                println!("✅ No improvement opportunities found! Code looks good.");
+            } else {
+                for (i, opp) in opportunities.iter().take(shown).enumerate() {
+                    let priority_bar = match opp.priority {
+                        p if p >= 0.9 => "🔴",
+                        p if p >= 0.7 => "🟠",
+                        p if p >= 0.5 => "🟡",
+                        _ => "🟢",
+                    };
+
+                    println!("{}. {} {} [{}]", i + 1, priority_bar, opp.description, opp.category);
+                    println!("   File: {}", opp.file);
+                    println!("   Priority: {:.2}, Effort: {}", opp.priority, opp.effort);
+
+                    if let Some(ref snippet) = opp.code_snippet {
+                        println!("   Suggestion: {}", snippet.chars().take(80).collect::<String>());
+                    }
+                    println!();
+                }
+
+                println!("---");
+                println!("📝 Summary by category:");
+                let mut by_category: std::collections::HashMap<&str, usize> = std::collections::HashMap::new();
+                for opp in &opportunities {
+                    *by_category.entry(&opp.category).or_insert(0) += 1;
+                }
+                for (cat, count) in by_category.iter() {
+                    println!("  {}: {}", cat, count);
+                }
+
+                let high_priority = opportunities.iter().filter(|o| o.priority >= 0.8).count();
+                if high_priority > 0 {
+                    println!("\n⚠️  {} high-priority issues require attention!", high_priority);
+                }
+            }
+
+            let report_path = housaky_dir.join("code_review_report.md");
+            let report = engine.generate_report();
+            tokio::fs::create_dir_all(&housaky_dir).await?;
+            tokio::fs::write(&report_path, &report).await?;
+            println!("\n📄 Full report saved to: {}", report_path.display());
+        }
     }
 
     Ok(())
