@@ -7,10 +7,34 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::process::Stdio;
 use std::sync::Arc;
-use std::time::Duration;
-use tokio::process::Command;
+use std::time::{Duration, Instant};
+use tokio::sync::{mpsc, RwLock};
 use tokio::time::timeout;
 use tracing::{error, info, warn};
+
+const DEFAULT_TIMEOUT_SECS: u64 = 120;
+const MAX_RETRIES: u32 = 3;
+const CACHE_TTL_SECS: u64 = 300;
+
+/// Cache entry for task results
+#[derive(Debug, Clone)]
+struct CacheEntry {
+    result: TaskResult,
+    cached_at: Instant,
+}
+
+/// Progress callback type
+pub type ProgressCallback = Box<dyn Fn(KowalskiProgress) + Send + Sync>;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum KowalskiProgress {
+    Queued { task_id: String, position: usize },
+    Starting { task_id: String, agent: String },
+    Streaming { task_id: String, chunk: String },
+    Completed { task_id: String },
+    Failed { task_id: String, error: String },
+    Retrying { task_id: String, attempt: u32, max_attempts: u32 },
+}
 
 /// Bridge to Kowalski multi-agent framework
 /// Enables Housaky to coordinate with Kowalski agents via CLI
@@ -20,6 +44,17 @@ pub struct KowalskiBridge {
     cli_path: Option<PathBuf>,
     keys_manager: Arc<KeysManager>,
     subagent_configs: HashMap<String, SubAgentConfig>,
+    cache: Arc<RwLock<HashMap<String, CacheEntry>>>,
+    task_queue: Arc<RwLock<Vec<PendingTask>>>,
+    progress_tx: Option<mpsc::Sender<KowalskiProgress>>,
+}
+
+#[derive(Debug, Clone)]
+struct PendingTask {
+    task_id: String,
+    agent_name: String,
+    task: String,
+    created_at: Instant,
 }
 
 /// Represents a Kowalski agent
@@ -235,7 +270,60 @@ impl KowalskiBridge {
             cli_path,
             keys_manager,
             subagent_configs,
+            cache: Arc::new(RwLock::new(HashMap::new())),
+            task_queue: Arc::new(RwLock::new(Vec::new())),
+            progress_tx: None,
         }
+    }
+
+    /// Set progress callback channel
+    pub fn with_progress_channel(mut self, tx: mpsc::Sender<KowalskiProgress>) -> Self {
+        self.progress_tx = Some(tx);
+        self
+    }
+
+    /// Get queue status
+    pub async fn get_queue_status(&self) -> QueueStatus {
+        let queue = self.task_queue.read().await;
+        QueueStatus {
+            pending: queue.len(),
+            by_agent: queue.iter().fold(HashMap::new(), |mut acc, t| {
+                *acc.entry(t.agent_name.clone()).or_insert(0) += 1;
+                acc
+            }),
+        }
+    }
+
+    /// Clear expired cache entries
+    pub async fn clear_expired_cache(&self) -> usize {
+        let mut cache = self.cache.write().await;
+        let now = Instant::now();
+        let before = cache.len();
+        cache.retain(|_, entry| now.duration_since(entry.cached_at).as_secs() < CACHE_TTL_SECS);
+        before - cache.len()
+    }
+
+    /// Clear all cache
+    pub async fn clear_cache(&self) {
+        self.cache.write().await.clear();
+    }
+
+    /// Get cache stats
+    pub async fn get_cache_stats(&self) -> CacheStats {
+        let cache = self.cache.read().await;
+        CacheStats {
+            entries: cache.len(),
+            oldest: cache.values().map(|e| e.cached_at).min(),
+        }
+    }
+
+    fn generate_cache_key(agent_name: &str, task: &str) -> String {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+        let mut hasher = DefaultHasher::new();
+        agent_name.hash(&mut hasher);
+        task.hash(&mut hasher);
+        format!("{:x}", hasher.finish())
     }
 
     fn load_subagent_configs(keys_manager: &Arc<KeysManager>) -> HashMap<String, SubAgentConfig> {
@@ -379,6 +467,7 @@ impl KowalskiBridge {
     }
 
     /// Send a task to a specific agent using its configured provider/key
+    /// With caching, retry logic, and progress reporting
     pub async fn send_task(&self, agent_name: &str, task: &str) -> Result<TaskResult> {
         let agent = self
             .agents
@@ -394,7 +483,20 @@ impl KowalskiBridge {
             ));
         }
 
-        let start_time = std::time::Instant::now();
+        let cache_key = Self::generate_cache_key(agent_name, task);
+        
+        // Check cache first
+        {
+            let cache = self.cache.read().await;
+            if let Some(entry) = cache.get(&cache_key) {
+                if Instant::now().duration_since(entry.cached_at).as_secs() < CACHE_TTL_SECS {
+                    info!("Returning cached result for task to {}", agent_name);
+                    return Ok(entry.result.clone());
+                }
+            }
+        }
+
+        let start_time = Instant::now();
         info!("Sending task to {}: {}", agent_name, task);
 
         // Get subagent config from keys manager
@@ -408,14 +510,148 @@ impl KowalskiBridge {
 
         let (model, key_entry) = key_result;
         
-        // Execute with the configured provider
-        let result = match self.execute_with_provider(&subagent_config, &key_entry.key, &model, task).await {
-            Ok(output) => TaskResult {
-                success: true,
-                output,
-                error: None,
-                execution_time_ms: crate::util::time::duration_ms_u64(start_time.elapsed()),
-            },
+        // Execute with retry logic
+        let mut last_error = None;
+        for attempt in 1..=MAX_RETRIES {
+            if attempt > 1 {
+                let delay = Duration::from_secs(2u64.pow(attempt - 1));
+                warn!("Retry attempt {} for {} after {}s", attempt, agent_name, delay.as_secs());
+                tokio::time::sleep(delay).await;
+                
+                if let Some(ref tx) = self.progress_tx {
+                    let _ = tx.send(KowalskiProgress::Retrying {
+                        task_id: cache_key.clone(),
+                        attempt,
+                        max_attempts: MAX_RETRIES,
+                    }).await;
+                }
+            }
+
+            // Send starting progress
+            if let Some(ref tx) = self.progress_tx {
+                let _ = tx.send(KowalskiProgress::Starting {
+                    task_id: cache_key.clone(),
+                    agent: agent_name.to_string(),
+                }).await;
+            }
+
+            match self.execute_with_provider(&subagent_config, &key_entry.key, &model, task).await {
+                Ok(output) => {
+                    let result = TaskResult {
+                        success: true,
+                        output,
+                        error: None,
+                        execution_time_ms: crate::util::time::duration_ms_u64(start_time.elapsed()),
+                    };
+
+                    // Cache the result
+                    {
+                        let mut cache = self.cache.write().await;
+                        cache.insert(cache_key.clone(), CacheEntry {
+                            result: result.clone(),
+                            cached_at: Instant::now(),
+                        });
+                    }
+
+                    // Send completion progress
+                    if let Some(ref tx) = self.progress_tx {
+                        let _ = tx.send(KowalskiProgress::Completed {
+                            task_id: cache_key.clone(),
+                        }).await;
+                    }
+
+                    info!(
+                        "Task completed by {} in {}ms",
+                        agent_name, result.execution_time_ms
+                    );
+                    return Ok(result);
+                }
+                Err(e) => {
+                    last_error = Some(e);
+                    // Check if error is retryable
+                    let err_str = format!("{:?}", last_error);
+                    if !err_str.contains("rate limit") && !err_str.contains("timeout") && !err_str.contains("429") {
+                        break; // Non-retryable error
+                    }
+                }
+            }
+        }
+
+        // All retries failed
+        let result = TaskResult {
+            success: false,
+            output: String::new(),
+            error: Some(format!("Failed after {} attempts: {:?}", MAX_RETRIES, last_error)),
+            execution_time_ms: crate::util::time::duration_ms_u64(start_time.elapsed()),
+        };
+
+        // Send failure progress
+        if let Some(ref tx) = self.progress_tx {
+            let _ = tx.send(KowalskiProgress::Failed {
+                task_id: cache_key.clone(),
+                error: result.error.clone().unwrap_or_default(),
+            }).await;
+        }
+
+        error!("Task failed for {}: {:?}", agent_name, result.error);
+        Ok(result)
+    }
+
+    /// Send task with streaming support
+    pub async fn send_task_streaming<F>(&self, agent_name: &str, task: &str, mut on_chunk: F) -> Result<TaskResult>
+    where
+        F: FnMut(String) + Send,
+    {
+        let agent = self
+            .agents
+            .iter()
+            .find(|a| a.name == agent_name)
+            .ok_or_else(|| anyhow::anyhow!("Agent not found: {}", agent_name))?;
+
+        if !matches!(agent.status, AgentStatus::Available) {
+            return Err(anyhow::anyhow!(
+                "Agent {} is not available (status: {:?})",
+                agent_name,
+                agent.status
+            ));
+        }
+
+        let cache_key = Self::generate_cache_key(agent_name, task);
+        
+        // Check cache first
+        {
+            let cache = self.cache.read().await;
+            if let Some(entry) = cache.get(&cache_key) {
+                if Instant::now().duration_since(entry.cached_at).as_secs() < CACHE_TTL_SECS {
+                    info!("Returning cached result for streaming task to {}", agent_name);
+                    let result = entry.result.clone();
+                    on_chunk(result.output.clone());
+                    return Ok(result);
+                }
+            }
+        }
+
+        let start_time = Instant::now();
+        
+        let subagent_config = self.subagent_configs.get(agent_name)
+            .cloned()
+            .ok_or_else(|| anyhow::anyhow!("No configuration found for {}", agent_name))?;
+
+        let key_result = self.keys_manager.get_key_for_subagent(agent_name).await
+            .ok_or_else(|| anyhow::anyhow!("No key found for {}", agent_name))?;
+
+        let (model, key_entry) = key_result;
+        
+        let result = match self.execute_with_provider_streaming(&subagent_config, &key_entry.key, &model, task, &mut on_chunk).await {
+            Ok(output) => {
+                on_chunk(output.clone());
+                TaskResult {
+                    success: true,
+                    output,
+                    error: None,
+                    execution_time_ms: crate::util::time::duration_ms_u64(start_time.elapsed()),
+                }
+            }
             Err(e) => TaskResult {
                 success: false,
                 output: String::new(),
@@ -424,13 +660,13 @@ impl KowalskiBridge {
             },
         };
 
+        // Cache the result
         if result.success {
-            info!(
-                "Task completed by {} in {}ms",
-                agent_name, result.execution_time_ms
-            );
-        } else {
-            error!("Task failed for {}: {:?}", agent_name, result.error);
+            let mut cache = self.cache.write().await;
+            cache.insert(cache_key, CacheEntry {
+                result: result.clone(),
+                cached_at: Instant::now(),
+            });
         }
 
         Ok(result)
@@ -451,64 +687,204 @@ impl KowalskiBridge {
             config.provider, model
         );
 
-        // Build the request for OpenAI-compatible API
-        let request_body = serde_json::json!({
-            "model": model,
-            "messages": [
-                {
-                    "role": "system",
-                    "content": system_prompt
-                },
-                {
-                    "role": "user",
-                    "content": task
-                }
-            ],
-            "temperature": 0.7,
-            "max_tokens": 4096
-        });
+        self.execute_request(config.provider.as_str(), api_key, model, &system_prompt, task, false, None).await
+    }
 
+    /// Execute with streaming support
+    async fn execute_with_provider_streaming<F>(
+        &self,
+        config: &SubAgentConfig,
+        api_key: &str,
+        model: &str,
+        task: &str,
+        on_chunk: &mut F,
+    ) -> Result<String>
+    where
+        F: FnMut(String) + Send,
+    {
+        let system_prompt = self.get_system_prompt_for_agent_name(&config.key_name);
+        
+        info!(
+            "Executing streaming task with provider {} (model: {})",
+            config.provider, model
+        );
+
+        self.execute_request(config.provider.as_str(), api_key, model, &system_prompt, task, true, Some(on_chunk)).await
+    }
+
+    async fn execute_request<F>(
+        &self,
+        provider: &str,
+        api_key: &str,
+        model: &str,
+        system_prompt: &str,
+        task: &str,
+        streaming: bool,
+        mut on_chunk: Option<&mut F>,
+    ) -> Result<String>
+    where
+        F: FnMut(String) + Send,
+    {
         // Determine base URL based on provider
-        let base_url = match config.provider.as_str() {
+        let base_url = match provider {
             "modal" => "https://api.us-west-2.modal.direct/v1",
             "openrouter" => "https://openrouter.ai/api/v1",
             "openai" => "https://api.openai.com/v1",
             "anthropic" => "https://api.anthropic.com/v1",
+            "ollama" => "http://localhost:11434/api/chat",
             _ => "https://api.openai.com/v1",
         };
 
-        let client = reqwest::Client::new();
-        let url = format!("{}/chat/completions", base_url);
-        
-        let response = client
-            .post(&url)
-            .header("Authorization", format!("Bearer {}", api_key))
-            .header("Content-Type", "application/json")
-            .json(&request_body)
-            .send()
-            .await
-            .context("Failed to send request to API")?;
+        let client = reqwest::Client::builder()
+            .timeout(Duration::from_secs(DEFAULT_TIMEOUT_SECS))
+            .build()?;
 
-        if !response.status().is_success() {
-            let status = response.status();
-            let error_text = response.text().await.unwrap_or_default();
-            bail!("API request failed with status {}: {}", status, error_text);
-        }
+        if streaming && provider != "ollama" {
+            // Use SSE streaming for OpenAI-compatible APIs
+            let url = format!("{}/chat/completions", base_url);
+            
+            let request_body = serde_json::json!({
+                "model": model,
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": task}
+                ],
+                "temperature": 0.7,
+                "max_tokens": 4096,
+                "stream": true
+            });
 
-        let response_body: serde_json::Value = response
+            let response = client
+                .post(&url)
+                .header("Authorization", format!("Bearer {}", api_key))
+                .header("Content-Type", "application/json")
+                .header("Accept", "text/event-stream")
+                .json(&request_body)
+                .send()
+                .await
+                .context("Failed to send streaming request")?;
+
+            if !response.status().is_success() {
+                let status = response.status();
+                let error_text = response.text().await.unwrap_or_default();
+                bail!("Streaming request failed with status {}: {}", status, error_text);
+            }
+
+            let mut stream = response.bytes_stream();
+            let mut full_output = String::new();
+
+            use futures_util::StreamExt;
+            while let Some(item) = stream.next().await {
+                let chunk = item.context("Failed to read stream chunk")?;
+                let text = String::from_utf8_lossy(&chunk);
+                
+                for line in text.lines() {
+                    if line.starts_with("data: ") {
+                        let data = &line[6..];
+                        if data == "[DONE]" {
+                            return Ok(full_output);
+                        }
+                        
+                        if let Ok(json) = serde_json::from_str::<serde_json::Value>(data) {
+                            if let Some(content) = json.get("choices")
+                                .and_then(|c| c.as_array())
+                                .and_then(|c| c.first())
+                                .and_then(|c| c.get("delta"))
+                                .and_then(|d| d.get("content"))
+                                .and_then(|c| c.as_str())
+                            {
+                                full_output.push_str(content);
+                                if let Some(ref mut callback) = on_chunk {
+                                    callback(content.to_string());
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            Ok(full_output)
+        } else {
+            // Non-streaming request
+            let request_body = if provider == "ollama" {
+                serde_json::json!({
+                    "model": model,
+                    "messages": [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": task}
+                    ],
+                    "stream": false
+                })
+            } else {
+                serde_json::json!({
+                    "model": model,
+                    "messages": [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": task}
+                    ],
+                    "temperature": 0.7,
+                    "max_tokens": 4096
+                })
+            };
+
+            let url = if provider == "ollama" {
+                format!("{}/chat", base_url)
+            } else {
+                format!("{}/chat/completions", base_url)
+            };
+            
+            let mut request = client
+                .post(&url)
+                .header("Content-Type", "application/json");
+
+            if provider != "ollama" {
+                request = request.header("Authorization", format!("Bearer {}", api_key));
+            }
+            
+            let response = request
+                .json(&request_body)
+                .send()
+                .await
+                .context("Failed to send request to API")?;
+
+            if !response.status().is_success() {
+                let status = response.status();
+                let error_text = response.text().await.unwrap_or_default();
+                bail!("API request failed with status {}: {}", status, error_text);
+            }
+
+            let response_body: serde_json::Value = response
             .json()
             .await
             .context("Failed to parse API response")?;
 
-        let content = response_body["choices"]
-            .as_array()
-            .and_then(|arr| arr.first())
-            .and_then(|choice| choice.get("message"))
-            .and_then(|msg| msg.get("content"))
-            .and_then(|c| c.as_str())
-            .context("Invalid response format from API")?;
+        // Handle different response formats for different providers
+        let content = if provider == "ollama" {
+            // Ollama format: { "message": { "role": "assistant", "content": "..." } }
+            response_body.get("message")
+                .and_then(|msg| msg.get("content"))
+                .and_then(|c| c.as_str())
+                .map(|s| s.to_string())
+                .or_else(|| {
+                    // Alternative: { "response": "..." }
+                    response_body.get("response")
+                        .and_then(|c| c.as_str())
+                        .map(|s| s.to_string())
+                })
+                .context("Invalid Ollama response format")?
+        } else {
+            // OpenAI-compatible format: { "choices": [{ "message": { "content": "..." } }] }
+            response_body["choices"]
+                .as_array()
+                .and_then(|arr| arr.first())
+                .and_then(|choice| choice.get("message"))
+                .and_then(|msg| msg.get("content"))
+                .and_then(|c| c.as_str())
+                .context("Invalid OpenAI response format")?
+                .to_string()
+        };
 
-        Ok(content.to_string())
+        Ok(content)
     }
 
     fn get_system_prompt_for_agent_name(&self, key_name: &str) -> String {

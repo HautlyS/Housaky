@@ -871,9 +871,270 @@ impl GoalEngine {
         let goals = self.goals.read().await;
         let path = self.workspace_dir.join(".housaky").join("goals.json");
 
+        // Ensure directory exists
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+
         let goals_vec: Vec<_> = goals.values().cloned().collect();
         let json = serde_json::to_string_pretty(&goals_vec)?;
         std::fs::write(&path, json)?;
+        Ok(())
+    }
+
+    /// Save a single goal incrementally (for better performance)
+    pub async fn save_goal(&self, goal_id: &str) -> Result<()> {
+        let goals = self.goals.read().await;
+        
+        if let Some(goal) = goals.get(goal_id) {
+            let path = self.workspace_dir.join(".housaky").join("goals").join(format!("{}.json", goal_id));
+            
+            if let Some(parent) = path.parent() {
+                std::fs::create_dir_all(parent)?;
+            }
+            
+            let json = serde_json::to_string_pretty(goal)?;
+            std::fs::write(&path, json)?;
+        }
+        
+        Ok(())
+    }
+
+    /// Export goals to a specific path
+    pub async fn export_goals(&self, path: &PathBuf, format: &str) -> Result<()> {
+        let goals = self.goals.read().await;
+        let goals_vec: Vec<_> = goals.values().cloned().collect();
+
+        match format {
+            "json" => {
+                let json = serde_json::to_string_pretty(&goals_vec)?;
+                std::fs::write(path, json)?;
+            }
+            "yaml" => {
+                let yaml = serde_yaml::to_string(&goals_vec)?;
+                std::fs::write(path, yaml)?;
+            }
+            "markdown" => {
+                let mut md = String::from("# Goals Export\n\n");
+                for goal in &goals_vec {
+                    md.push_str(&format!("## {} ({})\n", goal.title, goal.id));
+                    md.push_str(&format!("- **Status:** {:?}\n", goal.status));
+                    md.push_str(&format!("- **Priority:** {:?}\n", goal.priority));
+                    md.push_str(&format!("- **Progress:** {:.0}%\n", goal.progress * 100.0));
+                    md.push_str(&format!("- **Category:** {:?}\n", goal.category));
+                    md.push_str(&format!("- **Description:** {}\n", goal.description));
+                    if !goal.subtask_ids.is_empty() {
+                        md.push_str(&format!("- **Subtasks:** {}\n", goal.subtask_ids.len()));
+                    }
+                    md.push('\n');
+                }
+                std::fs::write(path, md)?;
+            }
+            _ => bail!("Unsupported format: {}", format),
+        }
+
+        info!("Exported {} goals to {}", goals_vec.len(), path.display());
+        Ok(())
+    }
+
+    /// Get goals by filter
+    pub async fn get_goals_filtered<F>(&self, filter: F) -> Vec<Goal>
+    where
+        F: Fn(&Goal) -> bool,
+    {
+        let goals = self.goals.read().await;
+        goals.values().filter(|g| filter(g)).cloned().collect()
+    }
+
+    /// Get goals by status
+    pub async fn get_goals_by_status(&self, status: GoalStatus) -> Vec<Goal> {
+        self.get_goals_filtered(|g| g.status == status).await
+    }
+
+    /// Get goals by priority
+    pub async fn get_goals_by_priority(&self, priority: GoalPriority) -> Vec<Goal> {
+        self.get_goals_filtered(|g| g.priority == priority).await
+    }
+
+    /// Get goals by category
+    pub async fn get_goals_by_category(&self, category: GoalCategory) -> Vec<Goal> {
+        self.get_goals_filtered(|g| g.category == category).await
+    }
+
+    /// Get goals with approaching deadlines (within hours)
+    pub async fn get_goals_with_approaching_deadlines(&self, hours: i64) -> Vec<Goal> {
+        let now = Utc::now();
+        let cutoff = now + chrono::Duration::hours(hours);
+        
+        self.get_goals_filtered(|g| {
+            match g.deadline {
+                Some(dl) => dl <= cutoff && g.status != GoalStatus::Completed && g.status != GoalStatus::Failed,
+                None => false,
+            }
+        }).await
+    }
+
+    /// Get goal statistics with more detail
+    pub async fn get_detailed_stats(&self) -> GoalDetailedStats {
+        let goals = self.goals.read().await;
+        
+        let total = goals.len();
+        let pending = goals.values().filter(|g| g.status == GoalStatus::Pending).count();
+        let in_progress = goals.values().filter(|g| g.status == GoalStatus::InProgress).count();
+        let completed = goals.values().filter(|g| g.status == GoalStatus::Completed).count();
+        let failed = goals.values().filter(|g| g.status == GoalStatus::Failed).count();
+        let deferred = goals.values().filter(|g| g.status == GoalStatus::Deferred).count();
+        
+        let avg_progress = if total > 0 {
+            goals.values().map(|g| g.progress).sum::<f64>() / total as f64
+        } else {
+            0.0
+        };
+
+        let total_learning_value: f64 = goals.values().map(|g| g.learning_value).sum();
+        let total_complexity: f64 = goals.values().map(|g| g.estimated_complexity).sum();
+        
+        let completed_count = self.completed.read().await.len();
+        let failed_count = self.failed.read().await.len();
+        
+        let success_rate = if completed_count + failed_count > 0 {
+            completed_count as f64 / (completed_count + failed_count) as f64
+        } else {
+            0.0
+        };
+
+        GoalDetailedStats {
+            total,
+            pending,
+            in_progress,
+            completed,
+            failed,
+            deferred,
+            avg_progress,
+            total_learning_value,
+            total_complexity,
+            success_rate,
+            by_priority: goals.values()
+                .fold(HashMap::new(), |mut acc, g| {
+                    *acc.entry(g.priority.clone()).or_insert(0) += 1;
+                    acc
+                }),
+            by_category: goals.values()
+                .fold(HashMap::new(), |mut acc, g| {
+                    *acc.entry(g.category.clone()).or_insert(0) += 1;
+                    acc
+                }),
+        }
+    }
+
+    /// Validate a goal (check for inconsistencies)
+    pub async fn validate_goal(&self, goal_id: &str) -> Result<Vec<String>> {
+        let goals = self.goals.read().await;
+        let mut issues = Vec::new();
+        
+        if let Some(goal) = goals.get(goal_id) {
+            // Check parent exists
+            if let Some(ref parent_id) = goal.parent_id {
+                if !goals.contains_key(parent_id) {
+                    issues.push(format!("Parent goal {} not found", parent_id));
+                }
+            }
+            
+            // Check dependencies exist
+            for dep_id in &goal.dependencies {
+                if !goals.contains_key(dep_id) {
+                    issues.push(format!("Dependency {} not found", dep_id));
+                }
+            }
+            
+            // Check subtask IDs exist
+            for subtask_id in &goal.subtask_ids {
+                if !goals.contains_key(subtask_id) {
+                    issues.push(format!("Subtask {} not found", subtask_id));
+                }
+            }
+            
+            // Check progress is valid
+            if !(0.0..=1.0).contains(&goal.progress) {
+                issues.push(format!("Invalid progress: {}", goal.progress));
+            }
+            
+            // Check attempts
+            if goal.attempts > goal.max_attempts {
+                issues.push(format!("Attempts {} exceeds max {}", goal.attempts, goal.max_attempts));
+            }
+        } else {
+            issues.push(format!("Goal {} not found", goal_id));
+        }
+        
+        Ok(issues)
+    }
+
+    /// Cancel a goal and optionally cancel its subtasks
+    pub async fn cancel_goal(&self, goal_id: &str, cancel_subtasks: bool) -> Result<()> {
+        let mut goals = self.goals.write().await;
+        
+        if let Some(goal) = goals.get_mut(goal_id) {
+            goal.status = GoalStatus::Cancelled;
+            goal.updated_at = Utc::now();
+            
+            if cancel_subtasks {
+                for subtask_id in &goal.subtask_ids {
+                    if let Some(subtask) = goals.get_mut(subtask_id) {
+                        subtask.status = GoalStatus::Cancelled;
+                        subtask.updated_at = Utc::now();
+                    }
+                }
+            }
+        }
+        
+        drop(goals);
+        self.save_goals().await?;
+        
+        info!("Cancelled goal {} (subtasks: {})", goal_id, cancel_subtasks);
+        Ok(())
+    }
+
+    /// Resume a previously failed or cancelled goal
+    pub async fn resume_goal(&self, goal_id: &str) -> Result<()> {
+        let mut goals = self.goals.write().await;
+        
+        if let Some(goal) = goals.get_mut(goal_id) {
+            if matches!(goal.status, GoalStatus::Failed | GoalStatus::Cancelled) {
+                goal.status = GoalStatus::Pending;
+                goal.attempts = 0;
+                goal.updated_at = Utc::now();
+                
+                self.queue.write().await.push_back(goal_id.to_string());
+                
+                info!("Resumed goal {}", goal_id);
+            }
+        }
+        
+        drop(goals);
+        self.save_goals().await?;
+        Ok(())
+    }
+
+    /// Defer a goal to be resumed later
+    pub async fn defer_goal(&self, goal_id: &str, resume_at: Option<DateTime<Utc>>) -> Result<()> {
+        let mut goals = self.goals.write().await;
+        
+        if let Some(goal) = goals.get_mut(goal_id) {
+            if goal.status == GoalStatus::Pending || goal.status == GoalStatus::InProgress {
+                goal.status = GoalStatus::Deferred;
+                goal.updated_at = Utc::now();
+                
+                if let Some(time) = resume_at {
+                    goal.temporal_constraints.push(TemporalConstraint::NotBefore(time));
+                }
+                
+                info!("Deferred goal {} (resume at: {:?})", goal_id, resume_at);
+            }
+        }
+        
+        drop(goals);
+        self.save_goals().await?;
         Ok(())
     }
 
@@ -1058,6 +1319,22 @@ pub struct GoalStats {
     pub in_progress: usize,
     pub completed: usize,
     pub failed: usize,
+    pub by_priority: HashMap<GoalPriority, usize>,
+    pub by_category: HashMap<GoalCategory, usize>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GoalDetailedStats {
+    pub total: usize,
+    pub pending: usize,
+    pub in_progress: usize,
+    pub completed: usize,
+    pub failed: usize,
+    pub deferred: usize,
+    pub avg_progress: f64,
+    pub total_learning_value: f64,
+    pub total_complexity: f64,
+    pub success_rate: f64,
     pub by_priority: HashMap<GoalPriority, usize>,
     pub by_category: HashMap<GoalCategory, usize>,
 }

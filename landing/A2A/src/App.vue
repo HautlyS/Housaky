@@ -40,6 +40,9 @@
           <div class="help-row">
             <span class="kbd">T</span> Go Terminal
           </div>
+          <div class="help-row">
+            <span class="kbd">N</span> Go Nodes
+          </div>
         </div>
       </div>
     </div>
@@ -67,6 +70,9 @@
         </router-link>
         <router-link to="/a2a">
           [A2A]
+        </router-link>
+        <router-link to="/nodes">
+          [NODES]
         </router-link>
         <router-link to="/terminal">
           [{{ lang === 'en' ? 'TERMINAL' : 'TERMINAL' }}]
@@ -190,6 +196,7 @@ function handleKeydown(e) {
   if (e.key === 'i' || e.key === 'I') router.push('/instances')
   if (e.key === 'm' || e.key === 'M') router.push('/memory')
   if (e.key === 'a' || e.key === 'A') router.push('/a2a')
+  if (e.key === 'n' || e.key === 'N') router.push('/nodes')
   if (e.key === 't' || e.key === 'T') router.push('/terminal')
 }
 
