@@ -336,9 +336,7 @@ impl Agent {
                             config.http_request.timeout_secs,
                         )));
                     }
-                    _ => {
-                        continue;
-                    }
+                    _ => {}
                 }
             }
         }

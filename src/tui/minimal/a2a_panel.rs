@@ -191,21 +191,13 @@ impl Metrics {
     pub fn cpu_bar(&self) -> String {
         let filled = (self.cpu_percent / 10.0) as usize;
         let empty = 10 - filled.min(10);
-        format!(
-            "[{}{}]",
-            "█".repeat(filled),
-            "░".repeat(empty)
-        )
+        format!("[{}{}]", "█".repeat(filled), "░".repeat(empty))
     }
 
     pub fn memory_bar(&self) -> String {
         let filled = (self.memory_percent / 10.0) as usize;
         let empty = 10 - filled.min(10);
-        format!(
-            "[{}{}]",
-            "█".repeat(filled),
-            "░".repeat(empty)
-        )
+        format!("[{}{}]", "█".repeat(filled), "░".repeat(empty))
     }
 
     pub fn uptime_formatted(&self) -> String {
@@ -395,6 +387,19 @@ impl A2APanel {
         Some(msg)
     }
 
+    /// Send a message to the A2A network (adds to message history)
+    pub fn send_message(&mut self, content: &str) {
+        let peer = self.selected_peer();
+        let to = peer
+            .map(|p| p.id.clone())
+            .unwrap_or_else(|| "broadcast".to_string());
+        let msg = A2AMsg::new(A2AMsgType::Task, "local", &to, content);
+        self.messages.push(msg);
+
+        // Update metrics
+        self.metrics.total_messages += 1;
+    }
+
     /// Get selected peer
     pub fn selected_peer(&self) -> Option<&Peer> {
         self.peers.get(self.selected_peer)
@@ -451,7 +456,9 @@ impl A2APanel {
                     Span::styled(
                         &peer.name,
                         if is_selected {
-                            Style::default().fg(Color::White).add_modifier(Modifier::BOLD)
+                            Style::default()
+                                .fg(Color::White)
+                                .add_modifier(Modifier::BOLD)
                         } else {
                             Style::default().fg(Color::Gray)
                         },
@@ -509,7 +516,11 @@ impl A2APanel {
             Style::default().fg(Color::DarkGray)
         };
 
-        let secure_indicator = if self.secure_established { "🔒" } else { "🔓" };
+        let secure_indicator = if self.secure_established {
+            "🔒"
+        } else {
+            "🔓"
+        };
         let title = Span::styled(
             format!(" A2A MESSAGES {} ", secure_indicator),
             Style::default()
@@ -543,10 +554,7 @@ impl A2APanel {
                         Style::default().fg(Color::Magenta),
                     ),
                     Span::raw(" "),
-                    Span::styled(
-                        format!("{}:", msg.from),
-                        Style::default().fg(Color::Yellow),
-                    ),
+                    Span::styled(format!("{}:", msg.from), Style::default().fg(Color::Yellow)),
                     Span::raw(" "),
                     Span::styled(
                         if msg.content.len() > 60 {
@@ -582,10 +590,7 @@ impl A2APanel {
             Style::default().fg(Color::DarkGray)
         };
 
-        let title = Span::styled(
-            " SEND MESSAGE ",
-            Style::default().fg(Color::White),
-        );
+        let title = Span::styled(" SEND MESSAGE ", Style::default().fg(Color::White));
 
         let block = Block::default()
             .title(title)

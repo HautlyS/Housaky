@@ -664,6 +664,7 @@ mod security;
 mod sessions;
 mod system;
 mod tts;
+pub mod web;
 
 pub use approvals::ApprovalsCommands;
 pub use browser::BrowserCommands;
@@ -674,3 +675,4 @@ pub use security::SecurityCommands;
 pub use sessions::SessionsCommands;
 pub use system::{HeartbeatAction, SystemCommands};
 pub use tts::{TtsCommands, TtsConfig, TtsProviderConfig, Voice};
+pub use web::{FetchResult, SearchResult, WebCommands, WebConfig, handle_search, handle_fetch};

@@ -10,7 +10,7 @@ use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Clear, Gauge, List, ListItem, Paragraph, Tabs, Wrap},
+    widgets::{Block, Borders, Clear, List, ListItem, Paragraph, Wrap},
     Frame,
 };
 use std::path::PathBuf;
@@ -120,7 +120,7 @@ impl MarketItem {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum FilterTab {
+pub enum FilterTab {
     All,
     Installed,
     Available,
@@ -497,7 +497,7 @@ impl UnifiedMarketApp {
         let name = item.name.clone();
         let is_mcp = item.item_type == MarketTab::Mcps;
 
-        drop(items); // Release borrow
+        let _ = items; // Release borrow
 
         self.status = format!("Installing {}...", name);
 
@@ -672,7 +672,7 @@ impl UnifiedMarketApp {
     // ========================================================================
 
     pub fn handle_mouse(&mut self, mouse: MouseEvent) -> Result<()> {
-        let Some(layout) = self.last_layout else {
+        let Some(_layout) = self.last_layout else {
             return Ok(());
         };
         let Some(cols) = self.last_content_cols else {
@@ -797,28 +797,49 @@ impl UnifiedMarketApp {
             ),
         ]);
 
-        let right = Line::from(vec![
-            Span::styled(
-                format!(" 🧩 {}/{} ", skills_enabled, skills_total),
-                Style::default().fg(Color::Green),
-            ),
-            Span::styled(
-                format!(" 🔌 {}/{} ", mcps_enabled, mcps_total),
-                Style::default().fg(Color::Yellow),
-            ),
-            if !self.filter.is_empty() {
+        let right = if area.width > 60 {
+            Line::from(vec![
                 Span::styled(
-                    format!(" filter: \"{}\" ", self.filter),
-                    Style::default().fg(Color::Magenta),
-                )
-            } else {
-                Span::raw("")
-            },
-        ]);
+                    format!(" 🧩 {}/{} ", skills_enabled, skills_total),
+                    Style::default().fg(Color::Green),
+                ),
+                Span::styled(
+                    format!(" 🔌 {}/{} ", mcps_enabled, mcps_total),
+                    Style::default().fg(Color::Yellow),
+                ),
+                if !self.filter.is_empty() {
+                    Span::styled(
+                        format!(" filter: \"{}\" ", self.filter),
+                        Style::default().fg(Color::Magenta),
+                    )
+                } else {
+                    Span::raw("")
+                },
+            ])
+        } else {
+            Line::from(vec![
+                Span::styled(
+                    format!(" 🧩{} ", skills_enabled),
+                    Style::default().fg(Color::Green),
+                ),
+                Span::styled(
+                    format!(" 🔌{} ", mcps_enabled),
+                    Style::default().fg(Color::Yellow),
+                ),
+            ])
+        };
 
+        // Responsive split for header
+        let right_len = if area.width > 80 {
+            40
+        } else if area.width > 60 {
+            30
+        } else {
+            20
+        };
         let splits = Layout::default()
             .direction(Direction::Horizontal)
-            .constraints([Constraint::Min(10), Constraint::Length(40)])
+            .constraints([Constraint::Min(10), Constraint::Length(right_len)])
             .split(area);
 
         f.render_widget(Paragraph::new(left), splits[0]);
@@ -896,9 +917,14 @@ impl UnifiedMarketApp {
     }
 
     fn draw_content(&mut self, f: &mut Frame, area: Rect) {
+        // Responsive split: use 40/60 on narrow terminals, 45/55 on wider
+        let left_pct = if area.width < 80 { 40 } else { 45 };
         let cols = Layout::default()
             .direction(Direction::Horizontal)
-            .constraints([Constraint::Percentage(45), Constraint::Percentage(55)])
+            .constraints([
+                Constraint::Percentage(left_pct),
+                Constraint::Percentage(100 - left_pct),
+            ])
             .split(area);
 
         self.last_content_cols = Some([cols[0], cols[1]]);
@@ -943,6 +969,8 @@ impl UnifiedMarketApp {
             return;
         }
 
+        // Responsive name width
+        let name_width = (area.width.saturating_sub(15)).max(10) as usize;
         let items: Vec<ListItem> = filtered
             .iter()
             .enumerate()
@@ -966,17 +994,21 @@ impl UnifiedMarketApp {
                         Style::default().fg(item.status_color()),
                     ),
                     Span::styled(
-                        format!("{:20}", item.name),
+                        format!("{:width$}", item.name, width = name_width),
                         Style::default()
                             .fg(Color::White)
                             .bg(row_bg)
                             .add_modifier(row_mod),
                     ),
-                    Span::styled(
-                        format!(" [{}]", item.source.label()),
-                        Style::default().fg(item.source.color()).bg(row_bg),
-                    ),
-                    if item.installed {
+                    if area.width > 30 {
+                        Span::styled(
+                            format!(" [{}]", item.source.label()),
+                            Style::default().fg(item.source.color()).bg(row_bg),
+                        )
+                    } else {
+                        Span::raw("")
+                    },
+                    if item.installed && area.width > 40 {
                         Span::styled(" ✓", Style::default().fg(Color::Green))
                     } else {
                         Span::raw("")
@@ -1034,8 +1066,8 @@ impl UnifiedMarketApp {
         let layout = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Length(10), // info
-                Constraint::Min(0),     // description
+                Constraint::Length(if area.width < 40 { 7 } else { 10 }), // info - shorter on narrow
+                Constraint::Min(0),                                       // description
             ])
             .split(inner);
 
@@ -1151,6 +1183,8 @@ impl UnifiedMarketApp {
     fn draw_footer(&self, f: &mut Frame, area: Rect) {
         let hint = if self.filter_active {
             " Type to filter — Enter/Esc to confirm "
+        } else if area.width < 80 {
+            " ↑↓/jk=nav  Space=toggle  i=install  Tab=tab  /=search  r=refresh  q=quit "
         } else {
             " ↑↓/jk=navigate  Space/Enter=toggle  i=install  Tab=Skills/MCPs  1/2/3=filter  /=search  r=refresh  q=quit "
         };

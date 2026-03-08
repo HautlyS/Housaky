@@ -195,11 +195,9 @@ impl AGIChannelProcessor {
         let recent_thoughts = inner_monologue.get_recent(3).await;
         if !recent_thoughts.is_empty() {
             context.push_str("## Recent Thoughts\n");
+            use std::fmt::Write;
             for thought in recent_thoughts {
-                context.push_str(&format!(
-                    "- {}\n",
-                    thought.chars().take(100).collect::<String>()
-                ));
+                writeln!(context, "- {}", thought.chars().take(100).collect::<String>()).ok();
             }
             context.push('\n');
         }
@@ -208,12 +206,7 @@ impl AGIChannelProcessor {
         if !active_goals.is_empty() {
             context.push_str("## Active Goals\n");
             for goal in active_goals.iter().take(5) {
-                context.push_str(&format!(
-                    "- {} ({:.0}% complete) [{:?}]\n",
-                    goal.title,
-                    goal.progress * 100.0,
-                    goal.priority
-                ));
+                writeln!(context, "- {} ({:.0}% complete) [{:?}]", goal.title, goal.progress * 100.0, goal.priority).ok();
             }
             context.push('\n');
         }
@@ -223,8 +216,9 @@ impl AGIChannelProcessor {
             let entities = kg.search(query, 3).await;
             if !entities.is_empty() {
                 context.push_str("## Related Knowledge\n");
+                use std::fmt::Write;
                 for entity in &entities {
-                    context.push_str(&format!("- {} [{:?}]\n", entity.name, entity.entity_type));
+                    writeln!(context, "- {} [{:?}]", entity.name, entity.entity_type).ok();
                 }
                 context.push('\n');
             }

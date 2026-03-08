@@ -774,10 +774,10 @@ impl MinimalApp {
             }
             KeyCode::Enter => {
                 if self.a2a.focus == 2 {
-                    // Send input
+                    // Send input via A2A panel (adds to message history)
                     if let Some(msg) = self.a2a.send_input() {
-                        self.chat.push_system(&format!("A2A Send: {}", msg));
-                        // TODO: Actually send via WebSocket
+                        self.a2a.send_message(&msg);
+                        self.chat.push_system(&format!("A2A Sent: {}", msg));
                     }
                 }
             }

@@ -682,11 +682,12 @@ impl PromptSection for AGIContextSection {
 
         // Current context
         output.push_str("### Current Context\n");
-        output.push_str(&format!("- **Workspace**: `{}`\n", ctx.workspace_dir.display()));
-        output.push_str(&format!("- **Model**: {}\n", ctx.model_name));
-        output.push_str(&format!("- **Reasoning Mode**: {}\n", ctx.reasoning_mode.as_str()));
-        output.push_str(&format!("- **Tools Available**: {}\n", ctx.tools.len()));
-        output.push_str(&format!("- **Skills Available**: {}\n", ctx.skills.len()));
+        use std::fmt::Write;
+        writeln!(output, "- **Workspace**: `{}`", ctx.workspace_dir.display()).ok();
+        writeln!(output, "- **Model**: {}", ctx.model_name).ok();
+        writeln!(output, "- **Reasoning Mode**: {}", ctx.reasoning_mode.as_str()).ok();
+        writeln!(output, "- **Tools Available**: {}", ctx.tools.len()).ok();
+        writeln!(output, "- **Skills Available**: {}", ctx.skills.len()).ok();
 
         Ok(output)
     }

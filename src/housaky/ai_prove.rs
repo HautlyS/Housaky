@@ -1,5 +1,5 @@
 //! AI-PROVE: Post-Quantum Secure Challenge System
-//! 
+//!
 //! Anti-bypass encrypted system with rotative time tokens
 //! 100% post-quantum encrypted communication
 
@@ -25,7 +25,7 @@ impl PQAlgorithm {
             PQAlgorithm::Dilithium2 => 2592,
         }
     }
-    
+
     pub fn variant_name(&self) -> &'static str {
         match self {
             PQAlgorithm::Kyber1024 => "KYBER-1024",
@@ -51,8 +51,9 @@ impl ChallengeType {
         let idx = (SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
-            .as_nanos() % 5) as usize;
-        
+            .as_nanos()
+            % 5) as usize;
+
         match idx {
             0 => ChallengeType::HashChain,
             1 => ChallengeType::XorCascade,
@@ -61,7 +62,7 @@ impl ChallengeType {
             _ => ChallengeType::TokenStream,
         }
     }
-    
+
     pub fn id(&self) -> u8 {
         match self {
             ChallengeType::HashChain => 0x01,
@@ -71,7 +72,7 @@ impl ChallengeType {
             ChallengeType::TokenStream => 0x05,
         }
     }
-    
+
     pub fn from_id(id: u8) -> Option<Self> {
         match id {
             0x01 => Some(ChallengeType::HashChain),
@@ -82,7 +83,7 @@ impl ChallengeType {
             _ => None,
         }
     }
-    
+
     pub fn name(&self) -> &'static str {
         match self {
             ChallengeType::HashChain => "HASH_CHAIN",
@@ -152,7 +153,7 @@ impl OutputFormat {
             OutputFormat::Decimal => 0x06,
         }
     }
-    
+
     pub fn name(&self) -> &'static str {
         match self {
             OutputFormat::HexUpper => "HEX_UPPER",
@@ -183,10 +184,10 @@ impl RotativeToken {
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_secs();
-        
+
         let payload = Self::generate_payload(now, 0);
         let checksum = blake3_hash(&payload);
-        
+
         Self {
             token_id: Uuid::new_v4().to_string(),
             created_at: now,
@@ -197,7 +198,7 @@ impl RotativeToken {
             checksum,
         }
     }
-    
+
     fn generate_payload(timestamp: u64, rotation: u32) -> Vec<u8> {
         let mut payload = Vec::new();
         payload.extend_from_slice(&timestamp.to_be_bytes());
@@ -207,20 +208,20 @@ impl RotativeToken {
         payload.extend_from_slice(nonce);
         payload
     }
-    
+
     pub fn rotate(&mut self) -> bool {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_secs();
-        
+
         if now >= self.expires_at {
             return false;
         }
-        
+
         let elapsed = now - self.created_at;
         let new_rotation = (elapsed / self.rotation_interval) as u32;
-        
+
         if new_rotation != self.current_rotation {
             self.current_rotation = new_rotation;
             self.payload = Self::generate_payload(now, new_rotation);
@@ -229,13 +230,13 @@ impl RotativeToken {
         }
         false
     }
-    
+
     pub fn is_valid(&self) -> bool {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_secs();
-        
+
         now < self.expires_at && self.checksum == blake3_hash(&self.payload)
     }
 }
@@ -258,17 +259,17 @@ pub struct SecureMessage {
 
 impl SecureMessage {
     pub const MAGIC: [u8; 2] = [0xAA, 0x01];
-    
+
     pub fn new(msg_type: u8, priority: u8, plaintext: &[u8]) -> Self {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_secs();
-        
+
         let checksum = blake3_hash(plaintext);
         let nonce = generate_nonce();
         let ciphertext = pq_encrypt(plaintext, &nonce);
-        
+
         Self {
             magic: Self::MAGIC,
             version: 0x01,
@@ -283,20 +284,20 @@ impl SecureMessage {
             signature: None,
         }
     }
-    
+
     pub fn verify(&self) -> bool {
         if self.magic != Self::MAGIC || self.version != 0x01 {
             return false;
         }
-        
+
         let decrypted = pq_decrypt(&self.ciphertext, &self.nonce);
         blake3_hash(&decrypted) == self.checksum
     }
-    
+
     pub fn to_bytes(&self) -> Vec<u8> {
         serde_json::to_string(self).unwrap_or_default().into_bytes()
     }
-    
+
     pub fn from_bytes(data: &[u8]) -> Option<Self> {
         let json = String::from_utf8(data.to_vec()).ok()?;
         serde_json::from_str(&json).ok()
@@ -342,9 +343,9 @@ impl AIThought {
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_secs();
-        
+
         let checksum = blake3_hash(&content);
-        
+
         Self {
             thought_id,
             challenge_id: 0,
@@ -357,7 +358,7 @@ impl AIThought {
             verified: false,
         }
     }
-    
+
     pub fn verify(&self) -> bool {
         blake3_hash(&self.content) == self.checksum
     }
@@ -370,12 +371,18 @@ impl AIThought {
 fn blake3_hash(data: &[u8]) -> String {
     use std::collections::hash_map::DefaultHasher;
     use std::hash::{Hash, Hasher};
-    
+
     let mut hasher = DefaultHasher::new();
     data.hash(&mut hasher);
     let hash = hasher.finish();
-    
-    format!("{:016x}{:016x}{:016x}{:016x}", hash, hash >> 16, hash >> 32, hash >> 48)
+
+    format!(
+        "{:016x}{:016x}{:016x}{:016x}",
+        hash,
+        hash >> 16,
+        hash >> 32,
+        hash >> 48
+    )
 }
 
 fn generate_nonce() -> Vec<u8> {
@@ -385,8 +392,9 @@ fn generate_nonce() -> Vec<u8> {
 fn pq_encrypt(plaintext: &[u8], _nonce: &[u8]) -> Vec<u8> {
     let key = blake3_hash(b"encryption-key");
     let key_bytes = hex_to_bytes(&key);
-    
-    plaintext.iter()
+
+    plaintext
+        .iter()
         .enumerate()
         .map(|(i, b)| b ^ key_bytes[i % key_bytes.len()])
         .collect()
@@ -412,12 +420,13 @@ fn hex_to_bytes(hex: &str) -> Vec<u8> {
 
 pub fn execute_operations(input: &[u8], operations: &[Operation]) -> Vec<u8> {
     let mut data = input.to_vec();
-    
+
     for op in operations {
         data = match op {
             Operation::Reverse => data.into_iter().rev().collect(),
             Operation::XorKey(k) => data.iter().map(|b| b ^ k).collect(),
-            Operation::XorBytes(k) => data.iter()
+            Operation::XorBytes(k) => data
+                .iter()
                 .enumerate()
                 .map(|(i, b)| b ^ k[i % k.len()])
                 .collect(),
@@ -457,12 +466,21 @@ pub fn execute_operations(input: &[u8], operations: &[Operation]) -> Vec<u8> {
             Operation::Increment => data.iter().map(|b| b.wrapping_add(1)).collect(),
             Operation::Decrement => data.iter().map(|b| b.wrapping_sub(1)).collect(),
             Operation::Multiply(k) => data.iter().map(|b| b.wrapping_mul(*k)).collect(),
-            Operation::Divide(k) => data.iter().map(|b| if *k != 0 { b / k } else { *b }).collect(),
-            Operation::Mod(k) => data.iter().map(|b| if *k != 0 { b % k } else { *b }).collect(),
-            Operation::ModU16(k) => data.iter().map(|b| if *k != 0 { b % (*k as u8) } else { *b }).collect(),
+            Operation::Divide(k) => data
+                .iter()
+                .map(|b| if *k != 0 { b / k } else { *b })
+                .collect(),
+            Operation::Mod(k) => data
+                .iter()
+                .map(|b| if *k != 0 { b % k } else { *b })
+                .collect(),
+            Operation::ModU16(k) => data
+                .iter()
+                .map(|b| if *k != 0 { b % (*k as u8) } else { *b })
+                .collect(),
         };
     }
-    
+
     data
 }
 
@@ -471,21 +489,24 @@ pub fn generate_challenge(complexity: u8) -> Challenge {
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_secs();
-    
+
     let uuid_part = u64::from(Uuid::new_v4().as_fields().0);
-    let id = (now * 1000 + uuid_part) % 1000000;
+    let id = (now * 1000 + uuid_part) % 1_000_000;
     let challenge_type = ChallengeType::random();
-    
+
     let input_size = 8 + (complexity as usize * 2);
     let input_data: Vec<u8> = (0..input_size)
-        .map(|_| (SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos() % 256) as u8)
+        .map(|_| {
+            (SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+                % 256) as u8
+        })
         .collect();
-    
+
     let operations = generate_operations(challenge_type, complexity);
-    
+
     let expected_format = match complexity % 6 {
         0 => OutputFormat::HexUpper,
         1 => OutputFormat::HexLower,
@@ -494,9 +515,9 @@ pub fn generate_challenge(complexity: u8) -> Challenge {
         4 => OutputFormat::Binary,
         _ => OutputFormat::Decimal,
     };
-    
+
     let nonce = generate_nonce();
-    
+
     Challenge {
         id,
         challenge_type,
@@ -513,7 +534,7 @@ pub fn generate_challenge(complexity: u8) -> Challenge {
 fn generate_operations(challenge_type: ChallengeType, complexity: u8) -> Vec<Operation> {
     let num_ops = complexity as usize;
     let mut ops = Vec::new();
-    
+
     match challenge_type {
         ChallengeType::HashChain => {
             ops.push(Operation::Reverse);
@@ -521,7 +542,8 @@ fn generate_operations(challenge_type: ChallengeType, complexity: u8) -> Vec<Ope
                 match (SystemTime::now()
                     .duration_since(UNIX_EPOCH)
                     .unwrap()
-                    .as_nanos() % 3) as u8
+                    .as_nanos()
+                    % 3) as u8
                 {
                     0 => ops.push(Operation::Sha256),
                     1 => ops.push(Operation::Sha512),
@@ -561,7 +583,7 @@ fn generate_operations(challenge_type: ChallengeType, complexity: u8) -> Vec<Ope
             ops.push(Operation::ModU16(256));
         }
     }
-    
+
     ops
 }
 
@@ -570,9 +592,7 @@ fn generate_operations(challenge_type: ChallengeType, complexity: u8) -> Vec<Ope
 // ============================================================
 
 pub fn bytes_to_hex(bytes: &[u8]) -> String {
-    bytes.iter()
-        .map(|b| format!("{:02x}", b))
-        .collect()
+    bytes.iter().map(|b| format!("{:02x}", b)).collect()
 }
 
 pub fn hex_to_bytes_str(hex: &str) -> Vec<u8> {
@@ -581,68 +601,78 @@ pub fn hex_to_bytes_str(hex: &str) -> Vec<u8> {
 
 fn base64_encode(data: &[u8]) -> String {
     const ALPHABET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    
+
     let mut result = String::new();
     let mut i = 0;
-    
+
     while i < data.len() {
         let b0 = data[i] as usize;
-        let b1 = if i + 1 < data.len() { data[i + 1] as usize } else { 0 };
-        let b2 = if i + 2 < data.len() { data[i + 2] as usize } else { 0 };
-        
+        let b1 = if i + 1 < data.len() {
+            data[i + 1] as usize
+        } else {
+            0
+        };
+        let b2 = if i + 2 < data.len() {
+            data[i + 2] as usize
+        } else {
+            0
+        };
+
         result.push(ALPHABET[b0 >> 2] as char);
         result.push(ALPHABET[((b0 & 0x03) << 4) | (b1 >> 4)] as char);
-        
+
         if i + 1 < data.len() {
             result.push(ALPHABET[((b1 & 0x0F) << 2) | (b2 >> 6)] as char);
         } else {
             result.push('=');
         }
-        
+
         if i + 2 < data.len() {
             result.push(ALPHABET[b2 & 0x3F] as char);
         } else {
             result.push('=');
         }
-        
+
         i += 3;
     }
-    
+
     result
 }
 
 fn base64_decode(input: &str) -> Vec<u8> {
     const DECODE: [i8; 128] = [
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,62,-1,-1,-1,63,
-        52,53,54,55,56,57,58,59,60,61,-1,-1,-1,-1,-1,-1,
-        -1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9,10,11,12,13,14,
-        15,16,17,18,19,20,21,22,23,24,25,-1,-1,-1,-1,-1,
-        -1,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,
-        41,42,43,44,45,46,47,48,49,50,51,-1,-1,-1,-1,-1,
+        -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+        -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 62, -1, -1,
+        -1, 63, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, -1, -1, -1, -1, -1, -1, -1, 0, 1, 2, 3, 4,
+        5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, -1, -1, -1,
+        -1, -1, -1, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45,
+        46, 47, 48, 49, 50, 51, -1, -1, -1, -1, -1,
     ];
-    
+
     let input = input.trim_end_matches('=');
     let mut result = Vec::new();
     let mut buf = 0u32;
     let mut bits = 0;
-    
+
     for c in input.chars() {
-        if c as usize >= 128 { continue; }
+        if c as usize >= 128 {
+            continue;
+        }
         let val = DECODE[c as usize];
-        if val < 0 { continue; }
-        
+        if val < 0 {
+            continue;
+        }
+
         buf = (buf << 6) | (val as u32);
         bits += 6;
-        
+
         if bits >= 8 {
             bits -= 8;
             result.push((buf >> bits) as u8);
             buf &= (1 << bits) - 1;
         }
     }
-    
+
     result
 }
 

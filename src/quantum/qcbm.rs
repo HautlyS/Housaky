@@ -336,7 +336,7 @@ impl QuantumBornMachine {
                 let noise = context.diversity * ((s as f64 * 1.618).fract() - 0.5) * 0.2;
                 let p_one = (prob + noise).clamp(0.0, 1.0);
                 // Deterministic pseudo-sampling.
-                let sample = ((s as f64 * (q + 1) as f64 * 0.6180339887).fract()) < p_one;
+                let sample = ((s as f64 * (q + 1) as f64 * 0.618_033_988_7).fract()) < p_one;
                 bits.push(if sample { '1' } else { '0' });
             }
             *distribution.entry(bits).or_insert(0.0) += 1.0 / shots as f64;

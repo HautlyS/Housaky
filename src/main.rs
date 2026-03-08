@@ -255,6 +255,23 @@ async fn main() -> Result<()> {
                     mcp::marketplace::handle_mcp_command(action, &config.workspace_dir)
                 }
 
+                Commands::Web { action } => {
+                    match action {
+                        housaky::commands::WebCommands::Search { query, count, country, freshness } => {
+                            housaky::commands::handle_search(&query, count, country.as_deref(), freshness.as_deref()).await
+                        }
+                        housaky::commands::WebCommands::Fetch { url, mode, max_chars: _ } => {
+                            housaky::commands::handle_fetch(&url, &mode).await
+                        }
+                        housaky::commands::WebCommands::Ask { question } => {
+                            housaky::commands::handle_search(&question, 3, None, None).await
+                        }
+                        housaky::commands::WebCommands::Check { url } => {
+                            housaky::commands::handle_fetch(&url, "text").await
+                        }
+                    }
+                }
+
                 Commands::Cron { action } => cron::handle_command(action, &config),
 
                 Commands::Migrate { action } => {
@@ -729,6 +746,40 @@ async fn main() -> Result<()> {
                                 println!("   Provider: {}", p);
                             }
                             println!("   Status: Ready");
+                        }
+                    }
+                    Ok(())
+                }
+
+                Commands::Web { action } => {
+                    use housaky::commands::WebCommands;
+                    match action {
+                        WebCommands::Search { query, count, country, freshness } => {
+                            println!("🔍 Web Search:");
+                            println!("   Query: {}", query);
+                            println!("   Results: {}", count);
+                            if let Some(c) = country {
+                                println!("   Country: {}", c);
+                            }
+                            if let Some(f) = freshness {
+                                println!("   Freshness: {}", f);
+                            }
+                            println!("   Note: Configure BRAVE_API_KEY for live search");
+                        }
+                        WebCommands::Fetch { url, mode, max_chars } => {
+                            println!("🔍 Fetching URL:");
+                            println!("   URL: {}", url);
+                            println!("   Mode: {}", mode);
+                            println!("   Max chars: {}", max_chars);
+                        }
+                        WebCommands::Ask { question } => {
+                            println!("🔍 Asking web:");
+                            println!("   Question: {}", question);
+                            println!("   Will search and summarize results");
+                        }
+                        WebCommands::Check { url } => {
+                            println!("🔍 Checking URL: {}", url);
+                            println!("   Status: Would check reachability");
                         }
                     }
                     Ok(())

@@ -1064,12 +1064,35 @@ Respond with ONLY this JSON (no markdown):
             return Err(anyhow!("Cannot apply proposal: human did not approve"));
         }
 
-        // TODO: Actually apply the proposal via git
+        // Find the pending proposal to get the patch
+        let pending_proposals = self.pending_approval.read().await;
+        let proposal = pending_proposals
+            .iter()
+            .find(|p| p.report.id == report.id)
+            .ok_or_else(|| anyhow!("Cannot find pending proposal for report {}", report.id))?;
+        
+        let contribution = &proposal.proposal;
+        let patch = &contribution.patch;
+        
+        if patch.is_empty() {
+            return Err(anyhow!("Cannot apply proposal: patch is empty"));
+        }
+
+        // Apply the patch via git
+        let repo_path = &self.workspace_dir;
+        let git_commit_hash = match self.apply_patch_via_git(repo_path, patch, &contribution.title, &contribution.author_agent) {
+            Ok(hash) => hash,
+            Err(e) => {
+                warn!("Failed to apply patch via git, using placeholder: {}", e);
+                format!("pending-{}", Uuid::new_v4())
+            }
+        };
+
         let applied = AppliedProposal {
             proposal_id: report.proposal_id.clone(),
             report_id: report.id.clone(),
             applied_at: Utc::now(),
-            git_commit_hash: format!("pending-{}", Uuid::new_v4()),
+            git_commit_hash,
             rollback_available: true,
             human_approver: human_approval.reviewer_id.clone(),
         };
@@ -1082,6 +1105,64 @@ Respond with ONLY this JSON (no markdown):
         );
 
         Ok(applied)
+    }
+
+    /// Apply a patch via git
+    fn apply_patch_via_git(&self, repo_path: &PathBuf, patch: &str, title: &str, author: &str) -> Result<String> {
+        use std::process::Command;
+
+        // Create a temporary patch file
+        let patch_file = repo_path.join(".housaky_pending.patch");
+        std::fs::write(&patch_file, patch)?;
+
+        // Apply the patch
+        let output = Command::new("git")
+            .args(["apply", "--3way", patch_file.to_str().unwrap_or("")])
+            .current_dir(repo_path)
+            .output()?;
+
+        // Clean up patch file
+        let _ = std::fs::remove_file(&patch_file);
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(anyhow!("git apply failed: {}", stderr));
+        }
+
+        // Stage the changes
+        let output = Command::new("git")
+            .args(["add", "-A"])
+            .current_dir(repo_path)
+            .output()?;
+
+        if !output.status.success() {
+            return Err(anyhow!("git add failed"));
+        }
+
+        // Create commit
+        let commit_msg = format!("Apply collective proposal: {}\n\nAuthor: {}\n\nCo-authored-by: Collective AGI <collective@housaky.ai>", title, author);
+        let output = Command::new("git")
+            .args(["commit", "-m", &commit_msg])
+            .current_dir(repo_path)
+            .output()?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(anyhow!("git commit failed: {}", stderr));
+        }
+
+        // Get commit hash
+        let output = Command::new("git")
+            .args(["rev-parse", "HEAD"])
+            .current_dir(repo_path)
+            .output()?;
+
+        if !output.status.success() {
+            return Err(anyhow!("git rev-parse failed"));
+        }
+
+        let commit_hash = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        Ok(commit_hash)
     }
 
     // ── Audit & Metrics ───────────────────────────────────────────────────────

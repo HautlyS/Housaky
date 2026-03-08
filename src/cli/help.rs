@@ -14,7 +14,6 @@ impl HelpSystem {
             "mcp" | "m" => Self::show_mcp_help(),
             "agi" | "a" => Self::show_agi_help(),
             "quantum" | "q" => Self::show_quantum_help(),
-            "all" | "h" | "help" => Self::show_all_help(),
             _ => Self::show_all_help(),
         }
     }
