@@ -186,6 +186,52 @@ pub enum Commands {
     },
 
     // ─────────────────────────────────────────────────────────────────────────
+    // NEW COMMANDS (OpenClaw-inspired)
+    // ─────────────────────────────────────────────────────────────────────────
+    
+    /// Control built-in browser (Chrome/Chromium via CDP)
+    Browser {
+        #[command(subcommand)]
+        action: crate::commands::BrowserCommands,
+    },
+
+    /// Search and manage memory/knowledge
+    Memory {
+        #[command(subcommand)]
+        action: crate::commands::MemoryCommands,
+    },
+
+    /// List and manage conversation sessions
+    Sessions {
+        #[command(subcommand)]
+        action: crate::commands::SessionsCommands,
+    },
+
+    /// Security audit and management
+    Security {
+        #[command(subcommand)]
+        action: crate::commands::SecurityCommands,
+    },
+
+    /// Manage sandbox containers (Docker isolation)
+    Sandbox {
+        #[command(subcommand)]
+        action: crate::commands::SandboxCommands,
+    },
+
+    /// System events, heartbeat, presence
+    System {
+        #[command(subcommand)]
+        action: crate::commands::SystemCommands,
+    },
+
+    /// Manage exec approvals and allowlists
+    Approvals {
+        #[command(subcommand)]
+        action: crate::commands::ApprovalsCommands,
+    },
+
+    // ─────────────────────────────────────────────────────────────────────────
     // CHANNELS & INTEGRATIONS
     // ─────────────────────────────────────────────────────────────────────────
     /// Manage channels (telegram, discord, slack)
@@ -329,69 +375,6 @@ pub enum Commands {
 
     /// Connect to Kowalski agents
     Kowalski,
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // BROWSER: Built-in Browser Control
-    // ─────────────────────────────────────────────────────────────────────────
-    /// Control built-in browser (Chrome/Chromium via CDP)
-    Browser {
-        #[command(subcommand)]
-        action: crate::commands::BrowserCommands,
-    },
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // MEMORY: Knowledge Management
-    // ─────────────────────────────────────────────────────────────────────────
-    /// Search and manage memory/knowledge
-    Memory {
-        #[command(subcommand)]
-        action: crate::commands::MemoryCommands,
-    },
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // SESSIONS: Conversation Management
-    // ─────────────────────────────────────────────────────────────────────────
-    /// List and manage conversation sessions
-    Sessions {
-        #[command(subcommand)]
-        action: crate::commands::SessionsCommands,
-    },
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // SECURITY: Audit & Protection
-    // ─────────────────────────────────────────────────────────────────────────
-    /// Security audit and management
-    Security {
-        #[command(subcommand)]
-        action: crate::commands::SecurityCommands,
-    },
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // SANDBOX: Isolated Execution
-    // ─────────────────────────────────────────────────────────────────────────
-    /// Manage sandbox containers (Docker isolation)
-    Sandbox {
-        #[command(subcommand)]
-        action: crate::commands::SandboxCommands,
-    },
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // SYSTEM: Events & Presence
-    // ─────────────────────────────────────────────────────────────────────────
-    /// System events, heartbeat, presence
-    System {
-        #[command(subcommand)]
-        action: crate::commands::SystemCommands,
-    },
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // APPROVALS: Execution Permissions
-    // ─────────────────────────────────────────────────────────────────────────
-    /// Manage exec approvals and allowlists
-    Approvals {
-        #[command(subcommand)]
-        action: crate::commands::ApprovalsCommands,
-    },
 
     // ─────────────────────────────────────────────────────────────────────────
     // TUI: Unified Terminal Interface
