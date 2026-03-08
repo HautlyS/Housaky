@@ -6,8 +6,8 @@ use clap::{Parser, Subcommand};
 
 use crate::commands::{
     ChannelCommands, CollectiveCommands, CronCommands, GSDCommands, GoalCommands,
-    KeyCommands, MigrateCommands, ModelCommands, QuantumCommands, SelfModCommands,
-    ServiceCommands, SkillCommands,
+    KeyCommands, MigrateCommands, ModelCommands, QuantumCommands, SeedMindCommands,
+    SelfModCommands, ServiceCommands, SkillCommands,
 };
 
 // ============================================================================
@@ -265,6 +265,13 @@ pub enum Commands {
     Collective {
         #[command(subcommand)]
         action: CollectiveCommands,
+    },
+
+    /// Seed Mind: Living intelligence core (HDIN)
+    #[command(name = "seed-mind")]
+    SeedMind {
+        #[command(subcommand)]
+        action: SeedMindCommands,
     },
 
     // ─────────────────────────────────────────────────────────────────────────

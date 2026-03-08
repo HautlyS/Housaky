@@ -280,6 +280,10 @@ async fn main() -> Result<()> {
                     housaky::housaky::handle_command(housaky::commands::HousakyCommands::Collective { collective_command: action }, &config).await
                 }
 
+                Commands::SeedMind { action } => {
+                    housaky::housaky::seed_mind::handle_seed_mind_command(action, &config).await
+                }
+
                 // ─────────────────────────────────────────────────────────────
                 // HARDWARE
                 // ─────────────────────────────────────────────────────────────

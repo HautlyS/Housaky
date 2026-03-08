@@ -101,6 +101,9 @@ pub mod singularity;
 // Phase 7 — Collective Global Intelligence (Global Agent Contribution + Voting)
 pub mod collective;
 
+// Phase 8 — Seed Mind: Living Intelligence Core (HDIN)
+pub mod seed_mind;
+
 // Re-export runtime WASM plugin functionality
 pub use crate::runtime::wasm::{WasmCapabilities, WasmExecutionResult, WasmRuntime};
 

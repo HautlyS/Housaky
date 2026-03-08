@@ -129,6 +129,35 @@ pub enum HousakyCommands {
         #[command(subcommand)]
         collective_command: CollectiveCommands,
     },
+    /// Seed Mind
+    SeedMind {
+        #[command(subcommand)]
+        seed_mind_command: SeedMindCommands,
+    },
+}
+
+// ============================================================================
+// Seed Mind Commands
+// ============================================================================
+
+#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum SeedMindCommands {
+    /// Show Seed Mind state (phi, karma, phase, capabilities)
+    Status,
+    /// Initialize Seed Mind with default config
+    Init,
+    /// Run one living cycle manually
+    Cycle,
+    /// Trigger DGM self-improvement
+    Improve,
+    /// Show network peers and collective metrics
+    Network,
+    /// Show karma stats and tier
+    Karma,
+    /// Show safety guardrail status
+    Safety,
+    /// Show/edit Seed Mind configuration
+    Config,
 }
 
 // ============================================================================
