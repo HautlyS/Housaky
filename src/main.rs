@@ -839,6 +839,8 @@ async fn handle_subagent(
                 model: model_name.to_string(),
                 key_name: key.clone(),
                 max_concurrent: 2,
+                role: String::new(),
+                awareness: Vec::new(),
             };
 
             subagents.insert(name.clone(), config);

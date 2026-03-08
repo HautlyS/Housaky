@@ -633,7 +633,7 @@ impl MinimalApp {
                 }
                 KeyCode::Tab => {
                     if let Some(cmd) = self.input.command_palette.selected_command() {
-                        self.input.content = cmd.command.clone();
+                        self.input.content = cmd.command.to_string();
                         self.input.cursor = self.input.content.len();
                         self.input.command_palette.update_query(&self.input.content);
                     }

@@ -1100,7 +1100,6 @@ impl GoalEngine {
             }
         }
         
-        drop(goals);
         self.save_goals().await?;
         
         info!("Cancelled goal {} (subtasks: {})", goal_id, cancel_subtasks);

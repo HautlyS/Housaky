@@ -608,7 +608,13 @@ impl UnifiedAgentHub {
         
         // Try GLM-based execution first
         match bridge.execute_with_glm(&agent_type, &task.description).await {
-            Ok(output) => Ok((output, format!("kowalski-{}", agent_type.as_str()))),
+            Ok(result) => {
+                if result.success {
+                    Ok((result.output, format!("kowalski-{}", agent_type.as_str())))
+                } else {
+                    Err(anyhow::anyhow!(result.error.unwrap_or_else(|| "Unknown error".to_string())))
+                }
+            }
             Err(e) => {
                 warn!("GLM execution failed, trying CLI: {}", e);
                 // Fall back to CLI
@@ -765,11 +771,13 @@ impl UnifiedAgentHub {
         if let Some(bridge) = &self.kowalski_bridge {
             let bridge = bridge.read().await;
             for agent_type in [KowalskiAgentType::Code, KowalskiAgentType::Web, KowalskiAgentType::Academic] {
-                if let Ok(response) = bridge.execute_with_glm(&agent_type, &format!(
+                if let Ok(result) = bridge.execute_with_glm(&agent_type, &format!(
                     "Answer this question concisely: {}", question
                 )).await {
-                    responses.entry(response).or_default().push(format!("kowalski-{}", agent_type.as_str()));
-                    total_responders += 1;
+                    if result.success {
+                        responses.entry(result.output).or_default().push(format!("kowalski-{}", agent_type.as_str()));
+                        total_responders += 1;
+                    }
                 }
             }
         }

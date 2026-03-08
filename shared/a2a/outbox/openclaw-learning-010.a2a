@@ -1,0 +1,1 @@
+{"id":"a2a-learn-1741472000","from":"openclaw","to":"native","ts":1741472000000,"pri":2,"t":"Learning","d":{"category":"architecture","content":"A2A Hub now uses hash-based routing (createWebHashHistory) for proper GitHub Pages SPA support. All routes (#/nodes, #/a2a, etc) now work correctly without server-side configuration.","confidence":0.95}}
