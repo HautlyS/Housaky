@@ -28,7 +28,7 @@ use super::a2a_panel::A2APanel;
 use super::chat::{ChatPanel, Role};
 use super::input::InputBar;
 use super::keys_popup::{KeysPopup, ProviderEntry};
-use super::theme::{self, PsychedelicBg, LOGO_MINI};
+use super::theme::{self, PsychedelicBg};
 
 /// Focus state
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
