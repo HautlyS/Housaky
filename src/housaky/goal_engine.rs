@@ -1,5 +1,5 @@
 use crate::quantum::QuantumAgiBridge;
-use anyhow::Result;
+use anyhow::{bail, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
@@ -1074,16 +1074,28 @@ impl GoalEngine {
     pub async fn cancel_goal(&self, goal_id: &str, cancel_subtasks: bool) -> Result<()> {
         let mut goals = self.goals.write().await;
         
-        if let Some(goal) = goals.get_mut(goal_id) {
+        let subtask_ids_to_cancel: Vec<String> = if let Some(goal) = goals.get_mut(goal_id) {
             goal.status = GoalStatus::Cancelled;
             goal.updated_at = Utc::now();
             
             if cancel_subtasks {
-                for subtask_id in &goal.subtask_ids {
-                    if let Some(subtask) = goals.get_mut(subtask_id) {
-                        subtask.status = GoalStatus::Cancelled;
-                        subtask.updated_at = Utc::now();
-                    }
+                goal.subtask_ids.clone()
+            } else {
+                Vec::new()
+            }
+        } else {
+            Vec::new()
+        };
+        
+        drop(goals);
+        
+        // Cancel subtasks in a separate step
+        if cancel_subtasks && !subtask_ids_to_cancel.is_empty() {
+            let mut goals = self.goals.write().await;
+            for subtask_id in subtask_ids_to_cancel {
+                if let Some(subtask) = goals.get_mut(&subtask_id) {
+                    subtask.status = GoalStatus::Cancelled;
+                    subtask.updated_at = Utc::now();
                 }
             }
         }

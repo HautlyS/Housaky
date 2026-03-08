@@ -7,17 +7,20 @@
 //! - Kowalski agent integration (code, web, academic, data)
 //! - Ctrl+K hotkey for quick provider/model switching
 //! - A2A WebSocket panel for inter-agent communication
-//! - AMOLED black & white aesthetic
+//! - AMOLED black & white aesthetic with psychedelic accents
+//! - "/" command autocomplete with adaptive filtering
 
 pub mod a2a_panel;
 pub mod agents;
 pub mod app;
 pub mod chat;
+pub mod command_palette;
 pub mod input;
 pub mod keys_popup;
 pub mod theme;
 
 pub use app::MinimalApp;
+pub use command_palette::CommandPalette;
 pub use theme::Theme;
 
 use anyhow::Result;

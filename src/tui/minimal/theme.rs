@@ -2,6 +2,7 @@
 //!
 //! Pure void black with stark white accents, creating maximum contrast
 //! and a striking futuristic aesthetic perfect for AMOLED displays.
+//! Features high-performance animated psychedelic backgrounds.
 
 use ratatui::style::{Color, Modifier, Style};
 
@@ -13,8 +14,8 @@ pub struct Theme;
 
 impl Theme {
     // --- Backgrounds (Pure Black for AMOLED) ---
-    pub const BG: Color = Color::Rgb(0, 0, 0);           // True black
-    pub const BG_PANEL: Color = Color::Rgb(8, 8, 8);     // Barely visible
+    pub const BG: Color = Color::Rgb(0, 0, 0); // True black
+    pub const BG_PANEL: Color = Color::Rgb(8, 8, 8); // Barely visible
     pub const BG_ELEVATED: Color = Color::Rgb(15, 15, 15);
     pub const BG_SELECTED: Color = Color::Rgb(25, 25, 25);
     pub const BG_INPUT: Color = Color::Rgb(5, 5, 5);
@@ -27,16 +28,20 @@ impl Theme {
     pub const WHITE_SUBTLE: Color = Color::Rgb(40, 40, 40);
 
     // --- Accent Colors (Minimal, High Impact) ---
-    pub const ACCENT: Color = Color::Rgb(255, 255, 255);       // Pure white accent
+    pub const ACCENT: Color = Color::Rgb(255, 255, 255); // Pure white accent
     pub const ACCENT_DIM: Color = Color::Rgb(150, 150, 150);
-    pub const CYAN: Color = Color::Rgb(0, 255, 255);           // Neon cyan for highlights
-    pub const MAGENTA: Color = Color::Rgb(255, 0, 255);        // Psychedelic magenta
+    pub const CYAN: Color = Color::Rgb(0, 255, 255); // Neon cyan for highlights
+    pub const MAGENTA: Color = Color::Rgb(255, 0, 255); // Psychedelic magenta
+    pub const PURPLE: Color = Color::Rgb(128, 0, 255); // Deep purple
+    pub const LIME: Color = Color::Rgb(0, 255, 128); // Neon lime
+    pub const ORANGE: Color = Color::Rgb(255, 128, 0); // Neon orange
+    pub const PINK: Color = Color::Rgb(255, 64, 128); // Hot pink
 
     // --- Agent Colors (Subtle differentiation) ---
-    pub const AGENT_CODE: Color = Color::Rgb(200, 255, 200);   // Soft green
-    pub const AGENT_WEB: Color = Color::Rgb(200, 200, 255);    // Soft blue
+    pub const AGENT_CODE: Color = Color::Rgb(200, 255, 200); // Soft green
+    pub const AGENT_WEB: Color = Color::Rgb(200, 200, 255); // Soft blue
     pub const AGENT_ACADEMIC: Color = Color::Rgb(255, 200, 200); // Soft red
-    pub const AGENT_DATA: Color = Color::Rgb(255, 255, 200);   // Soft yellow
+    pub const AGENT_DATA: Color = Color::Rgb(255, 255, 200); // Soft yellow
 
     // --- Semantic ---
     pub const SUCCESS: Color = Color::Rgb(100, 255, 100);
@@ -48,6 +53,18 @@ impl Theme {
     pub const BORDER: Color = Color::Rgb(40, 40, 40);
     pub const BORDER_FOCUS: Color = Color::Rgb(100, 100, 100);
     pub const BORDER_ACTIVE: Color = Color::Rgb(255, 255, 255);
+
+    // --- Psychedelic Palette ---
+    pub const PSYCHEDELIC: [Color; 8] = [
+        Color::Rgb(0, 255, 255),  // Cyan
+        Color::Rgb(255, 0, 255),  // Magenta
+        Color::Rgb(128, 0, 255),  // Purple
+        Color::Rgb(0, 255, 128),  // Lime
+        Color::Rgb(255, 128, 0),  // Orange
+        Color::Rgb(255, 64, 128), // Pink
+        Color::Rgb(64, 255, 255), // Aqua
+        Color::Rgb(255, 255, 64), // Yellow
+    ];
 }
 
 // ============================================================================
@@ -63,9 +80,12 @@ pub const LOGO_SMALL: &str = r#"
 
 pub const LOGO_MINI: &str = "HOUSAKY";
 
-pub const SEPARATOR: &str = "--------------------------------------------------------------------------------";
-pub const SEPARATOR_THIN: &str = "........................................................................";
-pub const SEPARATOR_DOUBLE: &str = "================================================================================";
+pub const SEPARATOR: &str =
+    "--------------------------------------------------------------------------------";
+pub const SEPARATOR_THIN: &str =
+    "........................................................................";
+pub const SEPARATOR_DOUBLE: &str =
+    "================================================================================";
 
 pub const BOX_TL: char = '+';
 pub const BOX_TR: char = '+';
@@ -78,6 +98,51 @@ pub const BOX_V: char = '|';
 pub const ANIM_FRAMES: &[&str] = &["*", "+", "x", "+"];
 pub const SPINNER: &[&str] = &["|", "/", "-", "\\"];
 pub const PULSE: &[&str] = &[".", "o", "O", "o"];
+pub const SPINNER_DOTS: &[&str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+pub const SPINNER_ARROWS: &[&str] = &["←", "↖", "↑", "↗", "→", "↘", "↓", "↙"];
+pub const SPINNER_GLOW: &[&str] = &["◈", "◇", "◆", "◇"];
+
+// Psychedelic background patterns (high-performance, low-char patterns)
+pub const PSYCH_PATTERN_VINES: &[&str] = &[
+    "╭──────────────────────────────────────────────────────────────────────╮",
+    "│  ⠀⠀⠀⠀⠀⠀⠀⣀⣤⣴⣶⣶⣶⣦⣤⣀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀  │",
+    "│  ⠀⠀⠀⠀⣠⣶⣿⣿⣿⣿⣿⣿⣿⣿⣿⣶⣄⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀  │",
+    "│  ⠀⠀⣠⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣦⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀  │",
+    "│  ⠀⣼⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣦⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀  │",
+    "│  ⢀⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀  │",
+    "│  ⢸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡇⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀  │",
+    "│  ⠈⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀  │",
+    "╰──────────────────────────────────────────────────────────────────────╯",
+];
+
+pub const PSYCH_PATTERN_WAVES: &[&str] = &[
+    "░▒▓█ ▓▒░ ░▒▓█ ▓▒░ ░▒▓█ ▓▒░ ░▒▓█ ▓▒░ ░▒▓█ ▓▒░ ░▒▓█ ▓▒░",
+    "░▒▓█ ▓▒░ ░▒▓█ ▓▒░ ░▒▓█ ▓▒░ ░▒▓█ ▓▒░ ░▒▓█ ▓▒░ ░▒▓█ ▓▒░",
+    "░▒▓█ ▓▒░ ░▒▓█ ▓▒░ ░▒▓█ ▓▒░ ░▒▓█ ▓▒░ ░▒▓█ ▓▒░ ░▒▓█ ▓▒░",
+];
+
+pub const PSYCH_PATTERN_MATRIX: &[&str] = &[
+    "01001000 01001111 01010101 01010011 01000001 01001011 01011001",
+    "11001010 00110101 10010110 01101001 01010101 10101010 01010101",
+    "00101101 10101010 01010101 11010101 00101010 10101001 01010010",
+];
+
+// Simple geometric patterns for background (low overhead)
+pub const GEOM_FRAME_1: &str =
+    "╔═══════════════════════════════════════════════════════════════════════════╗";
+pub const GEOM_FRAME_2: &str =
+    "║  ◇────────────────────────────────────────────────────────────────────◇  ║";
+pub const GEOM_FRAME_3: &str =
+    "╚═══════════════════════════════════════════════════════════════════════════╝";
+
+// Vintage computer frames
+pub const VINTAGE_BORDER: &[&str] = &[
+    "┌────────────────────────────────────────────────────────────────────────────┐",
+    "│╔══════════════════════════════════════════════════════════════════════════││",
+    "│║                                                                          ║│",
+    "│╚══════════════════════════════════════════════════════════════════════════││",
+    "└────────────────────────────────────────────────────────────────────────────┘",
+];
 
 // Agent status indicators
 pub const STATUS_ACTIVE: &str = "[+]";
@@ -139,9 +204,7 @@ pub fn style_input() -> Style {
 }
 
 pub fn style_input_cursor() -> Style {
-    Style::default()
-        .fg(Theme::BG)
-        .bg(Theme::WHITE)
+    Style::default().fg(Theme::BG).bg(Theme::WHITE)
 }
 
 pub fn style_user_message() -> Style {
@@ -236,6 +299,78 @@ pub fn format_agent_status(active: bool, loading: bool) -> &'static str {
         STATUS_ACTIVE
     } else {
         STATUS_IDLE
+    }
+}
+
+// ============================================================================
+// Psychedelic Background Renderer
+// ============================================================================
+
+/// Psychedelic background animation state
+pub struct PsychedelicBg {
+    pub frame: usize,
+    pub tick: usize,
+    pub pattern: PsychedelicPattern,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum PsychedelicPattern {
+    Dots,
+    Waves,
+    Matrix,
+    Minimal,
+}
+
+impl PsychedelicBg {
+    pub fn new() -> Self {
+        Self {
+            frame: 0,
+            tick: 0,
+            pattern: PsychedelicPattern::Minimal,
+        }
+    }
+
+    pub fn update(&mut self) {
+        self.tick += 1;
+        if self.tick >= 3 {
+            self.tick = 0;
+            self.frame = (self.frame + 1) % 8;
+        }
+    }
+
+    pub fn get_accent_color(&self) -> Color {
+        Theme::PSYCHEDELIC[self.frame % Theme::PSYCHEDELIC.len()]
+    }
+
+    pub fn get_spinner(&self) -> &'static str {
+        SPINNER_DOTS[self.frame % SPINNER_DOTS.len()]
+    }
+
+    pub fn get_glow(&self) -> &'static str {
+        SPINNER_GLOW[self.frame % SPINNER_GLOW.len()]
+    }
+}
+
+impl Default for PsychedelicBg {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Get animated header decoration
+pub fn get_header_deco(frame: usize) -> String {
+    let chars = ["◈", "◇", "◆", "◆", "◇", "◈"];
+    let idx = frame % chars.len();
+    format!("{} HOUSAKY {}", chars[idx], chars[(idx + 3) % chars.len()])
+}
+
+/// Get animated status indicator
+pub fn get_status_indicator(frame: usize, active: bool) -> String {
+    if active {
+        let dots = ["⠁", "⠃", "⠇", "⡇", "⣇", "⣧", "⣷", "⣿"];
+        dots[frame % dots.len()].to_string()
+    } else {
+        "●".to_string()
     }
 }
 

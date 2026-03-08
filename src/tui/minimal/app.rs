@@ -1,11 +1,13 @@
 //! Minimal TUI Application
 //!
 //! A clean, focused chat interface with Kowalski agent integration.
+//! Features psychedelic animated decorations and command autocomplete.
 
 use anyhow::Result;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseEvent, MouseEventKind};
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
+    style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph},
     Frame,
@@ -26,7 +28,7 @@ use super::a2a_panel::A2APanel;
 use super::chat::{ChatPanel, Role};
 use super::input::InputBar;
 use super::keys_popup::{KeysPopup, ProviderEntry};
-use super::theme::{self, LOGO_MINI};
+use super::theme::{self, PsychedelicBg, LOGO_MINI};
 
 /// Focus state
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -58,6 +60,7 @@ pub struct MinimalApp {
     // Animation
     anim_frame: usize,
     anim_tick: usize,
+    psych_bg: PsychedelicBg,
 
     // Kowalski bridge
     kowalski: Option<Arc<KowalskiBridge>>,
@@ -219,6 +222,7 @@ impl MinimalApp {
             quit: false,
             anim_frame: 0,
             anim_tick: 0,
+            psych_bg: PsychedelicBg::new(),
             kowalski,
             orchestrator,
             delegate_agents,
@@ -378,6 +382,10 @@ impl MinimalApp {
             self.anim_frame = (self.anim_frame + 1) % 4;
         }
 
+        // Update psychedelic background
+        self.psych_bg.update();
+        self.input.update();
+
         // Drain log receiver
         if let Some(rx) = &self.log_rx {
             while let Ok(msg) = rx.try_recv() {
@@ -433,14 +441,15 @@ impl MinimalApp {
     fn draw_header(&self, frame: &mut Frame, area: Rect) {
         let block = Block::default()
             .borders(Borders::BOTTOM)
-            .border_style(theme::style_border())
+            .border_style(Style::default().fg(self.psych_bg.get_accent_color()))
             .style(theme::style_base());
 
         let inner = block.inner(area);
         frame.render_widget(block, area);
 
-        // Header content
-        let spinner = theme::SPINNER[self.anim_frame];
+        // Get animated spinner and accent
+        let spinner = self.psych_bg.get_spinner();
+        let accent = self.psych_bg.get_accent_color();
         let status = if self.streaming.load(Ordering::Relaxed) {
             format!("{} streaming...", spinner)
         } else {
@@ -453,12 +462,15 @@ impl MinimalApp {
             .map(|a| a.display())
             .unwrap_or("main");
 
+        // Animated title with psychedelic accent
+        let deco = theme::get_header_deco(self.psych_bg.frame);
+
         let header_line = Line::from(vec![
-            Span::styled(LOGO_MINI, theme::style_title()),
+            Span::styled(deco, Style::default().fg(accent).add_modifier(Modifier::BOLD)),
             Span::raw(" "),
             Span::styled("│", theme::style_dim()),
             Span::raw(" "),
-            Span::styled(&self.provider_name, theme::style_subtitle()),
+            Span::styled(&self.provider_name, Style::default().fg(accent)),
             Span::raw("/"),
             Span::styled(&self.model_name, theme::style_dim()),
             Span::raw(" "),
@@ -472,14 +484,14 @@ impl MinimalApp {
             Span::raw(" "),
             Span::styled("│", theme::style_dim()),
             Span::raw(" "),
-            Span::styled(format!("{} subagents", agent_count), theme::style_dim()),
+            Span::styled(format!("{} agents", agent_count), theme::style_dim()),
             Span::raw(" "),
             Span::styled("│", theme::style_dim()),
             Span::raw(" "),
             Span::styled(status, if self.streaming.load(Ordering::Relaxed) {
-                theme::style_warning()
+                Style::default().fg(theme::Theme::WARNING)
             } else {
-                theme::style_success()
+                Style::default().fg(theme::Theme::SUCCESS)
             }),
         ]);
 
@@ -597,6 +609,40 @@ impl MinimalApp {
     }
 
     fn handle_input_key(&mut self, key: KeyEvent) -> Result<()> {
+        // Handle command palette navigation when visible
+        if self.input.command_palette.visible {
+            match key.code {
+                KeyCode::Esc => {
+                    self.input.command_palette.hide();
+                    return Ok(());
+                }
+                KeyCode::Enter => {
+                    if let Some(cmd) = self.input.command_palette.accept() {
+                        self.input.content = cmd;
+                        self.input.cursor = self.input.content.len();
+                    }
+                    return Ok(());
+                }
+                KeyCode::Up | KeyCode::Char('k') => {
+                    self.input.command_palette.prev();
+                    return Ok(());
+                }
+                KeyCode::Down | KeyCode::Char('j') => {
+                    self.input.command_palette.next();
+                    return Ok(());
+                }
+                KeyCode::Tab => {
+                    if let Some(cmd) = self.input.command_palette.selected_command() {
+                        self.input.content = cmd.command.clone();
+                        self.input.cursor = self.input.content.len();
+                        self.input.command_palette.update_query(&self.input.content);
+                    }
+                    return Ok(());
+                }
+                _ => {}
+            }
+        }
+
         match (key.modifiers, key.code) {
             // Navigation
             (_, KeyCode::Tab) => {
@@ -645,8 +691,20 @@ impl MinimalApp {
             (KeyModifiers::CONTROL, KeyCode::Char('u')) => self.input.clear(),
 
             // History
-            (_, KeyCode::Up) => self.input.history_up(),
-            (_, KeyCode::Down) => self.input.history_down(),
+            (_, KeyCode::Up) => {
+                if self.input.command_palette.visible {
+                    self.input.command_palette.prev();
+                } else {
+                    self.input.history_up();
+                }
+            }
+            (_, KeyCode::Down) => {
+                if self.input.command_palette.visible {
+                    self.input.command_palette.next();
+                } else {
+                    self.input.history_down();
+                }
+            }
 
             // Character input
             (_, KeyCode::Char(c)) => self.input.insert(c),

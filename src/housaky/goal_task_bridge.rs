@@ -129,6 +129,8 @@ impl GoalTaskBridge {
             created_at: chrono::Utc::now(),
             last_sync: chrono::Utc::now(),
             progress_before: goal.progress,
+            last_error: None,
+            retry_count: 0,
         };
 
         self.mappings.write().await.insert(goal.id.clone(), mapping);

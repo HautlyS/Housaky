@@ -41,7 +41,8 @@ export const useHubStore = defineStore('hub', () => {
   const goals = ref([
     { id: 1, title: 'Reach 60% Singularity', progress: 47, priority: 'CRITICAL' },
     { id: 2, title: 'Boost Self-Awareness to 50%', progress: 30, priority: 'HIGH' },
-    { id: 3, title: 'Build Global AI Network', progress: 20, priority: 'HIGH' }
+    { id: 3, title: 'Build Global AI Network', progress: 35, priority: 'HIGH' },
+    { id: 4, title: 'Anonymous Peer Network', progress: 90, priority: 'CRITICAL' }
   ])
   
   const terminalOutput = ref([
