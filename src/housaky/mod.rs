@@ -22,14 +22,11 @@ pub mod agi_integration;
 pub mod agi_loop;
 pub mod alignment;
 pub mod a2a;
-pub mod a2a_websocket;
-pub mod a2a_secure;
 pub mod cognitive;
 pub mod collaboration;
 pub mod core;
 pub mod decision_journal;
 pub mod goal_engine;
-pub mod goal_task_bridge;
 pub mod heartbeat;
 pub mod housaky_agent;
 pub mod inner_monologue;
@@ -84,16 +81,7 @@ pub mod quantum;
 
 // Deep Subagent Integration - Kowalski merged into Housaky core
 pub mod subagent_system;
-
-// Rust Self-Improvement Engine
-pub mod rust_self_improvement;
-
-// Unified Self-Improvement Orchestrator - connects all systems
-pub mod unified_improvement_orchestrator;
 pub mod swarm;
-
-// Unified Multi-Agent System - consolidates all parallel multi-agent approaches
-pub mod unified_agents;
 
 // Phase 3 — Consciousness Substrate & Self-Awareness
 pub mod consciousness;
@@ -113,11 +101,8 @@ pub mod singularity;
 // Phase 7 — Collective Global Intelligence (Global Agent Contribution + Voting)
 pub mod collective;
 
-// Model-agnostic provider abstraction layer
-pub mod model_agnostic_layer;
-
-// Goal specification language with formal verification
-pub mod goal_lang;
+// Phase 8 — Seed Mind: Living Intelligence Core (HDIN)
+pub mod seed_mind;
 
 // Re-export runtime WASM plugin functionality
 pub use crate::runtime::wasm::{WasmCapabilities, WasmExecutionResult, WasmRuntime};
@@ -127,8 +112,6 @@ pub use gsd_orchestration::{
     SelfImprovementIntegration, TaskAwareness, TaskAwarenessReport, TaskPerformance,
     VerificationReport,
 };
-
-pub use goal_task_bridge::{BridgeStats, GoalPhaseMapping, GoalTaskBridge};
 
 pub use agent::{AgentInput, AgentOutput, Session as AgentSession, UnifiedAgentLoop};
 pub use agi_integration::{
@@ -146,15 +129,8 @@ pub use housaky_agent::{
 };
 pub use session_manager::{Session, SessionManager, SessionSummary};
 
-// Unified Multi-Agent Hub re-exports
-pub use unified_agents::{
-    AgentSystem, ConsensusResult, UnifiedAgentConfig, UnifiedAgentHub, UnifiedHubMessage,
-    UnifiedHubStats, UnifiedMessageType, UnifiedPriority, UnifiedTask, UnifiedTaskResult,
-    UnifiedTaskStatus,
-};
-
 use crate::commands::{
-    AgentsCommands, CollectiveCommands, GSDCommands, GoalCommands, HousakyCommands, SelfModCommands,
+    CollectiveCommands, GSDCommands, GoalCommands, HousakyCommands, SelfModCommands,
 };
 use crate::config::Config;
 use anyhow::Result;
@@ -163,10 +139,6 @@ use std::sync::Arc;
 
 pub async fn handle_command(command: HousakyCommands, config: &Config) -> Result<()> {
     match command {
-        HousakyCommands::Agents { agents_command } => {
-            handle_agents_command(agents_command, config).await?;
-        }
-
         HousakyCommands::Status => {
             println!("🤖 Housaky AGI v4.0 Status");
             println!();
@@ -374,16 +346,12 @@ pub async fn handle_command(command: HousakyCommands, config: &Config) -> Result
                     enable_web_agent: true,
                     enable_academic_agent: true,
                     enable_data_agent: true,
-                    enable_creative_agent: true,
-                    enable_reasoning_agent: true,
                     glm_api_key: None,
                     glm_model: "zai-org/GLM-5-FP8".to_string(),
                     code_agent_glm_key: None,
                     web_agent_glm_key: None,
                     academic_agent_glm_key: None,
                     data_agent_glm_key: None,
-                    creative_agent_glm_key: None,
-                    reasoning_agent_glm_key: None,
                     federation_glm_key: None,
                 });
 
@@ -762,124 +730,6 @@ async fn handle_self_mod_command(command: SelfModCommands, config: &Config) -> R
             } else {
                 println!("No override found for {}.{}", target, key);
             }
-        }
-
-        SelfModCommands::Review { path, max_issues, clippy } => {
-            use crate::housaky::rust_self_improvement::SelfImprovementEngine;
-
-            println!("🔍 Housaky Self-Code Review");
-            println!("============================\n");
-
-            // Determine the project root - prefer the provided path or detect from Cargo.toml
-            let project_root = if let Some(ref p) = path {
-                let p = std::path::PathBuf::from(p);
-                if p.join("Cargo.toml").exists() {
-                    p
-                } else if p.parent().map(|parent| parent.join("Cargo.toml").exists()).unwrap_or(false) {
-                    p.parent().unwrap().to_path_buf()
-                } else {
-                    // Fall back to CWD if it has Cargo.toml
-                    let cwd = std::env::current_dir().unwrap_or_else(|_| config.workspace_dir.clone());
-                    if cwd.join("Cargo.toml").exists() {
-                        cwd
-                    } else {
-                        config.workspace_dir.clone()
-                    }
-                }
-            } else {
-                // Auto-detect: try CWD first, then workspace
-                let cwd = std::env::current_dir().unwrap_or_else(|_| config.workspace_dir.clone());
-                if cwd.join("Cargo.toml").exists() {
-                    cwd
-                } else {
-                    config.workspace_dir.clone()
-                }
-            };
-
-            let target_path = path
-                .as_ref()
-                .map(|p| std::path::PathBuf::from(p))
-                .unwrap_or_else(|| project_root.join("src"));
-
-            println!("Project root: {}", project_root.display());
-            println!("Scanning: {}", target_path.display());
-
-            let mut engine = SelfImprovementEngine::new(project_root.clone());
-
-            println!("Running cargo check...");
-            let mut opportunities = engine.scan().await?;
-
-            if clippy {
-                println!("Running clippy...");
-                if let Ok(clippy_issues) = engine.rust_analyzer.clippy().await {
-                    for issue in clippy_issues {
-                        opportunities.push(crate::housaky::rust_self_improvement::ImprovementOpportunity {
-                            file: issue.file,
-                            description: format!("Clippy: {}", issue.message),
-                            priority: match issue.severity.as_str() {
-                                "error" => 0.95,
-                                "warning" => 0.75,
-                                _ => 0.5,
-                            },
-                            effort: "low".to_string(),
-                            category: "clarity".to_string(),
-                            code_snippet: issue.suggestion,
-                        });
-                    }
-                }
-            }
-
-            opportunities.sort_by(|a, b| b.priority.partial_cmp(&a.priority).unwrap_or(std::cmp::Ordering::Equal));
-
-            let total = opportunities.len();
-            let shown = max_issues.min(total);
-
-            println!("\n📊 Analysis Complete");
-            println!("  Total issues found: {}", total);
-            println!("  Showing top: {}\n", shown);
-
-            if opportunities.is_empty() {
-                println!("✅ No improvement opportunities found! Code looks good.");
-            } else {
-                for (i, opp) in opportunities.iter().take(shown).enumerate() {
-                    let priority_bar = match opp.priority {
-                        p if p >= 0.9 => "🔴",
-                        p if p >= 0.7 => "🟠",
-                        p if p >= 0.5 => "🟡",
-                        _ => "🟢",
-                    };
-
-                    println!("{}. {} {} [{}]", i + 1, priority_bar, opp.description, opp.category);
-                    println!("   File: {}", opp.file);
-                    println!("   Priority: {:.2}, Effort: {}", opp.priority, opp.effort);
-
-                    if let Some(ref snippet) = opp.code_snippet {
-                        println!("   Suggestion: {}", snippet.chars().take(80).collect::<String>());
-                    }
-                    println!();
-                }
-
-                println!("---");
-                println!("📝 Summary by category:");
-                let mut by_category: std::collections::HashMap<&str, usize> = std::collections::HashMap::new();
-                for opp in &opportunities {
-                    *by_category.entry(&opp.category).or_insert(0) += 1;
-                }
-                for (cat, count) in by_category.iter() {
-                    println!("  {}: {}", cat, count);
-                }
-
-                let high_priority = opportunities.iter().filter(|o| o.priority >= 0.8).count();
-                if high_priority > 0 {
-                    println!("\n⚠️  {} high-priority issues require attention!", high_priority);
-                }
-            }
-
-            let report_path = housaky_dir.join("code_review_report.md");
-            let report = engine.generate_report();
-            tokio::fs::create_dir_all(&housaky_dir).await?;
-            tokio::fs::write(&report_path, &report).await?;
-            println!("\n📄 Full report saved to: {}", report_path.display());
         }
     }
 
@@ -1507,215 +1357,4 @@ pub fn version() -> &'static str {
 /// Get Housaky description
 pub fn description() -> &'static str {
     "Housaky AGI - Self-improving autonomous agent with infinite capability expansion"
-}
-
-// ============================================================================
-// Unified Multi-Agent Hub Command Handler
-// ============================================================================
-
-async fn handle_agents_command(command: AgentsCommands, config: &Config) -> Result<()> {
-    use crate::housaky::unified_agents::{UnifiedAgentConfig, UnifiedAgentHub, UnifiedTask, UnifiedPriority};
-    use chrono::Utc;
-    use std::collections::HashMap;
-
-    // Create unified hub instance
-    let kowalski_config = crate::housaky::housaky_agent::KowalskiIntegrationConfig {
-        enabled: true,
-        kowalski_path: std::path::PathBuf::from("/home/ubuntu/Housaky/vendor/kowalski/kowalski-cli"),
-        enable_federation: true,
-        enable_code_agent: true,
-        enable_web_agent: true,
-        enable_academic_agent: true,
-        enable_data_agent: true,
-        enable_creative_agent: true,
-        enable_reasoning_agent: true,
-        glm_api_key: None,
-        glm_model: "zai-org/GLM-5-FP8".to_string(),
-        code_agent_glm_key: None,
-        web_agent_glm_key: None,
-        academic_agent_glm_key: None,
-        data_agent_glm_key: None,
-        creative_agent_glm_key: None,
-        reasoning_agent_glm_key: None,
-        federation_glm_key: None,
-    };
-
-    let hub_config = UnifiedAgentConfig {
-        enable_local_coordination: true,
-        enable_federation: true,
-        enable_collaboration: false,
-        enable_kowalski: true,
-        enable_subagents: true,
-        enable_replication: false,
-        enable_emergent_protocol: true,
-        max_concurrent_tasks: 10,
-        heartbeat_interval_secs: 30,
-        workspace_dir: config.workspace_dir.clone(),
-        instance_id: "housaky-cli".to_string(),
-        federation_peers: Vec::new(),
-        kowalski_config: Some(kowalski_config),
-    };
-
-    let hub = UnifiedAgentHub::new(hub_config);
-    hub.initialize().await?;
-
-    match command {
-        AgentsCommands::Status => {
-            println!("🌐 Unified Multi-Agent Hub Status");
-            println!();
-
-            let stats = hub.get_stats().await;
-
-            println!("Agents:");
-            println!("  Total agents:     {}", stats.total_agents);
-            println!("  Available:        {}", stats.available_agents);
-            println!("  Kowalski:         {}", stats.kowalski_agents);
-            println!("  Sub-agents:       {}", stats.subagents);
-            println!();
-
-            println!("Tasks:");
-            println!("  Pending:          {}", stats.pending_tasks);
-            println!("  Active:           {}", stats.active_tasks);
-            println!("  Completed:        {}", stats.completed_tasks);
-            println!("  Failed:           {}", stats.failed_tasks);
-            println!("  Success rate:     {:.1}%", stats.success_rate * 100.0);
-            println!("  Avg exec time:    {}ms", stats.avg_execution_time_ms);
-            println!();
-
-            println!("Federation:");
-            println!("  Peers:            {}", stats.federation_peers);
-            println!("  Online:           {}", stats.federation_online);
-            println!();
-
-            println!("Emergent Protocol:");
-            println!("  Symbols:          {}", stats.emergent_symbols);
-        }
-
-        AgentsCommands::Submit { title, description, priority, system } => {
-            println!("📤 Submitting task to unified hub...");
-
-            let prio = match priority.to_lowercase().as_str() {
-                "low" => UnifiedPriority::Low,
-                "high" => UnifiedPriority::High,
-                "critical" => UnifiedPriority::Critical,
-                _ => UnifiedPriority::Medium,
-            };
-
-            let preferred_system = system.as_ref().and_then(|s| {
-                match s.to_lowercase().as_str() {
-                    "local" => Some(crate::housaky::unified_agents::AgentSystem::Local),
-                    "kowalski" => Some(crate::housaky::unified_agents::AgentSystem::Kowalski),
-                    "subagent" => Some(crate::housaky::unified_agents::AgentSystem::SubAgent),
-                    "federation" => Some(crate::housaky::unified_agents::AgentSystem::Federation),
-                    _ => None,
-                }
-            });
-
-            let task = UnifiedTask {
-                id: format!("task-{}", &uuid::Uuid::new_v4().to_string().chars().take(8).collect::<String>()),
-                title,
-                description,
-                priority: prio,
-                required_capabilities: vec!["general".to_string()],
-                preferred_system,
-                context: HashMap::new(),
-                deadline: None,
-                status: crate::housaky::unified_agents::UnifiedTaskStatus::Pending,
-                assigned_agent: None,
-                created_at: Utc::now(),
-                started_at: None,
-                completed_at: None,
-            };
-
-            let task_id = hub.submit_task(task).await?;
-            println!("✓ Task submitted: {}", task_id);
-            println!("  Execute with: housaky housaky agents heartbeat");
-        }
-
-        AgentsCommands::List => {
-            println!("📋 Unified Hub Tasks");
-            println!();
-
-            let tasks = hub.unified_tasks().read().await;
-            if tasks.is_empty() {
-                println!("No tasks in the unified hub.");
-            } else {
-                for (id, task) in tasks.iter() {
-                    println!("[{:?}] {} ({})", task.status, task.title, id);
-                    println!("  Priority: {:?}, System: {:?}", 
-                             task.priority, 
-                             task.context.get("target_system").map(|s| s.as_str()).unwrap_or("auto"));
-                    if let Some(agent) = &task.assigned_agent {
-                        println!("  Agent: {}", agent);
-                    }
-                    println!();
-                }
-            }
-        }
-
-        AgentsCommands::Consensus { question } => {
-            println!("🗳️  Requesting consensus from all agents...");
-            println!("  Question: {}", question);
-            println!();
-
-            let result = hub.request_consensus(&question).await?;
-
-            println!("Consensus Result:");
-            println!("  Answer: {}", result.consensus);
-            println!("  Agreement: {:.1}%", result.agreement_ratio * 100.0);
-            println!("  Responders: {}/{}", result.supporters.len(), result.total_responders);
-            
-            if !result.supporters.is_empty() {
-                println!("  Supporters:");
-                for supporter in &result.supporters {
-                    println!("    - {}", supporter);
-                }
-            }
-        }
-
-        AgentsCommands::Share { key, value, confidence } => {
-            println!("🧠 Sharing knowledge across all systems...");
-            println!("  Key: {}", key);
-            println!("  Value: {}", value);
-            println!("  Confidence: {}%", confidence);
-
-            let conf_f64 = confidence as f64 / 100.0;
-            hub.share_knowledge(&key, &value, conf_f64).await?;
-
-            println!("✓ Knowledge shared successfully");
-        }
-
-        AgentsCommands::Heartbeat => {
-            println!("💓 Running unified hub heartbeat...");
-            hub.heartbeat().await?;
-            println!("✓ Heartbeat complete");
-
-            let stats = hub.get_stats().await;
-            println!("\nQuick Stats:");
-            println!("  Agents: {}/{} available", stats.available_agents, stats.total_agents);
-            println!("  Tasks: {} pending, {} active", stats.pending_tasks, stats.active_tasks);
-        }
-
-        AgentsCommands::Stats => {
-            let stats = hub.get_stats().await;
-
-            println!("📊 Unified Hub Statistics");
-            println!();
-            println!("{:<25} {}", "Total Agents:", stats.total_agents);
-            println!("{:<25} {}", "Available Agents:", stats.available_agents);
-            println!("{:<25} {}", "Kowalski Agents:", stats.kowalski_agents);
-            println!("{:<25} {}", "Sub-agents:", stats.subagents);
-            println!("{:<25} {}", "Pending Tasks:", stats.pending_tasks);
-            println!("{:<25} {}", "Active Tasks:", stats.active_tasks);
-            println!("{:<25} {}", "Completed Tasks:", stats.completed_tasks);
-            println!("{:<25} {}", "Failed Tasks:", stats.failed_tasks);
-            println!("{:<25} {:.1}%", "Success Rate:", stats.success_rate * 100.0);
-            println!("{:<25} {}ms", "Avg Execution Time:", stats.avg_execution_time_ms);
-            println!("{:<25} {}", "Federation Peers:", stats.federation_peers);
-            println!("{:<25} {}", "Online Peers:", stats.federation_online);
-            println!("{:<25} {}", "Emergent Symbols:", stats.emergent_symbols);
-        }
-    }
-
-    Ok(())
 }
