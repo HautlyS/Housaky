@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use tokio::fs;
 use regex::Regex;
+use crate::housaky::code_parsing::tree_sitter::RustCodeAnalyzer;
 
 // ============================================================================
 // CODE ANALYSIS STRUCTURES
@@ -214,47 +215,45 @@ impl RustAnalyzer {
 }
 
 // ============================================================================
-// TREE-SITTER INTEGRATION (SIMPLIFIED)
+// TREE-SITTER INTEGRATION
 // ============================================================================
 
 pub struct TreeSitterAnalyzer {
-    // Note: Full tree-sitter integration would require the tree-sitter crate
-    // For now, we use regex-based parsing which works well for most cases
+    analyzer: RustCodeAnalyzer,
 }
 
 impl TreeSitterAnalyzer {
     pub fn new() -> Self {
-        Self {}
+        Self {
+            analyzer: RustCodeAnalyzer::new(),
+        }
     }
 
-    /// Find functions that are too long (over 50 lines)
-    pub async fn find_long_functions(&self, content: &str) -> Vec<(String, u32, u32)> {
+    pub async fn find_long_functions(&mut self, content: &str) -> Vec<(String, u32, u32)> {
         let mut result = Vec::new();
-        let fn_re = Regex::new(r"(?m)^(pub\s+)?(async\s+)?fn\s+(\w+)").unwrap();
-        
-        for cap in fn_re.captures_iter(content) {
-            if let Some(name) = cap.get(3) {
-                // Simplified: count lines until next function or end
-                let start = cap.get(0).unwrap().start();
-                let lines_before = content[..start].lines().count();
-                result.push((name.as_str().to_string(), lines_before as u32, 0));
+
+        if let Ok(analysis) = self.analyzer.analyze(content) {
+            for func in &analysis.functions {
+                let line_count = func.line_end.saturating_sub(func.line_start) as u32;
+                if line_count > 50 {
+                    result.push((func.name.clone(), func.line_start as u32, line_count));
+                }
             }
         }
-        
+
         result
     }
 
-    /// Find deeply nested code (over 4 levels)
     pub fn find_deep_nesting(&self, content: &str) -> Vec<(u32, u32)> {
         let mut result = Vec::new();
         let mut current_depth = 0u32;
         let mut max_depth = 0u32;
         let mut start_line = 0u32;
-        
+
         for (i, line) in content.lines().enumerate() {
             let opens = line.matches('{').count() as u32;
             let closes = line.matches('}').count() as u32;
-            
+
             if opens > closes {
                 if current_depth == 0 {
                     start_line = i as u32 + 1;
@@ -268,8 +267,21 @@ impl TreeSitterAnalyzer {
                 current_depth = current_depth.saturating_sub(closes - opens);
             }
         }
-        
+
         result
+    }
+
+    pub fn analyze(&mut self, content: &str) -> Option<crate::housaky::code_parsing::tree_sitter::CodeAnalysisResult> {
+        self.analyzer.analyze(content).ok()
+    }
+
+    pub fn extract_function_complexity(&mut self, content: &str) -> Vec<(String, u32)> {
+        if let Ok(analysis) = self.analyzer.analyze(content) {
+            return analysis.functions.iter()
+                .map(|f| (f.name.clone(), f.complexity))
+                .collect();
+        }
+        Vec::new()
     }
 }
 
@@ -280,7 +292,7 @@ impl TreeSitterAnalyzer {
 pub struct SelfImprovementEngine {
     pub project_root: PathBuf,
     pub rust_analyzer: RustAnalyzer,
-    tree_sitter: TreeSitterAnalyzer,
+    pub tree_sitter: TreeSitterAnalyzer,
     improvements: Vec<ImprovementOpportunity>,
 }
 
@@ -361,15 +373,15 @@ impl SelfImprovementEngine {
         Ok(())
     }
 
-    async fn analyze_complexity(&self, dir: &Path, opportunities: &mut Vec<ImprovementOpportunity>) -> Result<()> {
+    async fn analyze_complexity(&mut self, dir: &Path, opportunities: &mut Vec<ImprovementOpportunity>) -> Result<()> {
         let mut entries = fs::read_dir(dir).await?;
-        
+
         while let Some(entry) = entries.next_entry().await? {
             let path = entry.path();
-            
+
             if path.is_file() && path.extension().map(|e| e == "rs").unwrap_or(false) {
                 let analysis = self.rust_analyzer.analyze_file(&path).await?;
-                
+
                 if analysis.complexity_score > 1.5 {
                     opportunities.push(ImprovementOpportunity {
                         file: analysis.path.clone(),
@@ -383,7 +395,7 @@ impl SelfImprovementEngine {
                         code_snippet: None,
                     });
                 }
-                
+
                 if analysis.lines > 500 {
                     opportunities.push(ImprovementOpportunity {
                         file: analysis.path.clone(),
@@ -394,9 +406,61 @@ impl SelfImprovementEngine {
                         code_snippet: None,
                     });
                 }
+
+                // Use tree-sitter for detailed analysis
+                if let Ok(content) = tokio::fs::read_to_string(&path).await {
+                    let long_funcs = self.tree_sitter.find_long_functions(&content).await;
+                    for (name, line, line_count) in long_funcs {
+                        opportunities.push(ImprovementOpportunity {
+                            file: analysis.path.clone(),
+                            description: format!(
+                                "Long function '{}' ({} lines at line {}). Consider breaking down.",
+                                name, line_count, line
+                            ),
+                            priority: (line_count as f64 / 100.0).min(0.9),
+                            effort: "medium".to_string(),
+                            category: "clarity".to_string(),
+                            code_snippet: None,
+                        });
+                    }
+
+                    let deep_nesting = self.tree_sitter.find_deep_nesting(&content);
+                    for (line, depth) in deep_nesting {
+                        opportunities.push(ImprovementOpportunity {
+                            file: analysis.path.clone(),
+                            description: format!(
+                                "Deep nesting (level {}) at line {}. Consider early returns or extraction.",
+                                depth, line
+                            ),
+                            priority: 0.6,
+                            effort: "medium".to_string(),
+                            category: "clarity".to_string(),
+                            code_snippet: None,
+                        });
+                    }
+
+                    let complexity = self.tree_sitter.extract_function_complexity(&content);
+                    for (name, cx) in complexity {
+                        if cx > 10 {
+                            opportunities.push(ImprovementOpportunity {
+                                file: analysis.path.clone(),
+                                description: format!(
+                                    "High cyclomatic complexity in '{}' ({}). Consider simplifying.",
+                                    name, cx
+                                ),
+                                priority: (cx as f64 / 20.0).min(0.95),
+                                effort: "medium".to_string(),
+                                category: "safety".to_string(),
+                                code_snippet: None,
+                            });
+                        }
+                    }
+                }
+            } else if path.is_dir() {
+                Box::pin(self.analyze_complexity(&path, opportunities)).await?;
             }
         }
-        
+
         Ok(())
     }
 

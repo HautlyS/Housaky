@@ -348,6 +348,10 @@ impl HousakyHeartbeat {
         self.run_quantum_goal_cycle().await;
         self.core.push_activity("goal", "Quantum goal scheduling done");
 
+        // GSD Phase Execution - execute pending phases for high-priority goals
+        self.execute_gsd_phases().await;
+        self.core.push_activity("gsd", "GSD phase execution complete");
+
         self.run_cognitive_cycle().await?;
         self.core.push_activity("thought", "Cognitive cycle complete");
 
@@ -478,6 +482,57 @@ impl HousakyHeartbeat {
             None => {
                 info!("Quantum goal cycle: no active goals to schedule");
             }
+        }
+    }
+
+    async fn execute_gsd_phases(&self) {
+        // Check for goals that need GSD phases
+        match self.core.check_and_spawn_gsd_phases().await {
+            Ok(spawned) => {
+                if !spawned.is_empty() {
+                    info!("🚀 GSD: Spawned {} new phase(s) for high-priority goals", spawned.len());
+                }
+            }
+            Err(e) => warn!("Failed to check/spawn GSD phases: {}", e),
+        }
+
+        // Get pending phases and execute one
+        let pending = self.core.get_pending_gsd_phases().await;
+        if !pending.is_empty() {
+            info!("📋 GSD: {} pending phase(s) to execute", pending.len());
+
+            // Execute the first pending phase
+            if let Some(phase_id) = pending.first() {
+                if let Some(goal_id) = self.core.goal_task_bridge.get_phase_goal_id(phase_id).await {
+                    info!("🎯 GSD: Executing phase {} for goal {}", phase_id, goal_id);
+
+                    match self.core.execute_goal_phase(&goal_id).await {
+                        Ok(Some(result)) => {
+                            info!("✅ GSD: {}", result);
+
+                            // Record as inner monologue thought
+                            let thought = format!(
+                                "GSD phase completed: {}",
+                                result
+                            );
+                            if let Err(e) = self.core.inner_monologue.add_thought(&thought, 0.9).await {
+                                warn!("Failed to record GSD thought: {e}");
+                            }
+                        }
+                        Ok(None) => {
+                            info!("GSD phase execution started (async)");
+                        }
+                        Err(e) => {
+                            warn!("GSD phase execution error: {}", e);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Sync progress from GSD tasks to goals
+        if let Err(e) = self.core.sync_gsd_progress().await {
+            warn!("GSD progress sync error: {}", e);
         }
     }
 

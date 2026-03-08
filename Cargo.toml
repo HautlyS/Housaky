@@ -197,7 +197,7 @@ unstable-key-tests = []
 # as a hard opt-in gate that is never enabled by `--all-features`.
 # To run them, use: RUSTFLAGS='--cfg feature="run-unstable-tests"' cargo test --features unstable-key-tests
 
-default = ["hardware"]
+default = ["hardware", "tree-sitter-rust"]
 hardware = ["nusb", "tokio-serial"]
 peripheral-rpi = ["rppal"]
 # probe = probe-rs for Nucleo memory read (adds ~50 deps; optional)
