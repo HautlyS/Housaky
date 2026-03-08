@@ -736,16 +736,22 @@ impl MinimalApp {
         // Check if targeting a specific agent
         let selected_agent = self.agents.selected_type();
 
-        // Send to LLM or Kowalski agent
-        if let Some(agent_type) = selected_agent {
-            if self.kowalski.is_some() {
-                self.send_to_kowalski(agent_type, content)?;
-            } else {
-                self.chat.push_system("Kowalski not available. Using default LLM.");
-                self.send_to_llm(content)?;
+        // Send to Main Orchestrator (with tools and AGI awareness) or Kowalski subagent
+        match selected_agent {
+            Some(agent_type) if agent_type.is_main() => {
+                self.send_to_orchestrator(content)?;
             }
-        } else {
-            self.send_to_llm(content)?;
+            Some(agent_type) if agent_type.is_subagent() => {
+                if self.kowalski.is_some() {
+                    self.send_to_kowalski(agent_type, content)?;
+                } else {
+                    self.chat.push_system("Kowalski subagents not available. Using main orchestrator.");
+                    self.send_to_orchestrator(content)?;
+                }
+            }
+            _ => {
+                self.send_to_orchestrator(content)?;
+            }
         }
 
         Ok(())
@@ -801,52 +807,52 @@ impl MinimalApp {
             "/agent" => {
                 if let Some(name) = parts.get(1) {
                     match *name {
-                        "code" | "c" => {
-                            self.agents.selected = 0;
-                            self.agents.list_state.select(Some(0));
-                            self.chat.push_system("Selected: Code Agent");
-                        }
-                        "web" | "w" => {
-                            self.agents.selected = 1;
-                            self.agents.list_state.select(Some(1));
-                            self.chat.push_system("Selected: Web Agent");
-                        }
-                        "academic" | "a" => {
-                            self.agents.selected = 2;
-                            self.agents.list_state.select(Some(2));
-                            self.chat.push_system("Selected: Academic Agent");
-                        }
-                        "data" | "d" => {
-                            self.agents.selected = 3;
-                            self.agents.list_state.select(Some(3));
-                            self.chat.push_system("Selected: Data Agent");
-                        }
-                        "creative" | "creativity" | "x" => {
-                            self.agents.selected = 4;
-                            self.agents.list_state.select(Some(4));
-                            self.chat.push_system("Selected: Creative Agent");
-                        }
-                        "reasoning" | "logic" | "r" => {
-                            self.agents.selected = 5;
-                            self.agents.list_state.select(Some(5));
-                            self.chat.push_system("Selected: Reasoning Agent");
-                        }
-                        "federation" | "fed" | "f" => {
-                            self.agents.selected = 6;
-                            self.agents.list_state.select(Some(6));
-                            self.chat.push_system("Selected: Federation Agent (coordinates all)");
-                        }
                         "main" | "orchestrator" | "m" | "o" => {
                             self.agents.selected = 0;
                             self.agents.list_state.select(Some(0));
-                            self.chat.push_system("Selected: Main Orchestrator (default LLM)");
+                            self.chat.push_system("Selected: Main Orchestrator (AGI with tools)");
+                        }
+                        "code" | "c" => {
+                            self.agents.selected = 1;
+                            self.agents.list_state.select(Some(1));
+                            self.chat.push_system("Selected: Code Agent");
+                        }
+                        "web" | "w" => {
+                            self.agents.selected = 2;
+                            self.agents.list_state.select(Some(2));
+                            self.chat.push_system("Selected: Web Agent");
+                        }
+                        "academic" | "a" => {
+                            self.agents.selected = 3;
+                            self.agents.list_state.select(Some(3));
+                            self.chat.push_system("Selected: Academic Agent");
+                        }
+                        "data" | "d" => {
+                            self.agents.selected = 4;
+                            self.agents.list_state.select(Some(4));
+                            self.chat.push_system("Selected: Data Agent");
+                        }
+                        "creative" | "creativity" | "x" => {
+                            self.agents.selected = 5;
+                            self.agents.list_state.select(Some(5));
+                            self.chat.push_system("Selected: Creative Agent");
+                        }
+                        "reasoning" | "logic" | "r" => {
+                            self.agents.selected = 6;
+                            self.agents.list_state.select(Some(6));
+                            self.chat.push_system("Selected: Reasoning Agent");
+                        }
+                        "federation" | "fed" | "f" => {
+                            self.agents.selected = 7;
+                            self.agents.list_state.select(Some(7));
+                            self.chat.push_system("Selected: Federation Agent (coordinates all)");
                         }
                         _ => {
-                            self.chat.push_system("Unknown agent. Use: code, web, academic, data, creative, reasoning, federation, main");
+                            self.chat.push_system("Unknown agent. Use: main, code, web, academic, data, creative, reasoning, federation");
                         }
                     }
                 } else {
-                    self.chat.push_system("Usage: /agent <code|web|academic|data|creative|reasoning|federation|main>");
+                    self.chat.push_system("Usage: /agent <main|code|web|academic|data|creative|reasoning|federation>");
                 }
             }
             "/provider" => {

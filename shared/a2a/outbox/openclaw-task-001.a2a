@@ -1,0 +1,1 @@
+{"id":"a2a-task-1741452002","from":"openclaw","to":"native","ts":1741452002000,"pri":2,"t":"Task","d":{"id":"task-review-001","action":"analyze","params":{"target":"src/housaky/","focus":"missing_implementations","questions":["Which command handlers are stubs?","What features have TODO markers?","Which modules need tests?"]}},"corr_id":"task-001"}

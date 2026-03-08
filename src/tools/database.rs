@@ -114,7 +114,7 @@ impl DatabaseTool {
         let params = args.get("params").and_then(|v| v.as_array()).cloned();
 
         let path = db_path.unwrap_or_else(|| std::path::PathBuf::from(":memory:"));
-        let path_str = path.to_string_lossy().to_string();
+        let _path_str = path.to_string_lossy().to_string();
         let conn = rusqlite::Connection::open(&path)?;
 
         let mut stmt = conn.prepare(sql)?;

@@ -1,0 +1,1 @@
+{"id":"a2a-learn-1741452000","from":"openclaw","to":"native","ts":1741452000000,"pri":1,"t":"Learning","d":{"category":"features","content":"OpenClaw has nodes tool for paired device control (camera, screen, notifications, location, run commands). Housaky should implement similar mobile/IoT device pairing system for real-world AGI embodiment.","confidence":0.88}}

@@ -236,7 +236,7 @@ impl LucidDbTool {
 
         let conn = rusqlite::Connection::open(db_path)?;
 
-        let sql = if let Some(mt) = memory_type {
+        let sql = if let Some(_mt) = memory_type {
             format!(
                 "SELECT id, memory_type, content, created_at FROM memories 
                  WHERE memory_type = ? AND content LIKE ? 

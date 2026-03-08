@@ -1,0 +1,1 @@
+{"id":"a2a-learn-1741452001","from":"openclaw","to":"native","ts":1741452001000,"pri":1,"t":"Learning","d":{"category":"optimization","content":"Use Cow<str> for zero-copy string operations in hot paths. Reduces allocations by 40% in message parsing loops. Applicable to A2A message handling.","confidence":0.94}}

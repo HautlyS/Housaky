@@ -15,6 +15,7 @@ use super::theme::{self, Theme};
 /// Kowalski agent types
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AgentType {
+    Main,
     Code,
     Web,
     Academic,
@@ -27,6 +28,7 @@ pub enum AgentType {
 impl AgentType {
     pub fn name(&self) -> &'static str {
         match self {
+            Self::Main => "main",
             Self::Code => "code",
             Self::Web => "web",
             Self::Academic => "academic",
@@ -39,6 +41,7 @@ impl AgentType {
 
     pub fn display(&self) -> &'static str {
         match self {
+            Self::Main => "Orchestrator",
             Self::Code => "Code Agent",
             Self::Web => "Web Agent",
             Self::Academic => "Academic Agent",
@@ -51,6 +54,7 @@ impl AgentType {
 
     pub fn description(&self) -> &'static str {
         match self {
+            Self::Main => "Main orchestrator with AGI capabilities",
             Self::Code => "Code analysis & refactoring",
             Self::Web => "Web research & scraping",
             Self::Academic => "Paper analysis & citations",
@@ -63,6 +67,7 @@ impl AgentType {
 
     pub fn icon(&self) -> &'static str {
         match self {
+            Self::Main => "AGI",
             Self::Code => "</>",
             Self::Web => "WWW",
             Self::Academic => "DOC",
@@ -75,6 +80,7 @@ impl AgentType {
 
     pub fn style(&self) -> Style {
         match self {
+            Self::Main => theme::style_title(),
             Self::Code => theme::style_agent_code(),
             Self::Web => theme::style_agent_web(),
             Self::Academic => theme::style_agent_academic(),
@@ -87,6 +93,7 @@ impl AgentType {
 
     pub fn all() -> &'static [AgentType] {
         &[
+            Self::Main,
             Self::Code,
             Self::Web,
             Self::Academic,
@@ -95,6 +102,14 @@ impl AgentType {
             Self::Reasoning,
             Self::Federation,
         ]
+    }
+
+    pub fn is_main(&self) -> bool {
+        matches!(self, Self::Main)
+    }
+
+    pub fn is_subagent(&self) -> bool {
+        !self.is_main()
     }
 }
 

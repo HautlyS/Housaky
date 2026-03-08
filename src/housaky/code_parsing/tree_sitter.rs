@@ -222,7 +222,7 @@ impl RustCodeAnalyzer {
         let mut imports = Vec::new();
         let mut total_complexity: u32 = 0;
 
-        let mut cursor = root.walk();
+        let _cursor = root.walk();
 
         fn visit_node(
             node: tree_sitter::Node,
@@ -486,7 +486,7 @@ impl RustCodeAnalyzer {
     fn extract_impl(node: tree_sitter::Node, source: &str) -> Option<ImplInfo> {
         let mut cursor = node.walk();
         let mut type_name = String::new();
-        let mut trait_name = None;
+        let trait_name = None;
         let mut methods = Vec::new();
 
         for child in node.children(&mut cursor) {

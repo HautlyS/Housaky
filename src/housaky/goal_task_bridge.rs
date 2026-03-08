@@ -1,9 +1,8 @@
 use crate::housaky::goal_engine::{Goal, GoalEngine, GoalPriority, GoalStatus};
 use crate::housaky::gsd_orchestration::{
-    DecompositionContext, GSDOrchestrator, GSDTaskStatus, PhaseStatus,
+    DecompositionContext, GSDOrchestrator, PhaseStatus,
 };
 use anyhow::Result;
-use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -159,7 +158,7 @@ impl GoalTaskBridge {
             .get(goal_id)
             .ok_or_else(|| anyhow::anyhow!("No phase mapping for goal {}", goal_id))?;
 
-        let context = DecompositionContext {
+        let _context = DecompositionContext {
             technology: Some("Rust".to_string()),
             requirements: vec![],
             constraints: vec![],
