@@ -60,6 +60,15 @@ pub mod git_sandbox;
 pub mod rust_code_modifier;
 pub mod self_improve_interface;
 
+// Missing module declarations
+pub mod a2a_secure;
+pub mod a2a_websocket;
+pub mod goal_task_bridge;
+pub mod model_agnostic_layer;
+pub mod rust_self_improvement;
+pub mod unified_agents;
+pub mod unified_improvement_orchestrator;
+
 // Structural parsing utilities (tree-sitter)
 pub mod code_parsing;
 
@@ -346,12 +355,16 @@ pub async fn handle_command(command: HousakyCommands, config: &Config) -> Result
                     enable_web_agent: true,
                     enable_academic_agent: true,
                     enable_data_agent: true,
+                    enable_creative_agent: true,
+                    enable_reasoning_agent: true,
                     glm_api_key: None,
                     glm_model: "zai-org/GLM-5-FP8".to_string(),
                     code_agent_glm_key: None,
                     web_agent_glm_key: None,
                     academic_agent_glm_key: None,
                     data_agent_glm_key: None,
+                    creative_agent_glm_key: None,
+                    reasoning_agent_glm_key: None,
                     federation_glm_key: None,
                 });
 
@@ -432,6 +445,10 @@ pub async fn handle_command(command: HousakyCommands, config: &Config) -> Result
 
         HousakyCommands::Collective { collective_command } => {
             handle_collective_command(collective_command, config).await?;
+        }
+        
+        HousakyCommands::SeedMind { seed_mind_command } => {
+            seed_mind::handle_seed_mind_command(seed_mind_command, config).await?;
         }
     }
 

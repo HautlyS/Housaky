@@ -14,7 +14,8 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
-use crate::config::Config;
+use crate::agent::Agent;
+use crate::config::{Config, DelegateAgentConfig};
 use crate::housaky::kowalski_integration::KowalskiBridge;
 use crate::housaky::housaky_agent::KowalskiIntegrationConfig;
 use crate::keys_manager::manager::get_global_keys_manager;
@@ -60,6 +61,12 @@ pub struct MinimalApp {
 
     // Kowalski bridge
     kowalski: Option<Arc<KowalskiBridge>>,
+
+    // Main orchestrator agent (with tools including delegate)
+    orchestrator: Option<Arc<std::sync::Mutex<Agent>>>,
+    
+    // Delegate agent configs for subagents
+    delegate_agents: HashMap<String, DelegateAgentConfig>,
 
     // Streaming
     streaming: Arc<AtomicBool>,
@@ -187,6 +194,17 @@ impl MinimalApp {
         } else {
             None
         };
+        
+        // Get delegate agent configs from Kowalski bridge for the orchestrator's delegate tool
+        let delegate_agents: HashMap<String, DelegateAgentConfig> = kowalski
+            .as_ref()
+            .map(|k| k.get_delegate_configs())
+            .unwrap_or_default();
+        
+        // Create the main orchestrator agent with tools (including delegate)
+        let orchestrator = Agent::from_config(&config)
+            .ok()
+            .map(|agent| Arc::new(std::sync::Mutex::new(agent)));
 
         let mut app = Self {
             config,
@@ -202,6 +220,8 @@ impl MinimalApp {
             anim_frame: 0,
             anim_tick: 0,
             kowalski,
+            orchestrator,
+            delegate_agents,
             streaming: Arc::new(AtomicBool::new(false)),
             stream_result: Arc::new(std::sync::Mutex::new(None)),
             stream_chunks: Arc::new(std::sync::Mutex::new(Vec::new())),
@@ -209,6 +229,19 @@ impl MinimalApp {
             resolved_key,
             log_rx: None,
         };
+        
+        // Set the main orchestrator as available
+        app.agents.set_agent_status(AgentType::Main, AgentStatus::Available);
+        
+        // Mark subagents as available if we have delegate configs
+        for &agent_type in AgentType::all() {
+            if agent_type.is_subagent() {
+                let agent_name = format!("kowalski-{}", agent_type.name());
+                if app.delegate_agents.contains_key(&agent_name) {
+                    app.agents.set_agent_status(agent_type, AgentStatus::Available);
+                }
+            }
+        }
 
         // Initialize keys popup with providers
         app.refresh_providers();
@@ -921,7 +954,67 @@ impl MinimalApp {
         self.chat.push_system(&format!("Switched to {}/{}", provider, model));
     }
 
-    fn send_to_llm(&mut self, content: &str) -> Result<()> {
+    fn send_to_orchestrator(&mut self, content: &str) -> Result<()> {
+        // Update agent status
+        self.agents.set_agent_status(AgentType::Main, AgentStatus::Busy);
+        
+        // Check if we have the orchestrator agent
+        let Some(orchestrator) = self.orchestrator.clone() else {
+            self.chat.push_system("Orchestrator agent not initialized. Falling back to simple LLM.");
+            self.agents.set_agent_status(AgentType::Main, AgentStatus::Error);
+            return self.send_to_llm_simple(content);
+        };
+
+        // Start streaming
+        self.streaming.store(true, Ordering::Relaxed);
+        self.chat.start_streaming(Role::Assistant);
+
+        // Clear previous chunks
+        if let Ok(mut chunks) = self.stream_chunks.lock() {
+            chunks.clear();
+        }
+
+        let content = content.to_string();
+        let result = self.stream_result.clone();
+        let chunks = self.stream_chunks.clone();
+
+        // Spawn task with full agent
+        std::thread::spawn(move || {
+            let rt = match tokio::runtime::Runtime::new() {
+                Ok(rt) => rt,
+                Err(e) => {
+                    if let Ok(mut r) = result.lock() {
+                        *r = Some(Err(format!("Runtime error: {}", e)));
+                    }
+                    return;
+                }
+            };
+
+            rt.block_on(async {
+                let mut agent = orchestrator.lock().unwrap();
+                match agent.turn(&content).await {
+                    Ok(response) => {
+                        // Add to chunks for display
+                        if let Ok(mut c) = chunks.lock() {
+                            c.push(response.clone());
+                        }
+                        if let Ok(mut r) = result.lock() {
+                            *r = Some(Ok(response));
+                        }
+                    }
+                    Err(e) => {
+                        if let Ok(mut r) = result.lock() {
+                            *r = Some(Err(format!("{}", e)));
+                        }
+                    }
+                }
+            });
+        });
+
+        Ok(())
+    }
+    
+    fn send_to_llm_simple(&mut self, content: &str) -> Result<()> {
         let Some(provider) = self.provider.clone() else {
             self.chat.push_system("No provider configured. Use /keys or Ctrl+K to configure.");
             return Ok(());
@@ -954,7 +1047,12 @@ impl MinimalApp {
             };
 
             rt.block_on(async {
-                match provider.chat_with_system(None, &content, &model, 0.7).await {
+                // Build a system prompt that includes subagent info
+                let system_prompt = "You are Housaky, an autonomous AI assistant with access to various tools including a 'delegate' tool. \
+                    You can delegate specialized tasks to subagents: code, web, academic, data, creative, reasoning, and federation. \
+                    Use the delegate tool when a task would benefit from specialized expertise.";
+                
+                match provider.chat_with_system(Some(system_prompt), &content, &model, 0.7).await {
                     Ok(response) => {
                         // Add to chunks for display
                         if let Ok(mut c) = chunks.lock() {
@@ -977,67 +1075,137 @@ impl MinimalApp {
     }
 
     fn send_to_kowalski(&mut self, agent_type: AgentType, content: &str) -> Result<()> {
-        let Some(kowalski) = self.kowalski.clone() else {
-            self.chat.push_system("Kowalski not available");
+        let agent_name = format!("kowalski-{}", agent_type.name());
+        
+        // Check if we have delegate config for this agent
+        let delegate_config = self.delegate_agents.get(&agent_name).cloned();
+        
+        if delegate_config.is_none() && self.kowalski.is_none() {
+            self.chat.push_system(&format!(
+                "No configuration for {}. Check keys.json for subagent key assignment.",
+                agent_type.display()
+            ));
             return Ok(());
-        };
-
+        }
+        
         // Update agent status
         self.agents.set_agent_status(agent_type, AgentStatus::Busy);
-
-        let agent_name = format!("kowalski-{}", agent_type.name());
-        let content = content.to_string();
-
+        
         self.chat.push_system(&format!("Sending to {}...", agent_type.display()));
-
+        
         // Start streaming
         self.streaming.store(true, Ordering::Relaxed);
         self.chat.start_streaming(Role::Agent(agent_type));
-
+        
         let result = self.stream_result.clone();
         let chunks = self.stream_chunks.clone();
-
+        
         // Clear previous chunks
         if let Ok(mut c) = chunks.lock() {
             c.clear();
         }
-
-        std::thread::spawn(move || {
-            let rt = match tokio::runtime::Runtime::new() {
-                Ok(rt) => rt,
-                Err(e) => {
-                    if let Ok(mut r) = result.lock() {
-                        *r = Some(Err(format!("Runtime error: {}", e)));
-                    }
-                    return;
-                }
-            };
-
-            rt.block_on(async {
-                match kowalski.send_task(&agent_name, &content).await {
-                    Ok(task_result) => {
-                        if task_result.success {
-                            if let Ok(mut c) = chunks.lock() {
-                                c.push(task_result.output.clone());
-                            }
-                            if let Ok(mut r) = result.lock() {
-                                *r = Some(Ok(task_result.output));
-                            }
-                        } else {
-                            let error = task_result.error.unwrap_or_else(|| "Unknown error".to_string());
-                            if let Ok(mut r) = result.lock() {
-                                *r = Some(Err(error));
-                            }
-                        }
-                    }
+        
+        // Prefer using delegate config for direct API call
+        if let Some(config) = delegate_config {
+            let content = content.to_string();
+            let agent_display = agent_type.display().to_string();
+            
+            std::thread::spawn(move || {
+                let rt = match tokio::runtime::Runtime::new() {
+                    Ok(rt) => rt,
                     Err(e) => {
                         if let Ok(mut r) = result.lock() {
-                            *r = Some(Err(format!("{}", e)));
+                            *r = Some(Err(format!("Runtime error: {}", e)));
+                        }
+                        return;
+                    }
+                };
+                
+                rt.block_on(async {
+                    let provider_name = if config.is_kowalski_agent { "glm" } else { &config.provider };
+                    let api_key = if config.is_kowalski_agent {
+                        config.glm_api_key.as_deref()
+                    } else {
+                        config.api_key.as_deref()
+                    };
+                    let model = if config.is_kowalski_agent {
+                        &config.glm_model
+                    } else {
+                        &config.model
+                    };
+                    
+                    match crate::providers::create_provider(provider_name, api_key) {
+                        Ok(provider) => {
+                            match provider.chat_with_system(
+                                config.system_prompt.as_deref(),
+                                &content,
+                                model,
+                                config.temperature.unwrap_or(0.7),
+                            ).await {
+                                Ok(response) => {
+                                    let output = format!("[{}]\n{}", agent_display, response);
+                                    if let Ok(mut c) = chunks.lock() {
+                                        c.push(output.clone());
+                                    }
+                                    if let Ok(mut r) = result.lock() {
+                                        *r = Some(Ok(output));
+                                    }
+                                }
+                                Err(e) => {
+                                    if let Ok(mut r) = result.lock() {
+                                        *r = Some(Err(format!("API error: {}", e)));
+                                    }
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            if let Ok(mut r) = result.lock() {
+                                *r = Some(Err(format!("Provider error: {}", e)));
+                            }
                         }
                     }
-                }
+                });
             });
-        });
+        } else if let Some(kowalski) = self.kowalski.clone() {
+            let content = content.to_string();
+            
+            std::thread::spawn(move || {
+                let rt = match tokio::runtime::Runtime::new() {
+                    Ok(rt) => rt,
+                    Err(e) => {
+                        if let Ok(mut r) = result.lock() {
+                            *r = Some(Err(format!("Runtime error: {}", e)));
+                        }
+                        return;
+                    }
+                };
+
+                rt.block_on(async {
+                    match kowalski.send_task(&agent_name, &content).await {
+                        Ok(task_result) => {
+                            if task_result.success {
+                                if let Ok(mut c) = chunks.lock() {
+                                    c.push(task_result.output.clone());
+                                }
+                                if let Ok(mut r) = result.lock() {
+                                    *r = Some(Ok(task_result.output));
+                                }
+                            } else {
+                                let error = task_result.error.unwrap_or_else(|| "Unknown error".to_string());
+                                if let Ok(mut r) = result.lock() {
+                                    *r = Some(Err(error));
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            if let Ok(mut r) = result.lock() {
+                                *r = Some(Err(format!("{}", e)));
+                            }
+                        }
+                    }
+                });
+            });
+        }
 
         Ok(())
     }

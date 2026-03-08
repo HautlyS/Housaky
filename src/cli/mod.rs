@@ -13,7 +13,7 @@ pub mod help;
 pub mod quantum;
 pub mod utils;
 
-pub use args::{Cli, Commands, DaemonAction, TuiAction};
+pub use args::{Cli, Commands, DaemonAction};
 pub use handlers::{
     handle_agent, handle_config, handle_daemon, handle_dashboard, handle_doctor, handle_gateway,
     handle_onboard, handle_status,
