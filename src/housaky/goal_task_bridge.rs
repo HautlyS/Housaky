@@ -3,6 +3,8 @@ use crate::housaky::gsd_orchestration::{
     DecompositionContext, GSDOrchestrator, GSDTaskStatus, PhaseStatus,
 };
 use anyhow::Result;
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -52,7 +54,7 @@ impl GoalTaskBridge {
                 continue;
             }
 
-            if goal.status != GoalStatus::Active {
+            if goal.status != GoalStatus::InProgress {
                 continue;
             }
 
@@ -65,7 +67,13 @@ impl GoalTaskBridge {
                     goal.priority,
                     GoalPriority::Critical | GoalPriority::High | GoalPriority::Medium
                 ),
-                GoalPriority::Low => true,
+                GoalPriority::Low => {
+                    matches!(
+                        goal.priority,
+                        GoalPriority::Critical | GoalPriority::High | GoalPriority::Medium | GoalPriority::Low
+                    )
+                }
+                GoalPriority::Background => true,
             };
 
             if should_spawn {
@@ -123,12 +131,12 @@ impl GoalTaskBridge {
                 };
 
                 self.goal_engine
-                    .update_progress(&mapping.goal_id, progress)
+                    .update_progress(&mapping.goal_id, progress, "GSD phase progress sync")
                     .await?;
 
                 if matches!(phase_status, PhaseStatus::Completed | PhaseStatus::Verified) {
                     self.goal_engine
-                        .update_status(&mapping.goal_id, GoalStatus::Completed)
+                        .update_progress(&mapping.goal_id, 1.0, "GSD phase completed")
                         .await?;
                     info!(
                         "Goal {} marked as completed via phase {}",
@@ -253,18 +261,23 @@ impl GoalTaskBridge {
 
     pub async fn get_bridge_stats(&self) -> BridgeStats {
         let mappings = self.mappings.read().await;
+        let total_links = mappings.len();
+        
+        let mut active_links = 0;
+        for mapping in mappings.values() {
+            if self.gsd_orchestrator
+                .get_phase_status(&mapping.phase_id)
+                .await
+                .map(|s| matches!(s, PhaseStatus::InProgress))
+                .unwrap_or(false)
+            {
+                active_links += 1;
+            }
+        }
+        
         BridgeStats {
-            total_links: mappings.len(),
-            active_links: mappings
-                .values()
-                .filter(|m| {
-                    self.gsd_orchestrator
-                        .get_phase_status(&m.phase_id)
-                        .await
-                        .map(|s| matches!(s, PhaseStatus::InProgress))
-                        .unwrap_or(false)
-                })
-                .count(),
+            total_links,
+            active_links,
         }
     }
 }

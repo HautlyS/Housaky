@@ -711,3 +711,210 @@ pub enum GSDCommands {
     /// Awareness report
     Awareness,
 }
+
+// ============================================================================
+// Browser Commands
+// ============================================================================
+
+#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum BrowserCommands {
+    /// Open URL in browser
+    Open { url: String },
+    /// Take screenshot
+    Screenshot {
+        #[arg(short, long)]
+        output: Option<String>,
+    },
+    /// Click element
+    Click { selector: String },
+    /// Type text
+    Type { text: String },
+    /// Navigate back
+    Back,
+    /// Navigate forward
+    Forward,
+    /// Refresh page
+    Refresh,
+    /// Get page content
+    Content,
+    /// Execute JavaScript
+    Eval { script: String },
+    /// List tabs
+    Tabs,
+    /// Switch tab
+    Switch { index: usize },
+    /// Close tab
+    Close { index: Option<usize> },
+    /// Wait for element
+    Wait {
+        selector: String,
+        #[arg(short, long, default_value = "10")]
+        timeout: u64,
+    },
+}
+
+// ============================================================================
+// Memory Commands
+// ============================================================================
+
+#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum MemoryCommands {
+    /// Store memory
+    Store {
+        key: String,
+        value: String,
+        #[arg(short, long)]
+        category: Option<String>,
+    },
+    /// Recall memory
+    Recall {
+        query: String,
+        #[arg(short, long, default_value = "10")]
+        limit: usize,
+    },
+    /// List memories
+    List {
+        #[arg(short, long)]
+        category: Option<String>,
+    },
+    /// Delete memory
+    Forget { key: String },
+    /// Clear all memories
+    Clear {
+        #[arg(short, long)]
+        confirm: bool,
+    },
+    /// Export memories
+    Export {
+        #[arg(short, long)]
+        output: String,
+    },
+    /// Import memories
+    Import { file: String },
+    /// Show memory stats
+    Stats,
+}
+
+// ============================================================================
+// Sessions Commands
+// ============================================================================
+
+#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum SessionsCommands {
+    /// List all sessions
+    List,
+    /// Show session details
+    Show { id: String },
+    /// Delete session
+    Delete { id: String },
+    /// Export session
+    Export {
+        id: String,
+        #[arg(short, long)]
+        output: String,
+    },
+    /// Continue session
+    Continue { id: String },
+    /// Show session stats
+    Stats,
+}
+
+// ============================================================================
+// Security Commands
+// ============================================================================
+
+#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum SecurityCommands {
+    /// Run security audit
+    Audit,
+    /// List security issues
+    Issues,
+    /// Approve action
+    Approve { id: String },
+    /// Deny action
+    Deny { id: String },
+    /// Show allowlist
+    Allowlist,
+    /// Add to allowlist
+    Allow { path: String },
+    /// Remove from allowlist
+    Disallow { path: String },
+    /// Show blocklist
+    Blocklist,
+    /// Block path
+    Block { path: String },
+    /// Unblock path
+    Unblock { path: String },
+}
+
+// ============================================================================
+// Sandbox Commands
+// ============================================================================
+
+#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum SandboxCommands {
+    /// List sandboxes
+    List,
+    /// Create sandbox
+    Create { name: String },
+    /// Remove sandbox
+    Remove { name: String },
+    /// Execute in sandbox
+    Exec { name: String, command: String },
+    /// Show sandbox info
+    Info { name: String },
+    /// Clean up all sandboxes
+    Clean,
+}
+
+// ============================================================================
+// System Commands
+// ============================================================================
+
+#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum SystemCommands {
+    /// Show system events
+    Events {
+        #[arg(short, long, default_value = "50")]
+        limit: usize,
+    },
+    /// Show presence
+    Presence,
+    /// Heartbeat
+    Heartbeat,
+    /// Show system info
+    Info,
+    /// Check health
+    Health,
+    /// Export system state
+    Export {
+        #[arg(short, long)]
+        output: String,
+    },
+}
+
+// ============================================================================
+// Approvals Commands
+// ============================================================================
+
+#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum ApprovalsCommands {
+    /// List pending approvals
+    List,
+    /// Approve request
+    Approve { id: String },
+    /// Reject request
+    Reject { id: String },
+    /// Show approval rules
+    Rules,
+    /// Add approval rule
+    AddRule {
+        pattern: String,
+        #[arg(short, long)]
+        auto: bool,
+    },
+    /// Remove approval rule
+    RemoveRule { id: String },
+    /// Clear all pending
+    Clear,
+}

@@ -102,7 +102,7 @@ impl WebhookTool {
         let events = args
             .get("events")
             .and_then(|v| v.as_array())
-            .map(|arr| arr.iter().filter_map(|v| v.as_str().to_string()).collect::<Vec<_>>())
+            .map(|arr| arr.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect::<Vec<_>>())
             .unwrap_or_default();
 
         let secret = args.get("secret").and_then(|v| v.as_str());

@@ -99,7 +99,7 @@ pub fn covering_named_node(
 
 #[cfg(feature = "tree-sitter-rust")]
 pub fn rust_language() -> Result<tree_sitter::Language> {
-    Ok(tree_sitter_rust::LANGUAGE.into())
+    Ok(tree_sitter_rust::language().into())
 }
 
 #[cfg(not(feature = "tree-sitter-rust"))]
@@ -238,38 +238,38 @@ impl RustCodeAnalyzer {
         ) {
             match node.kind() {
                 "function_item" => {
-                    if let Some(func) = Self::extract_function(node, source) {
+                    if let Some(func) = RustCodeAnalyzer::extract_function(node, source) {
                         *total_complexity += func.complexity;
                         functions.push(func);
                     }
                 }
                 "struct_item" => {
-                    if let Some(s) = Self::extract_struct(node, source) {
+                    if let Some(s) = RustCodeAnalyzer::extract_struct(node, source) {
                         structs.push(s);
                     }
                 }
                 "enum_item" => {
-                    if let Some(e) = Self::extract_enum(node, source) {
+                    if let Some(e) = RustCodeAnalyzer::extract_enum(node, source) {
                         enums.push(e);
                     }
                 }
                 "impl_item" => {
-                    if let Some(i) = Self::extract_impl(node, source) {
+                    if let Some(i) = RustCodeAnalyzer::extract_impl(node, source) {
                         impls.push(i);
                     }
                 }
                 "trait_item" => {
-                    if let Some(t) = Self::extract_trait(node, source) {
+                    if let Some(t) = RustCodeAnalyzer::extract_trait(node, source) {
                         traits.push(t);
                     }
                 }
                 "mod_item" => {
-                    if let Some(m) = Self::extract_mod(node, source) {
+                    if let Some(m) = RustCodeAnalyzer::extract_mod(node, source) {
                         mods.push(m);
                     }
                 }
                 "use_declaration" => {
-                    if let Some(import) = Self::extract_import(node, source) {
+                    if let Some(import) = RustCodeAnalyzer::extract_import(node, source) {
                         imports.push(import);
                     }
                 }
@@ -277,7 +277,7 @@ impl RustCodeAnalyzer {
             }
 
             if node.kind() == "function_item" {
-                *total_complexity += Self::count_complexity(node);
+                *total_complexity += RustCodeAnalyzer::count_complexity(node);
             }
 
             let mut cursor = node.walk();

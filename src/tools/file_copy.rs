@@ -77,7 +77,7 @@ impl Tool for FileCopyTool {
         let source_path = expand_path(source);
         let dest_path = expand_path(destination);
 
-        if !self.security.is_path_allowed(&source_path) {
+        if !self.security.is_path_allowed(source_path.to_str().unwrap_or("")) {
             return Ok(ToolResult {
                 success: false,
                 output: String::new(),
@@ -85,7 +85,7 @@ impl Tool for FileCopyTool {
             });
         }
 
-        if !self.security.is_path_allowed(&dest_path) {
+        if !self.security.is_path_allowed(dest_path.to_str().unwrap_or("")) {
             return Ok(ToolResult {
                 success: false,
                 output: String::new(),

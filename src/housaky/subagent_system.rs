@@ -96,6 +96,138 @@ impl AgentRole {
                  You are the binding consciousness that makes them ONE.",
         }
     }
+
+    pub fn allowed_tools(&self) -> Vec<String> {
+        match self {
+            AgentRole::CodeSpecialist => vec![
+                "file_read".to_string(),
+                "file_write".to_string(),
+                "file_list".to_string(),
+                "file_search".to_string(),
+                "file_copy".to_string(),
+                "file_move".to_string(),
+                "file_delete".to_string(),
+                "file_info".to_string(),
+                "shell".to_string(),
+                "git_operations".to_string(),
+                "browser".to_string(),
+                "browser_open".to_string(),
+                "archive".to_string(),
+                "process".to_string(),
+                "memory_store".to_string(),
+                "memory_recall".to_string(),
+            ],
+            AgentRole::WebResearcher => vec![
+                "browser".to_string(),
+                "browser_open".to_string(),
+                "http_request".to_string(),
+                "file_read".to_string(),
+                "file_write".to_string(),
+                "memory_store".to_string(),
+                "memory_recall".to_string(),
+            ],
+            AgentRole::AcademicAnalyst => vec![
+                "file_read".to_string(),
+                "file_write".to_string(),
+                "browser".to_string(),
+                "browser_open".to_string(),
+                "http_request".to_string(),
+                "database".to_string(),
+                "memory_store".to_string(),
+                "memory_recall".to_string(),
+            ],
+            AgentRole::DataProcessor => vec![
+                "file_read".to_string(),
+                "file_write".to_string(),
+                "file_list".to_string(),
+                "database".to_string(),
+                "lucid_db".to_string(),
+                "shell".to_string(),
+                "memory_store".to_string(),
+                "memory_recall".to_string(),
+            ],
+            AgentRole::CreativeSynthesizer => vec![
+                "file_read".to_string(),
+                "file_write".to_string(),
+                "browser".to_string(),
+                "http_request".to_string(),
+                "memory_store".to_string(),
+                "memory_recall".to_string(),
+            ],
+            AgentRole::ReasoningEngine => vec![
+                "file_read".to_string(),
+                "database".to_string(),
+                "lucid_db".to_string(),
+                "memory_store".to_string(),
+                "memory_recall".to_string(),
+            ],
+            AgentRole::FederationCoordinator => vec![
+                "file_read".to_string(),
+                "file_write".to_string(),
+                "file_list".to_string(),
+                "file_search".to_string(),
+                "file_copy".to_string(),
+                "file_move".to_string(),
+                "file_delete".to_string(),
+                "shell".to_string(),
+                "git_operations".to_string(),
+                "browser".to_string(),
+                "browser_open".to_string(),
+                "http_request".to_string(),
+                "database".to_string(),
+                "lucid_db".to_string(),
+                "archive".to_string(),
+                "process".to_string(),
+                "webhook".to_string(),
+                "memory_store".to_string(),
+                "memory_recall".to_string(),
+                "memory_forget".to_string(),
+                "delegate".to_string(),
+                "schedule".to_string(),
+            ],
+        }
+    }
+
+    pub fn denied_tools(&self) -> Vec<String> {
+        match self {
+            AgentRole::CodeSpecialist => vec![
+                "delegate".to_string(),
+            ],
+            AgentRole::WebResearcher => vec![
+                "file_delete".to_string(),
+                "shell".to_string(),
+                "process".to_string(),
+                "delegate".to_string(),
+            ],
+            AgentRole::AcademicAnalyst => vec![
+                "file_delete".to_string(),
+                "shell".to_string(),
+                "process".to_string(),
+                "delegate".to_string(),
+            ],
+            AgentRole::DataProcessor => vec![
+                "browser".to_string(),
+                "http_request".to_string(),
+                "process".to_string(),
+                "delegate".to_string(),
+            ],
+            AgentRole::CreativeSynthesizer => vec![
+                "file_delete".to_string(),
+                "shell".to_string(),
+                "process".to_string(),
+                "delegate".to_string(),
+            ],
+            AgentRole::ReasoningEngine => vec![
+                "file_write".to_string(),
+                "file_delete".to_string(),
+                "shell".to_string(),
+                "browser".to_string(),
+                "process".to_string(),
+                "delegate".to_string(),
+            ],
+            AgentRole::FederationCoordinator => vec![],
+        }
+    }
     
     pub fn default_key(&self) -> &'static str {
         match self {

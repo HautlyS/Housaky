@@ -3,6 +3,7 @@ use crate::security::SecurityPolicy;
 use crate::util::expand_path;
 use async_trait::async_trait;
 use serde_json::json;
+use std::io::Write;
 use std::sync::Arc;
 
 pub struct ArchiveTool {
@@ -89,7 +90,9 @@ impl Tool for ArchiveTool {
         let archive = expand_path(archive_path);
         let source = expand_path(source_path);
 
-        if !self.security.is_path_allowed(&archive) || !self.security.is_path_allowed(&source) {
+        if !self.security.is_path_allowed(archive.to_str().unwrap_or(""))
+            || !self.security.is_path_allowed(source.to_str().unwrap_or(""))
+        {
             return Ok(ToolResult {
                 success: false,
                 output: String::new(),
@@ -137,13 +140,12 @@ impl ArchiveTool {
                 if source_path.is_file() {
                     let name = source_path.file_name().unwrap().to_string_lossy();
                     zip.start_file(name.as_ref(), options)?;
-                    let content = tokio::fs::read(source_path).await?;
+                    let content = std::fs::read(source_path)?;
                     zip.write_all(&content)?;
                     files_added = 1;
                     total_size = content.len() as u64;
                 } else {
-                    let (f, s) = self.add_dir_to_zip(&mut zip, source_path, source_path, options)
-                        .await?;
+                    let (f, s) = self.add_dir_to_zip_sync(&mut zip, source_path, source_path, options)?;
                     files_added = f;
                     total_size = s;
                 }
@@ -193,7 +195,7 @@ impl ArchiveTool {
         })
     }
 
-    async fn add_dir_to_zip<W: std::io::Write + std::io::Seek>(
+    fn add_dir_to_zip_sync<W: std::io::Write + std::io::Seek>(
         &self,
         zip: &mut zip::ZipWriter<W>,
         base: &std::path::Path,
@@ -203,20 +205,20 @@ impl ArchiveTool {
         let mut files = 0u64;
         let mut size = 0u64;
 
-        let mut entries = tokio::fs::read_dir(current).await?;
-        while let Some(entry) = entries.next_entry().await? {
+        for entry in std::fs::read_dir(current)? {
+            let entry = entry?;
             let path = entry.path();
             let relative = path.strip_prefix(base)?;
             let name = relative.to_string_lossy().replace('\\', "/");
 
             if path.is_dir() {
                 zip.add_directory(&format!("{}/", name), options)?;
-                let (f, s) = self.add_dir_to_zip(zip, base, &path, options).await?;
+                let (f, s) = self.add_dir_to_zip_sync(zip, base, &path, options)?;
                 files += f;
                 size += s;
             } else {
                 zip.start_file(&name, options)?;
-                let content = tokio::fs::read(&path).await?;
+                let content = std::fs::read(&path)?;
                 zip.write_all(&content)?;
                 files += 1;
                 size += content.len() as u64;
@@ -224,6 +226,34 @@ impl ArchiveTool {
         }
 
         Ok((files, size))
+    }
+
+    fn extract_zip_sync(
+        &self,
+        archive_path: &std::path::Path,
+        dest_path: &std::path::Path,
+    ) -> anyhow::Result<u64> {
+        let file = std::fs::File::open(archive_path)?;
+        let mut archive = zip::ZipArchive::new(file)?;
+        let mut files_extracted = 0u64;
+
+        for i in 0..archive.len() {
+            let mut file = archive.by_index(i)?;
+            let outpath = dest_path.join(file.mangled_name());
+
+            if file.name().ends_with('/') {
+                std::fs::create_dir_all(&outpath)?;
+            } else {
+                if let Some(p) = outpath.parent() {
+                    std::fs::create_dir_all(p)?;
+                }
+                let mut outfile = std::fs::File::create(&outpath)?;
+                std::io::copy(&mut file, &mut outfile)?;
+                files_extracted += 1;
+            }
+        }
+
+        Ok(files_extracted)
     }
 
     async fn extract_archive(
@@ -239,7 +269,7 @@ impl ArchiveTool {
             });
         }
 
-        tokio::fs::create_dir_all(dest_path).await?;
+        std::fs::create_dir_all(dest_path)?;
 
         let mut files_extracted = 0u64;
 
@@ -250,24 +280,7 @@ impl ArchiveTool {
 
         match extension {
             "zip" => {
-                let file = std::fs::File::open(archive_path)?;
-                let mut archive = zip::ZipArchive::new(file)?;
-
-                for i in 0..archive.len() {
-                    let mut file = archive.by_index(i)?;
-                    let outpath = dest_path.join(file.mangled_name());
-
-                    if file.name().ends_with('/') {
-                        tokio::fs::create_dir_all(&outpath).await?;
-                    } else {
-                        if let Some(p) = outpath.parent() {
-                            tokio::fs::create_dir_all(p).await?;
-                        }
-                        let mut outfile = std::fs::File::create(&outpath)?;
-                        std::io::copy(&mut file, &mut outfile)?;
-                        files_extracted += 1;
-                    }
-                }
+                files_extracted = self.extract_zip_sync(archive_path, dest_path)?;
             }
             "gz" | "tgz" => {
                 let output = std::process::Command::new("tar")

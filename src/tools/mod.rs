@@ -1,8 +1,11 @@
+pub mod archive;
 pub mod browser;
 pub mod browser_open;
 pub mod clawd_cursor;
 pub mod composio;
+pub mod database;
 pub mod delegate;
+pub mod file_copy;
 pub mod file_delete;
 pub mod file_info;
 pub mod file_list;
@@ -17,20 +20,26 @@ pub mod hardware_memory_map;
 pub mod hardware_memory_read;
 pub mod http_request;
 pub mod image_info;
+pub mod lucid_db;
 pub mod memory_forget;
 pub mod memory_recall;
 pub mod memory_store;
+pub mod process;
 pub mod schedule;
 pub mod screenshot;
 pub mod shell;
 pub mod skill_tool;
 pub mod traits;
+pub mod webhook;
 
+pub use archive::ArchiveTool;
 pub use browser::{BrowserBridge, BrowserTool, ComputerUseConfig, CookieData, ProfileInfo};
 pub use browser_open::BrowserOpenTool;
 pub use clawd_cursor::ClawdCursorTool;
 pub use composio::ComposioTool;
+pub use database::DatabaseTool;
 pub use delegate::DelegateTool;
+pub use file_copy::FileCopyTool;
 pub use file_delete::FileDeleteTool;
 pub use file_info::FileInfoTool;
 pub use file_list::FileListTool;
@@ -45,14 +54,17 @@ pub use hardware_memory_map::HardwareMemoryMapTool;
 pub use hardware_memory_read::HardwareMemoryReadTool;
 pub use http_request::HttpRequestTool;
 pub use image_info::ImageInfoTool;
+pub use lucid_db::LucidDbTool;
 pub use memory_forget::MemoryForgetTool;
 pub use memory_recall::MemoryRecallTool;
 pub use memory_store::MemoryStoreTool;
+pub use process::ProcessTool;
 pub use schedule::ScheduleTool;
 pub use screenshot::ScreenshotTool;
 pub use shell::ShellTool;
 pub use skill_tool::{SkillHttpTool, SkillScriptTool, SkillToolTool};
 pub use traits::Tool;
+pub use webhook::WebhookTool;
 #[allow(unused_imports)]
 pub use traits::{ToolResult, ToolSpec};
 
@@ -137,9 +149,18 @@ pub fn all_tools_with_runtime(
         Box::new(FileWriteTool::new(security.clone())),
         Box::new(FileListTool::new(security.clone())),
         Box::new(FileSearchTool::new(security.clone())),
+        Box::new(FileCopyTool::new(security.clone())),
         Box::new(FileMoveTool::new(security.clone())),
         Box::new(FileDeleteTool::new(security.clone())),
         Box::new(FileInfoTool::new(security.clone())),
+        Box::new(ArchiveTool::new(security.clone())),
+        // Process management
+        Box::new(ProcessTool::new(security.clone())),
+        // Webhook system
+        Box::new(WebhookTool::new(security.clone())),
+        // Database access
+        Box::new(DatabaseTool::new(security.clone())),
+        Box::new(LucidDbTool::new(security.clone())),
         // Memory tools
         Box::new(MemoryStoreTool::new(memory.clone())),
         Box::new(MemoryRecallTool::new(memory.clone())),

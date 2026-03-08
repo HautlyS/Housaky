@@ -159,6 +159,9 @@ url = "2.5"
 # Tempfile for sandbox execution
 tempfile = "3.14"
 
+# ZIP archive support
+zip = { version = "2.2", default-features = false, features = ["deflate"] }
+
 # RSS/Atom feed parsing (for web monitoring)
 feed-rs = { version = "2.0", optional = true }
 

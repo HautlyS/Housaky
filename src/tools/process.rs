@@ -121,7 +121,7 @@ impl ProcessTool {
 
         if let Some(dir) = cwd {
             let expanded = crate::util::expand_path(dir);
-            if !self.security.is_path_allowed(&expanded) {
+            if !self.security.is_path_allowed(expanded.to_str().unwrap_or("")) {
                 return Ok(ToolResult {
                     success: false,
                     output: String::new(),

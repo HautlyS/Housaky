@@ -110,6 +110,19 @@ impl AGIAgentLoop {
                 self.create_goal_action(title, description, priority.clone())
                     .await
             }
+            AGIAction::ExecutePhase {
+                ref phase_id,
+                ref goal_id,
+            } => {
+                self.execute_phase_action(phase_id, goal_id.as_deref())
+                    .await
+            }
+            AGIAction::PlanTask {
+                ref goal_id,
+                ref tasks,
+            } => {
+                self.plan_task_action(goal_id, tasks).await
+            }
             AGIAction::Reflect { ref trigger } => {
                 self.core.reflect_on_turn(trigger).await?;
                 "I've taken a moment to reflect on our conversation.".to_string()
@@ -243,6 +256,50 @@ impl AGIAgentLoop {
         match self.core.goal_engine.add_goal(goal).await {
             Ok(id) => format!("I've created a new goal: {} (ID: {})", title, id),
             Err(e) => format!("Failed to create goal: {}", e),
+        }
+    }
+
+    async fn execute_phase_action(
+        &self,
+        phase_id: &str,
+        goal_id: Option<&str>,
+    ) -> String {
+        info!("Executing GSD phase: {} for goal {:?}", phase_id, goal_id);
+
+        match self.core.gsd_orchestrator.execute_phase(phase_id).await {
+            Ok(summary) => {
+                if summary.successful_tasks == summary.total_tasks {
+                    format!(
+                        "Phase {} completed successfully: {} tasks completed",
+                        phase_id, summary.successful_tasks
+                    )
+                } else {
+                    format!(
+                        "Phase {} partially completed: {}/{} tasks successful",
+                        phase_id, summary.successful_tasks, summary.total_tasks
+                    )
+                }
+            }
+            Err(e) => format!("Failed to execute phase {}: {}", phase_id, e),
+        }
+    }
+
+    async fn plan_task_action(
+        &self,
+        goal_id: &str,
+        tasks: &[String],
+    ) -> String {
+        info!("Planning tasks for goal {}: {} tasks", goal_id, tasks.len());
+
+        match self.core.decompose_goal_into_tasks(goal_id, tasks.to_vec()).await {
+            Ok(task_ids) => {
+                format!(
+                    "Created {} tasks for goal {}",
+                    task_ids.len(),
+                    goal_id
+                )
+            }
+            Err(e) => format!("Failed to plan tasks for goal {}: {}", goal_id, e),
         }
     }
 

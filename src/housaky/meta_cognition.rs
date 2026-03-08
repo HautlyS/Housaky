@@ -176,6 +176,7 @@ pub enum EmotionalState {
     Cautious,
 }
 
+#[derive(Debug, Clone)]
 pub struct MetaCognitionEngine {
     self_model: Arc<RwLock<SelfModel>>,
     reflections: Arc<RwLock<Vec<Reflection>>>,

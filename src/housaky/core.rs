@@ -248,11 +248,12 @@ impl HousakyCore {
 
         let core_config = HousakyCoreConfig::default();
 
-        // GSD Orchestrator - needs meta_cognition_base (will be finalized later with quantum)
-        // We create it here and finalize after meta_cognition is quantum-wired
+        // GSD Orchestrator - needs meta_cognition (created with quantum later)
+        // For now, create a temporary instance for GSD; it will be replaced with quantum-wired version
+        let gsd_meta_cognition = Arc::new(MetaCognitionEngine::new());
         let gsd_orchestrator_base = GSDOrchestrator::new(
             workspace_dir.clone(),
-            Arc::new(meta_cognition_base.clone()),
+            gsd_meta_cognition,
             goal_engine.clone(),
         );
 
@@ -950,6 +951,16 @@ impl HousakyCore {
                 None,
             ),
             AGIAction::CreateGoal { title, .. } => ("create_goal".to_string(), title.clone(), None),
+            AGIAction::ExecutePhase { phase_id, goal_id } => (
+                "execute_phase".to_string(),
+                format!("Execute GSD phase {} for goal {:?}", phase_id, goal_id),
+                None,
+            ),
+            AGIAction::PlanTask { goal_id, tasks } => (
+                "plan_task".to_string(),
+                format!("Plan {} tasks for goal {}", tasks.len(), goal_id),
+                None,
+            ),
             AGIAction::Reflect { trigger } => ("reflect".to_string(), trigger.clone(), None),
             AGIAction::Learn { topic, source } => (
                 "learn".to_string(),
