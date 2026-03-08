@@ -195,7 +195,6 @@ impl std::fmt::Debug for QuantumAgiBridge {
         f.debug_struct("QuantumAgiBridge")
             .field("config", &self.config)
             .field("metrics", &self.metrics)
-            .field("transpiler", &self.transpiler)
             .finish()
     }
 }

@@ -313,6 +313,51 @@ async fn main() -> Result<()> {
                 }
 
                 // ─────────────────────────────────────────────────────────────
+                // NEW COMMANDS (OpenClaw-inspired)
+                // ─────────────────────────────────────────────────────────────
+                Commands::Browser { action } => {
+                    println!("🌐 Browser command: {:?}", action);
+                    // TODO: Implement browser handler
+                    Ok(())
+                }
+
+                Commands::Memory { action } => {
+                    println!("🧠 Memory command: {:?}", action);
+                    // TODO: Implement memory handler
+                    Ok(())
+                }
+
+                Commands::Sessions { action } => {
+                    println!("💬 Sessions command: {:?}", action);
+                    // TODO: Implement sessions handler
+                    Ok(())
+                }
+
+                Commands::Security { action } => {
+                    println!("🔒 Security command: {:?}", action);
+                    // TODO: Implement security handler
+                    Ok(())
+                }
+
+                Commands::Sandbox { action } => {
+                    println!("📦 Sandbox command: {:?}", action);
+                    // TODO: Implement sandbox handler
+                    Ok(())
+                }
+
+                Commands::System { action } => {
+                    println!("⚙️  System command: {:?}", action);
+                    // TODO: Implement system handler
+                    Ok(())
+                }
+
+                Commands::Approvals { action } => {
+                    println!("✅ Approvals command: {:?}", action);
+                    // TODO: Implement approvals handler
+                    Ok(())
+                }
+
+                // ─────────────────────────────────────────────────────────────
                 // TUI & HELP
                 // ─────────────────────────────────────────────────────────────
                 Commands::Tui { name, provider, model, temperature } => {
