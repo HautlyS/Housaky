@@ -6,11 +6,22 @@ use serde::{Deserialize, Serialize};
 #[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum SecurityCommands {
     /// Run security audit
-    Audit { #[arg(long)] deep: bool, #[arg(long)] fix: bool },
+    Audit {
+        #[arg(long)]
+        deep: bool,
+        #[arg(long)]
+        fix: bool,
+    },
     /// Check file permissions
-    Permissions { #[arg(long)] fix: bool },
+    Permissions {
+        #[arg(long)]
+        fix: bool,
+    },
     /// Check for exposed secrets
-    Secrets { #[arg(long)] git_history: bool },
+    Secrets {
+        #[arg(long)]
+        git_history: bool,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -22,7 +33,11 @@ pub struct SecurityAuditResult {
 
 impl Default for SecurityAuditResult {
     fn default() -> Self {
-        Self { passed: true, issues: Vec::new(), score: 100 }
+        Self {
+            passed: true,
+            issues: Vec::new(),
+            score: 100,
+        }
     }
 }
 

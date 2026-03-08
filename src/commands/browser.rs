@@ -10,8 +10,10 @@ use serde::{Deserialize, Serialize};
 pub enum BrowserCommands {
     /// Start browser
     Start {
-        #[arg(long)] headless: bool,
-        #[arg(long, default_value = "default")] profile: String,
+        #[arg(long)]
+        headless: bool,
+        #[arg(long, default_value = "default")]
+        profile: String,
     },
     /// Stop browser
     Stop,
@@ -29,29 +31,47 @@ pub enum BrowserCommands {
     Focus { tab: String },
     /// Capture screenshot
     Screenshot {
-        #[arg(short, long)] output: Option<String>,
-        #[arg(long)] full_page: bool,
+        #[arg(short, long)]
+        output: Option<String>,
+        #[arg(long)]
+        full_page: bool,
     },
     /// Capture accessibility snapshot
     Snapshot {
-        #[arg(long, default_value = "ai")] format: String,
-        #[arg(long, default_value = "200")] limit: usize,
+        #[arg(long, default_value = "ai")]
+        format: String,
+        #[arg(long, default_value = "200")]
+        limit: usize,
     },
     /// Click element by ref
-    Click { ref_id: String, #[arg(long)] double: bool },
+    Click {
+        ref_id: String,
+        #[arg(long)]
+        double: bool,
+    },
     /// Type into element
-    Type { ref_id: String, text: String, #[arg(long)] submit: bool },
+    Type {
+        ref_id: String,
+        text: String,
+        #[arg(long)]
+        submit: bool,
+    },
     /// Press a key
     Press { key: String },
     /// Hover element
     Hover { ref_id: String },
     /// Evaluate JavaScript
-    Evaluate { #[arg(long)] function: String },
+    Evaluate {
+        #[arg(long)]
+        function: String,
+    },
     /// Wait for condition
     Wait {
-        #[arg(long)] kind: String,
+        #[arg(long)]
+        kind: String,
         value: String,
-        #[arg(long, default_value = "30000")] timeout: u64,
+        #[arg(long, default_value = "30000")]
+        timeout: u64,
     },
 }
 
@@ -67,7 +87,14 @@ pub struct BrowserStatus {
 
 impl Default for BrowserStatus {
     fn default() -> Self {
-        Self { running: false, headless: true, profile: "default".to_string(), tabs_count: 0, active_tab: None, version: None }
+        Self {
+            running: false,
+            headless: true,
+            profile: "default".to_string(),
+            tabs_count: 0,
+            active_tab: None,
+            version: None,
+        }
     }
 }
 
@@ -82,6 +109,12 @@ pub struct BrowserConfig {
 
 impl Default for BrowserConfig {
     fn default() -> Self {
-        Self { headless: true, profile: "default".to_string(), viewport_width: 1280, viewport_height: 720, timeout_ms: 30000 }
+        Self {
+            headless: true,
+            profile: "default".to_string(),
+            viewport_width: 1280,
+            viewport_height: 720,
+            timeout_ms: 30000,
+        }
     }
 }

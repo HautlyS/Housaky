@@ -5,9 +5,10 @@
 use clap::{Parser, Subcommand};
 
 use crate::commands::{
-    ChannelCommands, CollectiveCommands, CronCommands, GSDCommands, GoalCommands,
-    KeyCommands, MigrateCommands, ModelCommands, QuantumCommands, SeedMindCommands,
-    SelfModCommands, ServiceCommands, SkillCommands,
+    ApprovalsCommands, BrowserCommands, ChannelCommands, CollectiveCommands, CronCommands,
+    GSDCommands, GoalCommands, KeyCommands, McpCommands, MemoryCommands, MigrateCommands,
+    ModelCommands, NodesCommands, QuantumCommands, SandboxCommands, SecurityCommands, SeedMindCommands,
+    SelfModCommands, ServiceCommands, SessionsCommands, SkillCommands, SystemCommands,
 };
 
 // ============================================================================
@@ -34,9 +35,8 @@ pub enum Commands {
     // ─────────────────────────────────────────────────────────────────────────
     // CORE: Chat & Interactive
     // ─────────────────────────────────────────────────────────────────────────
-
     /// Interactive chat with AI (TUI or one-shot)
-    /// 
+    ///
     /// Examples:
     ///   housaky chat              # Opens TUI
     ///   housaky chat -m "hello"   # One-shot message
@@ -62,9 +62,8 @@ pub enum Commands {
     // ─────────────────────────────────────────────────────────────────────────
     // SETUP & STATUS
     // ─────────────────────────────────────────────────────────────────────────
-
     /// Initialize workspace, config, and AGI system
-    /// 
+    ///
     /// Examples:
     ///   housaky init                    # Quick setup
     ///   housaky init --interactive      # Full wizard
@@ -118,7 +117,6 @@ pub enum Commands {
     // ─────────────────────────────────────────────────────────────────────────
     // RUNTIME: Daemon & Service
     // ─────────────────────────────────────────────────────────────────────────
-
     /// Manage the Housaky daemon (gateway + channels + heartbeat)
     Daemon {
         #[command(subcommand)]
@@ -176,7 +174,6 @@ pub enum Commands {
     // ─────────────────────────────────────────────────────────────────────────
     // KEYS & PROVIDERS
     // ─────────────────────────────────────────────────────────────────────────
-
     /// Manage API keys and providers
     Keys {
         #[command(subcommand)]
@@ -192,7 +189,6 @@ pub enum Commands {
     // ─────────────────────────────────────────────────────────────────────────
     // CHANNELS & INTEGRATIONS
     // ─────────────────────────────────────────────────────────────────────────
-
     /// Manage channels (telegram, discord, slack)
     Channel {
         #[command(subcommand)]
@@ -224,7 +220,6 @@ pub enum Commands {
     // ─────────────────────────────────────────────────────────────────────────
     // AGI: Goals & Self-Improvement
     // ─────────────────────────────────────────────────────────────────────────
-
     /// Manage goals
     Goal {
         #[command(subcommand)]
@@ -277,7 +272,6 @@ pub enum Commands {
     // ─────────────────────────────────────────────────────────────────────────
     // HARDWARE
     // ─────────────────────────────────────────────────────────────────────────
-
     /// Hardware management (USB, peripherals, flashing)
     Hw {
         #[command(subcommand)]
@@ -287,7 +281,6 @@ pub enum Commands {
     // ─────────────────────────────────────────────────────────────────────────
     // QUANTUM & A2A
     // ─────────────────────────────────────────────────────────────────────────
-
     /// Quantum computing (Amazon Braket)
     Quantum {
         #[command(subcommand)]
@@ -338,6 +331,71 @@ pub enum Commands {
 
     /// Connect to Kowalski agents
     Kowalski,
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // NEW COMMANDS (OpenClaw-inspired)
+    // ─────────────────────────────────────────────────────────────────────────
+    /// Browser automation control
+    Browser {
+        #[command(subcommand)]
+        action: BrowserCommands,
+    },
+
+    /// Memory management
+    Memory {
+        #[command(subcommand)]
+        action: MemoryCommands,
+    },
+
+    /// Sessions management
+    Sessions {
+        #[command(subcommand)]
+        action: SessionsCommands,
+    },
+
+    /// Security commands
+    Security {
+        #[command(subcommand)]
+        action: SecurityCommands,
+    },
+
+    /// Sandbox commands
+    Sandbox {
+        #[command(subcommand)]
+        action: SandboxCommands,
+    },
+
+    /// System commands
+    System {
+        #[command(subcommand)]
+        action: SystemCommands,
+    },
+
+    /// Approvals management
+    Approvals {
+        #[command(subcommand)]
+        action: ApprovalsCommands,
+    },
+
+    /// Node pairing and control (mobile/IoT devices)
+    Nodes {
+        #[command(subcommand)]
+        action: NodesCommands,
+    },
+
+    /// MCP marketplace
+    Mcp {
+        #[command(subcommand)]
+        action: McpCommands,
+    },
+
+    /// TUI variants
+    Tui {
+        name: Option<String>,
+        provider: Option<String>,
+        model: Option<String>,
+        temperature: Option<f64>,
+    },
 }
 
 // ============================================================================

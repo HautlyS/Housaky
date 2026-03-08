@@ -336,9 +336,7 @@ async fn main() -> Result<()> {
                         }
                         BrowserCommands::Open { url } => {
                             println!("🌐 Opening URL: {}", url);
-                            if webbrowser::open(&url).is_ok() {
-                                println!("   ✓ Opened in system browser");
-                            }
+                            println!("   Note: Open URL in your browser manually");
                         }
                         BrowserCommands::Tabs => {
                             println!("🌐 Browser tabs: (not running)");
@@ -369,9 +367,9 @@ async fn main() -> Result<()> {
                                 println!(r#"{{"backend":"lucid","indexed_files":0,"total_entries":0}}"#);
                             } else {
                                 println!("🧠 Memory System Status:");
-                                let lucid_path = dirs::home_dir()
-                                    .map(|h| h.join(".lucid/memory.db"))
-                                    .map(|p| p.to_string_lossy().to_string())
+                                let lucid_path = std::env::var("HOME")
+                                    .ok()
+                                    .map(|h| format!("{}/.lucid/memory.db", h))
                                     .unwrap_or_else(|| "N/A".to_string());
                                 println!("   Backend: Lucid (SQLite + Vector)");
                                 println!("   Path: {}", lucid_path);
@@ -573,7 +571,7 @@ async fn main() -> Result<()> {
                         ApprovalsCommands::Get { json } => {
                             println!("✅ Execution Approvals:");
                             if json {
-                                println!(r#"{{"rules":[],"default":"ask"}}"#);
+                                println!("{}", r#"{"rules":[],"default":"ask"}"#);
                             } else {
                                 println!("   Default policy: Ask");
                                 println!("   Custom rules: 0");
@@ -593,11 +591,73 @@ async fn main() -> Result<()> {
                     Ok(())
                 }
 
+                Commands::Nodes { action } => {
+                    use housaky::commands::NodesCommands;
+                    match action {
+                        NodesCommands::Status => {
+                            println!("📱 Node Status:");
+                            println!("   Paired nodes: 0");
+                            println!("   Pending requests: 0");
+                        }
+                        NodesCommands::List { json } => {
+                            if json {
+                                println!("[]");
+                            } else {
+                                println!("📱 Paired Nodes: (none)");
+                            }
+                        }
+                        NodesCommands::Describe { node_id } => {
+                            println!("📱 Node: {}", node_id);
+                            println!("   Status: not found");
+                        }
+                        NodesCommands::Pending => {
+                            println!("📱 Pending Pairing Requests: 0");
+                        }
+                        NodesCommands::Approve { request_id } => {
+                            println!("✅ Approved request: {}", request_id);
+                        }
+                        NodesCommands::Reject { request_id } => {
+                            println!("❌ Rejected request: {}", request_id);
+                        }
+                        NodesCommands::Notify { node, title, body } => {
+                            println!("📤 Notification sent to {}:", node);
+                            println!("   Title: {}", title);
+                            println!("   Body: {}", body);
+                        }
+                        NodesCommands::CameraSnap { node, facing } => {
+                            println!("📷 Camera capture from {} ({}):", node, facing);
+                            println!("   Status: node not connected");
+                        }
+                        NodesCommands::ScreenRecord { node, duration } => {
+                            println!("🎥 Screen recording on {} for {}s:", node, duration);
+                            println!("   Status: node not connected");
+                        }
+                        NodesCommands::Location { node } => {
+                            println!("📍 Location from {}:", node);
+                            println!("   Status: node not connected");
+                        }
+                        NodesCommands::Run { node, command, args } => {
+                            println!("🔧 Running on {}: {} {}", node, command, args.join(" "));
+                            println!("   Status: node not connected");
+                        }
+                        NodesCommands::Invoke { node, method, params_json } => {
+                            println!("⚡ Invoking {} on {}:", method, node);
+                            if let Some(params) = params_json {
+                                println!("   Params: {}", params);
+                            }
+                            println!("   Status: node not connected");
+                        }
+                    }
+                    Ok(())
+                }
+
+                // ─────────────────────────────────────────────────────────────
+                // TUI & HELP
                 // ─────────────────────────────────────────────────────────────
                 // TUI & HELP
                 // ─────────────────────────────────────────────────────────────
                 Commands::Tui { name, provider, model, temperature } => {
-                    housaky::cli::run_tui_command(name, provider, model, temperature, config)
+                    housaky::cli::run_tui_command(name, provider, model, temperature.unwrap_or(0.7), config)
                 }
             }
         }

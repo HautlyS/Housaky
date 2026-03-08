@@ -6,16 +6,26 @@ use serde::{Deserialize, Serialize};
 #[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum SystemCommands {
     /// Enqueue a system event
-    Event { text: String, #[arg(long)] heartbeat: bool },
+    Event {
+        text: String,
+        #[arg(long)]
+        heartbeat: bool,
+    },
     /// Heartbeat controls
     Heartbeat {
         #[command(subcommand)]
         action: HeartbeatAction,
     },
     /// List system presence entries
-    Presence { #[arg(long)] json: bool },
+    Presence {
+        #[arg(long)]
+        json: bool,
+    },
     /// Show system info
-    Info { #[arg(long)] json: bool },
+    Info {
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 #[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

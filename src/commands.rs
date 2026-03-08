@@ -653,3 +653,22 @@ pub enum McpCommands {
     Enable { name: String },
     Disable { name: String },
 }
+
+// Subdirectory modules
+mod approvals;
+mod browser;
+mod memory;
+mod nodes;
+mod sandbox;
+mod security;
+mod sessions;
+mod system;
+
+pub use approvals::ApprovalsCommands;
+pub use browser::BrowserCommands;
+pub use memory::MemoryCommands;
+pub use nodes::{NodeCapability, NodeConfig, NodeInfo, NodesCommands, NodeStatus, PairingRequest};
+pub use sandbox::SandboxCommands;
+pub use security::SecurityCommands;
+pub use sessions::SessionsCommands;
+pub use system::{HeartbeatAction, SystemCommands};
