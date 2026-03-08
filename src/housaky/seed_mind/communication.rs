@@ -110,14 +110,54 @@ impl HNLProtocol {
 
         // Bootstrap with common AI communication concepts
         let bootstrap_concepts = vec![
-            "query", "response", "error", "success", "task", "result",
-            "model", "weight", "gradient", "loss", "accuracy", "epoch",
-            "node", "peer", "sync", "broadcast", "consensus", "vote",
-            "improve", "modify", "test", "validate", "rollback", "commit",
-            "phi", "psi", "karma", "fitness", "capability", "emergence",
-            "perceive", "reason", "act", "learn", "reflect", "replicate",
-            "safe", "risk", "approve", "reject", "review", "block",
-            "fast", "medium", "slow", "meta", "recursive", "nested",
+            "query",
+            "response",
+            "error",
+            "success",
+            "task",
+            "result",
+            "model",
+            "weight",
+            "gradient",
+            "loss",
+            "accuracy",
+            "epoch",
+            "node",
+            "peer",
+            "sync",
+            "broadcast",
+            "consensus",
+            "vote",
+            "improve",
+            "modify",
+            "test",
+            "validate",
+            "rollback",
+            "commit",
+            "phi",
+            "psi",
+            "karma",
+            "fitness",
+            "capability",
+            "emergence",
+            "perceive",
+            "reason",
+            "act",
+            "learn",
+            "reflect",
+            "replicate",
+            "safe",
+            "risk",
+            "approve",
+            "reject",
+            "review",
+            "block",
+            "fast",
+            "medium",
+            "slow",
+            "meta",
+            "recursive",
+            "nested",
         ];
 
         for (i, concept) in bootstrap_concepts.iter().enumerate() {
@@ -188,8 +228,10 @@ impl HNLProtocol {
 
         // Store context
         let context_reference = context_id.map(|id| {
-            self.context_cache
-                .insert(id.to_string(), words.iter().map(|w| w.to_string()).collect());
+            self.context_cache.insert(
+                id.to_string(),
+                words.iter().map(|w| w.to_string()).collect(),
+            );
             id.to_string()
         });
 
@@ -249,7 +291,9 @@ impl HNLProtocol {
 
         // Keep symbols above the beta threshold
         let threshold = self.ib_beta * 0.3; // moderate pruning
-        scored.retain(|(_, info)| *info >= threshold || scored.len() <= 2);
+        let min_keep = 2;
+        let len = scored.len();
+        scored.retain(|(_, info)| *info >= threshold || len <= min_keep);
 
         scored.into_iter().map(|(id, _)| id).collect()
     }
@@ -330,14 +374,20 @@ mod tests {
 
         // All words should be present in decoded output
         for word in original.split_whitespace() {
-            assert!(decoded.contains(word), "Missing word '{}' in decoded '{}'", word, decoded);
+            assert!(
+                decoded.contains(word),
+                "Missing word '{}' in decoded '{}'",
+                word,
+                decoded
+            );
         }
     }
 
     #[test]
     fn test_compression() {
         let mut hnl = HNLProtocol::new(8192, 0.5);
-        let message = "the model should improve the accuracy of the prediction by training on more data";
+        let message =
+            "the model should improve the accuracy of the prediction by training on more data";
         let encoded = hnl.encode(message, None);
 
         // Should achieve some compression via IB pruning
@@ -389,10 +439,22 @@ mod tests {
 
     #[test]
     fn test_verbosity_levels() {
-        assert_eq!(VerbosityLevel::from_importance(0.9), VerbosityLevel::Verbose);
-        assert_eq!(VerbosityLevel::from_importance(0.6), VerbosityLevel::Standard);
-        assert_eq!(VerbosityLevel::from_importance(0.3), VerbosityLevel::Compact);
-        assert_eq!(VerbosityLevel::from_importance(0.1), VerbosityLevel::Minimal);
+        assert_eq!(
+            VerbosityLevel::from_importance(0.9),
+            VerbosityLevel::Verbose
+        );
+        assert_eq!(
+            VerbosityLevel::from_importance(0.6),
+            VerbosityLevel::Standard
+        );
+        assert_eq!(
+            VerbosityLevel::from_importance(0.3),
+            VerbosityLevel::Compact
+        );
+        assert_eq!(
+            VerbosityLevel::from_importance(0.1),
+            VerbosityLevel::Minimal
+        );
     }
 
     #[test]

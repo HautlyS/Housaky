@@ -364,43 +364,49 @@ async fn main() -> Result<()> {
                 Commands::Memory { action } => {
                     use housaky::commands::MemoryCommands;
                     match action {
-                        MemoryCommands::Status => {
-                            println!("🧠 Memory System Status:");
-                            let lucid_path = dirs::home_dir()
-                                .map(|h| h.join(".lucid/memory.db"))
-                                .map(|p| p.to_string_lossy().to_string())
-                                .unwrap_or_else(|| "N/A".to_string());
-                            println!("   Backend: Lucid (SQLite + Vector)");
-                            println!("   Path: {}", lucid_path);
-                            if std::path::Path::new(&lucid_path).exists() {
-                                println!("   Status: ✓ Connected");
+                        MemoryCommands::Status { json } => {
+                            if json {
+                                println!(r#"{{"backend":"lucid","indexed_files":0,"total_entries":0}}"#);
                             } else {
-                                println!("   Status: ○ Not initialized");
+                                println!("🧠 Memory System Status:");
+                                let lucid_path = dirs::home_dir()
+                                    .map(|h| h.join(".lucid/memory.db"))
+                                    .map(|p| p.to_string_lossy().to_string())
+                                    .unwrap_or_else(|| "N/A".to_string());
+                                println!("   Backend: Lucid (SQLite + Vector)");
+                                println!("   Path: {}", lucid_path);
+                                if std::path::Path::new(&lucid_path).exists() {
+                                    println!("   Status: ✓ Connected");
+                                } else {
+                                    println!("   Status: ○ Not initialized");
+                                }
                             }
                         }
-                        MemoryCommands::Search { query, limit } => {
+                        MemoryCommands::Search { query, limit, min_score } => {
                             println!("🧠 Searching memory: '{}'", query);
                             println!("   Limit: {}", limit);
+                            if let Some(score) = min_score {
+                                println!("   Min score: {}", score);
+                            }
                             println!("   Note: Run `lucid search \"{}\"` for full search", query);
                         }
-                        MemoryCommands::Add { content, category } => {
-                            println!("🧠 Adding memory:");
-                            println!("   Category: {}", category);
-                            println!("   Content: {}", content);
-                        }
-                        MemoryCommands::Index => {
+                        MemoryCommands::Index { force } => {
                             println!("🧠 Indexing memory...");
+                            if force {
+                                println!("   Force rebuild: true");
+                            }
                             println!("   Note: Run `lucid index` to rebuild index");
                         }
-                        MemoryCommands::Clear { confirm } => {
-                            if confirm {
-                                println!("🧠 Memory cleared (simulation)");
-                            } else {
-                                println!("🧠 Use --confirm to clear memory");
+                        MemoryCommands::Get { path, lines } => {
+                            println!("🧠 Getting memory entry: {}", path);
+                            if let Some(l) = lines {
+                                println!("   Lines: {}", l);
                             }
                         }
-                        _ => {
-                            println!("🧠 Memory command: {:?}", action);
+                        MemoryCommands::List { limit } => {
+                            println!("🧠 Recent memory files:");
+                            println!("   Limit: {}", limit);
+                            println!("   Files: 0");
                         }
                     }
                     Ok(())
