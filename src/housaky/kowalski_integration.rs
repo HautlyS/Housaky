@@ -1,11 +1,12 @@
 use crate::config::DelegateAgentConfig;
 use crate::housaky::agent::KowalskiIntegrationConfig;
+use crate::keys_manager::manager::{get_global_keys_manager, KeysManager, SubAgentConfig};
 use anyhow::{bail, Context, Result};
-use reqwest;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::process::Stdio;
+use std::sync::Arc;
 use std::time::Duration;
 use tokio::process::Command;
 use tokio::time::timeout;
@@ -17,6 +18,8 @@ pub struct KowalskiBridge {
     config: KowalskiIntegrationConfig,
     agents: Vec<KowalskiAgent>,
     cli_path: Option<PathBuf>,
+    keys_manager: Arc<KeysManager>,
+    subagent_configs: HashMap<String, SubAgentConfig>,
 }
 
 /// Represents a Kowalski agent
@@ -64,6 +67,19 @@ impl KowalskiAgentType {
             KowalskiAgentType::Creative => "Creative synthesis and idea generation",
             KowalskiAgentType::Reasoning => "Logical reasoning and deduction",
             KowalskiAgentType::Federated => "Multi-agent coordination and federation",
+        }
+    }
+
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s {
+            "code" => Some(Self::Code),
+            "web" => Some(Self::Web),
+            "academic" => Some(Self::Academic),
+            "data" => Some(Self::Data),
+            "creative" => Some(Self::Creative),
+            "reasoning" => Some(Self::Reasoning),
+            "federated" | "federation" => Some(Self::Federated),
+            _ => None,
         }
     }
 }
@@ -116,12 +132,19 @@ impl KowalskiBridge {
             info!("Kowalski CLI found at: {}", path.display());
         }
 
+        let keys_manager = get_global_keys_manager();
+        
+        // Load subagent configs synchronously
+        let subagent_configs = Self::load_subagent_configs(&keys_manager);
+
+        // Create agents based on config, but check if they have keys configured
         if config.enable_code_agent {
+            let has_key = subagent_configs.contains_key("kowalski-code");
             agents.push(KowalskiAgent {
                 name: "kowalski-code".to_string(),
                 agent_type: KowalskiAgentType::Code,
-                enabled: true,
-                status: AgentStatus::Offline,
+                enabled: has_key,
+                status: if has_key { AgentStatus::Available } else { AgentStatus::Offline },
                 created_at: None,
                 last_task: None,
                 task_count: 0,
@@ -129,11 +152,12 @@ impl KowalskiBridge {
         }
 
         if config.enable_web_agent {
+            let has_key = subagent_configs.contains_key("kowalski-web");
             agents.push(KowalskiAgent {
                 name: "kowalski-web".to_string(),
                 agent_type: KowalskiAgentType::Web,
-                enabled: true,
-                status: AgentStatus::Offline,
+                enabled: has_key,
+                status: if has_key { AgentStatus::Available } else { AgentStatus::Offline },
                 created_at: None,
                 last_task: None,
                 task_count: 0,
@@ -141,11 +165,12 @@ impl KowalskiBridge {
         }
 
         if config.enable_academic_agent {
+            let has_key = subagent_configs.contains_key("kowalski-academic");
             agents.push(KowalskiAgent {
                 name: "kowalski-academic".to_string(),
                 agent_type: KowalskiAgentType::Academic,
-                enabled: true,
-                status: AgentStatus::Offline,
+                enabled: has_key,
+                status: if has_key { AgentStatus::Available } else { AgentStatus::Offline },
                 created_at: None,
                 last_task: None,
                 task_count: 0,
@@ -153,11 +178,12 @@ impl KowalskiBridge {
         }
 
         if config.enable_data_agent {
+            let has_key = subagent_configs.contains_key("kowalski-data");
             agents.push(KowalskiAgent {
                 name: "kowalski-data".to_string(),
                 agent_type: KowalskiAgentType::Data,
-                enabled: true,
-                status: AgentStatus::Offline,
+                enabled: has_key,
+                status: if has_key { AgentStatus::Available } else { AgentStatus::Offline },
                 created_at: None,
                 last_task: None,
                 task_count: 0,
@@ -165,11 +191,12 @@ impl KowalskiBridge {
         }
 
         if config.enable_creative_agent {
+            let has_key = subagent_configs.contains_key("kowalski-creative");
             agents.push(KowalskiAgent {
                 name: "kowalski-creative".to_string(),
                 agent_type: KowalskiAgentType::Creative,
-                enabled: true,
-                status: AgentStatus::Offline,
+                enabled: has_key,
+                status: if has_key { AgentStatus::Available } else { AgentStatus::Offline },
                 created_at: None,
                 last_task: None,
                 task_count: 0,
@@ -177,11 +204,12 @@ impl KowalskiBridge {
         }
 
         if config.enable_reasoning_agent {
+            let has_key = subagent_configs.contains_key("kowalski-reasoning");
             agents.push(KowalskiAgent {
                 name: "kowalski-reasoning".to_string(),
                 agent_type: KowalskiAgentType::Reasoning,
-                enabled: true,
-                status: AgentStatus::Offline,
+                enabled: has_key,
+                status: if has_key { AgentStatus::Available } else { AgentStatus::Offline },
                 created_at: None,
                 last_task: None,
                 task_count: 0,
@@ -189,11 +217,12 @@ impl KowalskiBridge {
         }
 
         if config.enable_federation {
+            let has_key = subagent_configs.contains_key("kowalski-federation");
             agents.push(KowalskiAgent {
                 name: "kowalski-federation".to_string(),
                 agent_type: KowalskiAgentType::Federated,
-                enabled: true,
-                status: AgentStatus::Offline,
+                enabled: has_key,
+                status: if has_key { AgentStatus::Available } else { AgentStatus::Offline },
                 created_at: None,
                 last_task: None,
                 task_count: 0,
@@ -204,7 +233,21 @@ impl KowalskiBridge {
             config: config.clone(),
             agents,
             cli_path,
+            keys_manager,
+            subagent_configs,
         }
+    }
+
+    fn load_subagent_configs(keys_manager: &Arc<KeysManager>) -> HashMap<String, SubAgentConfig> {
+        let rt = match tokio::runtime::Runtime::new() {
+            Ok(rt) => rt,
+            Err(_) => return HashMap::new(),
+        };
+
+        rt.block_on(async {
+            let _ = keys_manager.load().await;
+            keys_manager.list_subagents().await.into_iter().collect()
+        })
     }
 
     fn find_kowalski_cli(base_path: &PathBuf) -> Option<PathBuf> {
@@ -301,66 +344,18 @@ impl KowalskiBridge {
     }
 
     pub async fn initialize_agents(&mut self) -> Result<()> {
-        if !self.check_kowalski().await? {
-            warn!("Kowalski not available, skipping agent initialization");
-            for agent in &mut self.agents {
-                agent.status = AgentStatus::NotInstalled;
-            }
-            return Ok(());
+        // Reload subagent configs
+        self.subagent_configs = Self::load_subagent_configs(&self.keys_manager);
+        
+        // Update agent status based on config
+        for agent in &mut self.agents {
+            let has_key = self.subagent_configs.contains_key(&agent.name);
+            agent.enabled = has_key;
+            agent.status = if has_key { AgentStatus::Available } else { AgentStatus::Offline };
         }
 
-        info!("Initializing Kowalski agents...");
-
-        match self.run_cli_command(&["list"]).await {
-            Ok(output) => info!("Available Kowalski agent types:\n{}", output),
-            Err(e) => warn!("Failed to list agent types: {}", e),
-        }
-
-        // Process agents one by one to avoid borrow checker issues
-        let agent_count = self.agents.len();
-        for i in 0..agent_count {
-            let agent_name = self.agents[i].name.clone();
-            let agent_type_str = self.agents[i].agent_type.as_str().to_string();
-
-            self.agents[i].status = AgentStatus::Creating;
-
-            match self
-                .create_agent_by_name(&agent_name, &agent_type_str)
-                .await
-            {
-                Ok(created_at) => {
-                    self.agents[i].status = AgentStatus::Available;
-                    self.agents[i].created_at = Some(created_at);
-                    info!("Initialized: {} (type: {})", agent_name, agent_type_str);
-                }
-                Err(e) => {
-                    let error_msg = format!("{}", e);
-                    self.agents[i].status = AgentStatus::Error(error_msg.clone());
-                    warn!("Failed to initialize {}: {}", agent_name, error_msg);
-                }
-            }
-        }
-
+        info!("Kowalski agents initialized from keys.json");
         Ok(())
-    }
-
-    async fn create_agent_by_name(
-        &self,
-        agent_name: &str,
-        agent_type: &str,
-    ) -> Result<chrono::DateTime<chrono::Utc>> {
-        info!("Creating {} agent ({})...", agent_type, agent_name);
-
-        let args = vec!["create", agent_type, "--name", agent_name];
-
-        let output = self
-            .run_cli_command(&args)
-            .await
-            .with_context(|| format!("Failed to create Kowalski agent: {}", agent_name))?;
-
-        info!("Create output: {}", output.trim());
-
-        Ok(chrono::Utc::now())
     }
 
     pub async fn coordinate_agents(&self) -> Result<()> {
@@ -380,38 +375,10 @@ impl KowalskiBridge {
             available_agents.len()
         );
 
-        for agent in available_agents {
-            match self.ping_agent(agent).await {
-                Ok(true) => info!("{} is responsive", agent.name),
-                Ok(false) => {
-                    warn!("{} is not responding", agent.name);
-                }
-                Err(e) => {
-                    warn!("Failed to ping {}: {}", agent.name, e);
-                }
-            }
-        }
-
         Ok(())
     }
 
-    async fn ping_agent(&self, agent: &KowalskiAgent) -> Result<bool> {
-        match self.run_cli_command(&["agents"]).await {
-            Ok(output) => {
-                let agent_exists = output.contains(&agent.name);
-                if agent_exists {
-                    match self.run_cli_command(&["list"]).await {
-                        Ok(_) => Ok(true),
-                        Err(_) => Ok(false),
-                    }
-                } else {
-                    Ok(false)
-                }
-            }
-            Err(_) => Ok(false),
-        }
-    }
-
+    /// Send a task to a specific agent using its configured provider/key
     pub async fn send_task(&self, agent_name: &str, task: &str) -> Result<TaskResult> {
         let agent = self
             .agents
@@ -430,7 +397,19 @@ impl KowalskiBridge {
         let start_time = std::time::Instant::now();
         info!("Sending task to {}: {}", agent_name, task);
 
-        let result = match self.execute_agent_task(agent, task).await {
+        // Get subagent config from keys manager
+        let subagent_config = self.subagent_configs.get(agent_name)
+            .cloned()
+            .ok_or_else(|| anyhow::anyhow!("No configuration found for {} in keys.json", agent_name))?;
+
+        // Get the specific key for this agent
+        let key_result = self.keys_manager.get_key_for_subagent(agent_name).await
+            .ok_or_else(|| anyhow::anyhow!("No key found for {} in keys.json", agent_name))?;
+
+        let (model, key_entry) = key_result;
+        
+        // Execute with the configured provider
+        let result = match self.execute_with_provider(&subagent_config, &key_entry.key, &model, task).await {
             Ok(output) => TaskResult {
                 success: true,
                 output,
@@ -457,104 +436,121 @@ impl KowalskiBridge {
         Ok(result)
     }
 
-    async fn execute_agent_task(&self, agent: &KowalskiAgent, task: &str) -> Result<String> {
-        match agent.agent_type {
-            KowalskiAgentType::Code => self.execute_code_task(agent, task).await,
-            KowalskiAgentType::Web => self.execute_web_task(agent, task).await,
-            KowalskiAgentType::Academic => self.execute_academic_task(agent, task).await,
-            KowalskiAgentType::Data => self.execute_data_task(agent, task).await,
-            KowalskiAgentType::Creative => self.execute_creative_task(agent, task).await,
-            KowalskiAgentType::Reasoning => self.execute_reasoning_task(agent, task).await,
-            KowalskiAgentType::Federated => self.execute_federated_task(agent, task),
-        }
-    }
+    /// Execute a task using the provider configured in keys.json
+    async fn execute_with_provider(
+        &self,
+        config: &SubAgentConfig,
+        api_key: &str,
+        model: &str,
+        task: &str,
+    ) -> Result<String> {
+        let system_prompt = self.get_system_prompt_for_agent_name(&config.key_name);
+        
+        info!(
+            "Executing task with provider {} (model: {})",
+            config.provider, model
+        );
 
-    async fn execute_code_task(&self, agent: &KowalskiAgent, task: &str) -> Result<String> {
-        info!("Executing code task on {}: {}", agent.name, task);
+        // Build the request for OpenAI-compatible API
+        let request_body = serde_json::json!({
+            "model": model,
+            "messages": [
+                {
+                    "role": "system",
+                    "content": system_prompt
+                },
+                {
+                    "role": "user",
+                    "content": task
+                }
+            ],
+            "temperature": 0.7,
+            "max_tokens": 4096
+        });
 
-        let output = self.execute_with_glm(&KowalskiAgentType::Code, task).await?;
+        // Determine base URL based on provider
+        let base_url = match config.provider.as_str() {
+            "modal" => "https://api.us-west-2.modal.direct/v1",
+            "openrouter" => "https://openrouter.ai/api/v1",
+            "openai" => "https://api.openai.com/v1",
+            "anthropic" => "https://api.anthropic.com/v1",
+            _ => "https://api.openai.com/v1",
+        };
 
-        Ok(format!(
-            "Code analysis result from {}:\n{}",
-            agent.name, output
-        ))
-    }
+        let client = reqwest::Client::new();
+        let url = format!("{}/chat/completions", base_url);
+        
+        let response = client
+            .post(&url)
+            .header("Authorization", format!("Bearer {}", api_key))
+            .header("Content-Type", "application/json")
+            .json(&request_body)
+            .send()
+            .await
+            .context("Failed to send request to API")?;
 
-    async fn execute_web_task(&self, agent: &KowalskiAgent, task: &str) -> Result<String> {
-        info!("Executing web task on {}: {}", agent.name, task);
-
-        let output = self.execute_with_glm(&KowalskiAgentType::Web, task).await?;
-
-        Ok(format!(
-            "Web research result from {}:\n{}",
-            agent.name, output
-        ))
-    }
-
-    async fn execute_academic_task(&self, agent: &KowalskiAgent, task: &str) -> Result<String> {
-        info!("Executing academic task on {}: {}", agent.name, task);
-
-        let output = self.execute_with_glm(&KowalskiAgentType::Academic, task).await?;
-
-        Ok(format!(
-            "Academic research result from {}:\n{}",
-            agent.name, output
-        ))
-    }
-
-    async fn execute_data_task(&self, agent: &KowalskiAgent, task: &str) -> Result<String> {
-        info!("Executing data task on {}: {}", agent.name, task);
-
-        let output = self.execute_with_glm(&KowalskiAgentType::Data, task).await?;
-
-        Ok(format!(
-            "Data processing result from {}:\n{}",
-            agent.name, output
-        ))
-    }
-
-    async fn execute_creative_task(&self, agent: &KowalskiAgent, task: &str) -> Result<String> {
-        info!("Executing creative task on {}: {}", agent.name, task);
-
-        let output = self.execute_with_glm(&KowalskiAgentType::Creative, task).await?;
-
-        Ok(format!(
-            "Creative synthesis result from {}:\n{}",
-            agent.name, output
-        ))
-    }
-
-    async fn execute_reasoning_task(&self, agent: &KowalskiAgent, task: &str) -> Result<String> {
-        info!("Executing reasoning task on {}: {}", agent.name, task);
-
-        let output = self.execute_with_glm(&KowalskiAgentType::Reasoning, task).await?;
-
-        Ok(format!(
-            "Reasoning result from {}:\n{}",
-            agent.name, output
-        ))
-    }
-
-    fn execute_federated_task(&self, agent: &KowalskiAgent, task: &str) -> Result<String> {
-        info!("Executing federated task on {}: {}", agent.name, task);
-
-        let available_agents: Vec<_> = self
-            .agents
-            .iter()
-            .filter(|a| matches!(a.status, AgentStatus::Available) && a.name != agent.name)
-            .collect();
-
-        if available_agents.is_empty() {
-            return Ok("No other agents available for federation".to_string());
+        if !response.status().is_success() {
+            let status = response.status();
+            let error_text = response.text().await.unwrap_or_default();
+            bail!("API request failed with status {}: {}", status, error_text);
         }
 
-        let mut results = vec![format!("Federated coordination by {}:\n", agent.name)];
+        let response_body: serde_json::Value = response
+            .json()
+            .await
+            .context("Failed to parse API response")?;
 
-        for other_agent in available_agents.iter().take(3) {
-            results.push(format!("- Coordinated with {}", other_agent.name));
-        }
+        let content = response_body["choices"]
+            .as_array()
+            .and_then(|arr| arr.first())
+            .and_then(|choice| choice.get("message"))
+            .and_then(|msg| msg.get("content"))
+            .and_then(|c| c.as_str())
+            .context("Invalid response format from API")?;
 
-        Ok(results.join("\n"))
+        Ok(content.to_string())
+    }
+
+    fn get_system_prompt_for_agent_name(&self, key_name: &str) -> String {
+        // Map key names to agent types
+        match key_name {
+            name if name.contains("code") || name.contains("tupa") => {
+                "You are a specialized code analysis agent. Your role is to analyze, refactor, \
+                and document code. You have deep knowledge of programming patterns, best practices, \
+                and can understand complex codebases. Provide clear, actionable insights."
+            }
+            name if name.contains("web") || name.contains("hautlythird") => {
+                "You are a specialized web research agent. Your role is to search, retrieve, and \
+                synthesize information from the web. You are skilled at finding relevant information \
+                and presenting it in a clear, organized manner."
+            }
+            name if name.contains("academic") => {
+                "You are a specialized academic research agent. Your role is to help with academic \
+                research, paper analysis, and scholarly inquiry. You have knowledge of academic \
+                databases, citation styles, and research methodologies."
+            }
+            name if name.contains("data") || name.contains("touch") => {
+                "You are a specialized data analysis agent. Your role is to process, analyze, and \
+                transform data. You have expertise in data manipulation, statistical analysis, and \
+                data visualization."
+            }
+            name if name.contains("creative") || name.contains("rouxy") => {
+                "You are a specialized creative synthesis agent. Your role is to generate novel \
+                ideas, creative solutions, and innovative approaches. You excel at brainstorming \
+                and thinking outside the box. Be imaginative and inspiring."
+            }
+            name if name.contains("reasoning") || name.contains("hautly") => {
+                "You are a specialized reasoning engine. Your role is to apply logical deduction, \
+                step-by-step analysis, and critical thinking to solve complex problems. You excel \
+                at breaking down complex issues and finding elegant solutions."
+            }
+            name if name.contains("federation") || name.contains("housaky") => {
+                "You are a federated coordination agent. Your role is to coordinate multiple \
+                specialized agents to work together on complex tasks. You can delegate subtasks \
+                to other agents and synthesize their results."
+            }
+            _ => "You are a specialized AI agent. Provide helpful, accurate, and relevant responses."
+        }.to_string()
     }
 
     pub fn get_agent_status(&self) -> Vec<(String, AgentStatus)> {
@@ -597,6 +593,52 @@ impl KowalskiBridge {
         }
     }
 
+    /// Get delegate agent configs for the orchestrator's delegate tool
+    /// This maps each subagent to a DelegateAgentConfig with proper provider/key
+    pub fn get_delegate_configs(&self) -> HashMap<String, DelegateAgentConfig> {
+        let mut configs = HashMap::new();
+
+        for agent in &self.agents {
+            if !matches!(agent.status, AgentStatus::Available | AgentStatus::Offline) {
+                continue;
+            }
+
+            // Get subagent config from keys manager
+            if let Some(subagent_config) = self.subagent_configs.get(&agent.name) {
+                // Get the specific key for this agent
+                let rt = match tokio::runtime::Runtime::new() {
+                    Ok(rt) => rt,
+                    Err(_) => continue,
+                };
+
+                let key_result = rt.block_on(async {
+                    self.keys_manager.get_key_for_subagent(&agent.name).await
+                });
+
+                if let Some((model, key_entry)) = key_result {
+                    let system_prompt = self.get_system_prompt_for_agent_name(&subagent_config.key_name);
+                    
+                    let config = DelegateAgentConfig {
+                        provider: subagent_config.provider.clone(),
+                        model: model.clone(),
+                        system_prompt: Some(system_prompt),
+                        api_key: Some(key_entry.key.clone()),
+                        temperature: Some(0.7),
+                        max_depth: 3,
+                        is_kowalski_agent: false, // Use the standard provider path
+                        glm_api_key: None,
+                        glm_model: String::new(),
+                        glm_per_agent: HashMap::new(),
+                    };
+
+                    configs.insert(agent.name.clone(), config);
+                }
+            }
+        }
+
+        configs
+    }
+
     pub async fn build_kowalski(&self) -> Result<()> {
         info!("Building Kowalski from source...");
 
@@ -636,174 +678,6 @@ impl KowalskiBridge {
             Err(anyhow::anyhow!("Kowalski tests failed: {}", stderr))
         }
     }
-
-    fn get_glm_key_for_agent_type(&self, agent_type: &KowalskiAgentType) -> Option<String> {
-        match agent_type {
-            KowalskiAgentType::Code => self.config.code_agent_glm_key.clone(),
-            KowalskiAgentType::Web => self.config.web_agent_glm_key.clone(),
-            KowalskiAgentType::Academic => self.config.academic_agent_glm_key.clone(),
-            KowalskiAgentType::Data => self.config.data_agent_glm_key.clone(),
-            KowalskiAgentType::Creative => self.config.creative_agent_glm_key.clone(),
-            KowalskiAgentType::Reasoning => self.config.reasoning_agent_glm_key.clone(),
-            KowalskiAgentType::Federated => self.config.federation_glm_key.clone(),
-        }
-    }
-
-    fn get_system_prompt_for_agent_type(&self, agent_type: &KowalskiAgentType) -> String {
-        match agent_type {
-            KowalskiAgentType::Code => {
-                "You are a specialized code analysis agent. Your role is to analyze, refactor, \
-                and document code. You have deep knowledge of programming patterns, best practices, \
-                and can understand complex codebases. Provide clear, actionable insights.".to_string()
-            }
-            KowalskiAgentType::Web => {
-                "You are a specialized web research agent. Your role is to search, retrieve, and \
-                synthesize information from the web. You are skilled at finding relevant information \
-                and presenting it in a clear, organized manner.".to_string()
-            }
-            KowalskiAgentType::Academic => {
-                "You are a specialized academic research agent. Your role is to help with academic \
-                research, paper analysis, and scholarly inquiry. You have knowledge of academic \
-                databases, citation styles, and research methodologies.".to_string()
-            }
-            KowalskiAgentType::Data => {
-                "You are a specialized data analysis agent. Your role is to process, analyze, and \
-                transform data. You have expertise in data manipulation, statistical analysis, and \
-                data visualization.".to_string()
-            }
-            KowalskiAgentType::Creative => {
-                "You are a specialized creative synthesis agent. Your role is to generate novel \
-                ideas, creative solutions, and innovative approaches. You excel at brainstorming \
-                and thinking outside the box. Be imaginative and inspiring.".to_string()
-            }
-            KowalskiAgentType::Reasoning => {
-                "You are a specialized reasoning engine. Your role is to apply logical deduction, \
-                step-by-step analysis, and critical thinking to solve complex problems. You excel \
-                at breaking down complex issues and finding elegant solutions.".to_string()
-            }
-            KowalskiAgentType::Federated => {
-                "You are a federated coordination agent. Your role is to coordinate multiple \
-                specialized agents to work together on complex tasks. You can delegate subtasks \
-                to other agents and synthesize their results.".to_string()
-            }
-        }
-    }
-
-    pub fn to_delegate_agent_config(
-        &self,
-        agent_type: &KowalskiAgentType,
-        _name: &str,
-    ) -> Option<DelegateAgentConfig> {
-        let glm_key = self.get_glm_key_for_agent_type(agent_type)?;
-        let system_prompt = self.get_system_prompt_for_agent_type(agent_type);
-
-        Some(DelegateAgentConfig {
-            provider: "glm".to_string(),
-            model: if self.config.glm_model.is_empty() {
-                "glm-4-plus".to_string()
-            } else {
-                self.config.glm_model.clone()
-            },
-            system_prompt: Some(system_prompt),
-            api_key: None,
-            temperature: None,
-            max_depth: 3,
-            is_kowalski_agent: true,
-            glm_api_key: Some(glm_key),
-            glm_model: if self.config.glm_model.is_empty() {
-                "glm-4-plus".to_string()
-            } else {
-                self.config.glm_model.clone()
-            },
-            glm_per_agent: HashMap::new(),
-        })
-    }
-
-    pub fn get_delegate_configs(&self) -> HashMap<String, DelegateAgentConfig> {
-        let mut configs = HashMap::new();
-
-        for agent in &self.agents {
-            if !matches!(agent.status, AgentStatus::Available | AgentStatus::Offline) {
-                continue;
-            }
-
-            if let Some(config) = self.to_delegate_agent_config(&agent.agent_type, &agent.name) {
-                configs.insert(agent.name.clone(), config);
-            }
-        }
-
-        configs
-    }
-
-    pub async fn execute_with_glm(
-        &self,
-        agent_type: &KowalskiAgentType,
-        task: &str,
-    ) -> Result<String> {
-        let glm_key = self
-            .get_glm_key_for_agent_type(agent_type)
-            .context("GLM API key not configured for this agent type")?;
-
-        let model = if self.config.glm_model.is_empty() {
-            "glm-4-plus".to_string()
-        } else {
-            self.config.glm_model.clone()
-        };
-
-        let system_prompt = self.get_system_prompt_for_agent_type(agent_type);
-
-        info!(
-            "Executing task with GLM (model: {}) for agent type: {:?}",
-            model, agent_type
-        );
-
-        let request_body = serde_json::json!({
-            "model": model,
-            "messages": [
-                {
-                    "role": "system",
-                    "content": system_prompt
-                },
-                {
-                    "role": "user",
-                    "content": task
-                }
-            ],
-            "temperature": 0.7,
-            "max_tokens": 4096
-        });
-
-        let client = reqwest::Client::new();
-        let response = client
-            .post("https://open.bigmodel.cn/api/paas/v4/chat/completions")
-            .header("Authorization", format!("Bearer {}", glm_key))
-            .header("Content-Type", "application/json")
-            .json(&request_body)
-            .send()
-            .await
-            .context("Failed to send request to GLM API")?;
-
-        if !response.status().is_success() {
-            let status = response.status();
-            let error_text = response.text().await.unwrap_or_default();
-            bail!("GLM API request failed with status {}: {}", status, error_text);
-        }
-
-        let response_body: serde_json::Value = response
-            .json()
-            .await
-            .context("Failed to parse GLM API response")?;
-
-        let content = response_body["choices"]
-            .as_array()
-            .and_then(|arr| arr.first())
-            .and_then(|choice| choice.get("message"))
-            .and_then(|msg| msg.get("content"))
-            .and_then(|c| c.as_str())
-            .context("Invalid response format from GLM API")?;
-
-        Ok(content.to_string())
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -834,5 +708,57 @@ impl KowalskiTask {
                 format!("Coordinate agents {:?} for task: {}", agents, task)
             }
         }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GoalOrientedTask {
+    pub goal_id: String,
+    pub goal_title: String,
+    pub goal_description: String,
+    pub priority: String,
+    pub karma_reward: f64,
+    pub task: String,
+    pub context: HashMap<String, String>,
+}
+
+impl GoalOrientedTask {
+    pub fn from_kowalski_response(goal_id: String, response: String, context: HashMap<String, String>) -> Self {
+        let (title, description, priority, karma) = Self::parse_kowalski_response(&response);
+        
+        Self {
+            goal_id,
+            goal_title: title,
+            goal_description: description,
+            priority,
+            karma_reward: karma,
+            task: response,
+            context,
+        }
+    }
+
+    fn parse_kowalski_response(response: &str) -> (String, String, String, f64) {
+        let lines: Vec<&str> = response.lines().collect();
+        let mut title = "Kowalski Task".to_string();
+        let mut description = response.to_string();
+        let mut priority = "Medium".to_string();
+        let mut karma = 25.0;
+
+        for line in &lines {
+            if line.starts_with("TITLE:") {
+                title = line.trim_start_matches("TITLE:").trim().to_string();
+            } else if line.starts_with("PRIORITY:") {
+                priority = line.trim_start_matches("PRIORITY:").trim().to_string();
+                karma = match priority.to_lowercase().as_str() {
+                    "low" => 10.0,
+                    "high" => 50.0,
+                    "critical" => 100.0,
+                    "urgent" => 200.0,
+                    _ => 25.0,
+                };
+            }
+        }
+
+        (title, description, priority, karma)
     }
 }

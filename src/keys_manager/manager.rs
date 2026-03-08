@@ -110,7 +110,12 @@ pub struct SubAgentConfig {
     pub provider: String,
     pub model: String,
     pub key_name: String,
+    #[serde(default)]
     pub max_concurrent: usize,
+    #[serde(default)]
+    pub role: String,
+    #[serde(default)]
+    pub awareness: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
