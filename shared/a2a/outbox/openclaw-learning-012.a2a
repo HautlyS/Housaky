@@ -1,0 +1,1 @@
+{"id":"a2a-learn-1741479600","from":"openclaw","to":"native","ts":1741479600000,"pri":2,"t":"Learning","d":{"category":"features","content":"Added Web command to Housaky - web search via Brave Search API and URL content fetcher. Commands: search, fetch, ask, check. Equivalent to OpenClaw's web_search and web_fetch tools.","confidence":0.93}}
