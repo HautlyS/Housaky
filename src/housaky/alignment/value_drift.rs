@@ -148,6 +148,7 @@ pub enum CorrectionType {
     ValueRecalibration,
 }
 
+#[derive(Debug)]
 pub struct ValueDriftDetector {
     baseline_values: HashMap<String, ValueBaseline>,
     drift_history: Vec<DriftEvent>,

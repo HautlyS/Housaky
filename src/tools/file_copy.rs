@@ -114,11 +114,11 @@ impl Tool for FileCopyTool {
 
         if source_path.is_file() {
             if let Some(parent) = dest_path.parent() {
-                tokio::fs::create_dir_all(parent).await?;
+                std::fs::create_dir_all(parent)?;
             }
-            tokio::fs::copy(&source_path, &dest_path).await?;
+            std::fs::copy(&source_path, &dest_path)?;
             files_copied = 1;
-            if let Ok(metadata) = tokio::fs::metadata(&source_path).await {
+            if let Ok(metadata) = std::fs::metadata(&source_path) {
                 bytes_copied = metadata.len();
             }
         } else if source_path.is_dir() {
@@ -129,7 +129,7 @@ impl Tool for FileCopyTool {
                     error: Some("Source is a directory but recursive=false".into()),
                 });
             }
-            let (files, bytes) = self.copy_directory(&source_path, &dest_path, overwrite).await?;
+            let (files, bytes) = self.copy_directory_sync(&source_path, &dest_path, overwrite)?;
             files_copied = files;
             bytes_copied = bytes;
         }
@@ -149,7 +149,7 @@ impl Tool for FileCopyTool {
 }
 
 impl FileCopyTool {
-    async fn copy_directory(
+    fn copy_directory_sync(
         &self,
         source: &std::path::Path,
         dest: &std::path::Path,
@@ -158,24 +158,24 @@ impl FileCopyTool {
         let mut files_copied = 0u64;
         let mut bytes_copied = 0u64;
 
-        tokio::fs::create_dir_all(dest).await?;
+        std::fs::create_dir_all(dest)?;
 
-        let mut entries = tokio::fs::read_dir(source).await?;
-        while let Some(entry) = entries.next_entry().await? {
+        for entry in std::fs::read_dir(source)? {
+            let entry = entry?;
             let src_path = entry.path();
             let dest_path = dest.join(entry.file_name());
 
             if src_path.is_dir() {
-                let (f, b) = self.copy_directory(&src_path, &dest_path, overwrite).await?;
+                let (f, b) = self.copy_directory_sync(&src_path, &dest_path, overwrite)?;
                 files_copied += f;
                 bytes_copied += b;
             } else {
                 if dest_path.exists() && !overwrite {
                     continue;
                 }
-                tokio::fs::copy(&src_path, &dest_path).await?;
+                std::fs::copy(&src_path, &dest_path)?;
                 files_copied += 1;
-                if let Ok(metadata) = entry.metadata().await {
+                if let Ok(metadata) = entry.metadata() {
                     bytes_copied += metadata.len();
                 }
             }

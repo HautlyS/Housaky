@@ -190,6 +190,16 @@ pub struct QuantumAgiBridge {
     transpiler: Option<CircuitTranspiler>,
 }
 
+impl std::fmt::Debug for QuantumAgiBridge {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("QuantumAgiBridge")
+            .field("config", &self.config)
+            .field("metrics", &self.metrics)
+            .field("transpiler", &self.transpiler)
+            .finish()
+    }
+}
+
 impl QuantumAgiBridge {
     /// Create a new AGI bridge with a local simulator backend.
     pub fn new(config: AgiBridgeConfig) -> Self {
