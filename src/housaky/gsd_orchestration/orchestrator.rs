@@ -418,7 +418,7 @@ impl GSDOrchestrator {
             }
         };
 
-        let duration = start.elapsed().as_millis() as i64;
+        let _duration = start.elapsed().as_millis() as i64;
         
         // Update awareness with task result
         if result.success {

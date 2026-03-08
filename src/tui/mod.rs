@@ -10,6 +10,9 @@
 // New minimal TUI (default)
 pub mod minimal;
 
+// Unified marketplace (Skills + MCPs)
+pub mod unified_market;
+
 // Legacy TUI modules (kept for compatibility)
 pub mod agi;
 pub mod app;
@@ -28,6 +31,7 @@ pub mod status_bar;
 
 // Re-export new minimal TUI as primary
 pub use minimal::{run_minimal_tui, MinimalApp};
+pub use unified_market::UnifiedMarketApp;
 
 // Legacy exports
 pub use agi::AGIDashboard;
@@ -107,8 +111,53 @@ pub fn run_skills_market_tui(config: Config, repo_root: std::path::PathBuf) -> R
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = ratatui::Terminal::new(backend)?;
 
-    let mut app = skills_market::SkillsMarketApp::new(config, repo_root);
-    app.load_skills();
+    // Use unified marketplace
+    let workspace_dir = config.workspace_dir.clone();
+    let mut app = UnifiedMarketApp::new(config, workspace_dir, repo_root);
+    app.load_all();
+
+    let res = loop {
+        terminal.draw(|f| app.draw(f))?;
+        if event::poll(Duration::from_millis(33))? {
+            match event::read()? {
+                Event::Key(key) => {
+                    app.handle_key(key)?;
+                    if app.quit {
+                        break Ok(());
+                    }
+                }
+                Event::Mouse(mouse) => {
+                    let _ = app.handle_mouse(mouse);
+                }
+                Event::Resize(_, _) => {
+                    terminal.autoresize()?;
+                }
+                _ => {}
+            }
+        }
+    };
+
+    disable_raw_mode()?;
+    execute!(
+        terminal.backend_mut(),
+        LeaveAlternateScreen,
+        DisableMouseCapture
+    )?;
+    terminal.show_cursor()?;
+
+    res
+}
+
+/// Run the unified marketplace TUI (Skills + MCPs)
+pub fn run_unified_market_tui(config: Config, workspace_dir: std::path::PathBuf, repo_root: std::path::PathBuf) -> Result<()> {
+    enable_raw_mode()?;
+    let mut stdout = io::stdout();
+    execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
+    let backend = CrosstermBackend::new(stdout);
+    let mut terminal = ratatui::Terminal::new(backend)?;
+
+    let mut app = UnifiedMarketApp::new(config, workspace_dir, repo_root);
+    app.load_all();
 
     let res = loop {
         terminal.draw(|f| app.draw(f))?;

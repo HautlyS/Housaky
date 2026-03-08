@@ -1,3 +1,5 @@
+#![allow(unused_assignments)]
+
 use super::traits::{Tool, ToolResult};
 use crate::security::SecurityPolicy;
 use crate::util::expand_path;

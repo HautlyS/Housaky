@@ -663,6 +663,7 @@ mod sandbox;
 mod security;
 mod sessions;
 mod system;
+mod tts;
 
 pub use approvals::ApprovalsCommands;
 pub use browser::BrowserCommands;
@@ -672,3 +673,4 @@ pub use sandbox::SandboxCommands;
 pub use security::SecurityCommands;
 pub use sessions::SessionsCommands;
 pub use system::{HeartbeatAction, SystemCommands};
+pub use tts::{TtsCommands, TtsConfig, TtsProviderConfig, Voice};

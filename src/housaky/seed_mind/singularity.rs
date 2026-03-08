@@ -113,8 +113,6 @@ impl SingularityEngine {
             };
         }
 
-        let n = self.trajectory.len();
-
         // Compute velocity (first derivative) over windows
         let velocities = self.compute_windowed_derivative(&self.trajectory);
 
@@ -127,10 +125,8 @@ impl SingularityEngine {
                 .skip(self.window_size)
                 .take(self.window_size);
 
-            let recent_avg: f64 = recent.clone().sum::<f64>()
-                / recent.count().max(1) as f64;
-            let older_avg: f64 = older.clone().sum::<f64>()
-                / older.count().max(1) as f64;
+            let recent_avg: f64 = recent.clone().sum::<f64>() / recent.count().max(1) as f64;
+            let older_avg: f64 = older.clone().sum::<f64>() / older.count().max(1) as f64;
 
             recent_avg - older_avg
         } else {
@@ -217,10 +213,7 @@ impl SingularityEngine {
 
     /// Get latest capability value
     pub fn latest_capability(&self) -> f64 {
-        self.trajectory
-            .last()
-            .map(|d| d.capability)
-            .unwrap_or(0.0)
+        self.trajectory.last().map(|d| d.capability).unwrap_or(0.0)
     }
 }
 
@@ -236,10 +229,22 @@ mod tests {
 
     #[test]
     fn test_singularity_phases() {
-        assert_eq!(SingularityPhase::from_acceleration(0.0, 0.0), SingularityPhase::Linear);
-        assert_eq!(SingularityPhase::from_acceleration(0.02, 0.0), SingularityPhase::Superlinear);
-        assert_eq!(SingularityPhase::from_acceleration(0.08, 0.0), SingularityPhase::Exponential);
-        assert_eq!(SingularityPhase::from_acceleration(0.08, 0.2), SingularityPhase::PreSingularity);
+        assert_eq!(
+            SingularityPhase::from_acceleration(0.0, 0.0),
+            SingularityPhase::Linear
+        );
+        assert_eq!(
+            SingularityPhase::from_acceleration(0.02, 0.0),
+            SingularityPhase::Superlinear
+        );
+        assert_eq!(
+            SingularityPhase::from_acceleration(0.08, 0.0),
+            SingularityPhase::Exponential
+        );
+        assert_eq!(
+            SingularityPhase::from_acceleration(0.08, 0.2),
+            SingularityPhase::PreSingularity
+        );
     }
 
     #[test]

@@ -10,7 +10,6 @@ use std::collections::HashMap;
 
 use super::config::SeedMindConfig;
 use super::consciousness::CollectiveMetrics;
-use super::singularity::SingularityPhase;
 
 /// A peer in the Seed Mind network
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -32,11 +31,18 @@ pub enum ImprovementType {
     /// Weight update delta (gradient-like)
     WeightDelta { layer: String, magnitude: f64 },
     /// Reasoning strategy improvement
-    StrategyImprovement { description: String, fitness_delta: f64 },
+    StrategyImprovement {
+        description: String,
+        fitness_delta: f64,
+    },
     /// New tool definition
     ToolDefinition { name: String, spec: String },
     /// Experience rollout (SAPO-style)
-    ExperienceRollout { task: String, outcome: f64, steps: Vec<String> },
+    ExperienceRollout {
+        task: String,
+        outcome: f64,
+        steps: Vec<String>,
+    },
     /// Prompt optimization
     PromptOptimization { prompt: String, improvement: f64 },
 }
@@ -167,7 +173,11 @@ impl SeedMindNetwork {
     }
 
     /// Share an improvement with the network
-    pub fn share_improvement(&mut self, improvement_type: ImprovementType, fitness_delta: f64) -> Option<SharedImprovement> {
+    pub fn share_improvement(
+        &mut self,
+        improvement_type: ImprovementType,
+        fitness_delta: f64,
+    ) -> Option<SharedImprovement> {
         // Only share if above threshold
         if fitness_delta < self.broadcast_threshold {
             return None;
@@ -373,7 +383,14 @@ mod tests {
         assert_eq!(CompressionMethod::None.compression_ratio(), 1.0);
         assert!(CompressionMethod::Quantization { bits: 8 }.compression_ratio() == 4.0);
         assert!(CompressionMethod::Sparsification { k_percent: 1.0 }.compression_ratio() == 100.0);
-        assert!(CompressionMethod::Cocktail { bits: 4, k_percent: 1.0 }.compression_ratio() == 800.0);
+        assert!(
+            CompressionMethod::Cocktail {
+                bits: 4,
+                k_percent: 1.0
+            }
+            .compression_ratio()
+                == 800.0
+        );
     }
 
     #[test]

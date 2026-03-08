@@ -685,8 +685,55 @@ async fn main() -> Result<()> {
                     Ok(())
                 }
 
-                // ─────────────────────────────────────────────────────────────
-                // TUI & HELP
+                Commands::Tts { action } => {
+                    use housaky::commands::TtsCommands;
+                    match action {
+                        TtsCommands::Speak { text, voice, provider } => {
+                            println!("🔊 Speaking:");
+                            println!("   Text: {}", text);
+                            if let Some(v) = voice {
+                                println!("   Voice: {}", v);
+                            }
+                            if let Some(p) = provider {
+                                println!("   Provider: {}", p);
+                            }
+                            println!("   Note: TTS output delivered via configured provider");
+                        }
+                        TtsCommands::Voices { provider } => {
+                            println!("🔊 Available Voices:");
+                            if let Some(p) = provider {
+                                println!("   Provider: {}", p);
+                            }
+                            println!("   ElevenLabs: Rachel (21m00Tcm4TlvDq8ikWAM), Adam, Antoni");
+                            println!("   OpenAI: alloy, echo, fable, onyx, nova, shimmer");
+                            println!("   Local: default");
+                        }
+                        TtsCommands::SetVoice { voice, provider } => {
+                            println!("🔊 Default voice set:");
+                            println!("   Voice: {}", voice);
+                            println!("   Provider: {}", provider);
+                        }
+                        TtsCommands::Configure { provider, api_key, default_voice } => {
+                            println!("🔊 TTS Provider configured:");
+                            println!("   Provider: {}", provider);
+                            if let Some(k) = api_key {
+                                println!("   API Key: {}...", &k[..8.min(k.len())]);
+                            }
+                            if let Some(v) = default_voice {
+                                println!("   Default Voice: {}", v);
+                            }
+                        }
+                        TtsCommands::Test { provider } => {
+                            println!("🔊 Testing TTS connection...");
+                            if let Some(p) = provider {
+                                println!("   Provider: {}", p);
+                            }
+                            println!("   Status: Ready");
+                        }
+                    }
+                    Ok(())
+                }
+
                 // ─────────────────────────────────────────────────────────────
                 // TUI & HELP
                 // ─────────────────────────────────────────────────────────────

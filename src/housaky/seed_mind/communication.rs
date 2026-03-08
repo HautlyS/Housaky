@@ -9,7 +9,6 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::time::SystemTime;
 
 /// A symbol in the HNL vocabulary: a compact representation of a concept
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -104,7 +103,7 @@ pub struct HNLProtocol {
 }
 
 impl HNLProtocol {
-    pub fn new(vocab_size: usize, ib_beta: f32) -> Self {
+    pub fn new(_vocab_size: usize, ib_beta: f32) -> Self {
         let mut vocab = HashMap::new();
         let mut reverse_vocab = HashMap::new();
 

@@ -491,23 +491,6 @@ impl KowalskiBridge {
             config.provider, model
         );
 
-        // Build the request for OpenAI-compatible API
-        let request_body = serde_json::json!({
-            "model": model,
-            "messages": [
-                {
-                    "role": "system",
-                    "content": system_prompt
-                },
-                {
-                    "role": "user",
-                    "content": task
-                }
-            ],
-            "temperature": 0.7,
-            "max_tokens": 4096
-        });
-
         // Determine base URL based on provider
         let base_url = match config.provider.as_str() {
             "modal" => "https://api.us-west-2.modal.direct/v1",
@@ -826,7 +809,7 @@ impl GoalOrientedTask {
     fn parse_kowalski_response(response: &str) -> (String, String, String, f64) {
         let lines: Vec<&str> = response.lines().collect();
         let mut title = "Kowalski Task".to_string();
-        let mut description = response.to_string();
+        let description = response.to_string();
         let mut priority = "Medium".to_string();
         let mut karma = 25.0;
 

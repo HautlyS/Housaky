@@ -8,7 +8,7 @@ use crate::commands::{
     ApprovalsCommands, BrowserCommands, ChannelCommands, CollectiveCommands, CronCommands,
     GSDCommands, GoalCommands, KeyCommands, McpCommands, MemoryCommands, MigrateCommands,
     ModelCommands, NodesCommands, QuantumCommands, SandboxCommands, SecurityCommands, SeedMindCommands,
-    SelfModCommands, ServiceCommands, SessionsCommands, SkillCommands, SystemCommands,
+    SelfModCommands, ServiceCommands, SessionsCommands, SkillCommands, SystemCommands, TtsCommands,
 };
 
 // ============================================================================
@@ -381,6 +381,12 @@ pub enum Commands {
     Nodes {
         #[command(subcommand)]
         action: NodesCommands,
+    },
+
+    /// Text-to-Speech commands
+    Tts {
+        #[command(subcommand)]
+        action: TtsCommands,
     },
 
     /// MCP marketplace

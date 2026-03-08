@@ -6,7 +6,37 @@ use std::process::Command;
 use crate::commands::McpCommands;
 
 const CLAUDE_MCP_REGISTRY_URL: &str =
-    "https://github.com/anthropics/mcp-servers/raw/main/registry.json";
+    "https://raw.githubusercontent.com/anthropics/mcp-servers/main/registry.json";
+
+// Popular MCP servers that might not be in the official registry
+const POPULAR_MCPS: &[(&str, &str, &str)] = &[
+    (
+        "filesystem",
+        "Filesystem operations - read, write, search files",
+        "npx",
+    ),
+    ("memory", "Persistent memory storage for context", "npx"),
+    ("brave-search", "Web search using Brave Search API", "npx"),
+    ("puppeteer", "Browser automation with Puppeteer", "npx"),
+    ("sqlite", "SQLite database operations", "npx"),
+    ("github", "GitHub API integration", "npx"),
+    ("git", "Git operations and repository management", "npx"),
+    ("slack", "Slack API integration", "npx"),
+    (
+        "google-maps",
+        "Google Maps API for location services",
+        "npx",
+    ),
+    ("fetch", "HTTP fetch capabilities", "npx"),
+    (
+        "sequential-thinking",
+        "Structured reasoning and problem solving",
+        "npx",
+    ),
+    ("time", "Time and timezone utilities", "npx"),
+    ("aws-kb-retrieval", "AWS Knowledge Base retrieval", "npx"),
+    ("everart", "AI image generation", "npx"),
+];
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct McpPackage {
@@ -43,7 +73,7 @@ struct McpRegistry {
     servers: std::collections::HashMap<String, McpServerEntry>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct McpServerEntry {
     #[serde(default)]
     description: Option<String>,
@@ -126,20 +156,50 @@ impl McpMarketplace {
     }
 
     pub fn list_available(&self) -> Result<Vec<McpPackage>> {
-        let servers = self.fetch_registry()?;
         let mut packages = Vec::new();
+        let mut seen_names = std::collections::HashSet::new();
 
-        for (name, entry) in servers {
-            packages.push(McpPackage {
-                name: name.clone(),
-                description: entry.description.unwrap_or_default(),
-                source: McpSource::ClaudeOfficial { name },
-                command: entry.command,
-                args: entry.args,
-                env: entry.env,
-                installed: false,
-                enabled: false,
-            });
+        // Try to fetch from registry
+        match self.fetch_registry() {
+            Ok(servers) => {
+                for (name, entry) in servers {
+                    seen_names.insert(name.clone());
+                    packages.push(McpPackage {
+                        name: name.clone(),
+                        description: entry.description.unwrap_or_default(),
+                        source: McpSource::ClaudeOfficial { name },
+                        command: entry.command,
+                        args: entry.args,
+                        env: entry.env,
+                        installed: false,
+                        enabled: false,
+                    });
+                }
+            }
+            Err(e) => {
+                tracing::warn!("Could not fetch MCP registry: {}", e);
+            }
+        }
+
+        // Add popular MCPs that might not be in the registry
+        for (name, desc, cmd) in POPULAR_MCPS {
+            if !seen_names.contains(*name) {
+                packages.push(McpPackage {
+                    name: name.to_string(),
+                    description: desc.to_string(),
+                    source: McpSource::Npm {
+                        package: format!("@modelcontextprotocol/server-{}", name),
+                    },
+                    command: Some(cmd.to_string()),
+                    args: Some(vec![
+                        "-y".to_string(),
+                        format!("@modelcontextprotocol/server-{}", name),
+                    ]),
+                    env: None,
+                    installed: false,
+                    enabled: false,
+                });
+            }
         }
 
         packages.sort_by(|a, b| a.name.cmp(&b.name));
@@ -175,29 +235,58 @@ impl McpMarketplace {
     }
 
     pub fn install(&self, name: &str) -> Result<String> {
-        let servers = self.fetch_registry()?;
-        let entry = servers
-            .get(name)
-            .ok_or_else(|| anyhow!("MCP server not found: {}", name))?;
+        // Try registry first
+        let entry = self
+            .fetch_registry()
+            .ok()
+            .and_then(|servers| servers.get(name).cloned());
 
         let mcp_dir = self.workspace_dir.join("mcp").join(name);
         std::fs::create_dir_all(&mcp_dir)?;
 
-        let command = entry
-            .command
-            .clone()
-            .or_else(|| Some("npx".to_string()))
-            .unwrap_or_default();
+        let (description, command, args, env) = if let Some(e) = entry {
+            (
+                e.description.unwrap_or_default(),
+                e.command.clone().unwrap_or_else(|| "npx".to_string()),
+                e.args.clone(),
+                e.env.clone(),
+            )
+        } else {
+            // Check if it's a popular MCP
+            let popular = POPULAR_MCPS.iter().find(|(n, _, _)| *n == name);
+            if let Some((_, desc, cmd)) = popular {
+                (
+                    desc.to_string(),
+                    cmd.to_string(),
+                    Some(vec![
+                        "-y".to_string(),
+                        format!("@modelcontextprotocol/server-{}", name),
+                    ]),
+                    None,
+                )
+            } else {
+                // Default to npm package
+                (
+                    format!("MCP server: {}", name),
+                    "npx".to_string(),
+                    Some(vec![
+                        "-y".to_string(),
+                        format!("@modelcontextprotocol/server-{}", name),
+                    ]),
+                    None,
+                )
+            }
+        };
 
         let package = McpPackage {
             name: name.to_string(),
-            description: entry.description.clone().unwrap_or_default(),
+            description,
             source: McpSource::ClaudeOfficial {
                 name: name.to_string(),
             },
-            command: Some(command),
-            args: entry.args.clone(),
-            env: entry.env.clone(),
+            command: Some(command.clone()),
+            args,
+            env,
             installed: true,
             enabled: true,
         };
@@ -206,12 +295,10 @@ impl McpMarketplace {
         let config_json = serde_json::to_string_pretty(&package)?;
         std::fs::write(&config_path, config_json)?;
 
-        if let Some(ref cmd) = package.command {
-            if cmd == "npx" || cmd == "npm" {
-                self.install_npm_deps(name, &mcp_dir)?;
-            } else if cmd == "uvx" || cmd == "python" {
-                self.install_python_deps(name, &mcp_dir)?;
-            }
+        if command == "npx" || command == "npm" {
+            self.install_npm_deps(name, &mcp_dir)?;
+        } else if command == "uvx" || command == "python" {
+            self.install_python_deps(name, &mcp_dir)?;
         }
 
         Ok(name.to_string())
