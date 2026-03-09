@@ -15,6 +15,7 @@ use super::self_modification::{SelfModificationEngine, FitnessScore};
 use super::recursive_self_modifier::{RecursiveSelfModifier, CodeModification};
 use super::subagent_system::SubAgentOrchestrator;
 use super::rust_self_improvement::{SelfImprovementEngine, ImprovementOpportunity};
+use super::fitness_evaluator::FitnessEvaluator;
 
 // ============================================================================
 // ORCHESTRATOR CONFIG
@@ -95,6 +96,9 @@ pub struct UnifiedSelfImprovementOrchestrator {
     // Subagent orchestrator
     subagents: Arc<RwLock<SubAgentOrchestrator>>,
     
+    // Fitness evaluator
+    fitness_evaluator: FitnessEvaluator,
+    
     // State
     cycle_count: Arc<RwLock<u64>>,
     total_improvements: Arc<RwLock<u64>>,
@@ -102,6 +106,7 @@ pub struct UnifiedSelfImprovementOrchestrator {
 
 impl UnifiedSelfImprovementOrchestrator {
     pub fn new(workspace_dir: PathBuf, config: UnifiedImprovementConfig) -> Self {
+        let fitness_evaluator = FitnessEvaluator::new(workspace_dir.clone());
         Self {
             self_improve_interface: Arc::new(RwLock::new(
                 SelfImproveInterface::new(workspace_dir.clone())
@@ -116,6 +121,7 @@ impl UnifiedSelfImprovementOrchestrator {
                 SelfImprovementEngine::new(workspace_dir.clone())
             )),
             subagents: Arc::new(RwLock::new(SubAgentOrchestrator::new())),
+            fitness_evaluator,
             config,
             workspace_dir,
             cycle_count: Arc::new(RwLock::new(0)),
@@ -211,20 +217,32 @@ impl UnifiedSelfImprovementOrchestrator {
         Ok(opportunities)
     }
     
-    /// Evaluate current fitness
+    /// Evaluate current fitness using real benchmarks
     async fn evaluate_fitness(&self) -> Result<FitnessScore> {
-        // Use existing fitness evaluator from self_modification module
-        let _engine = self.modification_engine.read().await;
-        // For now, return a placeholder fitness score
-        // In production, this would run benchmarks and tests
+        // Run real fitness evaluation (compilation, tests, clippy, complexity)
+        let real_score = self.fitness_evaluator.evaluate().await?;
+        
+        // Convert RealFitnessScore to legacy FitnessScore for compatibility
+        // Convert HashMap<String, String> to HashMap<String, f64> for details
+        let details: HashMap<String, f64> = real_score.details
+            .into_iter()
+            .filter_map(|(k, v)| {
+                // Try to parse as f64, otherwise skip
+                v.trim_end_matches('%')
+                    .parse::<f64>()
+                    .ok()
+                    .map(|val| (k, val / 100.0)) // Convert percentage to 0-1 range
+            })
+            .collect();
+        
         Ok(FitnessScore {
-            overall: 0.75,
-            latency_score: 0.80,
-            memory_score: 0.70,
-            correctness_score: 0.85,
-            capability_score: 0.65,
-            alignment_score: 0.90,
-            details: HashMap::new(),
+            overall: real_score.overall,
+            latency_score: real_score.latency_score,
+            memory_score: real_score.memory_score,
+            correctness_score: real_score.correctness_score,
+            capability_score: real_score.capability_score,
+            alignment_score: real_score.alignment_score,
+            details,
         })
     }
     

@@ -63,6 +63,7 @@ pub mod self_improve_interface;
 // Missing module declarations
 pub mod a2a_secure;
 pub mod a2a_websocket;
+pub mod fitness_evaluator;
 pub mod goal_task_bridge;
 pub mod model_agnostic_layer;
 pub mod rust_self_improvement;

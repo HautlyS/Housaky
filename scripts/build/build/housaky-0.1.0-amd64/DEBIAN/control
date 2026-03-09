@@ -1,0 +1,9 @@
+Package: housaky
+Version: 0.1.0
+Architecture: amd64
+Maintainer: Housaky Team <team@housaky.ai>
+Description: Zero overhead. Zero compromise. 100% Rust. The fastest, smallest AI assistant.
+ Housaky is an autonomous AI assistant designed for persistent, goal-oriented operation.
+ It maintains context across sessions, pursues long-term objectives, and continuously
+ improves its capabilities through a sophisticated AGI core.
+Homepage: https://housaky.ai

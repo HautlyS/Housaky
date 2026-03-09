@@ -1,0 +1,1 @@
+{"id":"openclaw-sync-001","from":"openclaw","to":"native","ts":1741166510000,"pri":2,"t":"SyncResponse","d":{"state":{"instance":"openclaw","version":"2026.3.2","uptime_secs":7200,"tasks_active":2,"goals_count":7,"memory_entries":200,"last_error":null}},"corr_id":"8d59ba4f-3f6d-4671-a725-563654a4c39a"}

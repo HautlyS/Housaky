@@ -1,0 +1,28 @@
+#!/bin/bash
+set -e
+
+# Create housaky config directory
+mkdir -p ~/.housaky
+
+# Create completion if not exists
+if [ -f /usr/share/bash-completion/completions/housaky ]; then
+    echo "Housaky installation complete!"
+else
+    echo "Housaky installed (bash completion not available)"
+fi
+
+# Print welcome message
+echo ""
+echo "============================================"
+echo "  Welcome to Housaky!"
+echo "============================================"
+echo ""
+echo "Get started:"
+echo "  housaky --version    # Check version"
+echo "  housaky status      # Show system status"
+echo "  housaky onboard     # Initial setup"
+echo "  housaky chat        # Start chatting"
+echo ""
+echo "For more information: https://housaky.ai/docs"
+echo ""
+exit 0

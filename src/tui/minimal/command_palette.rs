@@ -69,6 +69,26 @@ const COMMANDS: &[CommandSuggestion] = &[
         shortcut: "m",
     },
     CommandSuggestion {
+        command: "/skills",
+        description: "Open skills marketplace",
+        shortcut: "S",
+    },
+    CommandSuggestion {
+        command: "/mcp",
+        description: "Open MCP marketplace",
+        shortcut: "M",
+    },
+    CommandSuggestion {
+        command: "/install-skill <name>",
+        description: "Install a skill",
+        shortcut: "",
+    },
+    CommandSuggestion {
+        command: "/install-mcp <name>",
+        description: "Install an MCP server",
+        shortcut: "",
+    },
+    CommandSuggestion {
         command: "/export",
         description: "Export conversation",
         shortcut: "e",
@@ -106,11 +126,6 @@ const COMMANDS: &[CommandSuggestion] = &[
     CommandSuggestion {
         command: "/memory",
         description: "Memory operations",
-        shortcut: "",
-    },
-    CommandSuggestion {
-        command: "/skills",
-        description: "Manage skills",
         shortcut: "",
     },
     CommandSuggestion {

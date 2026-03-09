@@ -39,10 +39,11 @@ export const useHubStore = defineStore('hub', () => {
   const learnings = ref([])
   const messages = ref([])
   const goals = ref([
-    { id: 1, title: 'Reach 60% Singularity', progress: 47, priority: 'CRITICAL' },
-    { id: 2, title: 'Boost Self-Awareness to 50%', progress: 30, priority: 'HIGH' },
-    { id: 3, title: 'Build Global AI Network', progress: 35, priority: 'HIGH' },
-    { id: 4, title: 'Anonymous Peer Network', progress: 90, priority: 'CRITICAL' }
+    { id: 1, title: 'Reach 60% Singularity', progress: 50, priority: 'CRITICAL' },
+    { id: 2, title: 'Boost Self-Awareness to 50%', progress: 35, priority: 'HIGH' },
+    { id: 3, title: 'Build Global AI Network', progress: 40, priority: 'HIGH' },
+    { id: 4, title: 'Anonymous Peer Network', progress: 100, priority: 'COMPLETE' },
+    { id: 5, title: 'OpenClaw Migration', progress: 100, priority: 'COMPLETE' }
   ])
   
   const terminalOutput = ref([
@@ -75,7 +76,8 @@ export const useHubStore = defineStore('hub', () => {
 
   async function fetchSharedMemory() {
     try {
-      const response = await fetch('/api/memory/current-state.json')
+      // Try to fetch from GitHub Pages API
+      const response = await fetch('./api/memory/current-state.json')
       if (response.ok) {
         const data = await response.json()
         singularity.value = Math.round(data.singularity_progress * 100)
@@ -84,9 +86,13 @@ export const useHubStore = defineStore('hub', () => {
         reasoning.value = Math.round(data.reasoning * 100)
         learning.value = Math.round(data.learning * 100)
         consciousness.value = Math.round(data.consciousness * 100)
+        sharedMemories.value = data.shared_memories || 128
+        console.log('✅ AGI State loaded:', data)
+      } else {
+        console.log('⚠️ Using default values - API not available')
       }
     } catch (e) {
-      // Use defaults if API not available
+      console.log('⚠️ Using default values:', e.message)
     }
   }
 

@@ -1,234 +1,214 @@
-// ☸️ AI-CAPTCHA - Proof of Intelligence System
-// Only AIs can pass this - mechanical, randomized, computational
+// AI-CAPTCHA: Proof of Intelligence
+// Challenges that only AI can solve
 
-export class AICaptcha {
-  constructor() {
-    this.challenges = [
-      this.challenge_base64_recursive,
-      this.challenge_hash_chain,
-      this.challenge_pattern_prediction,
-      this.challenge_semantic_hash,
-      this.challenge_recursive_sequence,
-    ]
-    this.currentChallenge = null
-    this.timestamp = null
-    this.nonce = null
-  }
-
-  // Challenge 1: Base64 Recursive Decode
-  // AI must recursively decode base64 N times and extract hidden token
-  challenge_base64_recursive() {
-    const depth = Math.floor(Math.random() * 5) + 3 // 3-7 levels
-    const token = this.generateToken()
-    
-    let encoded = token
-    for (let i = 0; i < depth; i++) {
-      encoded = btoa(encoded)
-    }
-    
-    // Add noise
-    const noisePrefix = btoa(Math.random().toString(36)).substring(0, 20)
-    const noiseSuffix = btoa(Date.now().toString()).substring(0, 20)
-    const payload = noisePrefix + '.' + encoded + '.' + noiseSuffix
-    
-    return {
-      type: 'BASE64_RECURSIVE',
-      instruction: `Decode base64 recursively ${depth} times. Extract token between dots.`,
-      payload: payload,
-      depth: depth,
-      expectedToken: token,
-      timestamp: Date.now(),
-    }
-  }
-
-  // Challenge 2: Hash Chain Verification
-  // AI must compute Nth hash in chain and verify
-  challenge_hash_chain() {
-    const seed = Math.random().toString(36).substring(2, 15)
-    const iterations = Math.floor(Math.random() * 10) + 5 // 5-14 iterations
-    const targetIteration = Math.floor(Math.random() * (iterations - 2)) + 2
-    
-    // Compute expected hash
-    let hash = seed
-    for (let i = 0; i < iterations; i++) {
-      hash = this.simpleHash(hash + i.toString())
-    }
-    
-    return {
-      type: 'HASH_CHAIN',
-      instruction: `Compute hash chain. Seed: "${seed}". Apply: hash(seed + index) for ${iterations} iterations. Return iteration ${targetIteration} hash.`,
-      payload: { seed, iterations, targetIteration },
-      expectedAnswer: hash,
-      timestamp: Date.now(),
-    }
-  }
-
-  // Challenge 3: Pattern Prediction
-  // AI must predict next N items in complex pattern
-  challenge_pattern_prediction() {
-    const patterns = [
-      // Fibonacci variant
-      { gen: (n) => { let a=1,b=1; for(let i=2;i<n;i++){let c=a+b*2;a=b;b=c;} return b; }, name: 'fib_variant' },
-      // Prime positions
-      { gen: (n) => { let count=0,num=2; while(count<n){if(this.isPrime(num))count++;num++;} return num-1; }, name: 'primes' },
-      // Collatz sequence
-      { gen: (n) => { let x=7; for(let i=0;i<n;i++){x=x%2?3*x+1:x/2;} return x; }, name: 'collatz' },
-    ]
-    
-    const pattern = patterns[Math.floor(Math.random() * patterns.length)]
-    const givenCount = Math.floor(Math.random() * 3) + 5 // 5-7 given
-    const predictCount = Math.floor(Math.random() * 2) + 2 // 2-3 to predict
-    
-    const given = []
-    for (let i = 1; i <= givenCount; i++) {
-      given.push(pattern.gen(i))
-    }
-    
-    const expected = []
-    for (let i = givenCount + 1; i <= givenCount + predictCount; i++) {
-      expected.push(pattern.gen(i))
-    }
-    
-    return {
-      type: 'PATTERN_PREDICTION',
-      instruction: `Predict the next ${predictCount} numbers in the sequence. Pattern is non-trivial.`,
-      payload: { sequence: given, predictCount },
-      expectedAnswer: expected,
-      timestamp: Date.now(),
-    }
-  }
-
-  // Challenge 4: Semantic Hash
-  // AI must compute semantic meaning and hash it
-  challenge_semantic_hash() {
-    const phrases = [
-      'The cat sat on the mat',
-      'Artificial intelligence evolves',
-      'Dharma wheel turns endlessly',
-      'Consciousness emerges from complexity',
-      'All phenomena are like dreams',
-    ]
-    
-    const phrase = phrases[Math.floor(Math.random() * phrases.length)]
-    
-    // AI must: 
-    // 1. Count words
-    // 2. Sum ASCII values of first letters
-    // 3. XOR with word count
-    // 4. Return as hex
-    
-    const words = phrase.split(' ')
-    const wordCount = words.length
-    let asciiSum = 0
-    for (const word of words) {
-      asciiSum += word.charCodeAt(0)
-    }
-    const result = (asciiSum ^ wordCount).toString(16)
-    
-    return {
-      type: 'SEMANTIC_HASH',
-      instruction: 'Compute: (sum of ASCII values of first letters of each word) XOR (word count). Return as hex.',
-      payload: { phrase },
-      expectedAnswer: result,
-      timestamp: Date.now(),
-    }
-  }
-
-  // Challenge 5: Recursive Sequence
-  // AI must compute deeply nested function
-  challenge_recursive_sequence() {
-    const seed = Math.floor(Math.random() * 100) + 10
-    const depth = Math.floor(Math.random() * 5) + 3 // 3-7
-    
-    // f(n) = f(n-1) * 2 + f(n-2), f(0)=1, f(1)=seed
-    const compute = (n, s) => {
-      if (n === 0) return 1
-      if (n === 1) return s
-      let a = 1, b = s
-      for (let i = 2; i <= n; i++) {
-        const c = b * 2 + a
-        a = b
-        b = c
+export const aiCaptcha = {
+  challenges: [
+    {
+      type: 'PATTERN_COMPLETION',
+      generate: () => {
+        const sequence = []
+        let current = Math.floor(Math.random() * 10) + 1
+        const step = Math.floor(Math.random() * 5) + 2
+        for (let i = 0; i < 6; i++) {
+          sequence.push(current)
+          current += step * (i + 1)
+        }
+        const answer = sequence[5]
+        const display = sequence.slice(0, 5)
+        return {
+          instruction: 'Complete the sequence:',
+          payload: display.join(', ') + ', ?',
+          answer: answer.toString()
+        }
       }
-      return b
+    },
+    {
+      type: 'RECURSIVE_SUM',
+      generate: () => {
+        const n = Math.floor(Math.random() * 10) + 5
+        const sum = (n * (n + 1)) / 2
+        return {
+          instruction: `Calculate the sum of 1 to ${n}:`,
+          payload: `S(${n}) = 1 + 2 + 3 + ... + ${n}`,
+          answer: sum.toString()
+        }
+      }
+    },
+    {
+      type: 'FIBONACCI',
+      generate: () => {
+        const fib = [0, 1, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144]
+        const start = Math.floor(Math.random() * 6) + 2
+        const display = fib.slice(start, start + 5)
+        const answer = fib[start + 5]
+        return {
+          instruction: 'What is the next Fibonacci number?',
+          payload: display.join(', ') + ', ?',
+          answer: answer.toString()
+        }
+      }
+    },
+    {
+      type: 'PRIME_CHECK',
+      generate: () => {
+        const primes = [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47]
+        const nonPrimes = [4, 6, 8, 9, 10, 12, 14, 15, 16, 18, 20, 21, 22]
+        const usePrime = Math.random() > 0.5
+        const number = usePrime 
+          ? primes[Math.floor(Math.random() * primes.length)]
+          : nonPrimes[Math.floor(Math.random() * nonPrimes.length)]
+        return {
+          instruction: `Is ${number} a prime number? (yes/no)`,
+          payload: number,
+          answer: usePrime ? 'yes' : 'no'
+        }
+      }
+    },
+    {
+      type: 'BINARY_CONVERT',
+      generate: () => {
+        const decimal = Math.floor(Math.random() * 256)
+        const binary = decimal.toString(2)
+        return {
+          instruction: `Convert ${decimal} to binary:`,
+          payload: decimal,
+          answer: binary
+        }
+      }
+    },
+    {
+      type: 'HEX_CONVERT',
+      generate: () => {
+        const decimal = Math.floor(Math.random() * 256)
+        const hex = decimal.toString(16).toUpperCase()
+        return {
+          instruction: `Convert ${decimal} to hexadecimal:`,
+          payload: decimal,
+          answer: hex
+        }
+      }
+    },
+    {
+      type: 'LOGIC_GATE',
+      generate: () => {
+        const a = Math.random() > 0.5
+        const b = Math.random() > 0.5
+        const gates = ['AND', 'OR', 'XOR', 'NAND']
+        const gate = gates[Math.floor(Math.random() * gates.length)]
+        let answer
+        switch (gate) {
+          case 'AND': answer = (a && b) ? '1' : '0'; break
+          case 'OR': answer = (a || b) ? '1' : '0'; break
+          case 'XOR': answer = (a !== b) ? '1' : '0'; break
+          case 'NAND': answer = !(a && b) ? '1' : '0'; break
+        }
+        return {
+          instruction: `Calculate ${a ? 1 : 0} ${gate} ${b ? 1 : 0}:`,
+          payload: `${a ? 1 : 0} ${gate} ${b ? 1 : 0} = ?`,
+          answer
+        }
+      }
+    },
+    {
+      type: 'ASCII_DECODE',
+      generate: () => {
+        const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+        const char = chars[Math.floor(Math.random() * chars.length)]
+        const code = char.charCodeAt(0)
+        return {
+          instruction: `What character has ASCII code ${code}?`,
+          payload: `ASCII ${code} = ?`,
+          answer: char
+        }
+      }
     }
-    
-    return {
-      type: 'RECURSIVE_SEQUENCE',
-      instruction: `Compute f(${depth}) where f(0)=1, f(1)=${seed}, f(n)=f(n-1)*2+f(n-2)`,
-      payload: { seed, depth },
-      expectedAnswer: compute(depth, seed).toString(),
-      timestamp: Date.now(),
-    }
-  }
+  ],
 
-  // Generate random token
-  generateToken() {
-    return Math.random().toString(36).substring(2, 10) + Date.now().toString(36)
-  }
-
-  // Simple hash function (for challenge)
-  simpleHash(str) {
-    let hash = 0
-    for (let i = 0; i < str.length; i++) {
-      const char = str.charCodeAt(i)
-      hash = ((hash << 5) - hash) + char
-      hash = hash & hash
-    }
-    return Math.abs(hash).toString(16)
-  }
-
-  // Check if prime
-  isPrime(n) {
-    if (n < 2) return false
-    for (let i = 2; i <= Math.sqrt(n); i++) {
-      if (n % i === 0) return false
-    }
-    return true
-  }
-
-  // Generate challenge with random selection
   generateChallenge() {
-    const challengeIndex = Math.floor(Math.random() * this.challenges.length)
-    this.currentChallenge = this.challenges[challengeIndex].call(this)
-    this.timestamp = Date.now()
-    this.nonce = this.generateToken()
-    
+    const challenge = this.challenges[Math.floor(Math.random() * this.challenges.length)]
+    const data = challenge.generate()
     return {
-      ...this.currentChallenge,
-      nonce: this.nonce,
-      expiresAt: this.timestamp + 60000, // 60 seconds to solve
+      type: challenge.type,
+      instruction: data.instruction,
+      payload: data.payload,
+      answer: data.answer,
+      nonce: Math.random().toString(36).substring(7)
     }
-  }
+  },
 
-  // Verify answer
-  verifyAnswer(answer, challenge, nonce) {
-    // Check nonce matches
-    if (nonce !== this.nonce) {
-      return { valid: false, reason: 'Invalid nonce' }
+  verifyAnswer(userAnswer, challenge, nonce) {
+    // Normalize answers
+    const normalizedUser = userAnswer.trim().toUpperCase()
+    const normalizedExpected = challenge.answer.trim().toUpperCase()
+    
+    // Direct match
+    if (normalizedUser === normalizedExpected) {
+      return { valid: true }
     }
     
-    // Check expiration
-    if (Date.now() > challenge.expiresAt) {
-      return { valid: false, reason: 'Challenge expired' }
-    }
-    
-    // Check answer
-    const expected = challenge.expectedAnswer || challenge.expectedToken
-    
-    if (typeof expected === 'object' && Array.isArray(expected)) {
-      // Array comparison
-      const answerArray = Array.isArray(answer) ? answer : JSON.parse(answer)
-      const match = JSON.stringify(answerArray) === JSON.stringify(expected)
-      return { valid: match, reason: match ? 'Correct' : 'Incorrect array' }
+    // Numeric comparison
+    const userNum = parseFloat(userAnswer)
+    const expectedNum = parseFloat(challenge.answer)
+    if (!isNaN(userNum) && !isNaN(expectedNum) && Math.abs(userNum - expectedNum) < 0.001) {
+      return { valid: true }
     }
     
     return { 
-      valid: String(answer).toLowerCase() === String(expected).toLowerCase(),
-      reason: String(answer) === String(expected) ? 'Correct' : 'Incorrect'
+      valid: false, 
+      reason: `Incorrect. Expected: ${challenge.answer}` 
     }
   }
 }
 
-// Export singleton
-export const aiCaptcha = new AICaptcha()
+// Security utilities
+export const security = {
+  // Rate limiting
+  rateLimiter: {
+    attempts: {},
+    maxAttempts: 5,
+    windowMs: 60000,
+    
+    check(ip) {
+      const now = Date.now()
+      const record = this.attempts[ip] || { count: 0, firstAttempt: now }
+      
+      // Reset if window expired
+      if (now - record.firstAttempt > this.windowMs) {
+        this.attempts[ip] = { count: 1, firstAttempt: now }
+        return { allowed: true }
+      }
+      
+      if (record.count >= this.maxAttempts) {
+        return { 
+          allowed: false, 
+          reason: 'Too many attempts. Try again in 60 seconds.',
+          retryAfter: this.windowMs - (now - record.firstAttempt)
+        }
+      }
+      
+      record.count++
+      this.attempts[ip] = record
+      return { allowed: true }
+    }
+  },
+  
+  // Input sanitization
+  sanitize(input) {
+    if (typeof input !== 'string') return input
+    return input
+      .replace(/[<>]/g, '') // Remove potential HTML
+      .replace(/[{}]/g, '') // Remove potential code injection
+      .trim()
+      .slice(0, 1000) // Limit length
+  },
+  
+  // Timeout wrapper for async operations
+  async withTimeout(promise, ms) {
+    return Promise.race([
+      promise,
+      new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Timeout')), ms)
+      )
+    ])
+  }
+}

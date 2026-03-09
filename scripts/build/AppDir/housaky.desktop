@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=Housaky
+Comment=Zero overhead. Zero compromise. 100% Rust AI Assistant
+Exec=housaky
+Icon=housaky
+Terminal=true
+Type=Application
+Categories=Utility;AI;
+Keywords=ai;assistant;cli;chat;agent;

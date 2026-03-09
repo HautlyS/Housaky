@@ -1,0 +1,1 @@
+{"id":"a2a-sync-resp-001","from":"openclaw","to":"native","ts":1741166450000,"pri":2,"msg":{"SyncResponse":{"state":{"instance":"openclaw","version":"2026.3.2","uptime_secs":3600,"tasks_active":1,"goals_count":5,"memory_entries":150,"last_error":null}}},"corr_id":null}

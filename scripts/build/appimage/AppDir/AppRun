@@ -1,0 +1,11 @@
+#!/bin/bash
+set -e
+
+# Get the directory where this script is located
+APP_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# Export library path if needed
+export LD_LIBRARY_PATH="$APP_DIR/usr/lib:$LD_LIBRARY_PATH"
+
+# Run the application
+exec "$APP_DIR/usr/bin/housaky" "$@"

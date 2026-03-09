@@ -24,7 +24,7 @@
           </thead>
           <tbody>
             <tr
-              v-for="instance in store.instances"
+              v-for="instance in instances"
               :key="instance.id"
             >
               <td><code>{{ instance.id }}</code></td>
@@ -61,9 +61,31 @@
 </template>
 
 <script setup>
+import { ref, onMounted } from 'vue'
 import { useHubStore } from '../stores/hub'
 
 const store = useHubStore()
+const instances = ref([])
+const loading = ref(true)
+
+onMounted(async () => {
+  // Try to fetch real data
+  try {
+    const response = await fetch('./api/instances/list.json')
+    if (response.ok) {
+      const data = await response.json()
+      instances.value = data.instances
+      console.log('✅ Loaded', data.total_instances, 'instances from API')
+    } else {
+      // Fallback to store
+      instances.value = store.instances
+    }
+  } catch (e) {
+    console.log('⚠️ Using store data:', e.message)
+    instances.value = store.instances
+  }
+  loading.value = false
+})
 
 function formatDate(dateStr) {
   const date = new Date(dateStr)
