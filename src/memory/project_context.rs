@@ -690,6 +690,16 @@ impl AgentAwarenessEngine {
         }
     }
 
+    /// Get local context switcher
+    pub fn local(&self) -> &ContextSwitcher {
+        &self.context.local()
+    }
+
+    /// Get federation context
+    pub fn federation(&self) -> &FederationAwareContext {
+        &self.context
+    }
+
     /// Register an agent
     pub async fn register_agent(&self, agent_id: &str, agent_type: &str) {
         let state = AgentState {

@@ -11,6 +11,7 @@ pub mod project_context;
 pub mod response_cache;
 pub mod snapshot;
 pub mod traits;
+pub mod unified_agi_hub;
 pub mod vector;
 
 #[allow(unused_imports)]
@@ -31,6 +32,11 @@ pub use project_context::{
     ContextLevel, ProjectContext, ContextEntry, ConnectionRef, ConnectionType,
     ConnectionGraph, ContextSwitcher, FederationContext, FederationAwareContext,
     AgentAwarenessEngine, AgentState, AwarenessLevel, AwarenessContext,
+};
+pub use unified_agi_hub::{
+    UnifiedAGIMemoryHub, UnifiedAGIMemoryConfig, UnifiedMemorySource, UnifiedMemoryEntry,
+    CollectiveMindState, PeerInfo, SharedInsight, ConsensusTopic,
+    SelfImprovementRecord, ImprovementType, UnifiedMemoryStats,
 };
 
 use crate::config::MemoryConfig;
