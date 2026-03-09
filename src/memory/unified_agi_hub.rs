@@ -82,7 +82,7 @@ impl Default for UnifiedAGIMemoryConfig {
 // MEMORY SOURCE TYPES
 // ============================================================================
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum UnifiedMemorySource {
     Local,
     Intelligent,
