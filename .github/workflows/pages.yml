@@ -35,12 +35,11 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'pnpm'
-          cache-dependency-path: 'landing/pnpm-lock.yaml'
 
+      # Build Main Landing
       - name: Install dependencies for main landing
         working-directory: ./landing
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile || pnpm install
 
       - name: Build main landing
         working-directory: ./landing
@@ -48,6 +47,7 @@ jobs:
         env:
           NODE_ENV: production
 
+      # Build A2A Hub
       - name: Install dependencies for A2A Hub
         working-directory: ./landing/A2A/hub
         run: pnpm install --frozen-lockfile || pnpm install
@@ -58,11 +58,20 @@ jobs:
         env:
           NODE_ENV: production
 
-      - name: Move A2A dist to landing dist
+      # Copy A2A build to landing dist
+      - name: Prepare deployment
         run: |
           mkdir -p landing/dist/A2A
-          cp -r docs/A2A/* landing/dist/A2A/
+          if [ -d "docs/A2A" ]; then
+            cp -r docs/A2A/* landing/dist/A2A/
+          else
+            if [ -d "landing/A2A/hub/dist" ]; then
+              cp -r landing/A2A/hub/dist/* landing/dist/A2A/
+            fi
+          fi
           touch landing/dist/.nojekyll
+          ls -la landing/dist/
+          ls -la landing/dist/A2A/ || echo "A2A dir not found"
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3

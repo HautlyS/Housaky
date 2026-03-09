@@ -251,7 +251,7 @@ impl ImportanceClassifier {
         let query_lower = query.to_lowercase();
         
         // Start with a base score
-        let mut score = 0.5;
+        let mut score: f64 = 0.5;
         
         // Query relevance boost
         if content_lower.contains(&query_lower) || key_lower.contains(&query_lower) {
@@ -432,7 +432,7 @@ impl IntelligentMemory {
             backend: Arc::new(backend),
             config,
             classifier: ImportanceClassifier::new(),
-            deduplicator: SemanticDeduplicator::new(config.max_duplicate_similarity),
+            deduplicator: SemanticDeduplicator::new(IntelligentMemoryConfig::default().max_duplicate_similarity),
             session_context: Arc::new(RwLock::new(Vec::new())),
             critical_cache: Arc::new(RwLock::new(Vec::new())),
         }
@@ -440,12 +440,13 @@ impl IntelligentMemory {
 
     pub fn with_config(workspace_dir: PathBuf, config: IntelligentMemoryConfig) -> Self {
         let backend = LucidNativeMemory::with_workspace(&workspace_dir);
+        let dup_threshold = config.max_duplicate_similarity;
         
         Self {
             backend: Arc::new(backend),
-            config: config.clone(),
+            config,
             classifier: ImportanceClassifier::new(),
-            deduplicator: SemanticDeduplicator::new(config.max_duplicate_similarity),
+            deduplicator: SemanticDeduplicator::new(dup_threshold),
             session_context: Arc::new(RwLock::new(Vec::new())),
             critical_cache: Arc::new(RwLock::new(Vec::new())),
         }

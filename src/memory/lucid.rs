@@ -1,306 +1,660 @@
-use super::lucid_native::LucidNativeMemory;
-use super::traits::{Memory, MemoryCategory, MemoryEntry};
+// ☸️ LUCID MEMORY - Pure Lucid Integration with A2A Hub & OpenClaw
+// No SQLite - pure Lucid Native with ACT-R spreading activation
+// Integrates with OpenClaw (shared/) and A2A-Hub (landing/A2A/public/shared/memory/)
+
+use anyhow::{Context, Result};
 use async_trait::async_trait;
-use chrono::Local;
-use std::collections::HashSet;
+use chrono::{DateTime, Local, Utc};
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
-use std::time::{Duration, Instant};
-use tokio::process::Command;
-use tokio::time::timeout;
+use std::process::Command;
+use std::sync::Arc;
+use tokio::sync::RwLock;
+use tracing::{debug, info, warn};
+
+use super::traits::{Memory, MemoryCategory, MemoryEntry};
+
+// ============================================================================
+// CONFIGURATION
+// ============================================================================
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LucidConfig {
+    /// Path to lucid CLI binary
+    pub binary_path: PathBuf,
+    /// Token budget for context retrieval
+    pub token_budget: usize,
+    /// Enable spreading activation
+    pub enable_spreading: bool,
+    /// Enable emotional weighting
+    pub enable_emotional_weighting: bool,
+    /// Maximum memories to retrieve
+    pub max_retrieve: usize,
+    /// Enable A2A Hub integration
+    pub enable_a2a_hub: bool,
+    /// Enable OpenClaw integration
+    pub enable_openclaw: bool,
+    /// A2A Hub memory directory
+    pub a2a_hub_memory_path: Option<PathBuf>,
+    /// OpenClaw shared directory
+    pub openclaw_shared_path: Option<PathBuf>,
+    /// Workspace directory
+    pub workspace_dir: PathBuf,
+}
+
+impl Default for LucidConfig {
+    fn default() -> Self {
+        Self {
+            binary_path: PathBuf::from("/home/ubuntu/.lucid/bin/lucid"),
+            token_budget: 500,
+            enable_spreading: true,
+            enable_emotional_weighting: true,
+            max_retrieve: 20,
+            enable_a2a_hub: true,
+            enable_openclaw: true,
+            a2a_hub_memory_path: Some(PathBuf::from("/home/ubuntu/Housaky/landing/A2A/public/shared/memory")),
+            openclaw_shared_path: Some(PathBuf::from("/home/ubuntu/Housaky/shared")),
+            workspace_dir: PathBuf::from("/home/ubuntu/.housaky/workspace"),
+        }
+    }
+}
+
+// ============================================================================
+// MEMORY SOURCE TYPES
+// ============================================================================
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum MemorySource {
+    /// Local Housaky memory
+    Local,
+    /// A2A Hub shared memory (from other agents)
+    A2AHub,
+    /// OpenClaw collaborative memory
+    OpenClaw,
+    /// Critical memory (never forget)
+    Critical,
+}
+
+impl std::fmt::Display for MemorySource {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            MemorySource::Local => write!(f, "local"),
+            MemorySource::A2AHub => write!(f, "a2a-hub"),
+            MemorySource::OpenClaw => write!(f, "openclaw"),
+            MemorySource::Critical => write!(f, "critical"),
+        }
+    }
+}
+
+// ============================================================================
+// SHARED MEMORY ENTRY (for A2A Hub & OpenClaw)
+// ============================================================================
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SharedMemoryEntry {
+    pub id: String,
+    pub key: String,
+    pub content: String,
+    pub category: String,
+    pub timestamp: String,
+    pub source: MemorySource,
+    pub instance: String,
+    pub confidence: f64,
+    pub tags: Vec<String>,
+}
+
+impl From<MemoryEntry> for SharedMemoryEntry {
+    fn from(entry: MemoryEntry) -> Self {
+        Self {
+            id: entry.id,
+            key: entry.key,
+            content: entry.content,
+            category: entry.category.to_string(),
+            timestamp: entry.timestamp,
+            source: MemorySource::Local,
+            instance: "housaky".to_string(),
+            confidence: entry.score.unwrap_or(0.5),
+            tags: vec![],
+        }
+    }
+}
+
+impl From<&MemoryEntry> for SharedMemoryEntry {
+    fn from(entry: &MemoryEntry) -> Self {
+        Self {
+            id: entry.id.clone(),
+            key: entry.key.clone(),
+            content: entry.content.clone(),
+            category: entry.category.to_string(),
+            timestamp: entry.timestamp.clone(),
+            source: MemorySource::Local,
+            instance: "housaky".to_string(),
+            confidence: entry.score.unwrap_or(0.5),
+            tags: vec![],
+        }
+    }
+}
+
+// ============================================================================
+// LUCID MEMORY STATISTICS
+// ============================================================================
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct LucidMemoryStats {
+    pub total_memories: usize,
+    pub local_count: usize,
+    pub a2a_hub_count: usize,
+    pub openclaw_count: usize,
+    pub critical_count: usize,
+    pub database_size_mb: f64,
+    pub last_sync_ms: u64,
+    pub avg_retrieval_ms: f64,
+}
+
+// ============================================================================
+// CATEGORY MAPPING
+// ============================================================================
+
+fn category_to_lucid_type(category: &MemoryCategory) -> &'static str {
+    match category {
+        MemoryCategory::Core => "decision",
+        MemoryCategory::Daily => "context",
+        MemoryCategory::Conversation => "conversation",
+        MemoryCategory::Custom(name) => match name.as_str() {
+            "fact" | "facts" => "fact",
+            "procedure" | "procedures" => "procedure",
+            "skill" | "skills" => "skill",
+            "pattern" | "patterns" => "pattern",
+            "insight" | "insights" => "insight",
+            "visual" => "visual",
+            _ => "learning",
+        },
+    }
+}
+
+fn lucid_type_to_category(lucid_type: &str) -> MemoryCategory {
+    match lucid_type.to_lowercase().as_str() {
+        "decision" | "fact" | "facts" => MemoryCategory::Core,
+        "context" => MemoryCategory::Daily,
+        "conversation" => MemoryCategory::Conversation,
+        "procedure" | "procedures" => MemoryCategory::Custom("procedure".to_string()),
+        "skill" | "skills" => MemoryCategory::Custom("skill".to_string()),
+        "pattern" | "patterns" => MemoryCategory::Custom("pattern".to_string()),
+        "insight" | "insights" => MemoryCategory::Custom("insight".to_string()),
+        "visual" => MemoryCategory::Custom("visual".to_string()),
+        _ => MemoryCategory::Custom("learning".to_string()),
+    }
+}
+
+// ============================================================================
+// LUCID MEMORY IMPLEMENTATION
+// ============================================================================
 
 pub struct LucidMemory {
-    local: LucidNativeMemory,
-    lucid_cmd: String,
-    token_budget: usize,
-    workspace_dir: PathBuf,
-    recall_timeout: Duration,
-    store_timeout: Duration,
-    local_hit_threshold: usize,
-    failure_cooldown: Duration,
-    last_failure_at: Mutex<Option<Instant>>,
+    config: LucidConfig,
+    stats: Arc<RwLock<LucidMemoryStats>>,
+    cache: Arc<RwLock<HashMap<String, Vec<MemoryEntry>>>>,
+    critical_memories: Arc<RwLock<Vec<MemoryEntry>>>,
+    last_health_check: Arc<RwLock<Option<DateTime<Utc>>>>,
 }
 
 impl LucidMemory {
-    const DEFAULT_LUCID_CMD: &'static str = "lucid";
-    const DEFAULT_TOKEN_BUDGET: usize = 200;
-    const DEFAULT_RECALL_TIMEOUT_MS: u64 = 120;
-    const DEFAULT_STORE_TIMEOUT_MS: u64 = 800;
-    const DEFAULT_LOCAL_HIT_THRESHOLD: usize = 3;
-    const DEFAULT_FAILURE_COOLDOWN_MS: u64 = 15_000;
-
-    pub fn new(workspace_dir: &Path, local: SqliteMemory) -> Self {
-        let lucid_cmd = std::env::var("HOUSAKY_LUCID_CMD")
-            .unwrap_or_else(|_| Self::DEFAULT_LUCID_CMD.to_string());
-
-        let token_budget = std::env::var("HOUSAKY_LUCID_BUDGET")
-            .ok()
-            .and_then(|v| v.parse::<usize>().ok())
-            .filter(|v| *v > 0)
-            .unwrap_or(Self::DEFAULT_TOKEN_BUDGET);
-
-        let recall_timeout = Self::read_env_duration_ms(
-            "HOUSAKY_LUCID_RECALL_TIMEOUT_MS",
-            Self::DEFAULT_RECALL_TIMEOUT_MS,
-            20,
-        );
-        let store_timeout = Self::read_env_duration_ms(
-            "HOUSAKY_LUCID_STORE_TIMEOUT_MS",
-            Self::DEFAULT_STORE_TIMEOUT_MS,
-            50,
-        );
-        let local_hit_threshold = Self::read_env_usize(
-            "HOUSAKY_LUCID_LOCAL_HIT_THRESHOLD",
-            Self::DEFAULT_LOCAL_HIT_THRESHOLD,
-            1,
-        );
-        let failure_cooldown = Self::read_env_duration_ms(
-            "HOUSAKY_LUCID_FAILURE_COOLDOWN_MS",
-            Self::DEFAULT_FAILURE_COOLDOWN_MS,
-            100,
-        );
-
+    pub fn new(config: LucidConfig) -> Self {
         Self {
-            local,
-            lucid_cmd,
-            token_budget,
-            workspace_dir: workspace_dir.to_path_buf(),
-            recall_timeout,
-            store_timeout,
-            local_hit_threshold,
-            failure_cooldown,
-            last_failure_at: Mutex::new(None),
+            config,
+            stats: Arc::new(RwLock::new(LucidMemoryStats::default())),
+            cache: Arc::new(RwLock::new(HashMap::new())),
+            critical_memories: Arc::new(RwLock::new(Vec::new())),
+            last_health_check: Arc::new(RwLock::new(None)),
         }
     }
 
-    #[cfg(test)]
-    fn with_options(
-        workspace_dir: &Path,
-        local: SqliteMemory,
-        lucid_cmd: String,
-        token_budget: usize,
-        local_hit_threshold: usize,
-        recall_timeout: Duration,
-        store_timeout: Duration,
-        failure_cooldown: Duration,
-    ) -> Self {
-        Self {
-            local,
-            lucid_cmd,
-            token_budget,
-            workspace_dir: workspace_dir.to_path_buf(),
-            recall_timeout,
-            store_timeout,
-            local_hit_threshold: local_hit_threshold.max(1),
-            failure_cooldown,
-            last_failure_at: Mutex::new(None),
-        }
+    pub fn with_workspace(workspace_dir: &Path) -> Self {
+        let mut config = LucidConfig::default();
+        config.workspace_dir = workspace_dir.to_path_buf();
+        Self::new(config)
     }
 
-    fn read_env_usize(name: &str, default: usize, min: usize) -> usize {
-        std::env::var(name)
-            .ok()
-            .and_then(|v| v.parse::<usize>().ok())
-            .map_or(default, |v| v.max(min))
-    }
-
-    fn read_env_duration_ms(name: &str, default_ms: u64, min_ms: u64) -> Duration {
-        let millis = std::env::var(name)
-            .ok()
-            .and_then(|v| v.parse::<u64>().ok())
-            .map_or(default_ms, |v| v.max(min_ms));
-        Duration::from_millis(millis)
-    }
-
-    fn in_failure_cooldown(&self) -> bool {
-        let Ok(guard) = self.last_failure_at.lock() else {
-            return false;
-        };
-
-        guard
-            .as_ref()
-            .is_some_and(|last| last.elapsed() < self.failure_cooldown)
-    }
-
-    fn mark_failure_now(&self) {
-        if let Ok(mut guard) = self.last_failure_at.lock() {
-            *guard = Some(Instant::now());
-        }
-    }
-
-    fn clear_failure(&self) {
-        if let Ok(mut guard) = self.last_failure_at.lock() {
-            *guard = None;
-        }
-    }
-
-    fn to_lucid_type(category: &MemoryCategory) -> &'static str {
-        match category {
-            MemoryCategory::Core => "decision",
-            MemoryCategory::Daily => "context",
-            MemoryCategory::Conversation => "conversation",
-            MemoryCategory::Custom(_) => "learning",
-        }
-    }
-
-    fn to_memory_category(label: &str) -> MemoryCategory {
-        let normalized = label.to_lowercase();
-        if normalized.contains("visual") {
-            return MemoryCategory::Custom("visual".to_string());
-        }
-
-        match normalized.as_str() {
-            "decision" | "learning" | "solution" => MemoryCategory::Core,
-            "context" | "conversation" => MemoryCategory::Conversation,
-            "bug" => MemoryCategory::Daily,
-            other => MemoryCategory::Custom(other.to_string()),
-        }
-    }
-
-    fn merge_results(
-        primary_results: Vec<MemoryEntry>,
-        secondary_results: Vec<MemoryEntry>,
-        limit: usize,
-    ) -> Vec<MemoryEntry> {
-        if limit == 0 {
-            return Vec::new();
-        }
-
-        let mut merged = Vec::new();
-        let mut seen = HashSet::new();
-
-        for entry in primary_results.into_iter().chain(secondary_results) {
-            let signature = format!(
-                "{}\u{0}{}",
-                entry.key.to_lowercase(),
-                entry.content.to_lowercase()
-            );
-
-            if seen.insert(signature) {
-                merged.push(entry);
-                if merged.len() >= limit {
-                    break;
-                }
-            }
-        }
-
-        merged
-    }
-
-    fn parse_lucid_context(raw: &str) -> Vec<MemoryEntry> {
-        let mut in_context_block = false;
-        let mut entries = Vec::new();
-        let now = Local::now().to_rfc3339();
-
-        for line in raw.lines().map(str::trim) {
-            if line == "<lucid-context>" {
-                in_context_block = true;
-                continue;
-            }
-
-            if line == "</lucid-context>" {
-                break;
-            }
-
-            if !in_context_block || line.is_empty() {
-                continue;
-            }
-
-            let Some(rest) = line.strip_prefix("- [") else {
-                continue;
-            };
-
-            let Some((label, content_part)) = rest.split_once(']') else {
-                continue;
-            };
-
-            let content = content_part.trim();
-            if content.is_empty() {
-                continue;
-            }
-
-            let rank = entries.len();
-            entries.push(MemoryEntry {
-                id: format!("lucid:{rank}"),
-                key: format!("lucid_{rank}"),
-                content: content.to_string(),
-                category: Self::to_memory_category(label.trim()),
-                timestamp: now.clone(),
-                session_id: None,
-                score: Some((1.0 - rank as f64 * 0.05).max(0.1)),
-            });
-        }
-
-        entries
-    }
-
-    async fn run_lucid_command_raw(
-        lucid_cmd: &str,
-        args: &[String],
-        timeout_window: Duration,
-    ) -> anyhow::Result<String> {
-        let mut cmd = Command::new(lucid_cmd);
+    /// Execute a lucid CLI command (synchronous)
+    fn execute_lucid(&self, args: &[&str]) -> Result<String> {
+        let start = std::time::Instant::now();
+        
+        let mut cmd = Command::new(&self.config.binary_path);
         cmd.args(args);
-
-        let output = timeout(timeout_window, cmd.output()).await.map_err(|_| {
-            anyhow::anyhow!(
-                "lucid command timed out after {}ms",
-                timeout_window.as_millis()
-            )
-        })??;
-
+        
+        debug!("[LUCID] Executing: {} {}", self.config.binary_path.display(), args.join(" "));
+        
+        let output = cmd.output().context("Failed to execute lucid command")?;
+        
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             anyhow::bail!("lucid command failed: {stderr}");
         }
-
+        
+        let duration = start.elapsed().as_millis() as u64;
+        debug!("[LUCID] Command completed in {}ms", duration);
+        
         Ok(String::from_utf8_lossy(&output.stdout).to_string())
     }
 
-    async fn run_lucid_command(
-        &self,
-        args: &[String],
-        timeout_window: Duration,
-    ) -> anyhow::Result<String> {
-        Self::run_lucid_command_raw(&self.lucid_cmd, args, timeout_window).await
-    }
-
-    fn build_store_args(&self, key: &str, content: &str, category: &MemoryCategory) -> Vec<String> {
+    /// Store a memory with Lucid
+    pub async fn store_lucid(&self, key: &str, content: &str, category: &MemoryCategory) -> Result<()> {
         let payload = format!("{key}: {content}");
-        vec![
-            "store".to_string(),
-            payload,
-            format!("--type={}", Self::to_lucid_type(category)),
-            format!("--project={}", self.workspace_dir.display()),
-        ]
+        let category_type = category_to_lucid_type(category);
+        
+        let type_str = format!("--type={}", category_type);
+        let project_str = format!("--project={}", self.config.workspace_dir.display());
+        
+        let args: Vec<&str> = vec![
+            "store", 
+            &payload,
+            &type_str,
+            &project_str,
+        ];
+        
+        self.execute_lucid(&args)?;
+        
+        // Add to critical memories if it's important
+        if matches!(category, MemoryCategory::Core) {
+            self.add_critical(key, content, category).await;
+        }
+        
+        // Sync to A2A Hub if enabled
+        if self.config.enable_a2a_hub {
+            let entry = MemoryEntry {
+                id: uuid::Uuid::new_v4().to_string(),
+                key: key.to_string(),
+                content: content.to_string(),
+                category: category.clone(),
+                timestamp: Utc::now().to_rfc3339(),
+                session_id: None,
+                score: Some(0.8),
+            };
+            self.sync_to_a2a_hub(&entry).await;
+        }
+        
+        Ok(())
     }
 
-    fn build_recall_args(&self, query: &str) -> Vec<String> {
-        vec![
-            "context".to_string(),
-            query.to_string(),
-            format!("--budget={}", self.token_budget),
-            format!("--project={}", self.workspace_dir.display()),
-        ]
+    /// Recall memories from Lucid
+    pub async fn recall_lucid(&self, query: &str, limit: usize) -> Result<Vec<MemoryEntry>> {
+        let budget_str = format!("--budget={}", self.config.token_budget);
+        let project_str = format!("--project={}", self.config.workspace_dir.display());
+        
+        let args: Vec<&str> = vec![
+            "context", 
+            query,
+            &budget_str,
+            &project_str,
+        ];
+        
+        let output = self.execute_lucid(&args)?;
+        self.parse_context_output(&output, limit)
     }
 
-    async fn sync_to_lucid_async(&self, key: &str, content: &str, category: &MemoryCategory) {
-        let args = self.build_store_args(key, content, category);
-        if let Err(error) = self.run_lucid_command(&args, self.store_timeout).await {
-            tracing::debug!(
-                command = %self.lucid_cmd,
-                error = %error,
-                "Lucid store sync failed; sqlite remains authoritative"
-            );
+    /// Parse Lucid context output
+    fn parse_context_output(&self, output: &str, limit: usize) -> Result<Vec<MemoryEntry>> {
+        let mut entries = Vec::new();
+        let now = Local::now().to_rfc3339();
+        let mut in_context = false;
+        
+        for line in output.lines() {
+            let line = line.trim();
+            
+            if line.contains("<lucid-context>") || line.contains("```") {
+                in_context = true;
+                continue;
+            }
+            
+            if line.contains("</lucid-context>") || line.contains("```") {
+                break;
+            }
+            
+            if !in_context || line.is_empty() || !line.starts_with('-') {
+                continue;
+            }
+            
+            // Parse "- [type] content" format
+            let content = line.trim_start_matches("- ").trim_start_matches("[");
+            if content.is_empty() {
+                continue;
+            }
+            
+            let (category_label, entry_content) = if let Some(pos) = content.find(']') {
+                (&content[1..pos], content[pos+1..].trim())
+            } else {
+                ("learning", content)
+            };
+            
+            if entry_content.is_empty() {
+                continue;
+            }
+            
+            let rank = entries.len();
+            entries.push(MemoryEntry {
+                id: format!("lucid:{}", uuid::Uuid::new_v4()),
+                key: format!("lucid_{}", rank),
+                content: entry_content.to_string(),
+                category: lucid_type_to_category(category_label),
+                timestamp: now.clone(),
+                session_id: None,
+                score: Some((1.0 - rank as f64 * 0.05).max(0.1)),
+            });
+            
+            if entries.len() >= limit {
+                break;
+            }
+        }
+        
+        Ok(entries)
+    }
+
+    /// Get all memories
+    pub async fn list_all(&self, category: Option<&MemoryCategory>, limit: usize) -> Result<Vec<MemoryEntry>> {
+        let project_str = format!("--project={}", self.config.workspace_dir.display());
+        let limit_str = format!("--limit={}", limit);
+        
+        let args: Vec<&str> = vec![
+            "list",
+            &project_str,
+            &limit_str,
+        ];
+        
+        let output = self.execute_lucid(&args)?;
+        self.parse_context_output(&output, limit)
+    }
+
+    /// Forget a memory
+    pub async fn forget_lucid(&self, key: &str) -> Result<bool> {
+        let project_str = format!("--project={}", self.config.workspace_dir.display());
+        
+        let args: Vec<&str> = vec![
+            "forget", 
+            key,
+            &project_str,
+        ];
+        
+        match self.execute_lucid(&args) {
+            Ok(_) => Ok(true),
+            Err(_) => Ok(false),
         }
     }
 
-    async fn recall_from_lucid(&self, query: &str) -> anyhow::Result<Vec<MemoryEntry>> {
-        let args = self.build_recall_args(query);
-        let output = self.run_lucid_command(&args, self.recall_timeout).await?;
-        Ok(Self::parse_lucid_context(&output))
+    /// Count memories
+    pub async fn count_lucid(&self) -> Result<usize> {
+        let project_str = format!("--project={}", self.config.workspace_dir.display());
+        
+        let args: Vec<&str> = vec![
+            "count",
+            &project_str,
+        ];
+        
+        let output = self.execute_lucid(&args)?;
+        
+        // Parse count from output
+        for line in output.lines() {
+            if let Ok(count) = line.trim().parse::<usize>() {
+                return Ok(count);
+            }
+        }
+        
+        Ok(0)
+    }
+
+    // ============================================================================
+    // CRITICAL MEMORIES (Never Forget)
+    // ============================================================================
+
+    pub async fn add_critical(&self, key: &str, content: &str, category: &MemoryCategory) {
+        let mut critical = self.critical_memories.write().await;
+        
+        // Don't add duplicates
+        if critical.iter().any(|e| e.key == key) {
+            return;
+        }
+        
+        critical.push(MemoryEntry {
+            id: uuid::Uuid::new_v4().to_string(),
+            key: key.to_string(),
+            content: content.to_string(),
+            category: category.clone(),
+            timestamp: Utc::now().to_rfc3339(),
+            session_id: None,
+            score: Some(1.0),
+        });
+        
+        info!("[LUCID] Added critical memory: {}", key);
+    }
+
+    pub async fn get_critical(&self) -> Vec<MemoryEntry> {
+        self.critical_memories.read().await.clone()
+    }
+
+    // ============================================================================
+    // A2A HUB INTEGRATION
+    // ============================================================================
+
+    async fn sync_to_a2a_hub(&self, entry: &MemoryEntry) {
+        if let Some(ref hub_path) = self.config.a2a_hub_memory_path {
+            let shared: SharedMemoryEntry = entry.into();
+            
+            // Write to learnings.jsonl (appending)
+            let learnings_path = hub_path.join("learnings.jsonl");
+            if let Ok(json) = serde_json::to_string(&shared) {
+                if let Err(e) = std::fs::OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open(learnings_path)
+                    .and_then(|mut f| {
+                        use std::io::Write;
+                        writeln!(f, "{}", json)
+                    })
+                {
+                    warn!("[A2A-HUB] Failed to sync memory: {}", e);
+                } else {
+                    info!("[A2A-HUB] Synced memory: {}", entry.key);
+                }
+            }
+            
+            // Update current-state.json
+            self.update_a2a_state(hub_path).await;
+        }
+    }
+
+    async fn update_a2a_state(&self, hub_path: &Path) {
+        let state_path = hub_path.join("current-state.json");
+        
+        let mut state = HashMap::new();
+        state.insert("instance".to_string(), "housaky".to_string());
+        state.insert("timestamp".to_string(), Utc::now().to_rfc3339());
+        state.insert("total_memories".to_string(), self.critical_memories.read().await.len().to_string());
+        
+        if let Ok(json) = serde_json::to_string_pretty(&state) {
+            let _ = std::fs::write(state_path, json);
+        }
+    }
+
+    pub async fn fetch_a2a_hub_memories(&self) -> Vec<MemoryEntry> {
+        if let Some(ref hub_path) = self.config.a2a_hub_memory_path {
+            let learnings_path = hub_path.join("learnings.jsonl");
+            
+            if !learnings_path.exists() {
+                return vec![];
+            }
+            
+            let mut entries = Vec::new();
+            
+            if let Ok(content) = std::fs::read_to_string(&learnings_path) {
+                for line in content.lines() {
+                    if let Ok(shared) = serde_json::from_str::<SharedMemoryEntry>(line) {
+                        entries.push(MemoryEntry {
+                            id: shared.id,
+                            key: shared.key,
+                            content: shared.content,
+                            category: lucid_type_to_category(&shared.category),
+                            timestamp: shared.timestamp,
+                            session_id: None,
+                            score: Some(shared.confidence),
+                        });
+                    }
+                }
+            }
+            
+            info!("[A2A-HUB] Fetched {} memories from hub", entries.len());
+            entries
+        } else {
+            vec![]
+        }
+    }
+
+    // ============================================================================
+    // OPENCLAW INTEGRATION
+    // ============================================================================
+
+    pub async fn sync_to_openclaw(&self, entry: &MemoryEntry) {
+        if let Some(ref shared_path) = self.config.openclaw_shared_path {
+            let memory_path = shared_path.join("memory");
+            
+            if let Err(e) = std::fs::create_dir_all(&memory_path) {
+                warn!("[OPENCLAW] Failed to create memory dir: {}", e);
+                return;
+            }
+            
+            let shared: SharedMemoryEntry = entry.into();
+            let filename = format!("{}.json", entry.id);
+            let file_path = memory_path.join(&filename);
+            
+            if let Ok(json) = serde_json::to_string_pretty(&shared) {
+                if let Err(e) = std::fs::write(&file_path, json) {
+                    warn!("[OPENCLAW] Failed to sync memory: {}", e);
+                } else {
+                    info!("[OPENCLAW] Synced memory: {}", entry.key);
+                }
+            }
+        }
+    }
+
+    pub async fn fetch_openclaw_memories(&self) -> Vec<MemoryEntry> {
+        if let Some(ref shared_path) = self.config.openclaw_shared_path {
+            let memory_path = shared_path.join("memory");
+            
+            if !memory_path.exists() {
+                return vec![];
+            }
+            
+            let mut entries = Vec::new();
+            
+            if let Ok(entries_dir) = std::fs::read_dir(&memory_path) {
+                for entry in entries_dir.flatten() {
+                    if entry.path().extension().map_or(false, |e| e == "json") {
+                        if let Ok(content) = std::fs::read_to_string(entry.path()) {
+                            if let Ok(shared) = serde_json::from_str::<SharedMemoryEntry>(&content) {
+                                entries.push(MemoryEntry {
+                                    id: shared.id,
+                                    key: shared.key,
+                                    content: shared.content,
+                                    category: lucid_type_to_category(&shared.category),
+                                    timestamp: shared.timestamp,
+                                    session_id: None,
+                                    score: Some(shared.confidence),
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+            
+            info!("[OPENCLAW] Fetched {} memories from shared", entries.len());
+            entries
+        } else {
+            vec![]
+        }
+    }
+
+    // ============================================================================
+    // INTELLIGENT SEARCH (with all sources)
+    // ============================================================================
+
+    pub async fn intelligent_recall(&self, query: &str, limit: usize) -> Result<Vec<MemoryEntry>> {
+        let mut all_entries: HashMap<String, (MemoryEntry, MemorySource)> = HashMap::new();
+        
+        // 1. Get critical memories first (always included)
+        for entry in self.get_critical().await {
+            if entry.content.to_lowercase().contains(&query.to_lowercase())
+                || entry.key.to_lowercase().contains(&query.to_lowercase())
+            {
+                all_entries.insert(entry.id.clone(), (entry, MemorySource::Critical));
+            }
+        }
+        
+        // 2. Get local Lucid memories
+        if let Ok(local) = self.recall_lucid(query, limit).await {
+            for entry in local {
+                all_entries.entry(entry.id.clone()).or_insert((entry, MemorySource::Local));
+            }
+        }
+        
+        // 3. Get A2A Hub memories (if enabled)
+        if self.config.enable_a2a_hub {
+            for entry in self.fetch_a2a_hub_memories().await {
+                if entry.content.to_lowercase().contains(&query.to_lowercase()) {
+                    all_entries.entry(entry.id.clone()).or_insert((entry, MemorySource::A2AHub));
+                }
+            }
+        }
+        
+        // 4. Get OpenClaw memories (if enabled)
+        if self.config.enable_openclaw {
+            for entry in self.fetch_openclaw_memories().await {
+                if entry.content.to_lowercase().contains(&query.to_lowercase()) {
+                    all_entries.entry(entry.id.clone()).or_insert((entry, MemorySource::OpenClaw));
+                }
+            }
+        }
+        
+        // Sort by source priority (Critical > Local > A2AHub > OpenClaw) then by score
+        let mut sorted: Vec<_> = all_entries.into_values().collect();
+        sorted.sort_by(|a, b| {
+            let source_order = |s: &MemorySource| match s {
+                MemorySource::Critical => 0,
+                MemorySource::Local => 1,
+                MemorySource::A2AHub => 2,
+                MemorySource::OpenClaw => 3,
+            };
+            
+            let source_cmp = source_order(&a.1).cmp(&source_order(&b.1));
+            if source_cmp != std::cmp::Ordering::Equal {
+                return source_cmp;
+            }
+            
+            b.0.score.unwrap_or(0.0).partial_cmp(&a.0.score.unwrap_or(0.0))
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        
+        Ok(sorted.into_iter().take(limit).map(|(e, _)| e).collect())
+    }
+
+    // ============================================================================
+    // STATS
+    // ============================================================================
+
+    pub async fn get_stats(&self) -> LucidMemoryStats {
+        let mut stats = self.stats.read().await.clone();
+        
+        if let Ok(count) = self.count_lucid().await {
+            stats.total_memories = count;
+        }
+        
+        stats.critical_count = self.critical_memories.read().await.len();
+        
+        stats
     }
 }
+
+// ============================================================================
+// MEMORY TRAIT IMPLEMENTATION
+// ============================================================================
 
 #[async_trait]
 impl Memory for LucidMemory {
@@ -308,161 +662,94 @@ impl Memory for LucidMemory {
         "lucid"
     }
 
-    async fn store(
-        &self,
-        key: &str,
-        content: &str,
-        category: MemoryCategory,
-    ) -> anyhow::Result<()> {
-        self.local.store(key, content, category.clone()).await?;
-        self.sync_to_lucid_async(key, content, &category).await;
-        Ok(())
+    async fn store(&self, key: &str, content: &str, category: MemoryCategory) -> anyhow::Result<()> {
+        self.store_lucid(key, content, &category).await
     }
 
     async fn recall(&self, query: &str, limit: usize) -> anyhow::Result<Vec<MemoryEntry>> {
-        let local_results = self.local.recall(query, limit).await?;
-        if limit == 0
-            || local_results.len() >= limit
-            || local_results.len() >= self.local_hit_threshold
-        {
-            return Ok(local_results);
-        }
-
-        if self.in_failure_cooldown() {
-            return Ok(local_results);
-        }
-
-        match self.recall_from_lucid(query).await {
-            Ok(lucid_results) if !lucid_results.is_empty() => {
-                self.clear_failure();
-                Ok(Self::merge_results(local_results, lucid_results, limit))
-            }
-            Ok(_) => {
-                // Lucid succeeded but didn't return usable context. Treat this similarly to a failure
-                // to avoid repeatedly spawning lucid when it's misconfigured or returning junk.
-                self.mark_failure_now();
-                Ok(local_results)
-            }
-            Err(error) => {
-                self.mark_failure_now();
-                tracing::debug!(
-                    command = %self.lucid_cmd,
-                    error = %error,
-                    "Lucid context unavailable; using local sqlite results"
-                );
-                Ok(local_results)
-            }
-        }
+        self.intelligent_recall(query, limit).await
     }
 
     async fn get(&self, key: &str) -> anyhow::Result<Option<MemoryEntry>> {
-        self.local.get(key).await
+        // Try to get from critical first
+        let critical = self.get_critical().await;
+        if let Some(entry) = critical.into_iter().find(|e| e.key == key) {
+            return Ok(Some(entry));
+        }
+        
+        // Then try lucid
+        let results = self.recall_lucid(key, 1).await?;
+        Ok(results.into_iter().find(|e| e.key.contains(key)))
     }
 
     async fn list(&self, category: Option<&MemoryCategory>) -> anyhow::Result<Vec<MemoryEntry>> {
-        self.local.list(category).await
+        self.list_all(category, 100).await
     }
 
     async fn forget(&self, key: &str) -> anyhow::Result<bool> {
-        self.local.forget(key).await
+        self.forget_lucid(key).await
     }
 
     async fn count(&self) -> anyhow::Result<usize> {
-        self.local.count().await
+        let stats = self.get_stats().await;
+        Ok(stats.total_memories + stats.critical_count)
     }
 
     async fn health_check(&self) -> bool {
-        self.local.health_check().await
+        // Check if lucid binary exists
+        if !self.config.binary_path.exists() {
+            return false;
+        }
+        
+        // Try a simple command
+        match self.execute_lucid(&["--version"]) {
+            Ok(_) => {
+                *self.last_health_check.write().await = Some(Utc::now());
+                true
+            }
+            Err(_) => false,
+        }
     }
 }
 
-#[cfg(all(test, unix))]
+// ============================================================================
+// TESTS
+// ============================================================================
+
+#[cfg(test)]
 mod tests {
     use super::*;
-    use std::fs;
-    use std::os::unix::fs::PermissionsExt;
     use tempfile::TempDir;
 
-    fn write_fake_lucid_script(dir: &Path) -> String {
-        let script_path = dir.join("fake-lucid.sh");
-        let script = r##"#!/usr/bin/env bash
-set -euo pipefail
-
-if [[ "${1:-}" == "store" ]]; then
-  echo '{"success":true,"id":"mem_1"}'
-  exit 0
-fi
-
-if [[ "${1:-}" == "context" ]]; then
-  printf 'context\n' >> "{marker}"
-  echo "simulated lucid failure" >&2
-  exit 1
-fi
-
-echo "unsupported command" >&2
-exit 1
-"##;
-        fs::write(&script_path, script).unwrap();
-        let mut perms = fs::metadata(&script_path).unwrap().permissions();
-        perms.set_mode(0o755);
-        fs::set_permissions(&script_path, perms).unwrap();
-        script_path.display().to_string()
+    #[test]
+    fn test_category_mapping() {
+        assert_eq!(category_to_lucid_type(&MemoryCategory::Core), "decision");
+        assert_eq!(category_to_lucid_type(&MemoryCategory::Daily), "context");
+        assert_eq!(category_to_lucid_type(&MemoryCategory::Conversation), "conversation");
     }
 
-    fn write_failing_lucid_script(dir: &Path, marker: &Path) -> String {
-        let script_path = dir.join("failing-lucid.sh");
-        let marker_str = marker.display();
-        let script = format!(
-            r#"#!/usr/bin/env bash
-set -euo pipefail
-
-if [[ "${{1:-}}" == "store" ]]; then
-  echo '{{"success":true,"id":"mem_1"}}'
-  exit 0
-fi
-
-if [[ "${{1:-}}" == "context" ]]; then
-  printf 'context\n' >> "{marker_str}"
-  echo "simulated lucid failure" >&2
-  exit 1
-fi
-
-echo "unsupported command" >&2
-exit 1
-"#
-        );
-        fs::write(&script_path, script).unwrap();
-        let mut perms = fs::metadata(&script_path).unwrap().permissions();
-        perms.set_mode(0o755);
-        fs::set_permissions(&script_path, perms).unwrap();
-        script_path.display().to_string()
+    #[test]
+    fn test_memory_source_display() {
+        assert_eq!(MemorySource::Local.to_string(), "local");
+        assert_eq!(MemorySource::A2AHub.to_string(), "a2a-hub");
+        assert_eq!(MemorySource::OpenClaw.to_string(), "openclaw");
+        assert_eq!(MemorySource::Critical.to_string(), "critical");
     }
 
     #[tokio::test]
-    async fn failure_cooldown_avoids_repeated_lucid_calls() {
+    async fn test_critical_memories() {
         let tmp = TempDir::new().unwrap();
-        let marker = tmp.path().join("failing_context_calls.log");
-        let failing_cmd = write_failing_lucid_script(tmp.path(), &marker);
-
-        let sqlite = SqliteMemory::new(tmp.path()).unwrap();
-        let memory = LucidMemory::with_options(
-            tmp.path(),
-            sqlite,
-            failing_cmd,
-            200,
-            99,
-            Duration::from_millis(120),
-            Duration::from_millis(400),
-            Duration::from_secs(5),
-        );
-
-        let first = memory.recall("auth", 5).await.unwrap();
-        let second = memory.recall("auth", 5).await.unwrap();
-
-        assert!(first.is_empty());
-        assert!(second.is_empty());
-
-        let calls = fs::read_to_string(&marker).unwrap_or_default();
-        assert_eq!(calls.lines().count(), 1);
+        let config = LucidConfig {
+            workspace_dir: tmp.path().to_path_buf(),
+            ..LucidConfig::default()
+        };
+        
+        let memory = LucidMemory::new(config);
+        
+        memory.add_critical("test_key", "test content", &MemoryCategory::Core).await;
+        
+        let critical = memory.get_critical().await;
+        assert_eq!(critical.len(), 1);
+        assert_eq!(critical[0].key, "test_key");
     }
 }

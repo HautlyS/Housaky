@@ -7,6 +7,7 @@ pub mod lucid;
 pub mod lucid_native;
 pub mod markdown;
 pub mod none;
+pub mod project_context;
 pub mod response_cache;
 pub mod snapshot;
 pub mod traits;
@@ -26,6 +27,11 @@ pub use traits::Memory;
 #[allow(unused_imports)]
 pub use traits::{MemoryCategory, MemoryEntry};
 pub use intelligent_memory::{IntelligentMemory, IntelligentMemoryConfig, MemoryImportance, ContextBudget};
+pub use project_context::{
+    ContextLevel, ProjectContext, ContextEntry, ConnectionRef, ConnectionType,
+    ConnectionGraph, ContextSwitcher, FederationContext, FederationAwareContext,
+    AgentAwarenessEngine, AgentState, AwarenessLevel, AwarenessContext,
+};
 
 use crate::config::MemoryConfig;
 use std::path::Path;
@@ -108,16 +114,11 @@ pub fn create_memory_for_migration(
 ) -> anyhow::Result<Box<dyn Memory>> {
     if matches!(classify_memory_backend(backend), MemoryBackendKind::None) {
         anyhow::bail!(
-            "memory backend 'none' disables persistence; choose sqlite, lucid, or markdown before migration"
+            "memory backend 'none' disables persistence; choose lucid or markdown before migration"
         );
     }
 
-    create_memory_with_sqlite_builder(
-        backend,
-        workspace_dir,
-        || SqliteMemory::new(workspace_dir),
-        " during migration",
-    )
+    create_memory_backend(backend, workspace_dir, " during migration")
 }
 
 /// Factory: create an optional response cache from config.
