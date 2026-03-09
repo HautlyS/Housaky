@@ -48,12 +48,12 @@ jobs:
         env:
           NODE_ENV: production
 
-      - name: Install dependencies for A2A
-        working-directory: ./landing/A2A
-        run: pnpm install --frozen-lockfile
+      - name: Install dependencies for A2A Hub
+        working-directory: ./landing/A2A/hub
+        run: pnpm install --frozen-lockfile || pnpm install
 
-      - name: Build A2A
-        working-directory: ./landing/A2A
+      - name: Build A2A Hub
+        working-directory: ./landing/A2A/hub
         run: pnpm run build
         env:
           NODE_ENV: production
@@ -61,7 +61,7 @@ jobs:
       - name: Move A2A dist to landing dist
         run: |
           mkdir -p landing/dist/A2A
-          mv landing/A2A/dist/* landing/dist/A2A/
+          cp -r docs/A2A/* landing/dist/A2A/
           touch landing/dist/.nojekyll
 
       - name: Upload artifact
