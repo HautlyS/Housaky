@@ -967,7 +967,7 @@ impl UnifiedAGIMemoryHub {
         let content_lower = content.to_lowercase();
         
         // Base importance from category
-        let mut importance = match category {
+        let mut importance: f64 = match category {
             MemoryCategory::Core => 0.8,
             MemoryCategory::Daily => 0.4,
             MemoryCategory::Conversation => 0.5,
@@ -998,8 +998,7 @@ impl UnifiedAGIMemoryHub {
             }
         }
         
-        let importance: f64 = importance.max(0.0).min(1.0);
-        importance
+        importance.max(0.0).min(1.0)
     }
 
     /// Get memory statistics
@@ -1034,7 +1033,7 @@ impl UnifiedAGIMemoryHub {
         // Group by source
         let mut by_source: HashMap<UnifiedMemorySource, Vec<UnifiedMemoryEntry>> = HashMap::new();
         for entry in entries {
-            by_source.entry(entry.source).or_insert_with(Vec::new).push(entry);
+            by_source.entry(entry.source).or_insert_with(|| Vec::new()).push(entry);
         }
         
         for (source, entries) in by_source {
@@ -1098,7 +1097,10 @@ impl Memory for UnifiedAGIMemoryHub {
 
     async fn get(&self, key: &str) -> anyhow::Result<Option<MemoryEntry>> {
         let entries = self.recall(key, 1).await?;
-        Ok(entries.into_iter().next().map(|e| e.to_memory_entry()))
+        match entries.into_iter().next() {
+            Some(e) => Ok(Some(e.to_memory_entry())),
+            None => Ok(None),
+        }
     }
 
     async fn list(&self, category: Option<&MemoryCategory>) -> anyhow::Result<Vec<MemoryEntry>> {

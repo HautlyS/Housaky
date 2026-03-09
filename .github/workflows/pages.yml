@@ -61,17 +61,35 @@ jobs:
       # Copy A2A build to landing dist
       - name: Prepare deployment
         run: |
-          mkdir -p landing/dist/A2A
-          if [ -d "docs/A2A" ]; then
-            cp -r docs/A2A/* landing/dist/A2A/
-          else
-            if [ -d "landing/A2A/hub/dist" ]; then
-              cp -r landing/A2A/hub/dist/* landing/dist/A2A/
-            fi
+          # Ensure landing/dist exists
+          mkdir -p landing/dist/A2A/assets
+          
+          # Copy main landing first
+          if [ -d "landing/dist" ]; then
+            echo "Main landing build found"
           fi
+          
+          # Copy A2A Hub from docs/A2A (preferred) or build output
+          if [ -d "docs/A2A" ] && [ -d "docs/A2A/assets" ]; then
+            echo "Copying from docs/A2A..."
+            cp -r docs/A2A/* landing/dist/A2A/
+            ls -la docs/A2A/assets/ | head -5
+          elif [ -d "landing/A2A/hub/dist" ]; then
+            echo "Copying from landing/A2A/hub/dist..."
+            cp -r landing/A2A/hub/dist/* landing/dist/A2A/
+          fi
+          
+          # Ensure .nojekyll for SPA
           touch landing/dist/.nojekyll
+          touch landing/dist/A2A/.nojekyll
+          
+          # Debug output
+          echo "=== Deployment structure ==="
           ls -la landing/dist/
-          ls -la landing/dist/A2A/ || echo "A2A dir not found"
+          echo "=== A2A directory ==="
+          ls -la landing/dist/A2A/
+          echo "=== A2A assets ==="
+          ls -la landing/dist/A2A/assets/ | head -10
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
