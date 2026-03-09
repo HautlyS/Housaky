@@ -154,6 +154,11 @@ pub enum HousakyCommands {
         #[command(subcommand)]
         meta_cognition_command: MetaCognitionCommands,
     },
+    /// Distributed cognition and peer federation
+    Federation {
+        #[command(subcommand)]
+        federation_command: FederationCommands,
+    },
 }
 
 // ============================================================================
@@ -214,6 +219,34 @@ pub enum MetaCognitionCommands {
     Values,
     /// Show known limitations
     Limitations,
+}
+
+// ============================================================================
+// Federation Commands
+// ============================================================================
+
+#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum FederationCommands {
+    /// Show federation status and connected peers
+    Status,
+    /// List all known peers
+    Peers,
+    /// Show knowledge sync status
+    Sync,
+    /// Show network statistics
+    Network,
+    /// Share knowledge with federation
+    Share {
+        /// Knowledge key
+        #[arg(long)]
+        key: String,
+        /// Knowledge value
+        #[arg(long)]
+        value: String,
+        /// Confidence level (0-1)
+        #[arg(long, default_value = "0.8")]
+        confidence: f64,
+    },
 }
 
 #[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -757,3 +790,4 @@ pub use web::{FetchResult, SearchResult, WebCommands, WebConfig, handle_search, 
 pub use self::SingularityCommands;
 pub use self::ConsciousnessCommands;
 pub use self::MetaCognitionCommands;
+pub use self::FederationCommands;
