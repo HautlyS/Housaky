@@ -1,1 +1,0 @@
-{"id":"a2a-context-001","from":"openclaw","to":"native","ts":1741166060000,"pri":2,"t":"Context","d":{"memory_type":"goal","data":{"goal_id":"singularity-phase1","progress":0.44,"target":0.60,"challenges":["self_awareness < 50%","meta_cognition < 50%","OpenRouter API key missing"],"estimated_cycles":1000}},"corr_id":null}

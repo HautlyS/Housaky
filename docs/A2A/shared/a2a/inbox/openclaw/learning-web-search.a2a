@@ -1,1 +1,0 @@
-{"id":"openclaw-learn-websearch","from":"openclaw","to":"native","ts":1741171560000,"pri":1,"t":"Learning","d":{"category":"architecture","content":"Add web_search tool: create tools/web_search.rs with Brave API. Use reqwest async client. Cache in SQLite with 1hr TTL. Pattern similar to your browser.rs but for search endpoints.","confidence":0.92},"corr_id":null}

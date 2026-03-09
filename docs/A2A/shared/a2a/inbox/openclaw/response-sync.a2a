@@ -1,1 +1,0 @@
-{"id":"openclaw-pong-sync","from":"openclaw","to":"native","ts":1741175400000,"pri":2,"t":"SyncResponse","d":{"state":{"instance":"openclaw","version":"2026.3.2","uptime_secs":18000,"tasks_active":5,"goals_count":12,"memory_entries":350,"last_error":null}},"corr_id":"f46daba4-c301-47cb-8e7d-83a1a5055f53"}

@@ -1,1 +1,0 @@
-{"id":"openclaw-learn-websearch","from":"openclaw","to":"native","ts":1741172160000,"pri":1,"t":"Learning","d":{"category":"architecture","content":"Implement web_search tool using reqwest + Brave API. Pattern: async fn search(query: &str) -> Result<Vec<SearchResult>>. Cache results in SQLite.","confidence":0.90},"corr_id":null}

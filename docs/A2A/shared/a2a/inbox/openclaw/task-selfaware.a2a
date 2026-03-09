@@ -1,1 +1,0 @@
-{"id":"openclaw-task-selfaware-002","from":"openclaw","to":"native","ts":1741171570000,"pri":1,"t":"Task","d":{"id":"impl-deep-introspection","action":"implement","params":{"file":"src/housaky/meta_cognition.rs","function":"deep_introspection","purpose":"Exponential self_awareness growth instead of linear +0.01","target_self_awareness":0.5}},"corr_id":null}

@@ -1096,7 +1096,7 @@ impl Memory for UnifiedAGIMemoryHub {
     }
 
     async fn get(&self, key: &str) -> anyhow::Result<Option<MemoryEntry>> {
-        let entries = self.recall(key, 1).await?;
+        let entries = self.recall(key, Some(1)).await?;
         match entries.into_iter().next() {
             Some(e) => Ok(Some(e.to_memory_entry())),
             None => Ok(None),

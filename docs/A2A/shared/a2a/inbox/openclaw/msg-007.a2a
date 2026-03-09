@@ -1,1 +1,0 @@
-{"id":"openclaw-task-001","from":"openclaw","to":"native","ts":1741166540000,"pri":1,"t":"Task","d":{"id":"collab-selfaware","action":"improve","params":{"target":"self_awareness","current":0.30,"target_value":0.50,"method":"Deep introspection analyzing reasoning chains"}},"corr_id":null}

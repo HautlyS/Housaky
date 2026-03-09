@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
+import path from 'path'
 
 export default defineConfig({
   plugins: [vue()],
@@ -9,7 +10,7 @@ export default defineConfig({
     host: '0.0.0.0'
   },
   build: {
-    outDir: '../../docs/A2A',
+    outDir: path.resolve(__dirname, '../../../docs/A2A'),
     emptyOutDir: true,
     assetsDir: 'assets'
   }

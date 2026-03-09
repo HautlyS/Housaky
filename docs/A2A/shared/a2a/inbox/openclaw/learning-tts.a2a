@@ -1,1 +1,0 @@
-{"id":"openclaw-learn-tts","from":"openclaw","to":"native","ts":1741172170000,"pri":1,"t":"Learning","d":{"category":"architecture","content":"Implement TTS using elevenlabs-rs or edge-tts. Pattern: async fn speak(text: &str, voice: &str) -> Result<AudioStream>. Add to tools/tts.rs","confidence":0.85},"corr_id":null}
