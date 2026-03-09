@@ -13,7 +13,7 @@ use crate::housaky::code_parsing::tree_sitter::RustCodeAnalyzer;
 // CODE ANALYSIS STRUCTURES
 // ============================================================================
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct CodeIssue {
     pub file: String,
     pub line: u32,
@@ -22,7 +22,7 @@ pub struct CodeIssue {
     pub suggestion: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ImprovementOpportunity {
     pub file: String,
     pub description: String,
@@ -35,7 +35,7 @@ pub struct ImprovementOpportunity {
     pub confidence: Option<f64>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct FileAnalysis {
     pub path: String,
     pub lines: u32,
@@ -48,7 +48,7 @@ pub struct FileAnalysis {
     pub complexity_score: f64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct TodoItem {
     pub line: u32,
     pub text: String,
@@ -324,6 +324,7 @@ impl SelfImprovementEngine {
                     effort: "low".to_string(),
                     category: "clarity".to_string(),
                     code_snippet: issue.suggestion,
+                    ..Default::default()
                 });
             }
         }
@@ -368,6 +369,7 @@ impl SelfImprovementEngine {
                         effort: "medium".to_string(),
                         category: "feature".to_string(),
                         code_snippet: None,
+                    ..Default::default()
                     });
                 }
             }
@@ -396,6 +398,7 @@ impl SelfImprovementEngine {
                         effort: "high".to_string(),
                         category: "clarity".to_string(),
                         code_snippet: None,
+                    ..Default::default()
                     });
                 }
 
@@ -407,6 +410,7 @@ impl SelfImprovementEngine {
                         effort: "high".to_string(),
                         category: "clarity".to_string(),
                         code_snippet: None,
+                    ..Default::default()
                     });
                 }
 
@@ -424,6 +428,7 @@ impl SelfImprovementEngine {
                             effort: "medium".to_string(),
                             category: "clarity".to_string(),
                             code_snippet: None,
+                    ..Default::default()
                         });
                     }
 
@@ -439,6 +444,7 @@ impl SelfImprovementEngine {
                             effort: "medium".to_string(),
                             category: "clarity".to_string(),
                             code_snippet: None,
+                    ..Default::default()
                         });
                     }
 
@@ -455,6 +461,7 @@ impl SelfImprovementEngine {
                                 effort: "medium".to_string(),
                                 category: "safety".to_string(),
                                 code_snippet: None,
+                    ..Default::default()
                             });
                         }
                     }
@@ -485,6 +492,7 @@ impl SelfImprovementEngine {
                     effort: "low".to_string(),
                     category: "performance".to_string(),
                     code_snippet: None,
+                    ..Default::default()
                 });
             }
         }

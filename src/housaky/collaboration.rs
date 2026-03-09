@@ -448,7 +448,7 @@ mod tests {
     #[tokio::test]
     async fn test_send_and_read_message() {
         let dir = tempdir().unwrap();
-        let manager = CollaborationManager::new(dir.path().to_path_buf(), "test");
+        let manager = CollaborationManager::new(dir.path().to_path_buf(), "test", "peer");
 
         // Send a message
         manager.send_message(
@@ -465,7 +465,7 @@ mod tests {
     #[tokio::test]
     async fn test_heartbeat() {
         let dir = tempdir().unwrap();
-        let manager = CollaborationManager::new(dir.path().to_path_buf(), "native");
+        let manager = CollaborationManager::new(dir.path().to_path_buf(), "native", "peer");
 
         manager.heartbeat(Some("testing")).await.unwrap();
 

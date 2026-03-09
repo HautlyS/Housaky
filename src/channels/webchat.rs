@@ -125,7 +125,7 @@ impl Channel for WebChatChannel {
         "webchat"
     }
 
-    async fn send(&self, message: &str, recipient: &str) -> Result<()> {
+    async fn send(&self, message: &str, _recipient: &str) -> Result<()> {
         self.broadcast(message, "housaky");
         Ok(())
     }

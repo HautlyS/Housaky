@@ -160,7 +160,7 @@ impl Channel for SignalChannel {
         self.send_message(recipient, message).await
     }
 
-    async fn listen(&self, mut tx: mpsc::Sender<ChannelMessage>) -> Result<()> {
+    async fn listen(&self, tx: mpsc::Sender<ChannelMessage>) -> Result<()> {
         loop {
             match self.receive_messages().await {
                 Ok(messages) => {
@@ -194,10 +194,13 @@ impl Channel for SignalChannel {
     async fn health_check(&self) -> bool {
         // Check if signal-cli is available
         let cli = self.cli_path();
-        Command::new(cli)
+        match Command::new(cli)
             .arg("--version")
             .output()
-            .map(|o| o.status.success())
-            .unwrap_or(false)
+            .await
+        {
+            Ok(o) => o.status.success(),
+            Err(_) => false,
+        }
     }
 }

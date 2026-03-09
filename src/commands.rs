@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 // Doctor Commands
 // ============================================================================
 
-#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum DoctorCommands {
     /// Run all diagnostics
     Run,
@@ -23,7 +23,7 @@ pub enum DoctorCommands {
 // Hardware Commands
 // ============================================================================
 
-#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum HardwareCommands {
     /// Discover USB devices
     Discover,
@@ -40,7 +40,7 @@ pub enum HardwareCommands {
 // Peripheral Commands
 // ============================================================================
 
-#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum PeripheralCommands {
     /// List peripherals
     List,
@@ -64,7 +64,7 @@ pub enum PeripheralCommands {
 // Housaky Internal Commands (used by housaky/mod.rs)
 // ============================================================================
 
-#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum HousakyCommands {
     /// Show status
     Status,
@@ -165,7 +165,7 @@ pub enum HousakyCommands {
 // Consciousness Commands
 // ============================================================================
 
-#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum ConsciousnessCommands {
     /// Show current consciousness level and phi estimate
     Status,
@@ -184,7 +184,7 @@ pub enum ConsciousnessCommands {
 // Singularity Commands
 // ============================================================================
 
-#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum SingularityCommands {
     /// Show current progress toward AGI singularity
     Status,
@@ -203,7 +203,7 @@ pub enum SingularityCommands {
 // Meta-Cognition Commands
 // ============================================================================
 
-#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum MetaCognitionCommands {
     /// Show current self-model
     SelfModel,
@@ -225,7 +225,7 @@ pub enum MetaCognitionCommands {
 // Federation Commands
 // ============================================================================
 
-#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum FederationCommands {
     /// Show federation status and connected peers
     Status,
@@ -249,7 +249,7 @@ pub enum FederationCommands {
     },
 }
 
-#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum SeedMindCommands {
     /// Show Seed Mind state (phi, karma, phase, capabilities)
     Status,
@@ -273,7 +273,7 @@ pub enum SeedMindCommands {
 // Integration Commands (kept for compatibility)
 // ============================================================================
 
-#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum IntegrationCommands {
     /// Show integration info
     Info { name: String },
@@ -283,7 +283,7 @@ pub enum IntegrationCommands {
 // Service Commands
 // ============================================================================
 
-#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum ServiceCommands {
     /// Install daemon service
     Install,
@@ -301,7 +301,7 @@ pub enum ServiceCommands {
 // Channel Commands
 // ============================================================================
 
-#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum ChannelCommands {
     /// List configured channels
     List,
@@ -327,7 +327,7 @@ pub enum ChannelCommands {
 // Skill Commands
 // ============================================================================
 
-#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum SkillCommands {
     /// Open skills marketplace TUI
     Ui,
@@ -362,7 +362,7 @@ pub enum SkillCommands {
 // Migration Commands
 // ============================================================================
 
-#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum MigrateCommands {
     /// Import from OpenClaw
     Openclaw {
@@ -379,7 +379,7 @@ pub enum MigrateCommands {
 // Cron Commands
 // ============================================================================
 
-#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum CronCommands {
     /// List tasks
     List,
@@ -409,7 +409,7 @@ pub enum CronCommands {
 // Model Commands
 // ============================================================================
 
-#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum ModelCommands {
     /// Refresh model cache
     Refresh {
@@ -460,7 +460,7 @@ pub enum KeyCommands {
 // Subagent Commands
 // ============================================================================
 
-#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum SubagentCommands {
     /// List sub-agent configurations
     List,
@@ -497,7 +497,7 @@ pub enum SubagentCommands {
 // Goal Commands
 // ============================================================================
 
-#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum GoalCommands {
     /// List goals
     List,
@@ -520,7 +520,7 @@ pub enum GoalCommands {
 // Self-Mod Commands
 // ============================================================================
 
-#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum SelfModCommands {
     /// Run improvement cycle
     Run {
@@ -650,7 +650,7 @@ pub enum QuantumCommands {
 // Collective Commands
 // ============================================================================
 
-#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum CollectiveCommands {
     /// Bootstrap on Moltbook
     Bootstrap,
@@ -713,7 +713,7 @@ pub enum CollectiveCommands {
 // GSD Commands
 // ============================================================================
 
-#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum GSDCommands {
     /// New project
     NewProject { name: String, vision: String },
@@ -753,7 +753,7 @@ pub enum GSDCommands {
     Awareness,
 }
 
-#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum McpCommands {
     List,
     Installed,

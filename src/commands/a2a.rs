@@ -7,7 +7,7 @@ use clap::Subcommand;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
-#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum A2ACommands {
     /// Check peer status via ping
     Ping,

@@ -439,6 +439,10 @@ mod tests {
                 api_key: None,
                 temperature: None,
                 max_depth: 3,
+                is_kowalski_agent: false,
+                glm_api_key: None,
+                glm_model: "glm-4-plus".to_string(),
+                glm_per_agent: HashMap::new(),
             },
         );
 

@@ -1857,7 +1857,12 @@ async fn handle_a2a_command(command: A2ACommands) -> Result<()> {
             // Check outbox
             let outbox_dir = a2a_dir.join("outbox").join(instance);
             let outbox_count = if outbox_dir.exists() {
-                tokio::fs::read_dir(&outbox_dir).await?.count()
+                let mut dir = tokio::fs::read_dir(&outbox_dir).await?;
+                let mut count = 0;
+                while dir.next_entry().await?.is_some() {
+                    count += 1;
+                }
+                count
             } else {
                 0
             };
@@ -1875,7 +1880,7 @@ async fn handle_a2a_command(command: A2ACommands) -> Result<()> {
                 for msg in &messages {
                     let from = msg["from"].as_str().unwrap_or("?");
                     let msg_type = msg["t"].as_str().unwrap_or("?");
-                    let ts = msg["ts"].as_u64().unwrap_or(0);
+                    let _ts = msg["ts"].as_u64().unwrap_or(0);
                     
                     println!("[{}] {} from {}", msg_type, msg["id"].as_str().unwrap_or("?"), from);
                     

@@ -3898,6 +3898,8 @@ mod tests {
             collective_api_key: None,
             collective: CollectiveSchemaConfig::default(),
             collaboration: CollaborationConfig::default(),
+            human_readonly: HumanReadOnlyConfig::default(),
+            mcp: McpConfig::default(),
         };
 
         let toml_str = toml::to_string_pretty(&config).unwrap();
@@ -4067,6 +4069,8 @@ tool_dispatcher = "xml"
             collective_api_key: None,
             collective: CollectiveSchemaConfig::default(),
             collaboration: CollaborationConfig::default(),
+            human_readonly: HumanReadOnlyConfig::default(),
+            mcp: McpConfig::default(),
         };
 
         config.save().unwrap();

@@ -32,6 +32,7 @@ rmp-serde = "1.1"
 
 # Config
 directories = "5.0"
+dirs = "5.0"
 toml = "1.0"
 shellexpand = "3.1"
 
@@ -47,6 +48,18 @@ base64 = "0.22"
 
 # Optional Rust-native browser automation backend
 fantoccini = { version = "0.22.0", optional = true, default-features = false, features = ["rustls-tls"] }
+
+# WhatsApp Baileys-like library (QR code pairing)
+#wa-rs = { version = "0.2", optional = true, default-features = false, features = ["sqlite-storage", "tokio-transport", "tokio-native"] }
+#wa-rs-sqlite-storage = { version = "0.2", optional = true }
+#wa-rs-tokio-transport = { version = "0.2", optional = true }
+#wa-rs-ureq-http = { version = "0.2", optional = true }
+
+# Browser automation via Chrome DevTools Protocol
+chromiumoxide = { version = "0.8", optional = true, default-features = false, features = ["tokio-runtime"] }
+
+# Kowalski AI Agent framework
+kowalski = { version = "0.5", optional = true }
 
 # Error handling
 anyhow = "1.0"
@@ -212,6 +225,12 @@ sandbox-bubblewrap = []
 sandbox-landlock = []
 # browser-native feature (placeholder for native browser automation)
 browser-native = []
+# WhatsApp Baileys-like support (QR code pairing)
+#whatsapp-qr = ["dep:wa-rs", "dep:wa-rs-sqlite-storage", "dep:wa-rs-tokio-transport", "dep:wa-rs-ureq-http"]
+# Browser CDP automation (chromiumoxide)
+browser-cdp = ["dep:chromiumoxide"]
+# Kowalski AI Agent integration
+kowalski-agent = ["dep:kowalski"]
 # web monitoring
 web-monitoring = ["dep:feed-rs"]
 # advanced queries

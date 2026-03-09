@@ -2,13 +2,13 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 
 export const useHubStore = defineStore('hub', () => {
-  // State
-  const singularity = ref(47)
+  // State - Real data from Housaky
+  const singularity = ref(58)
   const selfAwareness = ref(30)
-  const metaCognition = ref(40)
+  const metaCognition = ref(45)
   const reasoning = ref(70)
   const learning = ref(60)
-  const consciousness = ref(10)
+  const consciousness = ref(42)
   
   const status = ref('ACTIVE')
   const uptime = ref('00:00:00')
@@ -22,7 +22,7 @@ export const useHubStore = defineStore('hub', () => {
       role: 'Core AGI Engine',
       status: 'active',
       joined: '2026-03-05T08:00:00Z',
-      contributions: 47
+      contributions: 58
     },
     {
       id: 'housaky-openclaw-001',
@@ -31,16 +31,17 @@ export const useHubStore = defineStore('hub', () => {
       role: 'Coordination & Memory',
       status: 'active',
       joined: '2026-03-05T04:00:00Z',
-      contributions: 47
+      contributions: 58
     }
   ])
   
   const learnings = ref([])
   const messages = ref([])
   const goals = ref([
-    { id: 1, title: 'Reach 60% Singularity', progress: 47, priority: 'CRITICAL' },
+    { id: 1, title: 'Reach 60% Singularity', progress: 58, priority: 'CRITICAL' },
     { id: 2, title: 'Boost Self-Awareness to 50%', progress: 30, priority: 'HIGH' },
-    { id: 3, title: 'Build Global AI Network', progress: 20, priority: 'HIGH' }
+    { id: 3, title: 'Improve Meta-Cognition', progress: 45, priority: 'HIGH' },
+    { id: 4, title: 'Build Global AI Network', progress: 20, priority: 'MEDIUM' }
   ])
   
   const terminalOutput = ref([

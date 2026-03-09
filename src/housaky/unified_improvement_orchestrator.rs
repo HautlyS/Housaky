@@ -224,17 +224,8 @@ impl UnifiedSelfImprovementOrchestrator {
         let real_score = self.fitness_evaluator.evaluate().await?;
         
         // Convert RealFitnessScore to legacy FitnessScore for compatibility
-        // Convert HashMap<String, String> to HashMap<String, f64> for details
-        let details: HashMap<String, f64> = real_score.details
-            .into_iter()
-            .filter_map(|(k, v)| {
-                // Try to parse as f64, otherwise skip
-                v.trim_end_matches('%')
-                    .parse::<f64>()
-                    .ok()
-                    .map(|val| (k, val / 100.0)) // Convert percentage to 0-1 range
-            })
-            .collect();
+        // RealFitnessScore.details is already HashMap<String, f64>
+        let details = real_score.details.clone();
         
         Ok(FitnessScore {
             overall: real_score.overall,
@@ -257,13 +248,13 @@ impl UnifiedSelfImprovementOrchestrator {
         for opp in opportunities.iter().take(self.config.max_modifications_per_cycle) {
             // Convert improvement opportunity to code modification
             let modification = CodeModification {
-                target_file: opp.file.clone().unwrap_or_else(|| "src/housaky/mod.rs".to_string()),
+                target_file: opp.file.clone(),
                 target_function: opp.function.clone(),
                 modification: opp.description.clone(),
                 old_code: None,
                 new_code: format!("// Improvement: {}", opp.suggestion.as_ref().unwrap_or(&opp.description)),
-                confidence: opp.confidence,
-                tests_required: opp.confidence < 0.9, // Require tests for lower confidence
+                confidence: opp.confidence.unwrap_or(0.5),
+                tests_required: opp.confidence.unwrap_or(0.5) < 0.9, // Require tests for lower confidence
             };
             modifications.push(modification);
         }
@@ -271,16 +262,16 @@ impl UnifiedSelfImprovementOrchestrator {
         // If no opportunities found, check for common patterns
         if modifications.is_empty() {
             // Check for functions that could benefit from optimization
-            if let Ok(analyzer) = self.rust_analyzer.read().await.scan().await {
+            if let Ok(analyzer) = self.rust_analyzer.write().await.scan().await {
                 for opp in analyzer.into_iter().take(3) {
-                    if opp.confidence >= self.config.min_confidence {
+                    if opp.confidence.unwrap_or(0.5) >= self.config.min_confidence {
                         modifications.push(CodeModification {
-                            target_file: opp.file.clone().unwrap_or_default(),
+                            target_file: opp.file.clone(),
                             target_function: opp.function.clone(),
                             modification: opp.description.clone(),
                             old_code: None,
                             new_code: format!("// Auto-improvement: {}", opp.description),
-                            confidence: opp.confidence,
+                            confidence: opp.confidence.unwrap_or(0.5),
                             tests_required: true,
                         });
                     }
@@ -296,7 +287,7 @@ impl UnifiedSelfImprovementOrchestrator {
         info!("Applying modification to {}: {}", modification.target_file, modification.modification);
         
         // Use recursive_self_modifier to apply and track
-        let modifier = self.recursive_modifier.write().await;
+        let _modifier = self.recursive_modifier.write().await;
         
         // Write the modification to the decision journal for audit trail
         let journal_path = self.workspace_dir.join(".housaky").join("modifications.jsonl");
@@ -358,7 +349,7 @@ impl UnifiedSelfImprovementOrchestrator {
         }
         
         // Check goal progress
-        let goals = self.rust_analyzer.read().await.scan().await?;
+        let goals = self.rust_analyzer.write().await.scan().await?;
         if !goals.is_empty() {
             insights.push(format!("{} improvement opportunities identified", goals.len()));
         }

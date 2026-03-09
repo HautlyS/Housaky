@@ -17,14 +17,19 @@ const routes = [
     component: () => import('../views/Memory.vue')
   },
   {
-    path: '/research',
-    name: 'Research',
-    component: () => import('../views/Research.vue')
-  },
-  {
     path: '/a2a',
     name: 'A2A',
     component: () => import('../views/A2A.vue')
+  },
+  {
+    path: '/nodes',
+    name: 'Nodes',
+    component: () => import('../views/Nodes.vue')
+  },
+  {
+    path: '/security',
+    name: 'Security',
+    component: () => import('../views/Security.vue')
   },
   {
     path: '/terminal',

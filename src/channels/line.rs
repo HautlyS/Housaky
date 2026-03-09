@@ -5,6 +5,7 @@
 
 use anyhow::{Context, Result};
 use async_trait::async_trait;
+use base64::Engine;
 use serde::{Deserialize, Serialize};
 use reqwest::Client;
 use std::sync::Arc;
@@ -33,13 +34,13 @@ pub struct LineConfig {
 #[serde(tag = "type")]
 enum LineMessageType {
     Text { text: String },
-    Image { originalContentUrl: String, previewImageUrl: String },
-    Audio { originalContentUrl: String, duration: u32 },
-    Video { originalContentUrl: String, previewImageUrl: String },
-    File { originalContentUrl: String, fileName: String, fileSize: u64 },
+    Image { original_content_url: String, preview_image_url: String },
+    Audio { original_content_url: String, duration: u32 },
+    Video { original_content_url: String, preview_image_url: String },
+    File { original_content_url: String, file_name: String, file_size: u64 },
     Location { title: String, address: String, latitude: f64, longitude: f64 },
-    Sticker { packageId: String, stickerId: String },
-    Template { altText: String, template: serde_json::Value },
+    Sticker { package_id: String, sticker_id: String },
+    Template { alt_text: String, template: serde_json::Value },
 }
 
 #[derive(Debug, Serialize)]
@@ -52,8 +53,8 @@ struct LineSendMessage {
 struct LineWebhookEvent {
     #[serde(rename = "type")]
     event_type: String,
-    replyToken: Option<String>,
-    source: LineSource,
+    reply_token: Option<String>,
+    sender: LineSource,
     message: Option<LineMessage>,
     timestamp: u64,
 }
@@ -61,10 +62,10 @@ struct LineWebhookEvent {
 #[derive(Debug, Deserialize)]
 struct LineSource {
     #[serde(rename = "type")]
-    source_type: String,
-    userId: Option<String>,
-    groupId: Option<String>,
-    roomId: Option<String>,
+    sender_type: String,
+    user_id: Option<String>,
+    group_id: Option<String>,
+    room_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -150,9 +151,9 @@ impl LineChannel {
             // Handle text messages
             if let Some(ref msg) = event.message {
                 if msg.message_type == "text" {
-                    let sender = event.source.userId
-                        .or(event.source.groupId)
-                        .or(event.source.roomId)
+                    let sender = event.sender.user_id
+                        .or(event.sender.group_id)
+                        .or(event.sender.room_id)
                         .unwrap_or_default();
 
                     if self.is_allowed(&sender) {
@@ -186,7 +187,7 @@ impl LineChannel {
         mac.update(body);
         
         let expected = mac.finalize().into_bytes();
-        let expected_b64 = base64::encode(&expected);
+        let expected_b64 = base64::engine::general_purpose::STANDARD.encode(&expected);
         
         expected_b64 == signature
     }
