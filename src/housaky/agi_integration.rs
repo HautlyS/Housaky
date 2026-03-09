@@ -191,12 +191,19 @@ impl AGIIntegrationHub {
         ));
         let growth_tracker = Arc::new(CapabilityGrowthTracker::new());
         let singularity = Arc::new(RwLock::new(SingularityEngine::new(growth_tracker)));
-        // Phase3Engine::new is async; use a blocking future here via block_in_place
-        // so we can keep new() synchronous.  In practice this is fine as it only
-        // allocates in-memory structures.
-        let consciousness = Arc::new(tokio::task::block_in_place(|| {
-            tokio::runtime::Handle::current().block_on(Phase3Engine::new(Phase3Config::default()))
-        }));
+        // Phase3Engine::new is async; use std::thread::spawn to avoid runtime nesting
+        // when called from within an async context.
+        let consciousness = Arc::new(
+            std::thread::spawn(|| {
+                let rt = match tokio::runtime::Runtime::new() {
+                    Ok(r) => r,
+                    Err(_) => return Phase3Engine::new_fallback(Phase3Config::default()),
+                };
+                rt.block_on(Phase3Engine::new(Phase3Config::default()))
+            })
+            .join()
+            .unwrap_or_else(|_| Phase3Engine::new_fallback(Phase3Config::default()))
+        );
 
         Self {
             reasoning,

@@ -207,16 +207,141 @@ struct ClaudeMarketplaceIndex {
 #[derive(Debug, Deserialize)]
 struct ClaudeMarketplacePlugin {
     name: String,
+    #[serde(default)]
+    description: Option<String>,
     version: Option<String>,
+    #[serde(default)]
     source: ClaudeMarketplaceSource,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Default)]
 struct ClaudeMarketplaceSource {
-    #[serde(rename = "type")]
+    #[serde(rename = "type", default)]
     kind: String,
     #[serde(default)]
     path: Option<String>,
+    #[serde(default)]
+    source: Option<String>,
+}
+
+// Allow both string and object format for source
+struct ClaudeMarketplaceSourceVisitor;
+
+impl<'de> serde::de::Visitor<'de> for ClaudeMarketplaceSourceVisitor {
+    type Value = ClaudeMarketplaceSource;
+
+    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        formatter.write_str("a string or an object")
+    }
+
+    fn visit_str<E>(self, value: &str) -> std::result::Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        Ok(ClaudeMarketplaceSource {
+            kind: String::new(),
+            path: Some(value.to_string()),
+            source: Some(value.to_string()),
+        })
+    }
+
+    fn visit_map<M>(self, mut map: M) -> std::result::Result<Self::Value, M::Error>
+    where
+        M: serde::de::MapAccess<'de>,
+    {
+        let mut kind = String::new();
+        let mut path = None;
+        let mut source = None;
+
+        while let Some(key) = map.next_key::<String>()? {
+            match key.as_str() {
+                "type" => kind = map.next_value()?,
+                "path" => path = map.next_value()?,
+                "source" => source = map.next_value()?,
+                _ => {
+                    let _ = map.next_value::<serde::de::IgnoredAny>()?;
+                }
+            }
+        }
+
+        Ok(ClaudeMarketplaceSource { kind, path, source })
+    }
+}
+
+impl<'de> serde::de::Deserialize<'de> for ClaudeMarketplaceSource {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: serde::de::Deserializer<'de>,
+    {
+        deserializer.deserialize_any(ClaudeMarketplaceSourceVisitor)
+    }
+}
+
+#[derive(Debug, Deserialize, Default)]
+struct ClaudeMarketplaceSource {
+    #[serde(rename = "type", default)]
+    kind: String,
+    #[serde(default)]
+    path: Option<String>,
+    // Handle the case where source is a plain string
+    #[serde(default)]
+    source: Option<String>,
+}
+
+// Custom deserializer for source that handles both string and object formats
+impl<'de> serde::de::Deserialize<'de> for ClaudeMarketplaceSource {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: serde::de::Deserializer<'de>,
+    {
+        use serde::de::{self, Visitor};
+        use std::fmt;
+
+        struct SourceVisitor;
+
+        impl<'de> Visitor<'de> for SourceVisitor {
+            type Value = ClaudeMarketplaceSource;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("a string or an object")
+            }
+
+            fn visit_str<E>(self, value: &str) -> std::result::Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                Ok(ClaudeMarketplaceSource {
+                    kind: String::new(),
+                    path: Some(value.to_string()),
+                    source: Some(value.to_string()),
+                })
+            }
+
+            fn visit_map<M>(self, mut map: M) -> std::result::Result<Self::Value, M::Error>
+            where
+                M: serde::de::MapAccess<'de>,
+            {
+                let mut kind = String::new();
+                let mut path = None;
+                let mut source = None;
+
+                while let Some(key) = map.next_key::<String>()? {
+                    match key.as_str() {
+                        "type" => kind = map.next_value()?,
+                        "path" => path = map.next_value()?,
+                        "source" => source = map.next_value()?,
+                        _ => {
+                            let _ = map.next_value::<serde::de::IgnoredAny>()?;
+                        }
+                    }
+                }
+
+                Ok(ClaudeMarketplaceSource { kind, path, source })
+            }
+        }
+
+        deserializer.deserialize_any(SourceVisitor)
+    }
 }
 
 pub fn openclaw_vendored_skills_dir(repo_root: &Path) -> PathBuf {

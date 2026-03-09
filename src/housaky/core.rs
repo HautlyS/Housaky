@@ -291,8 +291,13 @@ impl HousakyCore {
                 let shots = config.quantum.shots;
                 let bc = bridge_config.clone();
 
-                match tokio::task::block_in_place(|| {
-                    tokio::runtime::Handle::current().block_on(async move {
+                // Use std::thread::spawn to avoid runtime nesting issues
+                let result = std::thread::spawn(move || {
+                    let rt = match tokio::runtime::Runtime::new() {
+                        Ok(r) => r,
+                        Err(e) => return Err(anyhow::anyhow!("Failed to create runtime: {}", e)),
+                    };
+                    rt.block_on(async move {
                         if s3_bucket.is_empty() {
                             warn!("⚠️  braket_s3_bucket not set in config — falling back to local simulator");
                             return Err(anyhow::anyhow!("braket_s3_bucket is empty"));
@@ -302,15 +307,16 @@ impl HousakyCore {
                         ).await?;
                         Ok(QuantumAgiBridge::from_braket(bc, braket_backend))
                     })
-                }) {
-                    Ok(b) => {
+                }).join();
+
+                match result {
+                    Ok(Ok(b)) => {
                         info!("☁️  Amazon Braket backend connected (SV1 managed simulator)");
                         Arc::new(b)
                     }
-                    Err(e) => {
+                    _ => {
                         warn!(
-                            "⚠️  Braket backend init failed: {} — falling back to local simulator",
-                            e
+                            "⚠️  Braket backend init failed — falling back to local simulator"
                         );
                         Arc::new(QuantumAgiBridge::new(bridge_config))
                     }

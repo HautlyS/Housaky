@@ -208,6 +208,60 @@ impl Phase3Engine {
         engine
     }
 
+    /// Create a minimally initialized Phase 3 engine (fallback for sync contexts).
+    /// This skips the async subscription steps but creates all components.
+    pub fn new_fallback(config: Phase3Config) -> Self {
+        let global_workspace = Arc::new(GlobalWorkspace::new());
+        let coalition_formation = Arc::new(CoalitionFormation::new());
+        let phenomenal_binder = Arc::new(PhenomenalBinder::new());
+        let consciousness_meter = Arc::new(ConsciousnessMeter::new());
+
+        let narrative_self = Arc::new(NarrativeSelf::new(config.agent_name.clone()));
+        let qualia_model = Arc::new(QualiaModel::new());
+
+        // Create module adapters (without subscribing to workspace)
+        let reasoning_adapter = Arc::new(ReasoningModuleAdapter::new());
+        let meta_cognition_adapter = Arc::new(MetaCognitionAdapter::new());
+        let goal_engine_adapter = Arc::new(GoalEngineAdapter::new());
+        let attention_adapter = Arc::new(AttentionModuleAdapter::new());
+        let memory_adapter = Arc::new(MemoryModuleAdapter::new());
+        let narrative_adapter = Arc::new(NarrativeSelfAdapter::new());
+
+        let episodic_memory = Arc::new(EpisodicMemory::new(config.episodic_capacity));
+        let autobiographical_memory =
+            Arc::new(AutobiographicalMemory::new(config.agent_name.clone()));
+        let reconsolidator = Arc::new(MemoryReconsolidator::new());
+        let schema_library = Arc::new(SchemaLibrary::new());
+        let forgetting = Arc::new(AdaptiveForgetting::new(ForgettingConfig::default()));
+
+        let theory_of_mind = Arc::new(TheoryOfMind::new());
+
+        info!("Phase3Engine: fallback initialization (minimal, no async subscriptions)");
+        Self {
+            config,
+            global_workspace,
+            coalition_formation,
+            phenomenal_binder,
+            consciousness_meter,
+            narrative_self,
+            qualia_model,
+            reasoning_adapter,
+            meta_cognition_adapter,
+            goal_engine_adapter,
+            attention_adapter,
+            memory_adapter,
+            narrative_adapter,
+            episodic_memory,
+            autobiographical_memory,
+            reconsolidator,
+            schema_library,
+            forgetting,
+            theory_of_mind,
+            cycle_count: Arc::new(tokio::sync::RwLock::new(0)),
+            forgetting_cycles_run: Arc::new(tokio::sync::RwLock::new(0)),
+        }
+    }
+
     /// Run one full consciousness cycle.
     ///
     /// Steps:
