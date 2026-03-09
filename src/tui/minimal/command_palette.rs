@@ -133,6 +133,21 @@ const COMMANDS: &[CommandSuggestion] = &[
         description: "Fallback controls",
         shortcut: "f",
     },
+    CommandSuggestion {
+        command: "/a2a",
+        description: "A2A communication panel",
+        shortcut: "A",
+    },
+    CommandSuggestion {
+        command: "/improve",
+        description: "Run self-improvement",
+        shortcut: "i",
+    },
+    CommandSuggestion {
+        command: "/singularity",
+        description: "Show singularity progress",
+        shortcut: "",
+    },
 ];
 
 /// Command palette state
