@@ -43,7 +43,7 @@ struct HeartbeatComponents {
 }
 
 /// Build the common sub-systems shared by every `HousakyHeartbeat` constructor.
-fn create_heartbeat_components(
+async fn create_heartbeat_components(
     agent: &Arc<Agent>,
     core: &Arc<HousakyCore>,
     model: &str,
@@ -88,13 +88,9 @@ fn create_heartbeat_components(
         let hub = UnifiedAgentHub::new(hub_config);
         
         // Initialize hub (register agents, connect to peers, etc.)
-        tokio::task::block_in_place(|| {
-            tokio::runtime::Handle::current().block_on(async {
-                if let Err(e) = hub.initialize().await {
-                    warn!("Unified hub initialization failed (non-fatal): {}", e);
-                }
-            })
-        });
+        if let Err(e) = hub.initialize().await {
+            warn!("Unified hub initialization failed (non-fatal): {}", e);
+        }
 
         Some(Arc::new(hub))
     } else {
@@ -145,7 +141,7 @@ fn create_heartbeat_components(
 }
 
 impl HousakyHeartbeat {
-    pub fn new(agent: Arc<Agent>) -> Self {
+    pub async fn new(agent: Arc<Agent>) -> Self {
         let full_config = Config::load_or_init().unwrap_or_default();
         let core = Arc::new(HousakyCore::new(&full_config).unwrap_or_else(|e| {
             error!("Failed to create core during heartbeat init: {}", e);
@@ -160,7 +156,7 @@ impl HousakyHeartbeat {
         .ok()
         .map(Arc::from);
 
-        let c = create_heartbeat_components(&agent, &core, &model, Some(&full_config));
+        let c = create_heartbeat_components(&agent, &core, &model, Some(&full_config)).await;
 
         Self {
             agent,
@@ -178,7 +174,7 @@ impl HousakyHeartbeat {
         }
     }
 
-    pub fn with_core(agent: Arc<Agent>, core: Arc<HousakyCore>, config: &Config) -> Self {
+    pub async fn with_core(agent: Arc<Agent>, core: Arc<HousakyCore>, config: &Config) -> Self {
         let model = agent.config.provider.model.clone();
         let provider = create_provider_with_keys_manager(
             &agent.config.provider.name,
@@ -187,7 +183,7 @@ impl HousakyHeartbeat {
         .ok()
         .map(Arc::from);
 
-        let c = create_heartbeat_components(&agent, &core, &model, Some(config));
+        let c = create_heartbeat_components(&agent, &core, &model, Some(config)).await;
 
         Self {
             agent,
@@ -205,33 +201,33 @@ impl HousakyHeartbeat {
         }
     }
 
-    pub fn with_provider(agent: Arc<Agent>, provider: Box<dyn Provider>, model: String) -> Self {
+    pub async fn with_provider(agent: Arc<Agent>, provider: Box<dyn Provider>, model: String) -> Self {
         let full_config = Config::load_or_init().unwrap_or_default();
         let core = Arc::new(HousakyCore::new(&full_config).unwrap_or_else(|e| {
             error!("Failed to create core during heartbeat init: {}", e);
             panic!("Failed to create core during heartbeat init")
         }));
-        Self::with_core_and_provider(agent, core, provider, model, full_config)
+        Self::with_core_and_provider(agent, core, provider, model, full_config).await
     }
 
-    pub fn with_core_provider(
+    pub async fn with_core_provider(
         agent: Arc<Agent>,
         core: Arc<HousakyCore>,
         provider: Box<dyn Provider>,
         model: String,
         config: Config,
     ) -> Self {
-        Self::with_core_and_provider(agent, core, provider, model, config)
+        Self::with_core_and_provider(agent, core, provider, model, config).await
     }
 
-    fn with_core_and_provider(
+    async fn with_core_and_provider(
         agent: Arc<Agent>,
         core: Arc<HousakyCore>,
         provider: Box<dyn Provider>,
         model: String,
         config: Config,
     ) -> Self {
-        let c = create_heartbeat_components(&agent, &core, &model, Some(&config));
+        let c = create_heartbeat_components(&agent, &core, &model, Some(&config)).await;
 
         Self {
             agent,
@@ -1337,7 +1333,7 @@ pub async fn run_agi_background(
 
     let agent = Arc::new(crate::housaky::agent::Agent::new(&config)?);
     let heartbeat =
-        HousakyHeartbeat::with_core_provider(agent, core, provider, model_name.to_string(), config);
+        HousakyHeartbeat::with_core_provider(agent, core, provider, model_name.to_string(), config).await;
 
     heartbeat.run().await
 }
@@ -1419,13 +1415,16 @@ pub async fn run_agi_with_tui(
     }
 
     let agent = Arc::new(crate::housaky::agent::Agent::new(&config)?);
-    let heartbeat = Arc::new(HousakyHeartbeat::with_core_provider(
-        agent,
-        core,
-        provider,
-        model_name.to_string(),
-        config.clone(),
-    ));
+    let heartbeat = Arc::new(
+        HousakyHeartbeat::with_core_provider(
+            agent,
+            core,
+            provider,
+            model_name.to_string(),
+            config.clone(),
+        )
+        .await,
+    );
 
     // Spawn heartbeat loop in a background thread (needs its own tokio
     // runtime because the TUI event loop blocks the main thread).

@@ -238,7 +238,7 @@ pub async fn handle_command(command: HousakyCommands, config: &Config) -> Result
             println!();
 
             let agent = Arc::new(agent::Agent::new(config)?);
-            let heartbeat = heartbeat::HousakyHeartbeat::new(agent.clone());
+            let heartbeat = heartbeat::HousakyHeartbeat::new(agent.clone()).await;
 
             tokio::spawn(async move {
                 if let Err(e) = heartbeat.run().await {
@@ -258,7 +258,7 @@ pub async fn handle_command(command: HousakyCommands, config: &Config) -> Result
             println!("💓 Triggering manual heartbeat...");
 
             let agent = Arc::new(agent::Agent::new(config)?);
-            let heartbeat = heartbeat::HousakyHeartbeat::new(agent);
+            let heartbeat = heartbeat::HousakyHeartbeat::new(agent).await;
 
             println!("Heartbeat cycle initiated. Running single cycle...");
 
@@ -1351,7 +1351,7 @@ pub async fn initialize(config: &Config) -> Result<Arc<agent::Agent>> {
     let agent = Arc::new(agent);
 
     // Start heartbeat in background
-    let heartbeat = heartbeat::HousakyHeartbeat::new(agent.clone());
+    let heartbeat = heartbeat::HousakyHeartbeat::new(agent.clone()).await;
     tokio::spawn(async move {
         if let Err(e) = heartbeat.run().await {
             tracing::error!("Housaky heartbeat error: {}", e);

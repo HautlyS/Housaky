@@ -268,7 +268,7 @@ async fn run_housaky_heartbeat(config: Config) -> Result<()> {
 
     let arc_agent = std::sync::Arc::new(agent);
 
-    let heartbeat = crate::housaky::heartbeat::HousakyHeartbeat::new(arc_agent);
+    let heartbeat = crate::housaky::heartbeat::HousakyHeartbeat::new(arc_agent).await;
 
     tracing::info!("🤖 Housaky AGI heartbeat starting - infinite self-improvement mode");
 
