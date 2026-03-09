@@ -134,6 +134,11 @@ pub enum HousakyCommands {
         #[command(subcommand)]
         seed_mind_command: SeedMindCommands,
     },
+    /// Singularity progress tracking
+    Singularity {
+        #[command(subcommand)]
+        singularity_command: SingularityCommands,
+    },
     /// A2A - Agent-to-Agent communication
     A2A {
         #[command(subcommand)]
@@ -142,8 +147,23 @@ pub enum HousakyCommands {
 }
 
 // ============================================================================
-// Seed Mind Commands
+// Singularity Commands
 // ============================================================================
+
+#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum SingularityCommands {
+    /// Show current progress toward AGI singularity
+    Status,
+    /// Show detailed metrics breakdown
+    Metrics,
+    /// Show capability trajectory
+    Trajectory {
+        #[arg(short, long, default_value = "10")]
+        cycles: usize,
+    },
+    /// Estimate time to singularity
+    Estimate,
+}
 
 #[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum SeedMindCommands {
@@ -683,3 +703,4 @@ pub use sessions::SessionsCommands;
 pub use system::{HeartbeatAction, SystemCommands};
 pub use tts::{TtsCommands, TtsConfig, TtsProviderConfig, Voice};
 pub use web::{FetchResult, SearchResult, WebCommands, WebConfig, handle_search, handle_fetch};
+pub use self::SingularityCommands;
