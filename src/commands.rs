@@ -144,14 +144,31 @@ pub enum HousakyCommands {
         #[command(subcommand)]
         a2a_command: A2ACommands,
     },
+    /// Consciousness level and phi tracking
+    Consciousness {
+        #[command(subcommand)]
+        consciousness_command: ConsciousnessCommands,
+    },
 }
 
 // ============================================================================
-// Singularity Commands
+// Consciousness Commands
 // ============================================================================
 
 #[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub enum SingularityCommands {
+pub enum ConsciousnessCommands {
+    /// Show current consciousness level and phi estimate
+    Status,
+    /// Show phi components breakdown
+    Phi,
+    /// Show consciousness history
+    History {
+        #[arg(short, long, default_value = "10")]
+        count: usize,
+    },
+    /// Show narrative self state
+    Narrative,
+}
     /// Show current progress toward AGI singularity
     Status,
     /// Show detailed metrics breakdown
@@ -704,3 +721,4 @@ pub use system::{HeartbeatAction, SystemCommands};
 pub use tts::{TtsCommands, TtsConfig, TtsProviderConfig, Voice};
 pub use web::{FetchResult, SearchResult, WebCommands, WebConfig, handle_search, handle_fetch};
 pub use self::SingularityCommands;
+pub use self::ConsciousnessCommands;

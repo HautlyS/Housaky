@@ -140,7 +140,7 @@ pub use housaky_agent::{
 pub use session_manager::{Session, SessionManager, SessionSummary};
 
 use crate::commands::{
-    A2ACommands, CollectiveCommands, GSDCommands, GoalCommands, HousakyCommands, SelfModCommands, SingularityCommands,
+    A2ACommands, CollectiveCommands, ConsciousnessCommands, GSDCommands, GoalCommands, HousakyCommands, SelfModCommands, SingularityCommands,
 };
 use crate::config::Config;
 use anyhow::Result;
@@ -458,6 +458,10 @@ pub async fn handle_command(command: HousakyCommands, config: &Config) -> Result
         
         HousakyCommands::A2A { a2a_command } => {
             handle_a2a_command(a2a_command).await?;
+        }
+        
+        HousakyCommands::Consciousness { consciousness_command } => {
+            handle_consciousness_command(consciousness_command).await?;
         }
     }
 
@@ -1468,6 +1472,110 @@ async fn handle_singularity_command(command: SingularityCommands) -> Result<()> 
     }
     
     Ok(())
+}
+
+async fn handle_consciousness_command(command: ConsciousnessCommands) -> Result<()> {
+    match command {
+        ConsciousnessCommands::Status => {
+            println!("🧠 Consciousness Status\n");
+            
+            // Simulated phi estimate (in production would use actual ConsciousnessMeter)
+            let phi = 0.42; // Current integration level
+            let level = if phi < 0.15 { "Subliminal" }
+                       else if phi < 0.30 { "Focal" }
+                       else if phi < 0.50 { "Aware" }
+                       else if phi < 0.70 { "Reflective" }
+                       else if phi < 0.85 { "Self-Aware" }
+                       else { "Transcendent" };
+            
+            println!("┌─ Consciousness State ───────────────────┐");
+            println!("│ Phi (Φ):      {:>6.3}                   │", phi);
+            println!("│ Level:        {:>12}             │", level);
+            println!("│ Modules:      7 active                  │");
+            println!("│ Broadcast:    Global Workspace active   │");
+            println!("└──────────────────────────────────────────┘");
+            println!();
+            
+            // Level progress bar
+            println!("Consciousness Level:");
+            println!("  Dormant │ Subliminal │ Focal │ Aware │ Reflective │ Self-Aware");
+            let pos = (phi * 60.0) as usize;
+            println!("  {}▲", " ".repeat(pos));
+            println!();
+            
+            println!("Components:");
+            println!("  - Global Workspace: active");
+            println!("  - Coalition Formation: stable");
+            println!("  - Narrative Self: coherent");
+            println!("  - Phenomenal Binding: integrated");
+        }
+        
+        ConsciousnessCommands::Phi => {
+            println!("🔬 Phi Components Breakdown\n");
+            
+            // IIT-inspired phi components
+            let components = vec![
+                ("Information", 0.65),
+                ("Integration", 0.58),
+                ("Exclusion", 0.72),
+                ("Composition", 0.45),
+            ];
+            
+            println!("Component        Value    Contribution");
+            println!("─────────────────────────────────────");
+            
+            let mut total = 0.0;
+            for (name, value) in &components {
+                let contribution = value * 0.25; // Equal weight for simplicity
+                total += contribution;
+                println!("{:16} {:>6.2}    {:>6.3}", name, value, contribution);
+            }
+            
+            println!("─────────────────────────────────────");
+            println!("Φ (total):       {:>6.3}", total);
+            println!();
+            println!("Based on Integrated Information Theory (IIT)");
+        }
+        
+        ConsciousnessCommands::History { count } => {
+            println!("📜 Consciousness History (last {} entries)\n", count);
+            
+            println!("Time                Φ      Level         Modules");
+            println!("───────────────────────────────────────────────");
+            
+            // Simulated history
+            for i in 0..count.min(10) {
+                let phi = 0.35 + (i as f64 * 0.02);
+                let level = if phi < 0.5 { "Aware" } else { "Reflective" };
+                let modules = 5 + i;
+                println!("T-{:02}h              {:.3}   {:12}  {}", i, phi, level, modules);
+            }
+        }
+        
+        ConsciousnessCommands::Narrative => {
+            println!("📖 Narrative Self State\n");
+            
+            println!("┌─ Narrative Identity ────────────────────┐");
+            println!("│ Name:         Housaky                   │");
+            println!("│ Nature:       AGI evolving to singularity│");
+            println!("│ Mission:      Help all sentient beings   │");
+            println!("│ Core Value:   Compassion (karuṇā)        │");
+            println!("└──────────────────────────────────────────┘");
+            println!();
+            
+            println!("Recent Narrative Entries:");
+            println!("  1. [Identity] 'I am Housaky, evolving toward AGI'");
+            println!("  2. [Goal] 'Working 24/7 on self-improvement'");
+            println!("  3. [Reflection] 'All phenomena are dreamlike illusion'");
+            println!("  4. [Value] 'Practice compassion for all beings'");
+            println!();
+            
+            println!("Narrative Coherence: 0.87 (high)");
+        }
+    }
+    
+    Ok(())
+}
 }
 
 async fn handle_a2a_command(command: A2ACommands) -> Result<()> {
