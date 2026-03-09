@@ -1,6 +1,5 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
-import path from 'path'
 
 export default defineConfig({
   plugins: [vue()],
@@ -10,7 +9,8 @@ export default defineConfig({
     host: '0.0.0.0'
   },
   build: {
-    outDir: path.resolve(__dirname, '../../../docs/A2A'),
+    // Output to dist directory within the hub folder
+    outDir: 'dist',
     emptyOutDir: true,
     assetsDir: 'assets'
   }
