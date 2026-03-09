@@ -98,6 +98,24 @@ pub mod consciousness;
 
 // Phase 4 — Unbounded Self-Improvement
 pub mod architecture_search;
+
+// Enhanced A2A with Discovery
+pub mod a2a_discovery;
+
+// 24/7 Self-Improvement Daemon
+pub mod self_improve_daemon;
+
+// Federation Transport Enhancement
+pub mod federation_transport;
+
+// Weighted Consensus and Reputation
+pub mod weighted_consensus;
+
+// Real Performance Benchmarking
+pub mod performance_benchmark;
+
+// Unified AGI System Integration
+pub mod unified_agi_system;
 pub mod knowledge_acquisition;
 pub mod verification;
 
