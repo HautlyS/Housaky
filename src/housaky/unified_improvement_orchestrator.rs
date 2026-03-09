@@ -250,30 +250,78 @@ impl UnifiedSelfImprovementOrchestrator {
     async fn generate_modifications(&self) -> Result<Vec<CodeModification>> {
         let mut modifications = Vec::new();
         
-        // Get suggestions from kowalski-code
-        let _subagents = self.subagents.read().await;
+        // Scan for actual improvement opportunities
+        let opportunities = self.analyze_with_subagents().await?;
         
-        // For now, generate placeholder modifications
-        // In production, this would query subagents for specific improvements
-        modifications.push(CodeModification {
-            target_file: "src/housaky/heartbeat.rs".to_string(),
-            target_function: Some("heartbeat_cycle".to_string()),
-            modification: "optimize_reasoning_depth".to_string(),
-            old_code: None,
-            new_code: "// Improved reasoning depth calculation".to_string(),
-            confidence: 0.85,
-            tests_required: true,
-        });
+        for opp in opportunities.iter().take(self.config.max_modifications_per_cycle) {
+            // Convert improvement opportunity to code modification
+            let modification = CodeModification {
+                target_file: opp.file.clone().unwrap_or_else(|| "src/housaky/mod.rs".to_string()),
+                target_function: opp.function.clone(),
+                modification: opp.description.clone(),
+                old_code: None,
+                new_code: format!("// Improvement: {}", opp.suggestion.as_ref().unwrap_or(&opp.description)),
+                confidence: opp.confidence,
+                tests_required: opp.confidence < 0.9, // Require tests for lower confidence
+            };
+            modifications.push(modification);
+        }
+        
+        // If no opportunities found, check for common patterns
+        if modifications.is_empty() {
+            // Check for functions that could benefit from optimization
+            if let Ok(analyzer) = self.rust_analyzer.read().await.scan().await {
+                for opp in analyzer.into_iter().take(3) {
+                    if opp.confidence >= self.config.min_confidence {
+                        modifications.push(CodeModification {
+                            target_file: opp.file.clone().unwrap_or_default(),
+                            target_function: opp.function.clone(),
+                            modification: opp.description.clone(),
+                            old_code: None,
+                            new_code: format!("// Auto-improvement: {}", opp.description),
+                            confidence: opp.confidence,
+                            tests_required: true,
+                        });
+                    }
+                }
+            }
+        }
         
         Ok(modifications)
     }
     
     /// Apply a modification
-    async fn apply_modification(&self, _modification: &CodeModification) -> Result<()> {
+    async fn apply_modification(&self, modification: &CodeModification) -> Result<()> {
+        info!("Applying modification to {}: {}", modification.target_file, modification.modification);
+        
         // Use recursive_self_modifier to apply and track
-        let _modifier = self.recursive_modifier.write().await;
-        // In production, this would actually modify the code
+        let modifier = self.recursive_modifier.write().await;
+        
+        // Write the modification to the decision journal for audit trail
+        let journal_path = self.workspace_dir.join(".housaky").join("modifications.jsonl");
+        let entry = serde_json::json!({
+            "timestamp": chrono::Utc::now().to_rfc3339(),
+            "target_file": modification.target_file,
+            "target_function": modification.target_function,
+            "modification": modification.modification,
+            "confidence": modification.confidence,
+            "tests_required": modification.tests_required,
+        });
+        
+        // Append to journal
+        if let Ok(mut file) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&journal_path)
+        {
+            use std::io::Write;
+            let _ = writeln!(file, "{}", entry);
+        }
+        
+        // In production, this would call the actual code modifier
         // modifier.apply_modification(modification).await?;
+        
+        info!("Modification logged to {:?}", journal_path);
         Ok(())
     }
     
@@ -281,12 +329,44 @@ impl UnifiedSelfImprovementOrchestrator {
     async fn get_subagent_insights(&self) -> Result<Vec<String>> {
         let mut insights = Vec::new();
         
-        // Query kowalski-reasoning for architectural insights
-        let _subagents = self.subagents.read().await;
+        // Read recent improvement experiments for patterns
+        let experiments_path = self.workspace_dir.join(".housaky").join("improvement_experiments.json");
+        if experiments_path.exists() {
+            if let Ok(content) = tokio::fs::read_to_string(&experiments_path).await {
+                if let Ok(experiments) = serde_json::from_str::<Vec<serde_json::Value>>(&content) {
+                    // Analyze success patterns
+                    let successful: Vec<_> = experiments.iter()
+                        .filter(|e| e["success"].as_bool().unwrap_or(false))
+                        .collect();
+                    
+                    if !successful.is_empty() {
+                        insights.push(format!("Success pattern: {} improvements applied successfully", successful.len()));
+                    }
+                }
+            }
+        }
         
-        // In production, this would query the subagent API
-        insights.push("Consider increasing heartbeat frequency for faster self-improvement".to_string());
-        insights.push("Quantum VQE convergence is improving".to_string());
+        // Check fitness trend
+        let fitness = self.evaluate_fitness().await;
+        if let Ok(score) = fitness {
+            if score.overall > 0.8 {
+                insights.push("Fitness score is healthy - consider more aggressive improvements".to_string());
+            } else if score.overall < 0.5 {
+                insights.push("Fitness score needs attention - focus on stability improvements".to_string());
+            }
+        }
+        
+        // Check goal progress
+        let goals = self.rust_analyzer.read().await.scan().await?;
+        if !goals.is_empty() {
+            insights.push(format!("{} improvement opportunities identified", goals.len()));
+        }
+        
+        // Default insights if none generated
+        if insights.is_empty() {
+            insights.push("Continue systematic self-improvement cycles".to_string());
+            insights.push("Monitor capability growth trajectory".to_string());
+        }
         
         Ok(insights)
     }
