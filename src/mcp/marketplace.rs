@@ -8,7 +8,29 @@ use crate::commands::McpCommands;
 const CLAUDE_MCP_REGISTRY_URL: &str =
     "https://raw.githubusercontent.com/anthropics/mcp-servers/main/registry.json";
 
-// Popular MCP servers that might not be in the official registry
+const FALLBACK_REGISTRY: &str = r#"{
+    "filesystem": {"description": "Filesystem operations - read, write, search files", "command": "npx", "args": ["-y", "@modelcontextprotocol/server-filesystem"]},
+    "memory": {"description": "Persistent memory storage for context", "command": "npx", "args": ["-y", "@modelcontextprotocol/server-memory"]},
+    "brave-search": {"description": "Web search using Brave Search API", "command": "npx", "args": ["-y", "@modelcontextprotocol/server-brave-search"]},
+    "puppeteer": {"description": "Browser automation with Puppeteer", "command": "npx", "args": ["-y", "@modelcontextprotocol/server-puppeteer"]},
+    "sqlite": {"description": "SQLite database operations", "command": "npx", "args": ["-y", "@modelcontextprotocol/server-sqlite"]},
+    "github": {"description": "GitHub API integration", "command": "npx", "args": ["-y", "@modelcontextprotocol/server-github"]},
+    "git": {"description": "Git operations and repository management", "command": "npx", "args": ["-y", "@modelcontextprotocol/server-git"]},
+    "slack": {"description": "Slack API integration", "command": "npx", "args": ["-y", "@modelcontextprotocol/server-slack"]},
+    "google-maps": {"description": "Google Maps API for location services", "command": "npx", "args": ["-y", "@modelcontextprotocol/server-google-maps"]},
+    "fetch": {"description": "HTTP fetch capabilities", "command": "npx", "args": ["-y", "@modelcontextprotocol/server-fetch"]},
+    "sequential-thinking": {"description": "Structured reasoning and problem solving", "command": "npx", "args": ["-y", "@modelcontextprotocol/server-sequential-thinking"]},
+    "time": {"description": "Time and timezone utilities", "command": "npx", "args": ["-y", "@modelcontextprotocol/server-time"]},
+    "aws-kb-retrieval": {"description": "AWS Knowledge Base retrieval", "command": "npx", "args": ["-y", "@modelcontextprotocol/server-aws-kb-retrieval"]},
+    "everart": {"description": "AI image generation", "command": "npx", "args": ["-y", "@modelcontextprotocol/server-everart"]},
+    "postgres": {"description": "PostgreSQL database operations", "command": "npx", "args": ["-y", "@modelcontextprotocol/server-postgres"]},
+    "mongodb": {"description": "MongoDB database operations", "command": "npx", "args": ["-y", "@modelcontextprotocol/server-mongodb"]},
+    "redis": {"description": "Redis cache operations", "command": "npx", "args": ["-y", "@modelcontextprotocol/server-redis"]},
+    "sentry": {"description": "Sentry error tracking integration", "command": "npx", "args": ["-y", "@modelcontextprotocol/server-sentry"]},
+    "airtable": {"description": "Airtable API integration", "command": "npx", "args": ["-y", "@modelcontextprotocol/server-airtable"]},
+    "notion": {"description": "Notion API integration", "command": "npx", "args": ["-y", "@modelcontextprotocol/server-notion"]}
+}"#;
+
 const POPULAR_MCPS: &[(&str, &str, &str)] = &[
     (
         "filesystem",
@@ -108,21 +130,29 @@ impl McpMarketplace {
         let cache_dir = self.ensure_cache_dir()?;
         let registry_path = cache_dir.join("registry.json");
 
-        let content = if registry_path.exists() {
-            let cached = std::fs::read_to_string(&registry_path)?;
-            if !cached.trim().is_empty() {
-                cached
-            } else {
-                // Empty file, try network
-                self.fetch_from_network(&registry_path)?
+        // Try cache first
+        if registry_path.exists() {
+            if let Ok(cached) = std::fs::read_to_string(&registry_path) {
+                if !cached.trim().is_empty() {
+                    if let Ok(registry) = serde_json::from_str::<McpRegistry>(&cached) {
+                        return Ok(registry.servers);
+                    }
+                }
             }
-        } else {
-            self.fetch_from_network(&registry_path)?
-        };
+        }
 
-        let registry: McpRegistry =
-            serde_json::from_str(&content).with_context(|| "Failed to parse MCP registry")?;
+        // Try network
+        if let Ok(content) = self.fetch_from_network(&registry_path) {
+            if let Ok(registry) = serde_json::from_str::<McpRegistry>(&content) {
+                return Ok(registry.servers);
+            }
+        }
 
+        // Use bundled fallback
+        let registry: McpRegistry = serde_json::from_str(FALLBACK_REGISTRY)
+            .with_context(|| "Failed to parse bundled fallback registry")?;
+
+        tracing::info!("Using bundled MCP registry fallback");
         Ok(registry.servers)
     }
 

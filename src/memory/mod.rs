@@ -2,13 +2,13 @@ pub mod backend;
 pub mod chunker;
 pub mod embeddings;
 pub mod hygiene;
+pub mod intelligent_memory;
 pub mod lucid;
 pub mod lucid_native;
 pub mod markdown;
 pub mod none;
 pub mod response_cache;
 pub mod snapshot;
-pub mod sqlite;
 pub mod traits;
 pub mod vector;
 
@@ -22,28 +22,22 @@ pub use lucid_native::{LucidNativeMemory, LucidNativeConfig, LucidMemoryStats};
 pub use markdown::MarkdownMemory;
 pub use none::NoneMemory;
 pub use response_cache::ResponseCache;
-pub use sqlite::SqliteMemory;
 pub use traits::Memory;
 #[allow(unused_imports)]
 pub use traits::{MemoryCategory, MemoryEntry};
+pub use intelligent_memory::{IntelligentMemory, IntelligentMemoryConfig, MemoryImportance, ContextBudget};
 
 use crate::config::MemoryConfig;
 use std::path::Path;
 use std::sync::Arc;
 
-fn create_memory_with_sqlite_builder<F>(
+fn create_memory_backend(
     backend_name: &str,
     workspace_dir: &Path,
-    mut sqlite_builder: F,
     unknown_context: &str,
-) -> anyhow::Result<Box<dyn Memory>>
-where
-    F: FnMut() -> anyhow::Result<SqliteMemory>,
-{
+) -> anyhow::Result<Box<dyn Memory>> {
     match classify_memory_backend(backend_name) {
-        MemoryBackendKind::Sqlite => Ok(Box::new(sqlite_builder()?)),
         MemoryBackendKind::Lucid => {
-            // Use LucidNativeMemory for pure Lucid integration (no SQLite fallback)
             let config = LucidNativeConfig {
                 project_path: workspace_dir.to_path_buf(),
                 ..LucidNativeConfig::default()
@@ -56,7 +50,6 @@ where
             tracing::warn!(
                 "Unknown memory backend '{backend_name}'{unknown_context}, falling back to lucid-native"
             );
-            // Default to Lucid instead of markdown
             let config = LucidNativeConfig {
                 project_path: workspace_dir.to_path_buf(),
                 ..LucidNativeConfig::default()
@@ -70,7 +63,7 @@ where
 pub fn create_memory(
     config: &MemoryConfig,
     workspace_dir: &Path,
-    api_key: Option<&str>,
+    _api_key: Option<&str>,
 ) -> anyhow::Result<Box<dyn Memory>> {
     // Best-effort memory hygiene/retention pass (throttled by state file).
     if let Err(e) = hygiene::run_if_due(config, workspace_dir) {
@@ -84,12 +77,12 @@ pub fn create_memory(
         }
     }
 
-    // Auto-hydration: if brain.db is missing but MEMORY_SNAPSHOT.md exists,
+    // Auto-hydration: if Lucid memory is unavailable but MEMORY_SNAPSHOT.md exists,
     // restore the "soul" from the snapshot before creating the backend.
     if config.auto_hydrate
         && matches!(
             classify_memory_backend(&config.backend),
-            MemoryBackendKind::Sqlite | MemoryBackendKind::Lucid
+            MemoryBackendKind::Lucid
         )
         && snapshot::should_hydrate(workspace_dir)
     {
@@ -106,36 +99,7 @@ pub fn create_memory(
         }
     }
 
-    fn build_sqlite_memory(
-        config: &MemoryConfig,
-        workspace_dir: &Path,
-        api_key: Option<&str>,
-    ) -> anyhow::Result<SqliteMemory> {
-        let embedder: Arc<dyn embeddings::EmbeddingProvider> =
-            Arc::from(embeddings::create_embedding_provider(
-                &config.embedding_provider,
-                api_key,
-                &config.embedding_model,
-                config.embedding_dimensions,
-            ));
-
-        #[allow(clippy::cast_possible_truncation)]
-        let mem = SqliteMemory::with_embedder(
-            workspace_dir,
-            embedder,
-            config.vector_weight as f32,
-            config.keyword_weight as f32,
-            config.embedding_cache_size,
-        )?;
-        Ok(mem)
-    }
-
-    create_memory_with_sqlite_builder(
-        &config.backend,
-        workspace_dir,
-        || build_sqlite_memory(config, workspace_dir, api_key),
-        "",
-    )
+    create_memory_backend(&config.backend, workspace_dir, "")
 }
 
 pub fn create_memory_for_migration(
