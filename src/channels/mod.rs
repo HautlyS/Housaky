@@ -11,6 +11,9 @@ pub mod telegram;
 pub mod traits;
 pub mod voice;
 pub mod whatsapp;
+pub mod line;
+pub mod signal;
+pub mod webchat;
 
 pub mod agi_processor;
 
@@ -27,6 +30,12 @@ pub use slack::SlackChannel;
 pub use telegram::TelegramChannel;
 pub use traits::Channel;
 pub use voice::voice_channel::VoiceChannel;
+pub use line::LineChannel;
+pub use line::LineConfig;
+pub use signal::SignalChannel;
+pub use signal::SignalConfig;
+pub use webchat::WebChatChannel;
+pub use webchat::WebChatConfig;
 pub use voice::VoiceConfig;
 pub use voice::VoiceEngine;
 pub use whatsapp::{WhatsAppChannel, WhatsAppChannelConfig, WhatsAppMode};
