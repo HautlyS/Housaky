@@ -2,7 +2,7 @@ import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import { resolve } from 'path'
 
-const base = process.env.NODE_ENV === 'production' && process.env.GITHUB_PAGES ? '/Housaky/' : '/'
+const base = process.env.GITHUB_PAGES === 'true' ? '/Housaky/' : '/'
 
 export default defineConfig({
   plugins: [vue()],
