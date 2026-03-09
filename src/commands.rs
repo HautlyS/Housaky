@@ -149,6 +149,11 @@ pub enum HousakyCommands {
         #[command(subcommand)]
         consciousness_command: ConsciousnessCommands,
     },
+    /// Meta-cognition and self-reflection
+    MetaCognition {
+        #[command(subcommand)]
+        meta_cognition_command: MetaCognitionCommands,
+    },
 }
 
 // ============================================================================
@@ -169,6 +174,13 @@ pub enum ConsciousnessCommands {
     /// Show narrative self state
     Narrative,
 }
+
+// ============================================================================
+// Singularity Commands
+// ============================================================================
+
+#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum SingularityCommands {
     /// Show current progress toward AGI singularity
     Status,
     /// Show detailed metrics breakdown
@@ -180,6 +192,28 @@ pub enum ConsciousnessCommands {
     },
     /// Estimate time to singularity
     Estimate,
+}
+
+// ============================================================================
+// Meta-Cognition Commands
+// ============================================================================
+
+#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum MetaCognitionCommands {
+    /// Show current self-model
+    SelfModel,
+    /// Reflect on recent actions
+    Reflect {
+        /// Trigger for reflection
+        #[arg(short, long)]
+        trigger: Option<String>,
+    },
+    /// Show capability growth areas
+    Growth,
+    /// Show value alignment status
+    Values,
+    /// Show known limitations
+    Limitations,
 }
 
 #[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -722,3 +756,4 @@ pub use tts::{TtsCommands, TtsConfig, TtsProviderConfig, Voice};
 pub use web::{FetchResult, SearchResult, WebCommands, WebConfig, handle_search, handle_fetch};
 pub use self::SingularityCommands;
 pub use self::ConsciousnessCommands;
+pub use self::MetaCognitionCommands;
