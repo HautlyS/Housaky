@@ -11,9 +11,9 @@ pub mod telegram;
 pub mod traits;
 pub mod voice;
 pub mod whatsapp;
-# pub mod line;
-# pub mod signal;
-# pub mod webchat;
+pub mod line;
+pub mod signal;
+pub mod webchat;
 
 pub mod agi_processor;
 
@@ -30,21 +30,15 @@ pub use slack::SlackChannel;
 pub use telegram::TelegramChannel;
 pub use traits::Channel;
 pub use voice::voice_channel::VoiceChannel;
-#[allow(unused)]
-# pub use line::LineChannel;
-#[allow(unused)]
-# pub use line::LineConfig;
-#[allow(unused)]
-# pub use signal::SignalChannel;
-#[allow(unused)]
-# pub use signal::SignalConfig;
-#[allow(unused)]
-# pub use webchat::WebChatChannel;
-#[allow(unused)]
-# pub use webchat::WebChatConfig;
 pub use voice::VoiceConfig;
 pub use voice::VoiceEngine;
 pub use whatsapp::{WhatsAppChannel, WhatsAppChannelConfig, WhatsAppMode};
+pub use line::LineChannel;
+pub use line::LineConfig;
+pub use signal::SignalChannel;
+pub use signal::SignalConfig;
+pub use webchat::WebChatChannel;
+pub use webchat::WebChatConfig;
 
 use crate::agent::loop_::{build_tool_instructions, run_tool_call_loop};
 use crate::config::Config;

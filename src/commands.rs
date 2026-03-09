@@ -787,7 +787,3 @@ pub use sessions::SessionsCommands;
 pub use system::{HeartbeatAction, SystemCommands};
 pub use tts::{TtsCommands, TtsConfig, TtsProviderConfig, Voice};
 pub use web::{FetchResult, SearchResult, WebCommands, WebConfig, handle_search, handle_fetch};
-pub use self::SingularityCommands;
-pub use self::ConsciousnessCommands;
-pub use self::MetaCognitionCommands;
-pub use self::FederationCommands;

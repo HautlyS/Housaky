@@ -8,6 +8,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use chrono::{DateTime, Utc};
+use tracing::info;
 
 // Import existing systems
 use super::self_improve_interface::SelfImproveInterface;

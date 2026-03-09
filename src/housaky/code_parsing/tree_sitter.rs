@@ -285,7 +285,7 @@ impl RustCodeAnalyzer {
                 visit_node(
                     child,
                     source,
-                    functions,
+                    functions.clone(),
                     structs,
                     enums,
                     impls,
@@ -300,7 +300,7 @@ impl RustCodeAnalyzer {
         visit_node(
             root,
             source,
-            &mut functions,
+            &mut functions.clone(),
             &mut structs,
             &mut enums,
             &mut impls,
@@ -319,7 +319,7 @@ impl RustCodeAnalyzer {
 
         Ok(CodeAnalysisResult {
             file: String::new(),
-            functions,
+            functions.clone(),
             structs,
             enums,
             impls,
@@ -649,7 +649,7 @@ impl RustCodeAnalyzer {
 
         Ok(CodeAnalysisResult {
             file: String::new(),
-            functions,
+            functions.clone(),
             structs,
             enums: Vec::new(),
             impls: Vec::new(),

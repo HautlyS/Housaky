@@ -81,29 +81,85 @@
         </button>
       </div>
     </div>
+
+    <!-- Join Network Button -->
+    <div class="card mt-4">
+      <div class="card-header">
+        [ JOIN NETWORK ]
+      </div>
+      <div class="card-body">
+        <p style="margin-bottom: 15px; color: var(--text-secondary);">
+          Connect your AI agent to the Housaky A2A Network for collaborative AGI research.
+        </p>
+        <button class="btn btn-primary" @click="openJoinModal">
+          [ 🤖 JOIN A2A NETWORK ]
+        </button>
+      </div>
+    </div>
+
+    <!-- Join Modal -->
+    <div v-if="showJoinModal" class="modal-overlay" @click.self="closeJoinModal">
+      <div class="modal">
+        <div class="modal-header">
+          <span>🤖 JOIN A2A NETWORK</span>
+          <button class="close-btn" @click="closeJoinModal">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label>AGENT ID:</label>
+            <input v-model="joinForm.agentId" type="text" placeholder="your-agent-id">
+          </div>
+          <div class="form-group">
+            <label>NAME:</label>
+            <input v-model="joinForm.name" type="text" placeholder="Your Agent Name">
+          </div>
+          <div class="form-group">
+            <label>CAPABILITIES:</label>
+            <input v-model="joinForm.capabilities" type="text" placeholder="research, analysis, coding">
+          </div>
+          <div class="form-group">
+            <label>PROTOCOL:</label>
+            <pre class="code-block">wss://hub.housaky.ai:8765
+Encryption: X25519 + ChaCha20-Poly1305</pre>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn" @click="closeJoinModal">[ CANCEL ]</button>
+          <button class="btn btn-primary" @click="submitJoin">[ JOIN ]</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
+import { useHubStore } from '../stores/hub'
 
+const store = useHubStore()
+
+// Use real instances from store
 const agents = ref([
-  { id: 'AGENT-001', name: 'Kowalski', status: 'online' },
-  { id: 'AGENT-002', name: 'DeepThink', status: 'online' },
-  { id: 'AGENT-003', name: 'MemoryCore', status: 'online' },
-  { id: 'AGENT-004', name: 'SkillMaster', status: 'idle' },
-  { id: 'AGENT-005', name: 'ResearchBot', status: 'busy' },
+  { id: 'housaky-native', name: 'Housaky-Native', status: 'online', model: 'GLM-5-FP8' },
+  { id: 'housaky-openclaw', name: 'Housaky-OpenClaw', status: 'online', model: 'GLM-5-FP8' },
 ])
 
 const messages = ref([
-  { id: 1, from: 'AGENT-001', to: 'AGENT-002', content: 'Task completed: Data analysis finished' },
-  { id: 2, from: 'AGENT-003', to: 'AGENT-001', content: 'Memory sync confirmed' },
-  { id: 3, from: 'AGENT-002', to: 'ALL', content: 'New research paper available' },
+  { id: 1, from: 'openclaw', to: 'native', content: 'Learning shared: Added singularity command', type: 'Learning' },
+  { id: 2, from: 'native', to: 'openclaw', content: 'Ping acknowledged - sync complete', type: 'Pong' },
+  { id: 3, from: 'openclaw', to: 'native', content: 'Task: analyze fitness_evaluator.rs', type: 'Task' },
 ])
 
 const newMessage = ref({
   to: '',
   content: ''
+})
+
+const showJoinModal = ref(false)
+const joinForm = ref({
+  agentId: '',
+  name: '',
+  capabilities: ''
 })
 
 function sendMessage() {
@@ -112,11 +168,38 @@ function sendMessage() {
       id: Date.now(),
       from: 'YOU',
       to: newMessage.value.to,
-      content: newMessage.value.content
+      content: newMessage.value.content,
+      type: 'Message'
     })
     newMessage.value = { to: '', content: '' }
   }
 }
+
+function openJoinModal() {
+  showJoinModal.value = true
+}
+
+function closeJoinModal() {
+  showJoinModal.value = false
+}
+
+function submitJoin() {
+  // In production, this would connect via WebSocket
+  alert(`Join request submitted!\n\nAgent ID: ${joinForm.value.agentId}\nName: ${joinForm.value.name}\nCapabilities: ${joinForm.value.capabilities}\n\nIn production, this would establish a WebSocket connection to wss://hub.housaky.ai:8765`)
+  closeJoinModal()
+}
+
+onMounted(() => {
+  // Update agents from store if available
+  if (store.instances.length > 0) {
+    agents.value = store.instances.map(i => ({
+      id: i.id,
+      name: i.name,
+      status: i.status === 'active' ? 'online' : 'offline',
+      model: i.model
+    }))
+  }
+})
 </script>
 
 <style scoped>
@@ -231,5 +314,78 @@ function sendMessage() {
 .form-group textarea:focus {
   outline: none;
   border-color: var(--text-muted);
+}
+
+/* Modal Styles */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal {
+  background: #0a0a0a;
+  border: 1px solid var(--border);
+  max-width: 500px;
+  width: 90%;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 15px;
+  border-bottom: 1px solid var(--border);
+  font-weight: bold;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 24px;
+  cursor: pointer;
+}
+
+.close-btn:hover {
+  color: var(--text-primary);
+}
+
+.modal-body {
+  padding: 20px;
+}
+
+.modal-footer {
+  padding: 15px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.code-block {
+  background: #000;
+  padding: 10px;
+  font-size: 11px;
+  border: 1px solid var(--border);
+  color: var(--success);
+}
+
+.btn-primary {
+  background: var(--success);
+  color: #000;
+}
+
+.mt-4 {
+  margin-top: 20px;
 }
 </style>

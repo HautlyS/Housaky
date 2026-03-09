@@ -1,4 +1,4 @@
-import{_ as t,o as s,c as d,a as e}from"./index-DsnOwpRN.js";const n={},v={class:"research"};function r(i,a){return s(),d("div",v,[...a[0]||(a[0]=[e(`<div class="banner" data-v-94129faa><pre class="ascii-art" data-v-94129faa>╔═══════════════════════════════════════════════════════════════════════════╗
+import{_ as t,o as s,c as d,a as e}from"./index-Dp4uRDdd.js";const n={},v={class:"research"};function r(i,a){return s(),d("div",v,[...a[0]||(a[0]=[e(`<div class="banner" data-v-94129faa><pre class="ascii-art" data-v-94129faa>╔═══════════════════════════════════════════════════════════════════════════╗
 ║                                                                           ║
 ║                      🔬 AGI RESEARCH LABORATORY                           ║
 ║                 Advancing Artificial General Intelligence                 ║

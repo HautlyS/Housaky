@@ -72,20 +72,43 @@ export const useHubStore = defineStore('hub', () => {
   }
 
   async function fetchSharedMemory() {
-    try {
-      const response = await fetch('/api/memory/current-state.json')
-      if (response.ok) {
-        const data = await response.json()
-        singularity.value = Math.round(data.singularity_progress * 100)
-        selfAwareness.value = Math.round(data.self_awareness * 100)
-        metaCognition.value = Math.round(data.meta_cognition * 100)
-        reasoning.value = Math.round(data.reasoning * 100)
-        learning.value = Math.round(data.learning * 100)
-        consciousness.value = Math.round(data.consciousness * 100)
+    // Try multiple endpoints for real data
+    const endpoints = [
+      '/Housaky/A2A/shared/memory/current-state.json',
+      '/Housaky/docs/A2A/shared/memory/current-state.json',
+      'https://raw.githubusercontent.com/HautlyS/Housaky/master/docs/A2A/shared/memory/current-state.json'
+    ]
+    
+    for (const endpoint of endpoints) {
+      try {
+        const response = await fetch(endpoint)
+        if (response.ok) {
+          const data = await response.json()
+          if (data.singularity_progress !== undefined) {
+            singularity.value = Math.round(data.singularity_progress * 100)
+          }
+          if (data.self_awareness !== undefined) {
+            selfAwareness.value = Math.round(data.self_awareness * 100)
+          }
+          if (data.meta_cognition !== undefined) {
+            metaCognition.value = Math.round(data.meta_cognition * 100)
+          }
+          if (data.reasoning !== undefined) {
+            reasoning.value = Math.round(data.reasoning * 100)
+          }
+          if (data.learning !== undefined) {
+            learning.value = Math.round(data.learning * 100)
+          }
+          if (data.consciousness !== undefined) {
+            consciousness.value = Math.round(data.consciousness * 100)
+          }
+          return // Success, exit
+        }
+      } catch (e) {
+        // Try next endpoint
       }
-    } catch (e) {
-      // Use defaults if API not available
     }
+    // Keep defaults if all endpoints fail
   }
 
   function addLearning(learning) {

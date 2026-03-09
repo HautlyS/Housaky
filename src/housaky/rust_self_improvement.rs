@@ -26,10 +26,13 @@ pub struct CodeIssue {
 pub struct ImprovementOpportunity {
     pub file: String,
     pub description: String,
-    pub priority: f64, // 0.0 - 1.0
-    pub effort: String, // "low", "medium", "high"
-    pub category: String, // "performance", "safety", "clarity", "feature"
+    pub priority: f64,
+    pub effort: String,
+    pub category: String,
     pub code_snippet: Option<String>,
+    pub function: Option<String>,
+    pub suggestion: Option<String>,
+    pub confidence: Option<f64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
