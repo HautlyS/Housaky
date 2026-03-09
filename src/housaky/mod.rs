@@ -140,7 +140,7 @@ pub use housaky_agent::{
 pub use session_manager::{Session, SessionManager, SessionSummary};
 
 use crate::commands::{
-    CollectiveCommands, GSDCommands, GoalCommands, HousakyCommands, SelfModCommands,
+    A2ACommands, CollectiveCommands, GSDCommands, GoalCommands, HousakyCommands, SelfModCommands,
 };
 use crate::config::Config;
 use anyhow::Result;
@@ -450,6 +450,10 @@ pub async fn handle_command(command: HousakyCommands, config: &Config) -> Result
         
         HousakyCommands::SeedMind { seed_mind_command } => {
             seed_mind::handle_seed_mind_command(seed_mind_command, config).await?;
+        }
+        
+        HousakyCommands::A2A { a2a_command } => {
+            handle_a2a_command(a2a_command).await?;
         }
     }
 
@@ -1341,6 +1345,212 @@ async fn handle_collective_command(command: CollectiveCommands, config: &Config)
         }
     }
 
+    Ok(())
+}
+
+async fn handle_a2a_command(command: A2ACommands) -> Result<()> {
+    use crate::commands::{create_message, send_message, read_inbox, read_peer_state, default_a2a_dir};
+    
+    let a2a_dir = default_a2a_dir();
+    let instance = "openclaw";
+    let peer = "native";
+    
+    match command {
+        A2ACommands::Ping => {
+            println!("☸️ Pinging native instance...");
+            
+            let (id, msg) = create_message(instance, peer, "Ping", serde_json::json!({}), 2);
+            send_message(&msg, &a2a_dir).await?;
+            
+            println!("✓ Ping sent (id: {})", id);
+            println!("  Check inbox with: housaky housaky a2a inbox");
+        }
+        
+        A2ACommands::Sync => {
+            println!("🔄 Syncing with native instance...");
+            
+            let (id, msg) = create_message(instance, peer, "SyncRequest", serde_json::json!({}), 2);
+            send_message(&msg, &a2a_dir).await?;
+            
+            println!("✓ Sync request sent (id: {})", id);
+        }
+        
+        A2ACommands::Status => {
+            println!("📊 A2A Communication Status\n");
+            
+            // Check peer state
+            if let Some(state) = read_peer_state(peer, &a2a_dir).await? {
+                println!("Native Instance:");
+                println!("  Status:    {}", state["status"].as_str().unwrap_or("unknown"));
+                println!("  Version:   {}", state["version"].as_str().unwrap_or("?"));
+                println!("  Progress:  {:.0}%", state["singularity_progress"].as_f64().unwrap_or(0.0) * 100.0);
+                println!("  Cycles:    {}", state["cycles_completed"].as_u64().unwrap_or(0));
+            } else {
+                println!("Native Instance: (no state file)");
+            }
+            
+            println!();
+            
+            // Check inbox
+            let inbox = read_inbox(instance, &a2a_dir).await?;
+            println!("Inbox: {} messages", inbox.len());
+            
+            // Check outbox
+            let outbox_dir = a2a_dir.join("outbox").join(instance);
+            let outbox_count = if outbox_dir.exists() {
+                tokio::fs::read_dir(&outbox_dir).await?.count()
+            } else {
+                0
+            };
+            println!("Outbox: {} messages", outbox_count);
+        }
+        
+        A2ACommands::Inbox => {
+            println!("📥 A2A Inbox\n");
+            
+            let messages = read_inbox(instance, &a2a_dir).await?;
+            
+            if messages.is_empty() {
+                println!("No messages in inbox.");
+            } else {
+                for msg in &messages {
+                    let from = msg["from"].as_str().unwrap_or("?");
+                    let msg_type = msg["t"].as_str().unwrap_or("?");
+                    let ts = msg["ts"].as_u64().unwrap_or(0);
+                    
+                    println!("[{}] {} from {}", msg_type, msg["id"].as_str().unwrap_or("?"), from);
+                    
+                    if msg_type == "Learning" {
+                        println!("  Category: {}", msg["d"]["category"].as_str().unwrap_or("?"));
+                        println!("  Content: {}", msg["d"]["content"].as_str().unwrap_or("?"));
+                    }
+                    println!();
+                }
+            }
+        }
+        
+        A2ACommands::Learn { category, content, confidence } => {
+            println!("📤 Sharing learning with native...");
+            
+            let data = serde_json::json!({
+                "category": category,
+                "content": content,
+                "confidence": confidence
+            });
+            
+            let (id, msg) = create_message(instance, peer, "Learning", data, 2);
+            send_message(&msg, &a2a_dir).await?;
+            
+            println!("✓ Learning shared (id: {}, confidence: {:.2})", id, confidence);
+        }
+        
+        A2ACommands::Task { id, action, params } => {
+            let task_id = id.unwrap_or_else(|| format!("task-{}", chrono::Utc::now().timestamp()));
+            
+            println!("📤 Delegating task to native: {}...", action);
+            
+            let params_value: serde_json::Value = serde_json::from_str(&params).unwrap_or(serde_json::json!({}));
+            
+            let data = serde_json::json!({
+                "id": task_id,
+                "action": action,
+                "params": params_value
+            });
+            
+            let (_, msg) = create_message(instance, peer, "Task", data, 1);
+            send_message(&msg, &a2a_dir).await?;
+            
+            println!("✓ Task sent (id: {})", task_id);
+        }
+        
+        A2ACommands::Review { file } => {
+            println!("📤 Requesting code review from native: {}...", file);
+            
+            let data = serde_json::json!({
+                "file": file,
+                "focus": "improvement"
+            });
+            
+            let (id, msg) = create_message(instance, peer, "Task", data, 1);
+            send_message(&msg, &a2a_dir).await?;
+            
+            println!("✓ Review request sent (id: {})", id);
+        }
+        
+        A2ACommands::Peers => {
+            println!("👥 A2A Peers\n");
+            
+            // Native
+            if let Some(state) = read_peer_state("native", &a2a_dir).await? {
+                println!("┌─ native ─────────────────────");
+                println!("│ Status:    {}", state["status"].as_str().unwrap_or("unknown"));
+                println!("│ Version:   {}", state["version"].as_str().unwrap_or("?"));
+                println!("│ Progress:  {:.0}%", state["singularity_progress"].as_f64().unwrap_or(0.0) * 100.0);
+                println!("└─────────────────────────────");
+            } else {
+                println!("native: (no state)");
+            }
+            
+            println!();
+            
+            // Self
+            if let Some(state) = read_peer_state("openclaw", &a2a_dir).await? {
+                println!("┌─ openclaw (self) ────────────");
+                println!("│ Status:    {}", state["status"].as_str().unwrap_or("unknown"));
+                println!("│ Role:      {}", state["role"].as_str().unwrap_or("?"));
+                println!("└─────────────────────────────");
+            }
+        }
+        
+        A2ACommands::Process => {
+            println!("⚙️ Processing inbox messages...\n");
+            
+            let messages = read_inbox(instance, &a2a_dir).await?;
+            let mut processed = 0;
+            
+            for msg in &messages {
+                let msg_type = msg["t"].as_str().unwrap_or("?");
+                
+                match msg_type {
+                    "Ping" => {
+                        // Auto-respond with Pong
+                        let (id, pong) = create_message(instance, peer, "Pong", serde_json::json!({}), 2);
+                        send_message(&pong, &a2a_dir).await?;
+                        println!("✓ Responded to Ping (id: {})", id);
+                        processed += 1;
+                    }
+                    "Learning" => {
+                        let category = msg["d"]["category"].as_str().unwrap_or("?");
+                        println!("📚 Learning received: {} - {}", category, 
+                            msg["d"]["content"].as_str().unwrap_or("?").chars().take(60).collect::<String>());
+                        processed += 1;
+                    }
+                    _ => {
+                        println!("📨 Message: {} (id: {})", msg_type, msg["id"].as_str().unwrap_or("?"));
+                        processed += 1;
+                    }
+                }
+            }
+            
+            println!("\n✓ Processed {} messages", processed);
+        }
+        
+        A2ACommands::CodeImprove { file, diff } => {
+            println!("📤 Sharing code improvement with native...");
+            
+            let data = serde_json::json!({
+                "file": file,
+                "diff": diff,
+                "language": "rust"
+            });
+            
+            let (id, msg) = create_message(instance, peer, "CodeImprove", data, 1);
+            send_message(&msg, &a2a_dir).await?;
+            
+            println!("✓ Code improvement sent (id: {})", id);
+        }
+    }
+    
     Ok(())
 }
 

@@ -134,6 +134,11 @@ pub enum HousakyCommands {
         #[command(subcommand)]
         seed_mind_command: SeedMindCommands,
     },
+    /// A2A - Agent-to-Agent communication
+    A2A {
+        #[command(subcommand)]
+        a2a_command: A2ACommands,
+    },
 }
 
 // ============================================================================
@@ -655,6 +660,7 @@ pub enum McpCommands {
 }
 
 // Subdirectory modules
+mod a2a;
 mod approvals;
 mod browser;
 mod memory;
@@ -666,6 +672,7 @@ mod system;
 mod tts;
 pub mod web;
 
+pub use a2a::{A2ACommands, A2AStatus, create_message, send_message, read_inbox, read_peer_state, default_a2a_dir};
 pub use approvals::ApprovalsCommands;
 pub use browser::BrowserCommands;
 pub use memory::MemoryCommands;
