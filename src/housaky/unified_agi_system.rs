@@ -117,7 +117,7 @@ impl UnifiedAGISystem {
         if self.config.enable_collective {
             info!("🤝 Initializing Collective Mind...");
             let collective_config = CollectiveConfig::default();
-            let collective = Arc::new(CollectiveHub::new(collective_config));
+            let collective = Arc::new(CollectiveHub::new(collective_config, self.config.workspace_dir.clone()));
             self.collective = Some(collective);
             self.status.write().await.insert("collective".to_string(), SystemStatus::Running);
         }
@@ -132,7 +132,7 @@ impl UnifiedAGISystem {
             info!("⏰ Initializing 24/7 Self-Improvement Daemon...");
             let daemon_config = SelfImproveDaemonConfig {
                 enabled: true,
-                enable_self_modification: self.config.self_modification_enabled,
+                enable_structural_changes: self.config.self_modification_enabled,
                 enable_parameter_tuning: true,
                 enable_tool_creation: true,
                 enable_skill_acquisition: true,

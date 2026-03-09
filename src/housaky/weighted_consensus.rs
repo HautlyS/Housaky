@@ -126,6 +126,12 @@ pub struct WeightedConsensusEngine {
     byzantine_threshold: f64,
 }
 
+impl Default for WeightedConsensusEngine {
+    fn default() -> Self {
+        Self::new(ReputationConfig::default())
+    }
+}
+
 impl WeightedConsensusEngine {
     pub fn new(config: ReputationConfig) -> Self {
         Self {
@@ -141,7 +147,8 @@ impl WeightedConsensusEngine {
         let mut reputations = self.reputations.write().await;
         
         if !reputations.contains_key(&agent_id) {
-            reputations.insert(agent_id.clone(), AgentReputation::new(agent_id));
+            let agent_id_clone = agent_id.clone();
+            reputations.insert(agent_id_clone.clone(), AgentReputation::new(agent_id_clone));
             info!("📝 Registered agent for consensus: {}", agent_id);
         }
     }
@@ -369,7 +376,7 @@ impl WeightedConsensusEngine {
 
     pub fn start_reputation_decay_loop(&self) {
         let engine = Arc::new(self.reputations.clone());
-        let config = self.config;
+        let config = self.config.clone();
         
         tokio::spawn(async move {
             let mut ticker = interval(Duration::from_secs(config.decay_interval_secs));

@@ -155,6 +155,10 @@ pub struct Config {
     /// OpenClaw collaboration configuration.
     #[serde(default)]
     pub collaboration: CollaborationConfig,
+
+    /// Unified AGI System Configuration - 24/7 self-improving AGI core.
+    #[serde(default)]
+    pub agi_system: AGISystemConfig,
 }
 
 // ── Collective Configuration (config.toml schema) ─────────────────────────────
@@ -247,6 +251,67 @@ fn default_shared_dir() -> PathBuf {
 
 fn default_collab_heartbeat() -> u64 {
     60
+}
+
+// ── Unified AGI System Configuration ─────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AGISystemConfig {
+    /// Enable 24/7 self-improvement daemon mode.
+    #[serde(default)]
+    pub enable_24_7_mode: bool,
+    /// Enable A2A agent discovery service.
+    #[serde(default)]
+    pub enable_a2a_discovery: bool,
+    /// Enable federation transport for peer communication.
+    #[serde(default)]
+    pub enable_federation: bool,
+    /// Enable collective intelligence system.
+    #[serde(default)]
+    pub enable_collective: bool,
+    /// Enable weighted consensus and reputation system.
+    #[serde(default)]
+    pub enable_weighted_consensus: bool,
+    /// Enable real performance benchmarking.
+    #[serde(default)]
+    pub enable_benchmarking: bool,
+    /// Enable structural code modifications (dangerous!).
+    #[serde(default)]
+    pub enable_self_modification: bool,
+    /// Minimum confidence threshold for auto-applying improvements.
+    #[serde(default)]
+    pub min_confidence_threshold: f64,
+    /// Maximum improvement cycles per hour.
+    #[serde(default)]
+    pub max_cycles_per_hour: u32,
+    /// Automatically apply safe improvements without approval.
+    #[serde(default)]
+    pub auto_apply_safe_improvements: bool,
+    /// Federation peer addresses to connect to.
+    #[serde(default)]
+    pub federation_peers: Vec<String>,
+    /// Federation bind address.
+    #[serde(default)]
+    pub federation_bind: String,
+}
+
+impl Default for AGISystemConfig {
+    fn default() -> Self {
+        Self {
+            enable_24_7_mode: false,
+            enable_a2a_discovery: true,
+            enable_federation: false,
+            enable_collective: true,
+            enable_weighted_consensus: true,
+            enable_benchmarking: true,
+            enable_self_modification: false,
+            min_confidence_threshold: 0.85,
+            max_cycles_per_hour: 12,
+            auto_apply_safe_improvements: false,
+            federation_peers: Vec::new(),
+            federation_bind: "0.0.0.0:7890".to_string(),
+        }
+    }
 }
 
 pub fn default_source_dir() -> PathBuf {
@@ -3186,16 +3251,17 @@ impl Default for Config {
             agents: HashMap::new(),
             hardware: HardwareConfig::default(),
             agi_enabled: true,
+            source_dir: default_source_dir(),
             provider_timeout: ProviderTimeoutConfig::default(),
             skills: SkillsConfig::default(),
             self_modification: SelfModificationConfig::default(),
             self_replication: SelfReplicationConfig::default(),
             gradient_free_optimizer: GradientFreeOptimizerConfig::default(),
             quantum: QuantumConfig::default(),
-            source_dir: home.join("housaky"),
             collective_api_key: None,
             collective: CollectiveSchemaConfig::default(),
             collaboration: CollaborationConfig::default(),
+            agi_system: AGISystemConfig::default(),
         }
     }
 }
@@ -3898,6 +3964,7 @@ mod tests {
             collective_api_key: None,
             collective: CollectiveSchemaConfig::default(),
             collaboration: CollaborationConfig::default(),
+            agi_system: AGISystemConfig::default(),
             human_readonly: HumanReadOnlyConfig::default(),
             mcp: McpConfig::default(),
         };
@@ -4069,6 +4136,7 @@ tool_dispatcher = "xml"
             collective_api_key: None,
             collective: CollectiveSchemaConfig::default(),
             collaboration: CollaborationConfig::default(),
+            agi_system: AGISystemConfig::default(),
             human_readonly: HumanReadOnlyConfig::default(),
             mcp: McpConfig::default(),
         };

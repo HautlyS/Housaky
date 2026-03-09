@@ -106,6 +106,7 @@ impl SelfImproveDaemon {
             })),
             cycles_count: Arc::new(RwLock::new(0)),
             improvements_count: Arc::new(RwLock::new(0)),
+            last_cycle_time: Arc::new(RwLock::new(0)),
             pause_reason: Arc::new(RwLock::new(None)),
             improvement_loop: None,
         }
@@ -291,7 +292,7 @@ pub fn create_24_7_daemon(
 ) -> SelfImproveDaemon {
     let config = SelfImproveDaemonConfig {
         enabled: true,
-        enable_self_modification,
+        enable_structural_changes: enable_self_modification,
         enable_parameter_tuning: true,
         enable_tool_creation: true,
         enable_skill_acquisition: true,

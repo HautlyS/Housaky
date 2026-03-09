@@ -199,7 +199,13 @@ impl AgentDiscoveryService {
     }
 
     pub fn create_discovery_message(&self) -> Vec<u8> {
-        serde_json::to_vec(&self.registry.blocking_read()).unwrap_or_default()
+        let registry = self.registry.blocking_read();
+        let snapshot = ServiceRegistry {
+            agents: registry.agents.clone(),
+            local_id: registry.local_id.clone(),
+            local_capabilities: registry.local_capabilities.clone(),
+        };
+        serde_json::to_vec(&snapshot).unwrap_or_default()
     }
 }
 

@@ -150,6 +150,7 @@ pub fn run_wizard() -> Result<Config> {
         collective_api_key: None,
         collective: crate::config::schema::CollectiveSchemaConfig::default(),
         collaboration: crate::config::schema::CollaborationConfig::default(),
+        agi_system: crate::config::schema::AGISystemConfig::default(),
         mcp: crate::config::schema::McpConfig::default(),
         human_readonly: crate::config::schema::HumanReadOnlyConfig::default(),
     };
@@ -379,6 +380,7 @@ pub fn run_quick_setup(
         collective_api_key: None,
         collective: crate::config::schema::CollectiveSchemaConfig::default(),
         collaboration: crate::config::schema::CollaborationConfig::default(),
+        agi_system: crate::config::schema::AGISystemConfig::default(),
         mcp: crate::config::schema::McpConfig::default(),
         human_readonly: crate::config::schema::HumanReadOnlyConfig::default(),
     };

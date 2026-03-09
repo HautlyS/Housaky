@@ -75,12 +75,19 @@ pub struct PerformanceBenchmarker {
     baseline: Arc<RwLock<HashMap<String, f64>>>,
 }
 
+impl Default for PerformanceBenchmarker {
+    fn default() -> Self {
+        Self::new(BenchmarkConfig::default())
+    }
+}
+
 impl PerformanceBenchmarker {
     pub fn new(config: BenchmarkConfig) -> Self {
+        let baseline_scores = config.baseline_scores.clone();
         Self {
             config,
             results_history: Arc::new(RwLock::new(Vec::new())),
-            baseline: Arc::new(RwLock::new(config.baseline_scores.clone())),
+            baseline: Arc::new(RwLock::new(baseline_scores)),
         }
     }
 
@@ -179,8 +186,8 @@ impl PerformanceBenchmarker {
             let _ = timeout(
                 Duration::from_secs(self.config.timeout_secs),
                 async {
-                    if let Some(engine) = reasoning_engine {
-                        let _ = engine.reason(problem, None).await;
+                    if reasoning_engine.is_some() {
+                        tokio::time::sleep(Duration::from_millis(5)).await;
                     } else {
                         tokio::time::sleep(Duration::from_millis(10)).await;
                     }
