@@ -46,6 +46,7 @@ jobs:
         run: pnpm run build
         env:
           NODE_ENV: production
+          GITHUB_PAGES: "true"
 
       # Build A2A Hub
       - name: Install dependencies for A2A Hub
