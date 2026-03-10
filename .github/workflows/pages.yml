@@ -65,13 +65,16 @@ jobs:
           # Ensure A2A dist directory exists
           mkdir -p landing/dist/A2A/assets
           
-          # Copy A2A Hub from hub dist to landing dist
-          echo "Copying A2A Hub from landing/A2A/hub/dist..."
-          if [ -d "landing/A2A/hub/dist" ]; then
+          # Copy A2A Hub from docs/A2A (build output) to landing dist
+          echo "Copying A2A Hub from docs/A2A..."
+          if [ -d "docs/A2A" ] && [ -d "docs/A2A/assets" ]; then
+            cp -r docs/A2A/* landing/dist/A2A/
+            echo "A2A Hub copied from docs/A2A"
+          elif [ -d "landing/A2A/hub/dist" ]; then
             cp -r landing/A2A/hub/dist/* landing/dist/A2A/
-            echo "A2A Hub copied successfully"
+            echo "A2A Hub copied from landing/A2A/hub/dist"
           else
-            echo "ERROR: landing/A2A/hub/dist not found!"
+            echo "ERROR: No A2A Hub build found!"
             exit 1
           fi
           
