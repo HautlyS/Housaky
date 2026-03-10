@@ -10,15 +10,13 @@ use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{debug, info, warn, error};
 
 use super::traits::{Memory, MemoryCategory, MemoryEntry};
 use super::lucid::LucidMemory;
-use super::intelligent_memory::{IntelligentMemory, IntelligentMemoryConfig, MemoryImportance, ContextBudget};
+use super::intelligent_memory::IntelligentMemory;
 use super::project_context::{
     AgentAwarenessEngine, AgentState, AwarenessLevel, AwarenessContext,
-    ContextSwitcher, ContextLevel, ProjectContext, ContextEntry, ConnectionGraph,
-    FederationAwareContext, ConnectionType,
+    ProjectContext, FederationAwareContext,
 };
 
 // ============================================================================
@@ -536,6 +534,7 @@ impl UnifiedAGIMemoryHub {
     /// Get awareness context for an agent
     pub async fn get_agent_awareness(&self, agent_id: &str, level: AwarenessLevel) -> Result<AwarenessContext> {
         if let Some(ref context) = self.project_context {
+            context.set_awareness_level(agent_id, level).await;
             let awareness = context.get_agent_awareness(agent_id).await;
             return Ok(awareness);
         }

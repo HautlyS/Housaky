@@ -147,7 +147,8 @@ impl SelfImproveDaemon {
                 
                 let current_status = *status.read().await;
                 if current_status != DaemonStatus::Running {
-                    info!("⏸️ Self-improvement daemon paused: {:?}", current_status);
+                    let reason = pause_reason.read().await;
+                    info!("⏸️ Self-improvement daemon paused: {:?} ({})", current_status, reason);
                     continue;
                 }
                 
@@ -204,6 +205,9 @@ impl SelfImproveDaemon {
     }
 
     async fn run_improvement_cycle(config: &SelfImproveDaemonConfig, workspace_dir: &PathBuf) -> Result<Option<serde_json::Value>> {
+        let workspace_path = workspace_dir.display();
+        info!("[SELF-IMPROVE] Starting improvement cycle in workspace: {}", workspace_path);
+        
         let mut improvements = serde_json::Map::new();
         
         if config.enable_parameter_tuning {

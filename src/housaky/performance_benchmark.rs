@@ -183,6 +183,8 @@ impl PerformanceBenchmarker {
             let problem = test_problems[i % test_problems.len()];
             let start = Instant::now();
             
+            debug!("[BENCH] Running problem {}: {}", i, problem);
+            
             let _ = timeout(
                 Duration::from_secs(self.config.timeout_secs),
                 async {

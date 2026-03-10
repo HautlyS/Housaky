@@ -312,7 +312,7 @@ impl ContextSwitcher {
 
     /// Update project access time
     async fn update_project_access(&self, project_id: &str) {
-        if let Some(mut project) = self.projects.write().await.get_mut(project_id) {
+        if let Some(project) = self.projects.write().await.get_mut(project_id) {
             project.last_accessed = Utc::now();
         }
     }
@@ -450,7 +450,7 @@ impl ContextSwitcher {
         let current = self.current_project.read().await.clone();
         
         if let Some(project) = current {
-            let entry = ContextEntry::new(
+            let mut entry = ContextEntry::new(
                 ContextLevel::Task,
                 &project.id,
                 task_id,
@@ -459,9 +459,11 @@ impl ContextSwitcher {
             .with_connections(connections)
             .with_importance(0.8);
             
+            entry.tags.push(task_name.to_string());
+            
             self.store_entry(entry).await?;
             
-            info!("[CONTEXT] Stored task context: {}", task_id);
+            info!("[CONTEXT] Stored task context: {} ({})", task_id, task_name);
         }
         
         Ok(())
@@ -584,14 +586,18 @@ impl FederationAwareContext {
         let mut all_shared = Vec::new();
         
         for (peer_id, context) in peers.iter() {
-            debug!("[FEDERATION] Syncing with peer: {}", context.peer_name);
+            debug!("[FEDERATION] Syncing with peer: {} ({})", context.peer_name, peer_id);
             
             // In a real implementation, this would:
             // 1. Send local context summary to peer
             // 2. Receive peer's context updates
             // 3. Merge and deduplicate
             
-            // For now, just log
+            // For now, just collect from peer's shared tasks
+            for task in &context.shared_tasks {
+                all_shared.push(task.clone());
+            }
+            
             info!("[FEDERATION] Synced with {} ({} tasks)", 
                 context.peer_name, 
                 context.shared_tasks.len()
@@ -721,7 +727,7 @@ impl AgentAwarenessEngine {
 
     /// Update agent's current task
     pub async fn update_agent_task(&self, agent_id: &str, task_id: Option<String>) {
-        if let Some(mut state) = self.active_agents.write().await.get_mut(agent_id) {
+        if let Some(state) = self.active_agents.write().await.get_mut(agent_id) {
             state.current_task = task_id.clone();
             state.last_update = Utc::now();
             
@@ -771,7 +777,7 @@ impl AgentAwarenessEngine {
 
     /// Set agent awareness level
     pub async fn set_awareness_level(&self, agent_id: &str, level: AwarenessLevel) {
-        if let Some(mut state) = self.active_agents.write().await.get_mut(agent_id) {
+        if let Some(state) = self.active_agents.write().await.get_mut(agent_id) {
             state.awareness_level = level;
             state.last_update = Utc::now();
             

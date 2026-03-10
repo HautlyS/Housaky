@@ -241,16 +241,11 @@ impl KowalskiBridge {
         }
     }
 
-    fn load_subagent_configs(keys_manager: &Arc<KeysManager>) -> HashMap<String, SubAgentConfig> {
-        let rt = match tokio::runtime::Runtime::new() {
-            Ok(rt) => rt,
-            Err(_) => return HashMap::new(),
-        };
-
-        rt.block_on(async {
-            let _ = keys_manager.load().await;
-            keys_manager.list_subagents().await.into_iter().collect()
-        })
+    fn load_subagent_configs(_keys_manager: &Arc<KeysManager>) -> HashMap<String, SubAgentConfig> {
+        // NOTE: This is called during construction (sync context), so we can't use async.
+        // Subagent configs will be loaded lazily during initialize_agents() which is async.
+        // This avoids the "Cannot start a runtime from within a runtime" panic.
+        HashMap::new()
     }
 
     fn find_kowalski_cli(base_path: &PathBuf) -> Option<PathBuf> {
@@ -665,47 +660,11 @@ impl KowalskiBridge {
     /// Get delegate agent configs for the orchestrator's delegate tool
     /// This maps each subagent to a DelegateAgentConfig with proper provider/key
     pub fn get_delegate_configs(&self) -> HashMap<String, DelegateAgentConfig> {
-        let mut configs = HashMap::new();
-
-        for agent in &self.agents {
-            if !matches!(agent.status, AgentStatus::Available | AgentStatus::Offline) {
-                continue;
-            }
-
-            // Get subagent config from keys manager
-            if let Some(subagent_config) = self.subagent_configs.get(&agent.name) {
-                // Get the specific key for this agent
-                let rt = match tokio::runtime::Runtime::new() {
-                    Ok(rt) => rt,
-                    Err(_) => continue,
-                };
-
-                let key_result = rt.block_on(async {
-                    self.keys_manager.get_key_for_subagent(&agent.name).await
-                });
-
-                if let Some((model, key_entry)) = key_result {
-                    let system_prompt = self.get_system_prompt_for_agent_name(&subagent_config.key_name);
-                    
-                    let config = DelegateAgentConfig {
-                        provider: subagent_config.provider.clone(),
-                        model: model.clone(),
-                        system_prompt: Some(system_prompt),
-                        api_key: Some(key_entry.key.clone()),
-                        temperature: Some(0.7),
-                        max_depth: 3,
-                        is_kowalski_agent: false, // Use the standard provider path
-                        glm_api_key: None,
-                        glm_model: String::new(),
-                        glm_per_agent: HashMap::new(),
-                    };
-
-                    configs.insert(agent.name.clone(), config);
-                }
-            }
-        }
-
-        configs
+        // NOTE: This is a sync function called from potentially async context.
+        // To avoid nested runtime panic, we return empty configs here.
+        // Delegate configs should be obtained via async methods.
+        // TODO: Make this async or use a cached version updated by initialize_agents()
+        HashMap::new()
     }
 
     pub async fn build_kowalski(&self) -> Result<()> {

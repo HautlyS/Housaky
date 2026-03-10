@@ -9,7 +9,6 @@ use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{debug, info, warn};
 
 use super::traits::{Memory, MemoryCategory, MemoryEntry};
 use super::lucid_native::LucidNativeMemory;

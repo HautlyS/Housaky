@@ -223,12 +223,22 @@ impl FederationTransport {
             anyhow::bail!("Peer {} not connected", peer_id);
         }
         
+        let payload_info = match &payload {
+            FederationPayload::Task { task_id, action, .. } => format!("Task({}: {})", task_id, action),
+            FederationPayload::Result { task_id, .. } => format!("Result({})", task_id),
+            FederationPayload::StateSync { .. } => "StateSync".to_string(),
+            FederationPayload::Heartbeat { .. } => "Heartbeat".to_string(),
+            FederationPayload::Discovery { .. } => "Discovery".to_string(),
+            FederationPayload::ConsensusRequest { topic, .. } => format!("ConsensusRequest({})", topic),
+            FederationPayload::ConsensusResponse { topic, .. } => format!("ConsensusResponse({})", topic),
+        };
+        
         let mut peers_write = self.peers.write().await;
         if let Some(s) = peers_write.get_mut(peer_id) {
             s.message_count += 1;
         }
         
-        info!("📤 Sent message to peer: {}", peer_id);
+        info!("📤 Sent {} to peer: {}", payload_info, peer_id);
         Ok(())
     }
 
@@ -236,10 +246,20 @@ impl FederationTransport {
         let peers = self.peers.read().await;
         let mut count = 0;
         
+        let payload_info = match &payload {
+            FederationPayload::Task { task_id, action, .. } => format!("Task({}: {})", task_id, action),
+            FederationPayload::Result { task_id, .. } => format!("Result({})", task_id),
+            FederationPayload::StateSync { .. } => "StateSync".to_string(),
+            FederationPayload::Heartbeat { status, load } => format!("Heartbeat({}: {:.1}%)", status, load),
+            FederationPayload::Discovery { .. } => "Discovery".to_string(),
+            FederationPayload::ConsensusRequest { topic, .. } => format!("ConsensusRequest({})", topic),
+            FederationPayload::ConsensusResponse { topic, vote, .. } => format!("ConsensusResponse({}: {})", topic, vote),
+        };
+        
         for (id, state) in peers.iter() {
             if state.connected {
                 count += 1;
-                info!("📣 Broadcasting to peer: {}", id);
+                info!("📣 Broadcasting {} to peer: {}", payload_info, id);
             }
         }
         

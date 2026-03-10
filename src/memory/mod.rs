@@ -41,7 +41,6 @@ pub use unified_agi_hub::{
 
 use crate::config::MemoryConfig;
 use std::path::Path;
-use std::sync::Arc;
 
 fn create_memory_backend(
     backend_name: &str,
