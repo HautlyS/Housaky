@@ -7,6 +7,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
 use std::process::Command;
+use std::time::{Duration, Instant};
+use sysinfo::System;
 use tracing::{debug, info, warn};
 
 /// Real fitness score with detailed metrics
@@ -93,8 +95,14 @@ impl FitnessEvaluator {
         score.correctness_score = (score.compilation_score + score.test_score) / 2.0;
         score.capability_score = score.overall;
         score.alignment_score = 0.9; // High alignment by default
-        score.latency_score = 0.8; // Placeholder - would need benchmarks
-        score.memory_score = 0.7; // Placeholder - would need profiling
+        
+        // Real latency benchmark (startup time)
+        score.latency_score = self.evaluate_latency().await?;
+        score.details.insert("latency".to_string(), score.latency_score);
+        
+        // Real memory benchmark (current process memory)
+        score.memory_score = self.evaluate_memory().await?;
+        score.details.insert("memory".to_string(), score.memory_score);
         
         info!("✅ Fitness evaluation complete: {:.2}%", score.overall * 100.0);
         
@@ -245,6 +253,84 @@ impl FitnessEvaluator {
                 Ok(score)
             }
             Err(_) => Ok(0.7)
+        }
+    }
+
+    /// Evaluate latency (startup time benchmark)
+    async fn evaluate_latency(&self) -> Result<f64> {
+        debug!("Evaluating latency (startup time)...");
+        
+        let binary_path = self.workspace_dir.join("target/release/housaky");
+        if !binary_path.exists() {
+            debug!("No release binary found, checking debug...");
+            let debug_path = self.workspace_dir.join("target/debug/housaky");
+            if !debug_path.exists() {
+                return Ok(0.7); // Default if no binary
+            }
+        }
+        
+        // Measure startup time (run --version which is fast)
+        let start = Instant::now();
+        let output = Command::new(&binary_path)
+            .args(["--version"])
+            .output();
+        
+        match output {
+            Ok(_) => {
+                let elapsed = start.elapsed();
+                // Score: <10ms = 1.0, <50ms = 0.9, <100ms = 0.8, <500ms = 0.6, >500ms = 0.4
+                let score = if elapsed < Duration::from_millis(10) {
+                    1.0
+                } else if elapsed < Duration::from_millis(50) {
+                    0.9
+                } else if elapsed < Duration::from_millis(100) {
+                    0.8
+                } else if elapsed < Duration::from_millis(500) {
+                    0.6
+                } else {
+                    0.4
+                };
+                
+                debug!("Startup time: {:?}, latency score: {:.2}", elapsed, score);
+                Ok(score)
+            }
+            Err(e) => {
+                warn!("Failed to run latency benchmark: {}", e);
+                Ok(0.7)
+            }
+        }
+    }
+
+    /// Evaluate memory usage
+    async fn evaluate_memory(&self) -> Result<f64> {
+        debug!("Evaluating memory usage...");
+        
+        let mut sys = System::new_all();
+        sys.refresh_all();
+        
+        // Get current process memory
+        let current_pid = sysinfo::get_current_pid().expect("Failed to get PID");
+        if let Some(process) = sys.process(current_pid) {
+            let memory_mb = process.memory() as f64 / (1024.0 * 1024.0);
+            
+            // Score: <10MB = 1.0, <50MB = 0.9, <100MB = 0.8, <500MB = 0.6, >500MB = 0.4
+            let score = if memory_mb < 10.0 {
+                1.0
+            } else if memory_mb < 50.0 {
+                0.9
+            } else if memory_mb < 100.0 {
+                0.8
+            } else if memory_mb < 500.0 {
+                0.6
+            } else {
+                0.4
+            };
+            
+            debug!("Memory usage: {:.2} MB, memory score: {:.2}", memory_mb, score);
+            Ok(score)
+        } else {
+            warn!("Failed to get process info");
+            Ok(0.7)
         }
     }
 
