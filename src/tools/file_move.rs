@@ -117,7 +117,7 @@ impl Tool for FileMoveTool {
         };
 
         // Resolve paths before operating to block symlink escapes
-        let resolved_source = match tokio::fs::canonicalize(&full_source).await {
+        let resolved_source: std::path::PathBuf = match tokio::fs::canonicalize(&full_source).await {
             Ok(p) => p,
             Err(e) => {
                 return Ok(ToolResult {

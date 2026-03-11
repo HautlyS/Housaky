@@ -259,6 +259,46 @@ impl Agent {
 
         let skills = crate::skills::load_active_skills(&config.workspace_dir, &config);
 
+        // If config.agents is empty, try to load subagents from keys.json
+        let agents_to_use = if config.agents.is_empty() {
+            use crate::keys_manager::manager::SubAgentConfig;
+            let subagents: Vec<(String, SubAgentConfig)> = std::thread::spawn({
+                let km = crate::keys_manager::manager::get_global_keys_manager();
+                move || {
+                    if let Some(runtime) = tokio::runtime::Runtime::new().ok() {
+                        runtime.block_on(km.list_subagents())
+                    } else {
+                        Vec::new()
+                    }
+                }
+            }).join().unwrap_or_default();
+            
+            if !subagents.is_empty() {
+                let mut agents_map = std::collections::HashMap::new();
+                for (name, subagent_config) in subagents {
+                    let model = subagent_config.model.clone();
+                    let delegate_config = crate::config::DelegateAgentConfig {
+                        provider: subagent_config.provider,
+                        model: model.clone(),
+                        system_prompt: None,
+                        api_key: None,
+                        temperature: None,
+                        max_depth: 3,
+                        is_kowalski_agent: true,
+                        glm_api_key: None,
+                        glm_model: model,
+                        glm_per_agent: std::collections::HashMap::new(),
+                    };
+                    agents_map.insert(name, delegate_config);
+                }
+                agents_map
+            } else {
+                config.agents.clone()
+            }
+        } else {
+            config.agents.clone()
+        };
+
         let mut tools = tools::all_tools_with_runtime(
             &security,
             runtime.clone(),
@@ -268,7 +308,7 @@ impl Agent {
             &config.browser,
             &config.http_request,
             &config.workspace_dir,
-            &config.agents,
+            &agents_to_use,
             config.api_key.as_deref(),
             config,
         );

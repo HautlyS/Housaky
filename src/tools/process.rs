@@ -186,12 +186,12 @@ impl ProcessTool {
             });
         }
 
-        let mut entries = tokio::fs::read_dir(&processes_dir).await?;
+        let mut entries: tokio::fs::ReadDir = tokio::fs::read_dir(&processes_dir).await?;
         let mut processes = Vec::new();
 
         while let Some(entry) = entries.next_entry().await? {
-            let path = entry.path();
-            if path.extension().map(|e| e == "json").unwrap_or(false) {
+            let path: std::path::PathBuf = entry.path();
+            if path.extension().map(|e: &std::ffi::OsStr| e == "json").unwrap_or(false) {
                 if let Ok(content) = tokio::fs::read_to_string(&path).await {
                     if let Ok(info) = serde_json::from_str::<serde_json::Value>(&content) {
                         let pid = info.get("pid").and_then(|v| v.as_str()).unwrap_or("?");
@@ -327,10 +327,10 @@ impl ProcessTool {
     }
 
     async fn update_process_status(&self, process_id: &str, status: &str) -> anyhow::Result<()> {
-        let process_file = crate::util::expand_path(&format!("~/.housaky/processes/{}.json", process_id));
+        let process_file: std::path::PathBuf = crate::util::expand_path(&format!("~/.housaky/processes/{}.json", process_id));
 
         if process_file.exists() {
-            let content = tokio::fs::read_to_string(&process_file).await?;
+            let content: String = tokio::fs::read_to_string(&process_file).await?;
             let mut info: serde_json::Value = serde_json::from_str(&content)?;
             info["status"] = serde_json::json!(status);
             info["ended_at"] = serde_json::json!(chrono::Utc::now().to_rfc3339());

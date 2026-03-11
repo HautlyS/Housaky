@@ -43,19 +43,47 @@ pub struct LucidConfig {
     pub workspace_dir: PathBuf,
 }
 
+fn default_binary_path() -> PathBuf {
+    if let Some(user_dirs) = directories::UserDirs::new() {
+        user_dirs.home_dir().join(".lucid").join("bin").join("lucid")
+    } else if let Ok(home) = std::env::var("HOME") {
+        PathBuf::from(home).join(".lucid").join("bin").join("lucid")
+    } else {
+        PathBuf::from(".lucid").join("bin").join("lucid")
+    }
+}
+
+fn default_workspace_dir() -> PathBuf {
+    if let Some(user_dirs) = directories::UserDirs::new() {
+        user_dirs.home_dir().join(".housaky").join("workspace")
+    } else if let Ok(home) = std::env::var("HOME") {
+        PathBuf::from(home).join(".housaky").join("workspace")
+    } else {
+        PathBuf::from(".housaky").join("workspace")
+    }
+}
+
+fn default_a2a_hub_memory_path() -> Option<PathBuf> {
+    std::env::current_dir().ok().map(|cwd| cwd.join("landing").join("A2A").join("public").join("shared").join("memory"))
+}
+
+fn default_openclaw_shared_path() -> Option<PathBuf> {
+    std::env::current_dir().ok().map(|cwd| cwd.join("shared"))
+}
+
 impl Default for LucidConfig {
     fn default() -> Self {
         Self {
-            binary_path: PathBuf::from("/home/ubuntu/.lucid/bin/lucid"),
+            binary_path: default_binary_path(),
             token_budget: 500,
             enable_spreading: true,
             enable_emotional_weighting: true,
             max_retrieve: 20,
             enable_a2a_hub: true,
             enable_openclaw: true,
-            a2a_hub_memory_path: Some(PathBuf::from("/home/ubuntu/Housaky/landing/A2A/public/shared/memory")),
-            openclaw_shared_path: Some(PathBuf::from("/home/ubuntu/Housaky/shared")),
-            workspace_dir: PathBuf::from("/home/ubuntu/.housaky/workspace"),
+            a2a_hub_memory_path: default_a2a_hub_memory_path(),
+            openclaw_shared_path: default_openclaw_shared_path(),
+            workspace_dir: default_workspace_dir(),
         }
     }
 }
@@ -355,14 +383,26 @@ impl LucidMemory {
         let project_str = format!("--project={}", self.config.workspace_dir.display());
         let limit_str = format!("--limit={}", limit);
         
-        let args: Vec<&str> = vec![
-            "list",
-            &project_str,
-            &limit_str,
+        let mut args: Vec<String> = vec![
+            "list".to_string(),
+            project_str,
+            limit_str,
         ];
         
-        let output = self.execute_lucid(&args)?;
-        self.parse_context_output(&output, limit)
+        if let Some(cat) = category {
+            args.push(format!("--category={}", cat));
+        }
+        
+        let args_refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
+        let output = self.execute_lucid(&args_refs)?;
+        
+        let mut entries = self.parse_context_output(&output, limit)?;
+        
+        if let Some(cat) = category {
+            entries.retain(|e| &e.category == cat);
+        }
+        
+        Ok(entries)
     }
 
     /// Forget a memory

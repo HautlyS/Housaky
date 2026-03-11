@@ -33,6 +33,7 @@ pub mod inner_monologue;
 pub mod knowledge_graph;
 pub mod kowalski_integration;
 pub mod memory;
+pub mod project_context;
 pub mod meta_cognition;
 pub mod multi_agent;
 pub mod quantum_integration;
@@ -366,10 +367,14 @@ pub async fn handle_command(command: HousakyCommands, config: &Config) -> Result
         HousakyCommands::ConnectKowalski => {
             println!("🔗 Connecting to Kowalski agents...");
 
+            let kowalski_path = std::env::current_dir()
+                .map(|c| c.join("vendor").join("kowalski").join("kowalski-cli"))
+                .unwrap_or_else(|_| std::path::PathBuf::from("vendor/kowalski/kowalski-cli"));
+
             let bridge =
                 kowalski_integration::KowalskiBridge::new(&agent::KowalskiIntegrationConfig {
                     enabled: true,
-                    kowalski_path: std::path::PathBuf::from("/home/ubuntu/Housaky/vendor/kowalski/kowalski-cli"),
+                    kowalski_path,
                     enable_federation: true,
                     enable_code_agent: true,
                     enable_web_agent: true,

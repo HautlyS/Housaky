@@ -73,7 +73,7 @@ pub fn print_status(port: u16) {
         if status.installed {
             "✅ Yes"
         } else {
-            "❌ No"
+            "❌ No (auto-build on start)"
         }
     );
     println!(
@@ -88,9 +88,9 @@ pub fn print_status(port: u16) {
 
     if !status.installed {
         println!();
-        println!("💡 To install the dashboard:");
-        println!("   1. Build from source: cd dashboard && pnpm install && pnpm tauri build");
-        println!("   2. Or download from: https://github.com/HautlyS/Housaky/releases");
+        println!("💡 Dashboard will be auto-built on first start.");
+        println!("   Requirements: Node.js + pnpm (or npm)");
+        println!("   Manual build: cd dashboard && pnpm install && pnpm build");
     }
 
     if status.installed && !status.running {
@@ -100,14 +100,87 @@ pub fn print_status(port: u16) {
     }
 }
 
-pub async fn start_dashboard_server(host: &str, port: u16, open: bool) -> Result<()> {
-    let (_, dist_dir) = get_dashboard_paths();
+pub fn check_node_installed() -> bool {
+    Command::new("node").arg("--version").output().is_ok()
+}
 
-    if !dist_dir.exists() {
-        anyhow::bail!(
-            "Dashboard not installed. Build it with: cd dashboard && pnpm install && pnpm build\n\
-             Or download from: https://github.com/HautlyS/Housaky/releases"
-        );
+pub fn detect_package_manager() -> Option<(&'static str, &'static [&'static str])> {
+    if Command::new("pnpm").arg("--version").output().is_ok() {
+        Some(("pnpm", &["run", "build"]))
+    } else if Command::new("npm").arg("--version").output().is_ok() {
+        Some(("npm", &["run", "build"]))
+    } else if Command::new("yarn").arg("--version").output().is_ok() {
+        Some(("yarn", &["build"]))
+    } else {
+        None
+    }
+}
+
+pub fn run_build_command(dashboard_dir: &std::path::Path) -> Result<()> {
+    let (cmd, args) = detect_package_manager()
+        .ok_or_else(|| anyhow::anyhow!("No package manager found (pnpm, npm, or yarn required)"))?;
+    
+    println!("   Using: {} {}", cmd, args.join(" "));
+    
+    let check_deps = Command::new(cmd)
+        .args(&["install", "--prefer-offline"])
+        .current_dir(dashboard_dir)
+        .status()
+        .ok();
+    
+    if let Some(status) = check_deps {
+        if !status.success() {
+            println!("   ⚠️  Dependency install had issues, attempting build anyway...");
+        }
+    }
+    
+    let status = Command::new(cmd)
+        .args(args)
+        .current_dir(dashboard_dir)
+        .status()
+        .context("Failed to execute build command")?;
+    
+    if !status.success() {
+        anyhow::bail!("Build command exited with non-zero status");
+    }
+    
+    Ok(())
+}
+
+pub async fn start_dashboard_server(host: &str, port: u16, open: bool) -> Result<()> {
+    let (dashboard_dir, dist_dir) = get_dashboard_paths();
+
+    if !dist_dir.exists() || !dist_dir.join("index.html").exists() {
+        println!("📦 Dashboard not built. Attempting to build...");
+        
+        if !dashboard_dir.exists() {
+            anyhow::bail!(
+                "Dashboard source not found at {}. \n\
+                 Please ensure you're running from the Housaky project directory.",
+                dashboard_dir.display()
+            );
+        }
+        
+        if !check_node_installed() {
+            anyhow::bail!(
+                "Node.js not found. Please install Node.js:\n\
+                 - Node.js: https://nodejs.org/\n\
+                 - pnpm (recommended): npm install -g pnpm"
+            );
+        }
+        
+        println!("🔨 Building dashboard...");
+        
+        if let Err(e) = run_build_command(&dashboard_dir) {
+            anyhow::bail!(
+                "Dashboard build failed: {}\n\
+                 Please run manually:\n\
+                 cd dashboard && pnpm install && pnpm build",
+                e
+            );
+        }
+        
+        println!("✅ Dashboard built successfully!");
     }
 
     let bind_addr: IpAddr = if host == "0.0.0.0" || host == "network" {

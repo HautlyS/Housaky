@@ -315,11 +315,12 @@ impl Default for AGISystemConfig {
 }
 
 pub fn default_source_dir() -> PathBuf {
-    // Default to ~/housaky — the actual source code repo for self-improvement
     if let Some(user_dirs) = UserDirs::new() {
         user_dirs.home_dir().join("housaky")
+    } else if let Ok(home) = std::env::var("HOME") {
+        PathBuf::from(home).join("housaky")
     } else {
-        PathBuf::from("/home/hautly/housaky")
+        PathBuf::from("housaky")
     }
 }
 

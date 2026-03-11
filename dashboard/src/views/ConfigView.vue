@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue'
-import { invoke } from '@tauri-apps/api/core'
 import Card from '@/components/ui/card.vue'
 import CardContent from '@/components/ui/card-content.vue'
 import CardDescription from '@/components/ui/card-description.vue'
@@ -27,9 +26,21 @@ import {
   Cpu,
   Database,
   Radio,
-  Globe
+  Globe,
+  Brain,
+  Zap,
+  Key,
+  Workflow,
+  Gauge,
+  MessageSquare,
+  Terminal,
+  Cloud,
+  Lock,
+  EyeIcon,
+  DollarSign
 } from 'lucide-vue-next'
 
+const GATEWAY_URL = import.meta.env.VITE_GATEWAY_URL || 'http://127.0.0.1:8080'
 const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 
 interface HousakyConfig {
@@ -51,6 +62,8 @@ interface HousakyConfig {
     forbidden_paths: string[]
     max_actions_per_hour: number
     max_cost_per_day_cents: number
+    require_approval_for_medium_risk?: boolean
+    block_high_risk_commands?: boolean
   }
   runtime: {
     kind: string
@@ -68,6 +81,45 @@ interface HousakyConfig {
   }
   secrets: {
     encrypt: boolean
+  }
+  agent: {
+    compact_context: boolean
+    max_tool_iterations: number
+    max_history_messages: number
+    tool_dispatcher: string
+    compaction_keep_recent_messages: number
+  }
+  tools: {
+    shell_timeout_secs: number
+    shell_max_output_bytes: number
+    file_read_max_bytes: number
+    delegate_timeout_secs: number
+  }
+  scheduler: {
+    enabled: boolean
+    max_tasks: number
+    max_concurrent: number
+  }
+  reliability: {
+    provider_retries: number
+    provider_backoff_ms: number
+    scheduler_poll_secs: number
+    scheduler_retries: number
+    auto_rotate_on_limit: boolean
+  }
+  cost: {
+    enabled: boolean
+    daily_limit_usd: number
+    monthly_limit_usd: number
+    warn_at_percent: number
+    allow_override: boolean
+  }
+  channels_config: {
+    cli: boolean
+    message_timeout_secs: number
+    parallelism_per_channel: number
+    min_in_flight_messages: number
+    max_in_flight_messages: number
   }
 }
 
@@ -117,30 +169,100 @@ const config = ref<HousakyConfig>({
   secrets: {
     encrypt: true,
   },
+  agent: {
+    compact_context: false,
+    max_tool_iterations: 18446744073709551615,
+    max_history_messages: 50,
+    tool_dispatcher: 'auto',
+    compaction_keep_recent_messages: 20,
+  },
+  tools: {
+    shell_timeout_secs: 60,
+    shell_max_output_bytes: 1048576,
+    file_read_max_bytes: 10485760,
+    delegate_timeout_secs: 120,
+  },
+  scheduler: {
+    enabled: true,
+    max_tasks: 64,
+    max_concurrent: 4,
+  },
+  reliability: {
+    provider_retries: 2,
+    provider_backoff_ms: 500,
+    scheduler_poll_secs: 15,
+    scheduler_retries: 2,
+    auto_rotate_on_limit: true,
+  },
+  cost: {
+    enabled: false,
+    daily_limit_usd: 10.0,
+    monthly_limit_usd: 100.0,
+    warn_at_percent: 80,
+    allow_override: false,
+  },
+  channels_config: {
+    cli: true,
+    message_timeout_secs: 300,
+    parallelism_per_channel: 4,
+    min_in_flight_messages: 8,
+    max_in_flight_messages: 64,
+  },
 })
 
 async function loadConfig() {
   loading.value = true
   error.value = ''
   
-  if (!isTauri) {
-    error.value = 'Running in server mode - config not available'
-    loading.value = false
-    return
-  }
-  
   try {
-    const status = await invoke<{ version: string; config: string }>('get_status')
-    configPath.value = status.config
-    
-    const fullConfig = await invoke<HousakyConfig>('get_config')
-    if (fullConfig) {
-      config.value = { ...config.value, ...fullConfig }
+    // Try gateway API first
+    const response = await fetch(`${GATEWAY_URL}/api/config`)
+    if (response.ok) {
+      const fullConfig = await response.json()
+      if (fullConfig) {
+        config.value = { ...config.value, ...fullConfig }
+      }
+      originalConfig.value = JSON.stringify(config.value)
+      
+      // Get status for config path
+      const statusResp = await fetch(`${GATEWAY_URL}/api/status`)
+      if (statusResp.ok) {
+        const status = await statusResp.json()
+        configPath.value = status.config_path || 'config.toml'
+      }
+    } else {
+      // Fallback to Tauri if available
+      if (isTauri) {
+        const { invoke } = await import('@tauri-apps/api/core')
+        const status = await invoke<{ version: string; config: string }>('get_status')
+        configPath.value = status.config
+        
+        const tc = await invoke<HousakyConfig>('get_config')
+        if (tc) {
+          config.value = { ...config.value, ...tc }
+        }
+        originalConfig.value = JSON.stringify(config.value)
+      } else {
+        error.value = 'Cannot connect to gateway. Start Housaky with: housaky gateway'
+      }
     }
-    
-    originalConfig.value = JSON.stringify(config.value)
   } catch (e) {
-    error.value = String(e)
+    if (isTauri) {
+      try {
+        const { invoke } = await import('@tauri-apps/api/core')
+        const status = await invoke<{ version: string; config: string }>('get_status')
+        configPath.value = status.config
+        const tc = await invoke<HousakyConfig>('get_config')
+        if (tc) {
+          config.value = { ...config.value, ...tc }
+        }
+        originalConfig.value = JSON.stringify(config.value)
+      } catch (te) {
+        error.value = String(te)
+      }
+    } else {
+      error.value = `Cannot connect to gateway: ${e}. Start Housaky with: housaky gateway`
+    }
     console.error('Failed to load config:', e)
   } finally {
     loading.value = false
@@ -148,11 +270,7 @@ async function loadConfig() {
 }
 
 async function validateAndWarn() {
-  if (!isTauri) return
-  try {
-    const result = await invoke<string[]>('validate_config', { config: config.value })
-    warnings.value = Array.isArray(result) ? result : []
-  } catch { warnings.value = [] }
+  warnings.value = []
 }
 
 async function saveConfig() {
@@ -160,21 +278,48 @@ async function saveConfig() {
   error.value = ''
   success.value = ''
 
-  if (!isTauri) {
-    error.value = 'Running in server mode — cannot save config'
-    saving.value = false
-    return
-  }
-
   try {
-    await validateAndWarn()
-    await invoke<string>('save_config', { config: config.value })
-    success.value = 'Configuration saved!'
-    originalConfig.value = JSON.stringify(config.value)
-    lastSaved.value = new Date()
-    setTimeout(() => { success.value = '' }, 3000)
+    // Try gateway API first
+    const response = await fetch(`${GATEWAY_URL}/api/config`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(config.value)
+    })
+    
+    if (response.ok) {
+      success.value = 'Configuration saved!'
+      originalConfig.value = JSON.stringify(config.value)
+      lastSaved.value = new Date()
+      setTimeout(() => { success.value = '' }, 3000)
+    } else {
+      const errData = await response.json()
+      // Fallback to Tauri if available
+      if (isTauri) {
+        const { invoke } = await import('@tauri-apps/api/core')
+        await invoke<string>('save_config', { config: config.value })
+        success.value = 'Configuration saved!'
+        originalConfig.value = JSON.stringify(config.value)
+        lastSaved.value = new Date()
+        setTimeout(() => { success.value = '' }, 3000)
+      } else {
+        error.value = errData.error || `Failed to save: ${response.status}`
+      }
+    }
   } catch (e) {
-    error.value = String(e)
+    if (isTauri) {
+      try {
+        const { invoke } = await import('@tauri-apps/api/core')
+        await invoke<string>('save_config', { config: config.value })
+        success.value = 'Configuration saved!'
+        originalConfig.value = JSON.stringify(config.value)
+        lastSaved.value = new Date()
+        setTimeout(() => { success.value = '' }, 3000)
+      } catch (te) {
+        error.value = String(te)
+      }
+    } else {
+      error.value = `Cannot connect to gateway: ${e}. Start Housaky with: housaky gateway`
+    }
   } finally {
     saving.value = false
   }
@@ -210,6 +355,12 @@ const sections = [
   { id: 'memory', name: 'Memory', icon: Database, description: 'Memory backend configuration' },
   { id: 'autonomy', name: 'Autonomy', icon: Shield, description: 'Agent autonomy and security' },
   { id: 'runtime', name: 'Runtime', icon: Cpu, description: 'Execution runtime settings' },
+  { id: 'agent', name: 'Agent', icon: Brain, description: 'Agent behavior and limits' },
+  { id: 'tools', name: 'Tools', icon: Terminal, description: 'Tool execution settings' },
+  { id: 'channels', name: 'Channels', icon: MessageSquare, description: 'Communication channels' },
+  { id: 'scheduler', name: 'Scheduler', icon: Workflow, description: 'Task scheduling' },
+  { id: 'reliability', name: 'Reliability', icon: Zap, description: 'Fallback and retry settings' },
+  { id: 'cost', name: 'Cost', icon: DollarSign, description: 'Cost tracking and limits' },
   { id: 'gateway', name: 'Gateway', icon: Globe, description: 'Webhook server settings' },
   { id: 'tunnel', name: 'Tunnel', icon: Radio, description: 'Tunnel provider for public access' },
 ]
@@ -586,6 +737,252 @@ onMounted(() => {
               <p class="text-xs text-muted-foreground">
                 Tunnel providers allow public access to your local Housaky instance
               </p>
+            </div>
+          </CardContent>
+        </template>
+
+        <template v-else-if="activeSection === 'agent'">
+          <CardHeader>
+            <CardTitle class="flex items-center gap-2">
+              <Brain class="w-5 h-5" />
+              Agent Settings
+            </CardTitle>
+            <CardDescription>Agent behavior and limits</CardDescription>
+          </CardHeader>
+          <CardContent class="space-y-6">
+            <div class="grid md:grid-cols-2 gap-4">
+              <div class="space-y-2">
+                <label class="text-sm font-medium">Max Tool Iterations</label>
+                <Input type="number" v-model.number="config.agent.max_tool_iterations" />
+              </div>
+              <div class="space-y-2">
+                <label class="text-sm font-medium">Max History Messages</label>
+                <Input type="number" v-model.number="config.agent.max_history_messages" />
+              </div>
+            </div>
+            <div class="grid md:grid-cols-2 gap-4">
+              <div class="space-y-2">
+                <label class="text-sm font-medium">Tool Dispatcher</label>
+                <select v-model="config.agent.tool_dispatcher" class="w-full h-10 rounded-md border bg-background px-3">
+                  <option value="auto">Auto</option>
+                  <option value="native">Native</option>
+                  <option value="xml">XML</option>
+                </select>
+              </div>
+              <div class="space-y-2">
+                <label class="text-sm font-medium">Compaction Keep Recent</label>
+                <Input type="number" v-model.number="config.agent.compaction_keep_recent_messages" />
+              </div>
+            </div>
+            <div class="flex items-center gap-3">
+              <input 
+                type="checkbox" 
+                v-model="config.agent.compact_context"
+                class="w-4 h-4 rounded"
+              />
+              <div>
+                <label class="text-sm font-medium">Compact Context</label>
+                <p class="text-xs text-muted-foreground">Enable context compaction</p>
+              </div>
+            </div>
+          </CardContent>
+        </template>
+
+        <template v-else-if="activeSection === 'tools'">
+          <CardHeader>
+            <CardTitle class="flex items-center gap-2">
+              <Terminal class="w-5 h-5" />
+              Tool Settings
+            </CardTitle>
+            <CardDescription>Shell and tool execution limits</CardDescription>
+          </CardHeader>
+          <CardContent class="space-y-6">
+            <div class="grid md:grid-cols-2 gap-4">
+              <div class="space-y-2">
+                <label class="text-sm font-medium">Shell Timeout (seconds)</label>
+                <Input type="number" v-model.number="config.tools.shell_timeout_secs" />
+              </div>
+              <div class="space-y-2">
+                <label class="text-sm font-medium">Max Output (bytes)</label>
+                <Input type="number" v-model.number="config.tools.shell_max_output_bytes" />
+              </div>
+            </div>
+            <div class="grid md:grid-cols-2 gap-4">
+              <div class="space-y-2">
+                <label class="text-sm font-medium">File Read Max (bytes)</label>
+                <Input type="number" v-model.number="config.tools.file_read_max_bytes" />
+              </div>
+              <div class="space-y-2">
+                <label class="text-sm font-medium">Delegate Timeout (seconds)</label>
+                <Input type="number" v-model.number="config.tools.delegate_timeout_secs" />
+              </div>
+            </div>
+          </CardContent>
+        </template>
+
+        <template v-else-if="activeSection === 'scheduler'">
+          <CardHeader>
+            <CardTitle class="flex items-center gap-2">
+              <Workflow class="w-5 h-5" />
+              Scheduler Settings
+            </CardTitle>
+            <CardDescription>Task scheduling configuration</CardDescription>
+          </CardHeader>
+          <CardContent class="space-y-6">
+            <div class="grid md:grid-cols-2 gap-4">
+              <div class="space-y-2">
+                <label class="text-sm font-medium">Max Tasks</label>
+                <Input type="number" v-model.number="config.scheduler.max_tasks" />
+              </div>
+              <div class="space-y-2">
+                <label class="text-sm font-medium">Max Concurrent</label>
+                <Input type="number" v-model.number="config.scheduler.max_concurrent" />
+              </div>
+            </div>
+            <div class="flex items-center gap-3">
+              <input 
+                type="checkbox" 
+                v-model="config.scheduler.enabled"
+                class="w-4 h-4 rounded"
+              />
+              <div>
+                <label class="text-sm font-medium">Scheduler Enabled</label>
+                <p class="text-xs text-muted-foreground">Enable background task scheduling</p>
+              </div>
+            </div>
+          </CardContent>
+        </template>
+
+        <template v-else-if="activeSection === 'cost'">
+          <CardHeader>
+            <CardTitle class="flex items-center gap-2">
+              <DollarSign class="w-5 h-5" />
+              Cost Tracking
+            </CardTitle>
+            <CardDescription>Daily and monthly cost limits</CardDescription>
+          </CardHeader>
+          <CardContent class="space-y-6">
+            <div class="flex items-center gap-3">
+              <input 
+                type="checkbox" 
+                v-model="config.cost.enabled"
+                class="w-4 h-4 rounded"
+              />
+              <div>
+                <label class="text-sm font-medium">Cost Tracking Enabled</label>
+                <p class="text-xs text-muted-foreground">Track API usage costs</p>
+              </div>
+            </div>
+            <div class="grid md:grid-cols-2 gap-4">
+              <div class="space-y-2">
+                <label class="text-sm font-medium">Daily Limit ($)</label>
+                <Input type="number" v-model.number="config.cost.daily_limit_usd" />
+              </div>
+              <div class="space-y-2">
+                <label class="text-sm font-medium">Monthly Limit ($)</label>
+                <Input type="number" v-model.number="config.cost.monthly_limit_usd" />
+              </div>
+            </div>
+            <div class="grid md:grid-cols-2 gap-4">
+              <div class="space-y-2">
+                <label class="text-sm font-medium">Warn at (%)</label>
+                <Input type="number" v-model.number="config.cost.warn_at_percent" />
+              </div>
+              <div class="flex items-center gap-3 mt-6">
+                <input 
+                  type="checkbox" 
+                  v-model="config.cost.allow_override"
+                  class="w-4 h-4 rounded"
+                />
+                <div>
+                  <label class="text-sm font-medium">Allow Override</label>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </template>
+
+        <template v-else-if="activeSection === 'channels'">
+          <CardHeader>
+            <CardTitle class="flex items-center gap-2">
+              <MessageSquare class="w-5 h-5" />
+              Channel Settings
+            </CardTitle>
+            <CardDescription>Communication channel configuration</CardDescription>
+          </CardHeader>
+          <CardContent class="space-y-6">
+            <div class="grid md:grid-cols-2 gap-4">
+              <div class="space-y-2">
+                <label class="text-sm font-medium">Message Timeout (seconds)</label>
+                <Input type="number" v-model.number="config.channels_config.message_timeout_secs" />
+              </div>
+              <div class="space-y-2">
+                <label class="text-sm font-medium">Parallelism Per Channel</label>
+                <Input type="number" v-model.number="config.channels_config.parallelism_per_channel" />
+              </div>
+            </div>
+            <div class="grid md:grid-cols-2 gap-4">
+              <div class="space-y-2">
+                <label class="text-sm font-medium">Min In-Flight Messages</label>
+                <Input type="number" v-model.number="config.channels_config.min_in_flight_messages" />
+              </div>
+              <div class="space-y-2">
+                <label class="text-sm font-medium">Max In-Flight Messages</label>
+                <Input type="number" v-model.number="config.channels_config.max_in_flight_messages" />
+              </div>
+            </div>
+            <div class="flex items-center gap-3">
+              <input 
+                type="checkbox" 
+                v-model="config.channels_config.cli"
+                class="w-4 h-4 rounded"
+              />
+              <div>
+                <label class="text-sm font-medium">CLI Channel Enabled</label>
+              </div>
+            </div>
+          </CardContent>
+        </template>
+
+        <template v-else-if="activeSection === 'reliability'">
+          <CardHeader>
+            <CardTitle class="flex items-center gap-2">
+              <Zap class="w-5 h-5" />
+              Reliability Settings
+            </CardTitle>
+            <CardDescription>Provider fallback and health monitoring</CardDescription>
+          </CardHeader>
+          <CardContent class="space-y-6">
+            <div class="grid md:grid-cols-2 gap-4">
+              <div class="space-y-2">
+                <label class="text-sm font-medium">Provider Retries</label>
+                <Input type="number" v-model.number="config.reliability.provider_retries" />
+              </div>
+              <div class="space-y-2">
+                <label class="text-sm font-medium">Provider Backoff (ms)</label>
+                <Input type="number" v-model.number="config.reliability.provider_backoff_ms" />
+              </div>
+            </div>
+            <div class="grid md:grid-cols-2 gap-4">
+              <div class="space-y-2">
+                <label class="text-sm font-medium">Scheduler Poll (seconds)</label>
+                <Input type="number" v-model.number="config.reliability.scheduler_poll_secs" />
+              </div>
+              <div class="space-y-2">
+                <label class="text-sm font-medium">Scheduler Retries</label>
+                <Input type="number" v-model.number="config.reliability.scheduler_retries" />
+              </div>
+            </div>
+            <div class="flex items-center gap-3">
+              <input 
+                type="checkbox" 
+                v-model="config.reliability.auto_rotate_on_limit"
+                class="w-4 h-4 rounded"
+              />
+              <div>
+                <label class="text-sm font-medium">Auto Rotate on Limit</label>
+                <p class="text-xs text-muted-foreground">Automatically rotate keys when rate limited</p>
+              </div>
             </div>
           </CardContent>
         </template>

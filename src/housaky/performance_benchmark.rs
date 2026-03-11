@@ -8,7 +8,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
 use tokio::time::timeout;
-use tracing::{info, warn};
+use tracing::{debug, info, warn};
 
 const BENCHMARK_TIMEOUT_SECS: u64 = 60;
 const MEMORY_BENCHMARK_ITERATIONS: usize = 1000;

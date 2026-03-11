@@ -10,6 +10,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::RwLock;
+use tracing::{debug, info};
 
 use super::traits::{Memory, MemoryCategory, MemoryEntry};
 use super::lucid::LucidMemory;
@@ -56,6 +57,16 @@ pub struct UnifiedAGIMemoryConfig {
 
 impl Default for UnifiedAGIMemoryConfig {
     fn default() -> Self {
+        let workspace_dir = if let Some(user_dirs) = directories::UserDirs::new() {
+            user_dirs.home_dir().join(".housaky").join("workspace")
+        } else if let Ok(home) = std::env::var("HOME") {
+            PathBuf::from(home).join(".housaky").join("workspace")
+        } else {
+            PathBuf::from(".housaky").join("workspace")
+        };
+
+        let cwd = std::env::current_dir().ok();
+
         Self {
             enable_lucid: true,
             enable_intelligent: true,
@@ -66,12 +77,12 @@ impl Default for UnifiedAGIMemoryConfig {
             enable_self_improvement: true,
             enable_collective_mind: true,
             context_budget_tokens: 8000,
-            self_improve_interval_secs: 3600, // 1 hour
-            collective_sync_interval_secs: 300, // 5 minutes
-            workspace_dir: PathBuf::from("/home/ubuntu/.housaky/workspace"),
-            a2a_hub_path: Some(PathBuf::from("/home/ubuntu/Housaky/landing/A2A/public/shared/memory")),
-            openclaw_path: Some(PathBuf::from("/home/ubuntu/Housaky/shared")),
-            kowalski_path: Some(PathBuf::from("/home/ubuntu/Housaky/vendor/kowalski")),
+            self_improve_interval_secs: 3600,
+            collective_sync_interval_secs: 300,
+            workspace_dir,
+            a2a_hub_path: cwd.as_ref().map(|c| c.join("landing").join("A2A").join("public").join("shared").join("memory")),
+            openclaw_path: cwd.as_ref().map(|c| c.join("shared")),
+            kowalski_path: cwd.as_ref().map(|c| c.join("vendor").join("kowalski")),
         }
     }
 }

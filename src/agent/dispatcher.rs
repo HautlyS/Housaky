@@ -43,30 +43,32 @@ impl XmlToolDispatcher {
 
             if let Some(end) = remaining[start..].find("</tool_call>") {
                 let inner = &remaining[start + 11..start + end];
+
+                // First try standard JSON format
                 match serde_json::from_str::<Value>(inner.trim()) {
                     Ok(parsed) => {
-                        let name = parsed
-                            .get("name")
-                            .and_then(Value::as_str)
-                            .unwrap_or("")
-                            .to_string();
-                        if name.is_empty() {
+                        if let Some(name) = parsed.get("name").and_then(Value::as_str) {
+                            let arguments = parsed
+                                .get("arguments")
+                                .cloned()
+                                .unwrap_or_else(|| Value::Object(serde_json::Map::new()));
+                            calls.push(ParsedToolCall {
+                                name: name.to_string(),
+                                arguments,
+                                tool_call_id: None,
+                            });
                             remaining = &remaining[start + end + 12..];
                             continue;
                         }
-                        let arguments = parsed
-                            .get("arguments")
-                            .cloned()
-                            .unwrap_or_else(|| Value::Object(serde_json::Map::new()));
-                        calls.push(ParsedToolCall {
-                            name,
-                            arguments,
-                            tool_call_id: None,
-                        });
                     }
-                    Err(e) => {
-                        tracing::warn!("Malformed <tool_call> JSON: {e}");
-                    }
+                    Err(_) => {}
+                }
+
+                // Fallback: try GLM-5 simplified format: tool_name<arg_key>key="value"
+                if let Some(glm_call) = Self::parse_glm5_style_tool_call(inner) {
+                    calls.push(glm_call);
+                } else {
+                    tracing::warn!("Malformed <tool_call> JSON: {}", inner);
                 }
                 remaining = &remaining[start + end + 12..];
             } else {
@@ -79,6 +81,63 @@ impl XmlToolDispatcher {
         }
 
         (text_parts.join("\n"), calls)
+    }
+
+    fn parse_glm5_style_tool_call(inner: &str) -> Option<ParsedToolCall> {
+        let inner = inner.trim();
+        if inner.is_empty() {
+            return None;
+        }
+
+        // Try format: tool_name<arg_key>key="value"
+        // or: tool_name {"key": "value"}
+        let _inner_lower = inner.to_lowercase();
+
+        // Check if it starts with a tool name followed by <
+        if let Some(tool_end) = inner.find('<') {
+            let name = inner[..tool_end].trim().to_string();
+            if !name.is_empty() {
+                let args_part = &inner[tool_end..];
+
+                // Parse key=value pairs
+                let mut args = serde_json::Map::new();
+
+                // Match patterns like: <arg_key>path="value" or <arg_key>"value"
+                let re = regex::Regex::new(r#"<(\w+)>(?:\{([^}]*)\}|"?([^"]*)"?|(\S+))"#).ok()?;
+                for cap in re.captures_iter(args_part) {
+                    let key = cap.get(1).map(|m| m.as_str()).unwrap_or("arg");
+                    let value = cap
+                        .get(2)
+                        .or(cap.get(3))
+                        .or(cap.get(4))
+                        .map(|m| m.as_str())
+                        .unwrap_or("");
+
+                    // Try to parse as JSON object if it looks like one
+                    if value.starts_with('{') {
+                        if let Ok(parsed) = serde_json::from_str::<Value>(value) {
+                            if let Some(obj) = parsed.as_object() {
+                                for (k, v) in obj {
+                                    args.insert(k.clone(), v.clone());
+                                }
+                            }
+                        }
+                    } else {
+                        args.insert(key.to_string(), Value::String(value.to_string()));
+                    }
+                }
+
+                if !args.is_empty() || !name.is_empty() {
+                    return Some(ParsedToolCall {
+                        name,
+                        arguments: Value::Object(args),
+                        tool_call_id: None,
+                    });
+                }
+            }
+        }
+
+        None
     }
 
     pub fn tool_specs(tools: &[Box<dyn Tool>]) -> Vec<ToolSpec> {

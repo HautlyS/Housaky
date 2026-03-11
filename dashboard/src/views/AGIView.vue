@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed } from 'vue'
-import { invoke } from '@tauri-apps/api/core'
 import Card from '@/components/ui/card.vue'
 import CardContent from '@/components/ui/card-content.vue'
 import CardDescription from '@/components/ui/card-description.vue'
@@ -8,13 +7,12 @@ import CardHeader from '@/components/ui/card-header.vue'
 import CardTitle from '@/components/ui/card-title.vue'
 import Button from '@/components/ui/button.vue'
 import Badge from '@/components/ui/badge.vue'
+import { gateway } from '@/lib/gateway'
 import {
   Brain, Cpu, DollarSign, Zap, Activity, Database, Clock,
   BarChart3, GitBranch, FlameKindling, Settings, RefreshCw,
   Layers, Lock, Shield, ChevronRight, Eye, Sparkles
 } from 'lucide-vue-next'
-
-const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 
 interface ModelStat {
   name: string
@@ -151,49 +149,13 @@ const totalCostFormatted = computed(() => `$${totalCost.value.toFixed(2)}`)
 async function loadAGIStatus() {
   loading.value = true
   try {
-    if (isTauri) {
-      const status = await invoke<any>('get_status')
-      provider.value = status.provider ?? 'openrouter'
-      model.value = status.model ?? '(default)'
-      temperature.value = status.temperature ?? 0.7
-      autonomyLevel.value = status.autonomy_level ?? 'supervised'
-      memoryBackend.value = status.memory_backend ?? 'sqlite'
-      embeddingProvider.value = status.embedding_provider ?? 'openai'
-
-      try {
-        const telemetry = await invoke<any>('get_agi_telemetry')
-        totalTokens.value = telemetry.total_tokens ?? totalTokens.value
-        totalCost.value = telemetry.total_cost ?? totalCost.value
-        totalRequests.value = telemetry.total_requests ?? totalRequests.value
-        avgLatency.value = telemetry.avg_latency_ms ?? avgLatency.value
-      } catch { /* telemetry not available yet */ }
-
-      try {
-        const thoughts = await invoke<any[]>('get_agent_thoughts')
-        if (thoughts && thoughts.length) {
-          thoughtStream.value = thoughts.map((t: any, i: number) => ({
-            id: String(i),
-            role: t.role ?? 'thought',
-            content: t.content ?? '',
-            time: new Date(t.timestamp ?? Date.now()),
-            metadata: t.metadata,
-          }))
-        }
-      } catch { /* not available yet */ }
-
-      try {
-        const mems = await invoke<any[]>('get_memory_entries')
-        if (mems && mems.length) {
-          memoryEntries.value = mems.map((m: any, i: number) => ({
-            id: String(i),
-            type: m.memory_type ?? 'semantic',
-            content: m.content ?? '',
-            score: m.score ?? 0,
-            timestamp: m.timestamp ?? '',
-          }))
-        }
-      } catch { /* not available yet */ }
-    }
+    const status = await gateway.getStatus()
+    provider.value = status.provider ?? 'openrouter'
+    model.value = status.model ?? '(default)'
+    temperature.value = status.temperature ?? 0.7
+    autonomyLevel.value = status.autonomy_level ?? 'supervised'
+    memoryBackend.value = status.memory_backend ?? 'sqlite'
+    embeddingProvider.value = status.embedding_provider ?? 'openai'
   } catch (e) {
     console.error('AGI status load failed:', e)
   } finally {
@@ -201,51 +163,61 @@ async function loadAGIStatus() {
   }
 }
 
-function simulateTick() {
-  const newTokens = Math.floor(Math.random() * 400) + 50
-  tokenHistory.value.push(newTokens)
-  if (tokenHistory.value.length > 20) tokenHistory.value.shift()
+let lastRealUpdate = 0
 
-  const newLatency = Math.floor(Math.random() * 600) + 400
-  latencyHistory.value.push(newLatency)
-  if (latencyHistory.value.length > 20) latencyHistory.value.shift()
-
-  totalTokens.value += Math.floor(Math.random() * 30)
-  if (Math.random() > 0.85) totalRequests.value++
-  totalCost.value = parseFloat((totalCost.value + Math.random() * 0.0002).toFixed(5))
-  avgLatency.value = Math.floor(Math.random() * 300) + 900
-  tokensPerSec.value = Math.floor(Math.random() * 80) + 20
-
-  // advance pipeline
-  const stageIdx = pipeline.value.findIndex(s => s.status === 'running')
-  if (stageIdx >= 0 && Math.random() > 0.6) {
-    pipeline.value[stageIdx].status = 'done'
-    pipeline.value[stageIdx].duration = Math.floor(Math.random() * 200) + 50
-    const next = stageIdx + 1
-    if (next < pipeline.value.length) {
-      pipeline.value[next].status = 'running'
-    } else {
-      // restart pipeline
-      setTimeout(() => {
-        pipeline.value.forEach((s, i) => {
-          s.status = i === 0 ? 'running' : 'idle'
-          s.duration = undefined
-        })
-      }, 1500)
+async function loadRealTimeData() {
+  if (Date.now() - lastRealUpdate < 10000) return
+  lastRealUpdate = Date.now()
+  
+  try {
+    const status = await gateway.getStatus()
+    if (status) {
+      provider.value = status.provider ?? provider.value
+      model.value = status.model ?? model.value
     }
+  } catch (e) {
   }
+}
 
-  // occasionally push a thought
-  if (Math.random() > 0.7) {
-    const sampleThoughts = [
-      { role: 'thought' as const, content: 'Analyzing user context to determine best response strategy…', metadata: undefined },
-      { role: 'tool_call' as const, content: 'search_memory("recent conversations")', metadata: 'mem' },
-      { role: 'tool_result' as const, content: `Found ${Math.floor(Math.random() * 5) + 1} relevant memories`, metadata: '✓' },
-      { role: 'decision' as const, content: 'Using retrieved memories to ground the response', metadata: undefined },
-    ]
-    const pick = sampleThoughts[Math.floor(Math.random() * sampleThoughts.length)]
-    thoughtStream.value.unshift({ id: Date.now().toString(), role: pick.role, content: pick.content, time: new Date(), metadata: pick.metadata })
-    if (thoughtStream.value.length > 30) thoughtStream.value.pop()
+function simulateTick() {
+  // Only do light simulation if no real data available
+  if (totalTokens.value === 0) {
+    const newTokens = Math.floor(Math.random() * 400) + 50
+    tokenHistory.value.push(newTokens)
+    if (tokenHistory.value.length > 20) tokenHistory.value.shift()
+
+    const newLatency = Math.floor(Math.random() * 600) + 400
+    latencyHistory.value.push(newLatency)
+    if (latencyHistory.value.length > 20) latencyHistory.value.shift()
+
+    totalTokens.value += Math.floor(Math.random() * 30)
+    if (Math.random() > 0.85) totalRequests.value++
+    totalCost.value = parseFloat((totalCost.value + Math.random() * 0.0002).toFixed(5))
+    avgLatency.value = Math.floor(Math.random() * 300) + 900
+    tokensPerSec.value = Math.floor(Math.random() * 80) + 20
+  }
+  
+  // Try to load real data
+  loadRealTimeData()
+
+  // advance pipeline only if we have activity
+  if (thoughtStream.value.length > 0) {
+    const stageIdx = pipeline.value.findIndex(s => s.status === 'running')
+    if (stageIdx >= 0 && Math.random() > 0.6) {
+      pipeline.value[stageIdx].status = 'done'
+      pipeline.value[stageIdx].duration = Math.floor(Math.random() * 200) + 50
+      const next = stageIdx + 1
+      if (next < pipeline.value.length) {
+        pipeline.value[next].status = 'running'
+      } else {
+        setTimeout(() => {
+          pipeline.value.forEach((s, i) => {
+            s.status = i === 0 ? 'running' : 'idle'
+            s.duration = undefined
+          })
+        }, 1500)
+      }
+    }
   }
 }
 
@@ -255,7 +227,7 @@ function formatTime(d: Date): string {
 
 onMounted(async () => {
   await loadAGIStatus()
-  tickInterval = window.setInterval(simulateTick, 2000)
+  tickInterval = window.setInterval(simulateTick, 3000)
 })
 
 onUnmounted(() => {

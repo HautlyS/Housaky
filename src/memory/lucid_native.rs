@@ -42,9 +42,25 @@ pub struct LucidNativeConfig {
 
 impl Default for LucidNativeConfig {
     fn default() -> Self {
+        let binary_path = if let Some(user_dirs) = directories::UserDirs::new() {
+            user_dirs.home_dir().join(".lucid").join("bin").join("lucid")
+        } else if let Ok(home) = std::env::var("HOME") {
+            PathBuf::from(home).join(".lucid").join("bin").join("lucid")
+        } else {
+            PathBuf::from(".lucid").join("bin").join("lucid")
+        };
+
+        let project_path = if let Some(user_dirs) = directories::UserDirs::new() {
+            user_dirs.home_dir().join(".housaky").join("workspace")
+        } else if let Ok(home) = std::env::var("HOME") {
+            PathBuf::from(home).join(".housaky").join("workspace")
+        } else {
+            PathBuf::from(".housaky").join("workspace")
+        };
+
         Self {
-            binary_path: PathBuf::from("/home/ubuntu/.lucid/bin/lucid"),
-            project_path: PathBuf::from("/home/ubuntu/.housaky/workspace"),
+            binary_path,
+            project_path,
             token_budget: 500,
             enable_spreading: true,
             enable_emotional_weighting: true,

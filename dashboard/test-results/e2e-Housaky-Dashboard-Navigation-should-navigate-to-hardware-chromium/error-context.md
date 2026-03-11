@@ -1,0 +1,134 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e4]:
+  - complementary [ref=e5]:
+    - generic [ref=e7]:
+      - img [ref=e9]
+      - generic [ref=e19]:
+        - heading "Housaky" [level=1] [ref=e20]
+        - generic [ref=e21]:
+          - img [ref=e22]
+          - generic [ref=e29]: Offline
+    - navigation [ref=e30]:
+      - link "Dashboard" [ref=e31] [cursor=pointer]:
+        - /url: /
+        - img [ref=e32]
+        - generic [ref=e37]: Dashboard
+      - link "Chat" [ref=e38] [cursor=pointer]:
+        - /url: /chat
+        - img [ref=e39]
+        - generic [ref=e41]: Chat
+      - link "AGI live" [ref=e42] [cursor=pointer]:
+        - /url: /agi
+        - img [ref=e43]
+        - generic [ref=e53]: AGI
+        - generic [ref=e54]: live
+      - link "Skills" [ref=e55] [cursor=pointer]:
+        - /url: /skills
+        - img [ref=e56]
+        - generic [ref=e58]: Skills
+      - link "Channels" [ref=e59] [cursor=pointer]:
+        - /url: /channels
+        - img [ref=e60]
+        - generic [ref=e65]: Channels
+      - link "Integrations" [ref=e66] [cursor=pointer]:
+        - /url: /integrations
+        - img [ref=e67]
+        - generic [ref=e71]: Integrations
+      - link "Hardware" [active] [ref=e72] [cursor=pointer]:
+        - /url: /hardware
+        - img [ref=e73]
+        - generic [ref=e76]: Hardware
+      - link "A2A Network" [ref=e77] [cursor=pointer]:
+        - /url: /a2a-instances
+        - img [ref=e78]
+        - generic [ref=e82]: A2A Network
+      - link "A2A Messages" [ref=e83] [cursor=pointer]:
+        - /url: /a2a-messages
+        - img [ref=e84]
+        - generic [ref=e86]: A2A Messages
+      - link "Security" [ref=e87] [cursor=pointer]:
+        - /url: /security
+        - img [ref=e88]
+        - generic [ref=e90]: Security
+      - link "Keys & Subagents" [ref=e91] [cursor=pointer]:
+        - /url: /keys
+        - img [ref=e92]
+        - generic [ref=e96]: Keys & Subagents
+      - link "Kowalski" [ref=e97] [cursor=pointer]:
+        - /url: /kowalski
+        - img [ref=e98]
+        - generic [ref=e101]: Kowalski
+      - link "Config" [ref=e102] [cursor=pointer]:
+        - /url: /config
+        - img [ref=e103]
+        - generic [ref=e106]: Config
+      - link "Terminal" [ref=e107] [cursor=pointer]:
+        - /url: /terminal
+        - img [ref=e108]
+        - generic [ref=e110]: Terminal
+    - generic [ref=e112]:
+      - generic [ref=e113]:
+        - img [ref=e114]
+        - generic [ref=e116]: Stopped
+      - button [ref=e117]:
+        - img [ref=e118]
+  - main [ref=e120]:
+    - generic [ref=e122]:
+      - heading "Hardware" [level=2] [ref=e124]
+      - generic [ref=e125]:
+        - button "Setup" [ref=e126]:
+          - img [ref=e127]
+          - text: Setup
+        - button [ref=e129]:
+          - img [ref=e130]
+        - button "2" [ref=e136]:
+          - img [ref=e137]
+          - generic [ref=e140]: "2"
+    - generic [ref=e142]:
+      - generic [ref=e143]:
+        - generic [ref=e144]:
+          - heading "Hardware" [level=1] [ref=e145]
+          - paragraph [ref=e146]: Discover and manage connected hardware
+        - button "Scan Devices" [disabled]:
+          - img
+          - text: Scan Devices
+      - generic [ref=e147]:
+        - generic [ref=e149]:
+          - generic [ref=e150]: "0"
+          - paragraph [ref=e151]: USB Devices
+        - generic [ref=e153]:
+          - generic [ref=e154]: "0"
+          - paragraph [ref=e155]: Boards Connected
+        - generic [ref=e157]:
+          - generic [ref=e158]: "0"
+          - paragraph [ref=e159]: Total Boards
+        - generic [ref=e161]:
+          - generic [ref=e162]: "4"
+          - paragraph [ref=e163]: Supported Types
+      - generic [ref=e164]:
+        - generic [ref=e165]:
+          - heading "USB Devices" [level=3] [ref=e166]:
+            - img [ref=e167]
+            - text: USB Devices
+          - generic [ref=e175]: Discovered USB and serial devices
+        - generic [ref=e177]:
+          - img [ref=e178]
+          - paragraph [ref=e180]: No USB devices found
+          - paragraph [ref=e181]: Connect a device and click Scan
+      - generic [ref=e182]:
+        - generic [ref=e184]:
+          - generic [ref=e185]:
+            - heading "Configured Boards" [level=3] [ref=e186]:
+              - img [ref=e187]
+              - text: Configured Boards
+            - generic [ref=e190]: Microcontroller boards and peripherals
+          - button "Add Board" [ref=e191]:
+            - img [ref=e192]
+            - text: Add Board
+        - generic [ref=e194]:
+          - img [ref=e195]
+          - paragraph [ref=e198]: No boards configured
+          - paragraph [ref=e199]: Add a board to get started
+```

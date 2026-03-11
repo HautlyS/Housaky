@@ -101,18 +101,18 @@ impl Tool for FileInfoTool {
         };
 
         // Try to get metadata (doesn't follow symlinks for the initial check)
-        let symlink_metadata = tokio::fs::symlink_metadata(&full_path).await;
+        let symlink_metadata: Result<std::fs::Metadata, std::io::Error> = tokio::fs::symlink_metadata(&full_path).await;
         let is_symlink = symlink_metadata
             .as_ref()
-            .map(|m| m.file_type().is_symlink())
+            .map(|m: &std::fs::Metadata| m.file_type().is_symlink())
             .unwrap_or(false);
 
         // Get the actual metadata (follows symlinks)
-        let metadata = tokio::fs::metadata(&full_path).await;
+        let metadata: Result<std::fs::Metadata, std::io::Error> = tokio::fs::metadata(&full_path).await;
 
         let exists = metadata.is_ok();
 
-        let metadata = match metadata {
+        let metadata: std::fs::Metadata = match metadata {
             Ok(m) => m,
             Err(e) => {
                 return Ok(ToolResult {
@@ -132,8 +132,12 @@ impl Tool for FileInfoTool {
             match tokio::fs::read_dir(&full_path).await {
                 Ok(mut dir) => {
                     let mut count = 0;
-                    while let Ok(Some(_)) = dir.next_entry().await {
-                        count += 1;
+                    loop {
+                        match dir.next_entry().await {
+                            Ok(Some(_)) => count += 1,
+                            Ok(None) => break,
+                            Err(_) => break,
+                        }
                     }
                     Some(count)
                 }
@@ -145,7 +149,7 @@ impl Tool for FileInfoTool {
 
         let file_name = full_path
             .file_name()
-            .map(|n| n.to_string_lossy().to_string())
+            .map(|n: &std::ffi::OsStr| n.to_string_lossy().to_string())
             .unwrap_or_else(|| path.to_string());
 
         let file_info = FileMetadata {

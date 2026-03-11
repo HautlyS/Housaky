@@ -384,9 +384,15 @@ impl WeightedConsensusEngine {
             loop {
                 ticker.tick().await;
                 
+                if !config.decay_enabled {
+                    continue;
+                }
+                
                 let mut reputations = engine.write().await;
                 for (_, reputation) in reputations.iter_mut() {
-                    *reputation = (*reputation * config.decay_factor).max(config.min_reputation);
+                    let current_value = reputation.reputation;
+                    let new_value = (current_value * 0.95).max(config.min_reputation).min(config.max_reputation);
+                    reputation.reputation = new_value;
                 }
             }
         });

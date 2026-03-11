@@ -10,17 +10,18 @@ test.describe('Housaky Dashboard', () => {
 
   test.describe('Navigation', () => {
     test('should load dashboard page', async ({ page }) => {
-      await expect(page.locator('h1')).toContainText('Dashboard')
+      await expect(page.locator('h2')).toContainText('Dashboard')
     })
 
     test('should navigate to chat', async ({ page }) => {
       await page.click('text=Chat')
-      await expect(page.locator('h1')).toContainText('Chat')
+      await page.waitForTimeout(500)
+      await expect(page.locator('main')).toContainText('Housaky Assistant')
     })
 
     test('should navigate to config', async ({ page }) => {
       await page.click('text=Config')
-      await expect(page.locator('h1')).toContainText('Configuration')
+      await expect(page.locator('h2')).toContainText('Config')
     })
 
     test('should navigate to channels', async ({ page }) => {

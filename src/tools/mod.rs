@@ -25,6 +25,7 @@ pub mod memory_forget;
 pub mod memory_recall;
 pub mod memory_store;
 pub mod process;
+pub mod project_context;
 pub mod schedule;
 pub mod screenshot;
 pub mod shell;
@@ -59,6 +60,7 @@ pub use memory_forget::MemoryForgetTool;
 pub use memory_recall::MemoryRecallTool;
 pub use memory_store::MemoryStoreTool;
 pub use process::ProcessTool;
+pub use project_context::ProjectContextTool;
 pub use schedule::ScheduleTool;
 pub use screenshot::ScreenshotTool;
 pub use shell::ShellTool;
@@ -170,6 +172,8 @@ pub fn all_tools_with_runtime(
             security.clone(),
             workspace_dir.to_path_buf(),
         )),
+        // Project self-awareness tool
+        Box::new(ProjectContextTool::for_housaky()),
     ];
 
     if browser_config.enabled {

@@ -210,13 +210,17 @@ impl Agent {
         let workspace_dir = config.workspace_dir.clone();
         let state = Arc::new(RwLock::new(HousakyState::default()));
 
+        let kowalski_path = std::env::current_dir()
+            .map(|c| c.join("vendor").join("kowalski").join("kowalski-cli"))
+            .unwrap_or_else(|_| PathBuf::from("vendor/kowalski/kowalski-cli"));
+
         let housaky_config = HousakyConfig {
-            heartbeat_interval_seconds: 120, // 2 minutes
+            heartbeat_interval_seconds: 120,
             enable_self_improvement: true,
             max_parallel_tasks: 5,
             kowalski_integration: KowalskiIntegrationConfig {
                 enabled: true,
-                kowalski_path: PathBuf::from("/home/ubuntu/Housaky/vendor/kowalski/kowalski-cli"),
+                kowalski_path,
                 enable_federation: true,
                 enable_code_agent: true,
                 enable_web_agent: true,

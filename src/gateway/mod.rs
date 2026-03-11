@@ -6,6 +6,8 @@
 //! - Request body size limits (64KB max)
 //! - Request timeouts (30s) to prevent slow-loris attacks
 //! - Header sanitization (handled by axum/hyper)
+//! - OpenClaw-style WebSocket gateway for real-time communication
+//! - REST API for config, MCP, chat, agent, skills, channels, keys, A2A, hardware, doctor
 
 // use crate::channels::Channel;
 // use crate::channels::WhatsAppChannel;
@@ -16,10 +18,10 @@ use crate::security::pairing::{constant_time_eq, is_public_bind, PairingGuard};
 use crate::util::truncate_with_ellipsis;
 use anyhow::Result;
 use axum::{
-    extract::State,
+    extract::{State, WebSocketUpgrade, ws::{Message as WsMessage, WebSocket}},
     http::{header, HeaderMap, StatusCode},
     response::{sse::Event, sse::Sse, IntoResponse},
-    routing::{get, post},
+    routing::{get, post, put, delete},
     Json, Router,
 };
 use std::collections::HashMap;
@@ -27,7 +29,9 @@ use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tokio::sync::broadcast;
+use tower_http::cors::{Any, CorsLayer};
 use tower_http::limit::RequestBodyLimitLayer;
+use tower_http::set_header::SetResponseHeaderLayer;
 use tower_http::timeout::TimeoutLayer;
 use uuid::Uuid;
 
@@ -37,6 +41,27 @@ pub const MAX_BODY_SIZE: usize = 65_536;
 pub const REQUEST_TIMEOUT_SECS: u64 = 30;
 /// Sliding window used by gateway rate limiting.
 pub const RATE_LIMIT_WINDOW_SECS: u64 = 60;
+
+/// Allowed origins for WebSocket connections (localhost only for security)
+const ALLOWED_WS_ORIGINS: &[&str] = &[
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://localhost:8080",
+    "http://127.0.0.1:8080",
+];
+
+/// TLS configuration for HTTPS
+#[derive(Debug, Clone, Default)]
+pub struct TlsConfig {
+    pub cert_path: Option<std::path::PathBuf>,
+    pub key_path: Option<std::path::PathBuf>,
+}
+
+impl TlsConfig {
+    pub fn is_enabled(&self) -> bool {
+        self.cert_path.is_some() && self.key_path.is_some()
+    }
+}
 
 fn webhook_memory_key() -> String {
     format!("webhook_msg_{}", Uuid::new_v4())
@@ -169,6 +194,55 @@ fn client_key_from_headers(headers: &HeaderMap) -> String {
     "unknown".into()
 }
 
+/// Chat session for dashboard
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ChatSession {
+    pub id: String,
+    pub title: String,
+    pub last_message: String,
+    pub timestamp: i64,
+    pub message_count: usize,
+}
+
+/// Chat message for dashboard
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ChatMessage {
+    pub id: String,
+    pub role: String,
+    pub content: String,
+    pub timestamp: i64,
+    pub token_count: Option<usize>,
+}
+
+/// Chat request body
+#[derive(serde::Deserialize)]
+pub struct ChatRequest {
+    pub message: String,
+    pub session_key: Option<String>,
+    pub model: Option<String>,
+    pub temperature: Option<f64>,
+    pub stream: Option<bool>,
+}
+
+/// Chat response
+#[derive(serde::Serialize)]
+pub struct ChatResponse {
+    pub message: ChatMessage,
+    pub session_id: String,
+    pub model: String,
+}
+
+/// MCP server info
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct McpServerInfo {
+    pub name: String,
+    pub command: String,
+    pub args: Vec<String>,
+    pub env: std::collections::HashMap<String, String>,
+    pub status: String,
+    pub tools_count: usize,
+}
+
 /// Shared state for all axum handlers
 #[derive(Clone)]
 pub struct AppState {
@@ -185,6 +259,15 @@ pub struct AppState {
     /// `WhatsApp` app secret for webhook signature verification (`X-Hub-Signature-256`)
     // pub whatsapp_app_secret: Option<Arc<str>>,
     pub events: broadcast::Sender<GatewayEvent>,
+    pub config_path: Arc<std::path::PathBuf>,
+    pub workspace_dir: Arc<std::path::PathBuf>,
+    pub start_time: Instant,
+    pub default_provider: Option<String>,
+    pub memory_config: crate::config::MemoryConfig,
+    pub autonomy_config: crate::config::AutonomyConfig,
+    pub heartbeat_config: crate::config::HeartbeatConfig,
+    pub channels_config: crate::config::ChannelsConfig,
+    pub secrets_config: crate::config::SecretsConfig,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -373,17 +456,80 @@ pub async fn run_gateway(host: &str, port: u16, config: Config) -> Result<()> {
         // whatsapp: whatsapp_channel,
         // whatsapp_app_secret,
         events,
+        config_path: Arc::new(config.config_path.clone()),
+        workspace_dir: Arc::new(config.workspace_dir.clone()),
+        start_time: Instant::now(),
+        default_provider: config.default_provider.clone(),
+        memory_config: config.memory.clone(),
+        autonomy_config: config.autonomy.clone(),
+        heartbeat_config: config.heartbeat.clone(),
+        channels_config: config.channels_config.clone(),
+        secrets_config: config.secrets.clone(),
     };
 
     // Build router with middleware
+    let cors = CorsLayer::new()
+        .allow_origin([
+            "http://localhost:3000".parse().unwrap(),
+            "http://127.0.0.1:3000".parse().unwrap(),
+            "http://localhost:8080".parse().unwrap(),
+            "http://127.0.0.1:8080".parse().unwrap(),
+        ])
+        .allow_methods(Any)
+        .allow_headers(Any);
+
     let app = Router::new()
         .route("/health", get(handle_health))
         .route("/pair", post(handle_pair))
         .route("/webhook", post(handle_webhook))
         .route("/events", get(handle_events))
+        .route("/ws", get(handle_websocket))
+        .route("/chat", post(handle_chat))
+        .route("/chat/sessions", get(handle_chat_sessions))
+        .route("/api/config", get(handle_get_config).put(handle_put_config))
+        .route("/api/mcp", get(handle_list_mcp).post(handle_add_mcp))
+        .route("/api/mcp/{name}", get(handle_get_mcp).delete(handle_remove_mcp))
+        .route("/api/status", get(handle_status))
+        // Agent control endpoints
+        .route("/api/agent/start", post(handle_agent_start))
+        .route("/api/agent/stop", post(handle_agent_stop))
+        .route("/api/agent/status", get(handle_agent_status))
+        // Skills endpoints
+        .route("/api/skills", get(handle_skills_list))
+        .route("/api/skills/{name}/toggle", post(handle_skill_toggle))
+        .route("/api/skills/{name}/install", post(handle_skill_install))
+        .route("/api/skills/{name}", delete(handle_skill_uninstall))
+        // Channels endpoints
+        .route("/api/channels", get(handle_channels_list))
+        .route("/api/channels/{type}/start", post(handle_channel_start))
+        .route("/api/channels/{type}/stop", post(handle_channel_stop))
+        .route("/api/channels/{type}/config", put(handle_channel_config))
+        // Keys endpoints
+        .route("/api/keys", get(handle_keys_list).post(handle_keys_add))
+        .route("/api/keys/{provider}/{key_id}", delete(handle_key_remove))
+        // A2A endpoints
+        .route("/api/a2a/instances", get(handle_a2a_instances))
+        .route("/api/a2a/{id}/ping", post(handle_a2a_ping))
+        .route("/api/a2a/messages", get(handle_a2a_messages).post(handle_a2a_send))
+        // Hardware & Doctor endpoints
+        .route("/api/hardware", get(handle_hardware_list))
+        .route("/api/doctor/run", post(handle_doctor_run))
         // .route("/whatsapp", get(handle_whatsapp_verify))
         // .route("/whatsapp", post(handle_whatsapp_message))
         .with_state(state)
+        .layer(SetResponseHeaderLayer::overriding(
+            header::X_CONTENT_TYPE_OPTIONS,
+            header::HeaderValue::from_static("nosniff"),
+        ))
+        .layer(SetResponseHeaderLayer::overriding(
+            header::X_FRAME_OPTIONS,
+            header::HeaderValue::from_static("DENY"),
+        ))
+        .layer(SetResponseHeaderLayer::overriding(
+            header::HeaderName::from_static("x-xss-protection"),
+            header::HeaderValue::from_static("1; mode=block"),
+        ))
+        .layer(cors)
         .layer(RequestBodyLimitLayer::new(MAX_BODY_SIZE))
         .layer(TimeoutLayer::with_status_code(
             StatusCode::REQUEST_TIMEOUT,
@@ -615,6 +761,464 @@ async fn handle_events(State(state): State<AppState>, headers: HeaderMap) -> imp
     Sse::new(stream)
         .keep_alive(axum::response::sse::KeepAlive::new())
         .into_response()
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// WEBSOCKET HANDLER - OpenClaw-style gateway
+// ══════════════════════════════════════════════════════════════════════════════
+
+async fn handle_websocket(
+    State(state): State<AppState>,
+    ws: WebSocketUpgrade,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    let origin = headers
+        .get("origin")
+        .and_then(|o| o.to_str().ok())
+        .unwrap_or("");
+    
+    if !origin.is_empty() && !ALLOWED_WS_ORIGINS.contains(&origin) {
+        tracing::warn!("WebSocket rejected from invalid origin: {}", origin);
+        return (StatusCode::FORBIDDEN, "Invalid origin").into_response();
+    }
+    
+    ws.on_upgrade(move |socket| handle_websocket_connection(socket, state))
+}
+
+async fn handle_websocket_connection(socket: WebSocket, state: AppState) {
+    let mut ws = socket;
+    while let Some(msg) = ws.recv().await {
+        match msg {
+            Ok(WsMessage::Text(text)) => {
+                let request: Result<serde_json::Value, _> = serde_json::from_str(&text);
+                match request {
+                    Ok(req) => {
+                        let response = handle_ws_message(&state, req).await;
+                        if let Ok(json) = serde_json::to_string(&response) {
+                            if ws.send(WsMessage::Text(json.into())).await.is_err() {
+                                break;
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        let err = serde_json::json!({"type": "error", "message": "Invalid JSON"});
+                        if let Ok(json) = serde_json::to_string(&err) {
+                            let _ = ws.send(WsMessage::Text(json.into())).await;
+                        }
+                    }
+                }
+            }
+            Ok(WsMessage::Close(_)) => break,
+            Err(_) => break,
+            _ => {}
+        }
+    }
+}
+
+async fn handle_ws_message(state: &AppState, req: serde_json::Value) -> serde_json::Value {
+    let msg_type = req.get("type").and_then(|t| t.as_str()).unwrap_or("");
+    
+    match msg_type {
+        "chat.message" => {
+            let message = req.get("message").and_then(|m| m.as_str()).unwrap_or("");
+            let model = req.get("model").and_then(|m| m.as_str()).unwrap_or(&state.model);
+            let temp = req.get("temperature").and_then(|t| t.as_f64()).unwrap_or(state.temperature);
+            
+            match state.provider.simple_chat(message, model, temp).await {
+                Ok(response) => serde_json::json!({
+                    "type": "chat.final",
+                    "runId": req.get("runId"),
+                    "message": {"role": "assistant", "content": response},
+                    "model": model
+                }),
+                Err(e) => serde_json::json!({
+                    "type": "chat.error",
+                    "runId": req.get("runId"),
+                    "error": e.to_string()
+                }),
+            }
+        }
+        "ping" => serde_json::json!({"type": "pong"}),
+        _ => serde_json::json!({"type": "error", "message": format!("Unknown message type: {}", msg_type)}),
+    }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// CHAT API HANDLERS
+// ══════════════════════════════════════════════════════════════════════════════
+
+/// POST /chat - Main chat endpoint for dashboard
+async fn handle_chat(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    body: Result<Json<ChatRequest>, axum::extract::rejection::JsonRejection>,
+) -> impl IntoResponse {
+    // Auth check
+    if state.pairing.require_pairing() {
+        let auth = headers
+            .get(header::AUTHORIZATION)
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("");
+        let token = auth.strip_prefix("Bearer ").unwrap_or("");
+        if !state.pairing.is_authenticated(token) {
+            let err = serde_json::json!({"error": "Unauthorized"});
+            return (StatusCode::UNAUTHORIZED, Json(err));
+        }
+    }
+
+    let Json(chat_req) = match body {
+        Ok(b) => b,
+        Err(e) => {
+            let err = serde_json::json!({"error": format!("Invalid request: {}", e)});
+            return (StatusCode::BAD_REQUEST, Json(err));
+        }
+    };
+
+    let model = chat_req.model.as_deref().unwrap_or(&state.model);
+    let temp = chat_req.temperature.unwrap_or(state.temperature);
+
+    match state.provider.simple_chat(&chat_req.message, model, temp).await {
+        Ok(response) => {
+            let msg = ChatMessage {
+                id: uuid::Uuid::new_v4().to_string(),
+                role: "assistant".to_string(),
+                content: response,
+                timestamp: chrono::Utc::now().timestamp(),
+                token_count: None,
+            };
+            let resp = ChatResponse {
+                message: msg,
+                session_id: chat_req.session_key.unwrap_or_else(|| "default".to_string()),
+                model: model.to_string(),
+            };
+            (StatusCode::OK, Json(serde_json::json!({"message": resp.message, "model": resp.model})))
+        }
+        Err(e) => {
+            let err = serde_json::json!({"error": format!("LLM error: {}", providers::sanitize_api_error(&e.to_string()))});
+            (StatusCode::INTERNAL_SERVER_ERROR, Json(err))
+        }
+    }
+}
+
+/// GET /chat/sessions - List chat sessions
+async fn handle_chat_sessions(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    if state.pairing.require_pairing() {
+        let auth = headers
+            .get(header::AUTHORIZATION)
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("");
+        let token = auth.strip_prefix("Bearer ").unwrap_or("");
+        if !state.pairing.is_authenticated(token) {
+            let err = serde_json::json!({"error": "Unauthorized"});
+            return (StatusCode::UNAUTHORIZED, Json(err));
+        }
+    }
+
+    // Return sample sessions - in real implementation would load from memory
+    let sessions: Vec<ChatSession> = vec![
+        ChatSession {
+            id: "default".to_string(),
+            title: "New Conversation".to_string(),
+            last_message: "".to_string(),
+            timestamp: chrono::Utc::now().timestamp(),
+            message_count: 0,
+        }
+    ];
+    
+    (StatusCode::OK, Json(serde_json::json!({"sessions": sessions})))
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// CONFIG API HANDLERS
+// ══════════════════════════════════════════════════════════════════════════════
+
+/// GET /api/config - Get current config
+async fn handle_get_config(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    if state.pairing.require_pairing() {
+        let auth = headers
+            .get(header::AUTHORIZATION)
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("");
+        let token = auth.strip_prefix("Bearer ").unwrap_or("");
+        if !state.pairing.is_authenticated(token) {
+            let err = serde_json::json!({"error": "Unauthorized"});
+            return (StatusCode::UNAUTHORIZED, Json(err));
+        }
+    }
+
+    match std::fs::read_to_string(state.config_path.as_ref()) {
+        Ok(content) => {
+            let config: serde_json::Value = toml::from_str(&content).unwrap_or(serde_json::json!({}));
+            (StatusCode::OK, Json(config))
+        }
+        Err(e) => {
+            let err = serde_json::json!({"error": format!("Failed to read config: {}", e)});
+            (StatusCode::INTERNAL_SERVER_ERROR, Json(err))
+        }
+    }
+}
+
+/// PUT /api/config - Update config
+async fn handle_put_config(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    body: Json<serde_json::Value>,
+) -> impl IntoResponse {
+    if state.pairing.require_pairing() {
+        let auth = headers
+            .get(header::AUTHORIZATION)
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("");
+        let token = auth.strip_prefix("Bearer ").unwrap_or("");
+        if !state.pairing.is_authenticated(token) {
+            let err = serde_json::json!({"error": "Unauthorized"});
+            return (StatusCode::UNAUTHORIZED, Json(err));
+        }
+    }
+
+    let Json(config_value) = body;
+    
+    // Convert JSON to TOML
+    let toml_str = match toml::to_string_pretty(&config_value) {
+        Ok(s) => s,
+        Err(e) => {
+            let err = serde_json::json!({"error": format!("Failed to serialize config: {}", e)});
+            return (StatusCode::BAD_REQUEST, Json(err));
+        }
+    };
+
+    match std::fs::write(state.config_path.as_ref(), &toml_str) {
+        Ok(_) => {
+            let resp = serde_json::json!({"success": true, "message": "Config saved. Restart may be required."});
+            (StatusCode::OK, Json(resp))
+        }
+        Err(e) => {
+            let err = serde_json::json!({"error": format!("Failed to write config: {}", e)});
+            (StatusCode::INTERNAL_SERVER_ERROR, Json(err))
+        }
+    }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// MCP API HANDLERS
+// ══════════════════════════════════════════════════════════════════════════════
+
+/// GET /api/mcp - List MCP servers
+async fn handle_list_mcp(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    if state.pairing.require_pairing() {
+        let auth = headers
+            .get(header::AUTHORIZATION)
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("");
+        let token = auth.strip_prefix("Bearer ").unwrap_or("");
+        if !state.pairing.is_authenticated(token) {
+            let err = serde_json::json!({"error": "Unauthorized"});
+            return (StatusCode::UNAUTHORIZED, Json(err));
+        }
+    }
+
+    let mcp_file = state.workspace_dir.join(".housaky").join("mcp.json");
+    let servers: Vec<McpServerInfo> = if mcp_file.exists() {
+        match std::fs::read_to_string(&mcp_file) {
+            Ok(content) => {
+                let config: serde_json::Value = serde_json::from_str(&content).unwrap_or(serde_json::json!({"mcpServers": {}}));
+                let mcp_servers = config.get("mcpServers").and_then(|s| s.as_object()).cloned().unwrap_or_default();
+                mcp_servers.into_iter().map(|(name, val)| {
+                    McpServerInfo {
+                        name: name.clone(),
+                        command: val.get("command").and_then(|c| c.as_str()).unwrap_or("").to_string(),
+                        args: val.get("args").and_then(|a| a.as_array()).cloned().unwrap_or_default()
+                            .iter().filter_map(|v| v.as_str().map(String::from)).collect(),
+                        env: val.get("env").and_then(|e| e.as_object()).cloned().unwrap_or_default()
+                            .into_iter().filter_map(|(k, v)| v.as_str().map(|s| (k, s.to_string()))).collect(),
+                        status: "configured".to_string(),
+                        tools_count: 0,
+                    }
+                }).collect()
+            }
+            Err(_) => vec![]
+        }
+    } else {
+        vec![]
+    };
+
+    (StatusCode::OK, Json(serde_json::json!({"servers": servers})))
+}
+
+/// POST /api/mcp - Add MCP server
+async fn handle_add_mcp(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    body: Json<McpServerInfo>,
+) -> impl IntoResponse {
+    if state.pairing.require_pairing() {
+        let auth = headers
+            .get(header::AUTHORIZATION)
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("");
+        let token = auth.strip_prefix("Bearer ").unwrap_or("");
+        if !state.pairing.is_authenticated(token) {
+            let err = serde_json::json!({"error": "Unauthorized"});
+            return (StatusCode::UNAUTHORIZED, Json(err));
+        }
+    }
+
+    let Json(server) = body;
+    let mcp_file = state.workspace_dir.join(".housaky").join("mcp.json");
+    
+    let mut config: serde_json::Value = if mcp_file.exists() {
+        std::fs::read_to_string(&mcp_file)
+            .ok()
+            .and_then(|c| serde_json::from_str(&c).ok())
+            .unwrap_or(serde_json::json!({"mcpServers": {}}))
+    } else {
+        serde_json::json!({"mcpServers": {}})
+    };
+
+    let mut empty_servers = serde_json::Map::new();
+    let servers = config.get_mut("mcpServers")
+        .and_then(|s| s.as_object_mut())
+        .unwrap_or(&mut empty_servers);
+    
+    servers.insert(server.name.clone(), serde_json::json!({
+        "command": server.command,
+        "args": server.args,
+        "env": server.env
+    }));
+
+    if let Some(parent) = mcp_file.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+
+    match std::fs::write(&mcp_file, serde_json::to_string_pretty(&config).unwrap_or_default()) {
+        Ok(_) => {
+            let resp = serde_json::json!({"success": true, "message": format!("MCP server '{}' added", server.name)});
+            (StatusCode::OK, Json(resp))
+        }
+        Err(e) => {
+            let err = serde_json::json!({"error": format!("Failed to save MCP config: {}", e)});
+            (StatusCode::INTERNAL_SERVER_ERROR, Json(err))
+        }
+    }
+}
+
+/// GET /api/mcp/{name} - Get specific MCP server
+async fn handle_get_mcp(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    axum::extract::Path(name): axum::extract::Path<String>,
+) -> impl IntoResponse {
+    if state.pairing.require_pairing() {
+        let auth = headers
+            .get(header::AUTHORIZATION)
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("");
+        let token = auth.strip_prefix("Bearer ").unwrap_or("");
+        if !state.pairing.is_authenticated(token) {
+            let err = serde_json::json!({"error": "Unauthorized"});
+            return (StatusCode::UNAUTHORIZED, Json(err));
+        }
+    }
+
+    let mcp_file = state.workspace_dir.join(".housaky").join("mcp.json");
+    if let Ok(content) = std::fs::read_to_string(&mcp_file) {
+        if let Ok(config) = serde_json::from_str::<serde_json::Value>(&content) {
+            if let Some(server) = config.get("mcpServers").and_then(|s| s.get(&name)) {
+                return (StatusCode::OK, Json(server.clone()));
+            }
+        }
+    }
+
+    let err = serde_json::json!({"error": format!("MCP server '{}' not found", name)});
+    (StatusCode::NOT_FOUND, Json(err))
+}
+
+/// DELETE /api/mcp/{name} - Remove MCP server
+async fn handle_remove_mcp(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    axum::extract::Path(name): axum::extract::Path<String>,
+) -> impl IntoResponse {
+    if state.pairing.require_pairing() {
+        let auth = headers
+            .get(header::AUTHORIZATION)
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("");
+        let token = auth.strip_prefix("Bearer ").unwrap_or("");
+        if !state.pairing.is_authenticated(token) {
+            let err = serde_json::json!({"error": "Unauthorized"});
+            return (StatusCode::UNAUTHORIZED, Json(err));
+        }
+    }
+
+    let mcp_file = state.workspace_dir.join(".housaky").join("mcp.json");
+    let mut config: serde_json::Value = if mcp_file.exists() {
+        std::fs::read_to_string(&mcp_file)
+            .ok()
+            .and_then(|c| serde_json::from_str(&c).ok())
+            .unwrap_or(serde_json::json!({"mcpServers": {}}))
+    } else {
+        serde_json::json!({"mcpServers": {}})
+    };
+
+    let removed = if let Some(servers) = config.get_mut("mcpServers").and_then(|s| s.as_object_mut()) {
+        servers.remove(&name).is_some()
+    } else {
+        false
+    };
+
+    if removed {
+        let _ = std::fs::write(&mcp_file, serde_json::to_string_pretty(&config).unwrap_or_default());
+        let resp = serde_json::json!({"success": true, "message": format!("MCP server '{}' removed", name)});
+        (StatusCode::OK, Json(resp))
+    } else {
+        let err = serde_json::json!({"error": format!("MCP server '{}' not found", name)});
+        (StatusCode::NOT_FOUND, Json(err))
+    }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// STATUS API HANDLER
+// ══════════════════════════════════════════════════════════════════════════════
+
+/// GET /api/status - Get system status
+async fn handle_status(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    if state.pairing.require_pairing() {
+        let auth = headers
+            .get(header::AUTHORIZATION)
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("");
+        let token = auth.strip_prefix("Bearer ").unwrap_or("");
+        if !state.pairing.is_authenticated(token) {
+            let err = serde_json::json!({"error": "Unauthorized"});
+            return (StatusCode::UNAUTHORIZED, Json(err));
+        }
+    }
+
+    let status = serde_json::json!({
+        "status": "ok",
+        "model": state.model,
+        "temperature": state.temperature,
+        "paired": state.pairing.is_paired(),
+        "memory_backend": state.mem.name(),
+        "runtime": crate::health::snapshot_json(),
+        "config_path": state.config_path.to_string_lossy(),
+        "workspace_dir": state.workspace_dir.to_string_lossy(),
+    });
+    
+    (StatusCode::OK, Json(status))
 }
 
 // ── WhatsApp handlers (disabled until whatsapp module is implemented) ──

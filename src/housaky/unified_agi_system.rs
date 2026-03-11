@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::info;
+use tracing::{debug, info};
 
 use crate::housaky::a2a_discovery::AgentDiscoveryService;
 use crate::housaky::collective::{CollectiveHub, CollectiveConfig};
@@ -152,6 +152,10 @@ impl UnifiedAGISystem {
         Ok(())
     }
 
+    pub fn get_daemon(&self) -> Option<Arc<SelfImproveDaemon>> {
+        self.daemon.clone()
+    }
+
     pub async fn get_system_status(&self) -> serde_json::Value {
         let status = self.status.read().await.clone();
         
@@ -203,6 +207,7 @@ impl UnifiedAGISystem {
         
         for (name, status) in self.status.write().await.iter_mut() {
             *status = SystemStatus::Stopped;
+            debug!("[SYSTEM] Stopped subsystem: {}", name);
         }
         
         info!("✅ Unified AGI System shutdown complete");

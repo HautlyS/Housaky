@@ -1,0 +1,146 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e4]:
+  - complementary [ref=e5]:
+    - generic [ref=e7]:
+      - img [ref=e9]
+      - generic [ref=e19]:
+        - heading "Housaky" [level=1] [ref=e20]
+        - generic [ref=e21]:
+          - img [ref=e22]
+          - generic [ref=e29]: Offline
+    - navigation [ref=e30]:
+      - link "Dashboard" [ref=e31] [cursor=pointer]:
+        - /url: /
+        - img [ref=e32]
+        - generic [ref=e37]: Dashboard
+      - link "Chat" [ref=e38] [cursor=pointer]:
+        - /url: /chat
+        - img [ref=e39]
+        - generic [ref=e41]: Chat
+      - link "AGI live" [ref=e42] [cursor=pointer]:
+        - /url: /agi
+        - img [ref=e43]
+        - generic [ref=e53]: AGI
+        - generic [ref=e54]: live
+      - link "Skills" [ref=e55] [cursor=pointer]:
+        - /url: /skills
+        - img [ref=e56]
+        - generic [ref=e58]: Skills
+      - link "Channels" [ref=e59] [cursor=pointer]:
+        - /url: /channels
+        - img [ref=e60]
+        - generic [ref=e65]: Channels
+      - link "Integrations" [ref=e66] [cursor=pointer]:
+        - /url: /integrations
+        - img [ref=e67]
+        - generic [ref=e71]: Integrations
+      - link "Hardware" [ref=e72] [cursor=pointer]:
+        - /url: /hardware
+        - img [ref=e73]
+        - generic [ref=e76]: Hardware
+      - link "A2A Network" [ref=e77] [cursor=pointer]:
+        - /url: /a2a-instances
+        - img [ref=e78]
+        - generic [ref=e82]: A2A Network
+      - link "A2A Messages" [ref=e83] [cursor=pointer]:
+        - /url: /a2a-messages
+        - img [ref=e84]
+        - generic [ref=e86]: A2A Messages
+      - link "Security" [ref=e87] [cursor=pointer]:
+        - /url: /security
+        - img [ref=e88]
+        - generic [ref=e90]: Security
+      - link "Keys & Subagents" [ref=e91] [cursor=pointer]:
+        - /url: /keys
+        - img [ref=e92]
+        - generic [ref=e96]: Keys & Subagents
+      - link "Kowalski" [ref=e97] [cursor=pointer]:
+        - /url: /kowalski
+        - img [ref=e98]
+        - generic [ref=e101]: Kowalski
+      - link "Config" [ref=e102] [cursor=pointer]:
+        - /url: /config
+        - img [ref=e103]
+        - generic [ref=e106]: Config
+      - link "Terminal" [active] [ref=e107] [cursor=pointer]:
+        - /url: /terminal
+        - img [ref=e108]
+        - generic [ref=e110]: Terminal
+    - generic [ref=e112]:
+      - generic [ref=e113]:
+        - img [ref=e114]
+        - generic [ref=e116]: Stopped
+      - button [ref=e117]:
+        - img [ref=e118]
+  - main [ref=e120]:
+    - generic [ref=e122]:
+      - heading "Terminal" [level=2] [ref=e124]
+      - generic [ref=e125]:
+        - button "Setup" [ref=e126]:
+          - img [ref=e127]
+          - text: Setup
+        - button [ref=e129]:
+          - img [ref=e130]
+        - button "2" [ref=e136]:
+          - img [ref=e137]
+          - generic [ref=e140]: "2"
+    - generic [ref=e142]:
+      - generic [ref=e143]:
+        - generic [ref=e144]:
+          - heading "Terminal" [level=1] [ref=e145]
+          - paragraph [ref=e146]: Execute Housaky commands
+        - generic [ref=e147]:
+          - generic [ref=e148]:
+            - img [ref=e149]
+            - text: Not Installed
+          - button "Clear" [ref=e151]:
+            - img [ref=e152]
+            - text: Clear
+          - button "Export" [ref=e155]:
+            - img [ref=e156]
+            - text: Export
+      - generic [ref=e159]:
+        - generic [ref=e160]:
+          - generic [ref=e162]:
+            - heading "Terminal" [level=3] [ref=e163]:
+              - img [ref=e164]
+              - text: Terminal
+            - generic [ref=e166]: Ready
+          - generic [ref=e169]: Welcome to Housaky Terminal! Type "housaky --help" for available commands.
+          - generic [ref=e171]:
+            - generic [ref=e172]: $
+            - textbox "Type a command..." [disabled] [ref=e173]
+            - button [disabled]:
+              - img
+        - generic [ref=e174]:
+          - heading "Quick Commands" [level=3] [ref=e176]:
+            - img [ref=e177]
+            - text: Quick Commands
+          - generic [ref=e179]:
+            - generic [ref=e180]:
+              - button "housaky status Show system status" [ref=e181]:
+                - code [ref=e182]: housaky status
+                - paragraph [ref=e183]: Show system status
+              - button "housaky doctor Run diagnostics" [ref=e184]:
+                - code [ref=e185]: housaky doctor
+                - paragraph [ref=e186]: Run diagnostics
+              - button "housaky channel list List channels" [ref=e187]:
+                - code [ref=e188]: housaky channel list
+                - paragraph [ref=e189]: List channels
+              - button "housaky skills list List skills" [ref=e190]:
+                - code [ref=e191]: housaky skills list
+                - paragraph [ref=e192]: List skills
+              - button "housaky config show Show configuration" [ref=e193]:
+                - code [ref=e194]: housaky config show
+                - paragraph [ref=e195]: Show configuration
+              - button "housaky --version Show version" [ref=e196]:
+                - code [ref=e197]: housaky --version
+                - paragraph [ref=e198]: Show version
+            - generic [ref=e199]:
+              - generic [ref=e200]:
+                - img [ref=e201]
+                - text: Recent Commands
+              - generic [ref=e205]: No commands yet
+```

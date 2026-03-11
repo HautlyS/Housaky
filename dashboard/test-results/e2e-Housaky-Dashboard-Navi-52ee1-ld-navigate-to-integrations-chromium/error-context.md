@@ -1,0 +1,372 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e4]:
+  - complementary [ref=e5]:
+    - generic [ref=e7]:
+      - img [ref=e9]
+      - generic [ref=e19]:
+        - heading "Housaky" [level=1] [ref=e20]
+        - generic [ref=e21]:
+          - img [ref=e22]
+          - generic [ref=e29]: Offline
+    - navigation [ref=e30]:
+      - link "Dashboard" [ref=e31] [cursor=pointer]:
+        - /url: /
+        - img [ref=e32]
+        - generic [ref=e37]: Dashboard
+      - link "Chat" [ref=e38] [cursor=pointer]:
+        - /url: /chat
+        - img [ref=e39]
+        - generic [ref=e41]: Chat
+      - link "AGI live" [ref=e42] [cursor=pointer]:
+        - /url: /agi
+        - img [ref=e43]
+        - generic [ref=e53]: AGI
+        - generic [ref=e54]: live
+      - link "Skills" [ref=e55] [cursor=pointer]:
+        - /url: /skills
+        - img [ref=e56]
+        - generic [ref=e58]: Skills
+      - link "Channels" [ref=e59] [cursor=pointer]:
+        - /url: /channels
+        - img [ref=e60]
+        - generic [ref=e65]: Channels
+      - link "Integrations" [active] [ref=e66] [cursor=pointer]:
+        - /url: /integrations
+        - img [ref=e67]
+        - generic [ref=e71]: Integrations
+      - link "Hardware" [ref=e72] [cursor=pointer]:
+        - /url: /hardware
+        - img [ref=e73]
+        - generic [ref=e76]: Hardware
+      - link "A2A Network" [ref=e77] [cursor=pointer]:
+        - /url: /a2a-instances
+        - img [ref=e78]
+        - generic [ref=e82]: A2A Network
+      - link "A2A Messages" [ref=e83] [cursor=pointer]:
+        - /url: /a2a-messages
+        - img [ref=e84]
+        - generic [ref=e86]: A2A Messages
+      - link "Security" [ref=e87] [cursor=pointer]:
+        - /url: /security
+        - img [ref=e88]
+        - generic [ref=e90]: Security
+      - link "Keys & Subagents" [ref=e91] [cursor=pointer]:
+        - /url: /keys
+        - img [ref=e92]
+        - generic [ref=e96]: Keys & Subagents
+      - link "Kowalski" [ref=e97] [cursor=pointer]:
+        - /url: /kowalski
+        - img [ref=e98]
+        - generic [ref=e101]: Kowalski
+      - link "Config" [ref=e102] [cursor=pointer]:
+        - /url: /config
+        - img [ref=e103]
+        - generic [ref=e106]: Config
+      - link "Terminal" [ref=e107] [cursor=pointer]:
+        - /url: /terminal
+        - img [ref=e108]
+        - generic [ref=e110]: Terminal
+    - generic [ref=e112]:
+      - generic [ref=e113]:
+        - img [ref=e114]
+        - generic [ref=e116]: Stopped
+      - button [ref=e117]:
+        - img [ref=e118]
+  - main [ref=e120]:
+    - generic [ref=e122]:
+      - heading "Integrations" [level=2] [ref=e124]
+      - generic [ref=e125]:
+        - button "Setup" [ref=e126]:
+          - img [ref=e127]
+          - text: Setup
+        - button [ref=e129]:
+          - img [ref=e130]
+        - button "2" [ref=e136]:
+          - img [ref=e137]
+          - generic [ref=e140]: "2"
+    - generic [ref=e142]:
+      - generic [ref=e144]:
+        - heading "Integrations" [level=1] [ref=e145]
+        - paragraph [ref=e146]: Browse 75+ integrations across 9 categories
+      - generic [ref=e147]:
+        - generic [ref=e149]:
+          - generic [ref=e150]: "1"
+          - paragraph [ref=e151]: Active
+        - generic [ref=e153]:
+          - generic [ref=e154]: "16"
+          - paragraph [ref=e155]: Available
+        - generic [ref=e157]:
+          - generic [ref=e158]: "5"
+          - paragraph [ref=e159]: Coming Soon
+        - generic [ref=e161]:
+          - generic [ref=e162]: "5"
+          - paragraph [ref=e163]: Categories
+      - generic [ref=e164]:
+        - generic [ref=e165]:
+          - img [ref=e166]
+          - textbox "Search integrations..." [ref=e169]
+        - generic [ref=e171]:
+          - button "All" [ref=e172]
+          - button "Active" [ref=e173]
+          - button "Available" [ref=e174]
+          - button "Coming Soon" [ref=e175]
+        - combobox [ref=e176]:
+          - option "All Categories" [selected]
+          - option "Chat Providers"
+          - option "AI Models"
+          - option "Tools & Automation"
+          - option "Productivity"
+          - option "Smart Home"
+      - generic [ref=e177]:
+        - generic [ref=e179]:
+          - generic [ref=e180]:
+            - img [ref=e181]
+            - heading "Chat Providers" [level=2] [ref=e183]
+            - generic [ref=e184]: "8"
+          - generic [ref=e185]:
+            - generic [ref=e186] [cursor=pointer]:
+              - generic [ref=e188]:
+                - heading "Telegram" [level=3] [ref=e189]
+                - img [ref=e190]
+              - generic [ref=e193]:
+                - paragraph [ref=e194]: Bot API — long-polling
+                - generic [ref=e195]:
+                  - generic [ref=e196]: available
+                  - button [ref=e197]:
+                    - img [ref=e198]
+            - generic [ref=e202] [cursor=pointer]:
+              - generic [ref=e204]:
+                - heading "Discord" [level=3] [ref=e205]
+                - img [ref=e206]
+              - generic [ref=e209]:
+                - paragraph [ref=e210]: Servers, channels & DMs
+                - generic [ref=e211]:
+                  - generic [ref=e212]: available
+                  - button [ref=e213]:
+                    - img [ref=e214]
+            - generic [ref=e218] [cursor=pointer]:
+              - generic [ref=e220]:
+                - heading "Slack" [level=3] [ref=e221]
+                - img [ref=e222]
+              - generic [ref=e225]:
+                - paragraph [ref=e226]: Workspace apps via Web API
+                - generic [ref=e227]:
+                  - generic [ref=e228]: available
+                  - button [ref=e229]:
+                    - img [ref=e230]
+            - generic [ref=e234] [cursor=pointer]:
+              - generic [ref=e236]:
+                - heading "WhatsApp" [level=3] [ref=e237]
+                - img [ref=e238]
+              - generic [ref=e241]:
+                - paragraph [ref=e242]: Meta Cloud API via webhook
+                - generic [ref=e243]:
+                  - generic [ref=e244]: available
+                  - button [ref=e245]:
+                    - img [ref=e246]
+            - generic [ref=e250] [cursor=pointer]:
+              - generic [ref=e252]:
+                - heading "Signal" [level=3] [ref=e253]
+                - img [ref=e254]
+              - generic [ref=e257]:
+                - paragraph [ref=e258]: Privacy-focused via signal-cli
+                - generic [ref=e259]:
+                  - generic [ref=e260]: Coming Soon
+                  - button [ref=e261]:
+                    - img [ref=e262]
+            - generic [ref=e266] [cursor=pointer]:
+              - generic [ref=e268]:
+                - heading "iMessage" [level=3] [ref=e269]
+                - img [ref=e270]
+              - generic [ref=e273]:
+                - paragraph [ref=e274]: macOS AppleScript bridge
+                - generic [ref=e275]:
+                  - generic [ref=e276]: available
+                  - button [ref=e277]:
+                    - img [ref=e278]
+            - generic [ref=e282] [cursor=pointer]:
+              - generic [ref=e284]:
+                - heading "Matrix" [level=3] [ref=e285]
+                - img [ref=e286]
+              - generic [ref=e289]:
+                - paragraph [ref=e290]: Matrix protocol (Element)
+                - generic [ref=e291]:
+                  - generic [ref=e292]: available
+                  - button [ref=e293]:
+                    - img [ref=e294]
+            - generic [ref=e298] [cursor=pointer]:
+              - generic [ref=e300]:
+                - heading "Microsoft Teams" [level=3] [ref=e301]
+                - img [ref=e302]
+              - generic [ref=e305]:
+                - paragraph [ref=e306]: Enterprise chat support
+                - generic [ref=e307]:
+                  - generic [ref=e308]: Coming Soon
+                  - button [ref=e309]:
+                    - img [ref=e310]
+        - generic [ref=e315]:
+          - generic [ref=e316]:
+            - img [ref=e317]
+            - heading "AI Models" [level=2] [ref=e320]
+            - generic [ref=e321]: "8"
+          - generic [ref=e322]:
+            - generic [ref=e323] [cursor=pointer]:
+              - generic [ref=e325]:
+                - heading "OpenRouter" [level=3] [ref=e326]
+                - img [ref=e327]
+              - generic [ref=e330]:
+                - paragraph [ref=e331]: 200+ models, 1 API key
+                - generic [ref=e332]:
+                  - generic [ref=e333]: active
+                  - button [ref=e334]:
+                    - img [ref=e335]
+            - generic [ref=e339] [cursor=pointer]:
+              - generic [ref=e341]:
+                - heading "Anthropic" [level=3] [ref=e342]
+                - img [ref=e343]
+              - generic [ref=e346]:
+                - paragraph [ref=e347]: Claude 3.5/4 Sonnet & Opus
+                - generic [ref=e348]:
+                  - generic [ref=e349]: available
+                  - button [ref=e350]:
+                    - img [ref=e351]
+            - generic [ref=e355] [cursor=pointer]:
+              - generic [ref=e357]:
+                - heading "OpenAI" [level=3] [ref=e358]
+                - img [ref=e359]
+              - generic [ref=e362]:
+                - paragraph [ref=e363]: GPT-4o, GPT-5, o1
+                - generic [ref=e364]:
+                  - generic [ref=e365]: available
+                  - button [ref=e366]:
+                    - img [ref=e367]
+            - generic [ref=e371] [cursor=pointer]:
+              - generic [ref=e373]:
+                - heading "Google" [level=3] [ref=e374]
+                - img [ref=e375]
+              - generic [ref=e378]:
+                - paragraph [ref=e379]: Gemini 2.5 Pro/Flash
+                - generic [ref=e380]:
+                  - generic [ref=e381]: available
+                  - button [ref=e382]:
+                    - img [ref=e383]
+            - generic [ref=e387] [cursor=pointer]:
+              - generic [ref=e389]:
+                - heading "DeepSeek" [level=3] [ref=e390]
+                - img [ref=e391]
+              - generic [ref=e394]:
+                - paragraph [ref=e395]: DeepSeek V3 & R1
+                - generic [ref=e396]:
+                  - generic [ref=e397]: available
+                  - button [ref=e398]:
+                    - img [ref=e399]
+            - generic [ref=e403] [cursor=pointer]:
+              - generic [ref=e405]:
+                - heading "Ollama" [level=3] [ref=e406]
+                - img [ref=e407]
+              - generic [ref=e410]:
+                - paragraph [ref=e411]: Local models
+                - generic [ref=e412]:
+                  - generic [ref=e413]: available
+                  - button [ref=e414]:
+                    - img [ref=e415]
+            - generic [ref=e419] [cursor=pointer]:
+              - generic [ref=e421]:
+                - heading "Groq" [level=3] [ref=e422]
+                - img [ref=e423]
+              - generic [ref=e426]:
+                - paragraph [ref=e427]: Fast inference
+                - generic [ref=e428]:
+                  - generic [ref=e429]: available
+                  - button [ref=e430]:
+                    - img [ref=e431]
+            - generic [ref=e435] [cursor=pointer]:
+              - generic [ref=e437]:
+                - heading "Mistral" [level=3] [ref=e438]
+                - img [ref=e439]
+              - generic [ref=e442]:
+                - paragraph [ref=e443]: Mistral AI models
+                - generic [ref=e444]:
+                  - generic [ref=e445]: available
+                  - button [ref=e446]:
+                    - img [ref=e447]
+        - generic [ref=e452]:
+          - generic [ref=e453]:
+            - img [ref=e454]
+            - heading "Tools & Automation" [level=2] [ref=e456]
+            - generic [ref=e457]: "3"
+          - generic [ref=e458]:
+            - generic [ref=e459] [cursor=pointer]:
+              - generic [ref=e461]:
+                - heading "Composio" [level=3] [ref=e462]
+                - img [ref=e463]
+              - generic [ref=e466]:
+                - paragraph [ref=e467]: 1000+ OAuth apps
+                - generic [ref=e468]:
+                  - generic [ref=e469]: available
+                  - button [ref=e470]:
+                    - img [ref=e471]
+            - generic [ref=e475] [cursor=pointer]:
+              - generic [ref=e477]:
+                - heading "Brave Search" [level=3] [ref=e478]
+                - img [ref=e479]
+              - generic [ref=e482]:
+                - paragraph [ref=e483]: Web search API
+                - generic [ref=e484]:
+                  - generic [ref=e485]: available
+                  - button [ref=e486]:
+                    - img [ref=e487]
+            - generic [ref=e491] [cursor=pointer]:
+              - generic [ref=e493]:
+                - heading "GitHub" [level=3] [ref=e494]
+                - img [ref=e495]
+              - generic [ref=e498]:
+                - paragraph [ref=e499]: Repo management
+                - generic [ref=e500]:
+                  - generic [ref=e501]: available
+                  - button [ref=e502]:
+                    - img [ref=e503]
+        - generic [ref=e508]:
+          - generic [ref=e509]:
+            - img [ref=e510]
+            - heading "Productivity" [level=2] [ref=e514]
+            - generic [ref=e515]: "1"
+          - generic [ref=e517] [cursor=pointer]:
+            - generic [ref=e519]:
+              - heading "Notion" [level=3] [ref=e520]
+              - img [ref=e521]
+            - generic [ref=e524]:
+              - paragraph [ref=e525]: Workspace integration
+              - generic [ref=e526]:
+                - generic [ref=e527]: Coming Soon
+                - button [ref=e528]:
+                  - img [ref=e529]
+        - generic [ref=e534]:
+          - generic [ref=e535]:
+            - img [ref=e536]
+            - heading "Smart Home" [level=2] [ref=e539]
+            - generic [ref=e540]: "2"
+          - generic [ref=e541]:
+            - generic [ref=e542] [cursor=pointer]:
+              - generic [ref=e544]:
+                - heading "Home Assistant" [level=3] [ref=e545]
+                - img [ref=e546]
+              - generic [ref=e549]:
+                - paragraph [ref=e550]: Smart home hub
+                - generic [ref=e551]:
+                  - generic [ref=e552]: Coming Soon
+                  - button [ref=e553]:
+                    - img [ref=e554]
+            - generic [ref=e558] [cursor=pointer]:
+              - generic [ref=e560]:
+                - heading "Philips Hue" [level=3] [ref=e561]
+                - img [ref=e562]
+              - generic [ref=e565]:
+                - paragraph [ref=e566]: Smart lighting
+                - generic [ref=e567]:
+                  - generic [ref=e568]: Coming Soon
+                  - button [ref=e569]:
+                    - img [ref=e570]
+```

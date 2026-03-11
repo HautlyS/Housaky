@@ -48,13 +48,13 @@ pub fn run_minimal_tui(
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = ratatui::Terminal::new(backend)?;
 
-    // Resolve provider/model
+    // Resolve provider/model - prefer modal for GLM-5
     let provider_name = provider
         .or_else(|| config.default_provider.clone())
-        .unwrap_or_else(|| "openrouter".to_string());
+        .unwrap_or_else(|| "modal".to_string());
     let model_name = model
         .or_else(|| config.default_model.clone())
-        .unwrap_or_else(|| "auto".to_string());
+        .unwrap_or_else(|| "zai-org/GLM-5-FP8".to_string());
 
     // Create app
     let mut app = MinimalApp::new(config, provider_name, model_name);

@@ -153,7 +153,11 @@ impl MinimalApp {
                 }
             })
             .filter(|p| p.exists())
-            .unwrap_or_else(|| std::path::PathBuf::from("/home/ubuntu/Housaky/vendor/kowalski"));
+            .unwrap_or_else(|| {
+                std::env::current_dir()
+                    .map(|c| c.join("vendor").join("kowalski"))
+                    .unwrap_or_else(|_| std::path::PathBuf::from("vendor/kowalski"))
+            });
         
         // Resolve subagent keys from keys manager
         let subagent_keys = Self::resolve_all_subagent_keys();
@@ -233,6 +237,9 @@ impl MinimalApp {
             resolved_key,
             log_rx: None,
         };
+        
+        // Set current provider/model from config
+        app.keys_popup.set_current(&provider_name, &model_name);
         
         // Set the main orchestrator as available
         app.agents.set_agent_status(AgentType::Main, AgentStatus::Available);
@@ -328,25 +335,34 @@ impl MinimalApp {
 
                 let enabled = p.keys.iter().any(|k| k.enabled);
 
-                // Common models per provider
-                let models = match p.name.as_str() {
-                    "openrouter" => vec![
-                        "auto".to_string(),
-                        "anthropic/claude-3.5-sonnet".to_string(),
-                        "openai/gpt-4-turbo".to_string(),
-                        "google/gemini-pro".to_string(),
-                    ],
-                    "anthropic" => vec![
-                        "claude-3-5-sonnet-20241022".to_string(),
-                        "claude-3-opus-20240229".to_string(),
-                        "claude-3-haiku-20240307".to_string(),
-                    ],
-                    "openai" => vec![
-                        "gpt-4-turbo".to_string(),
-                        "gpt-4".to_string(),
-                        "gpt-3.5-turbo".to_string(),
-                    ],
-                    _ => vec!["default".to_string()],
+                // Use models from keys.json if available, otherwise use provider defaults
+                let models = if !p.models.is_empty() {
+                    p.models.clone()
+                } else {
+                    // Fallback to common models only if no models defined in keys.json
+                    match p.name.as_str() {
+                        "openrouter" => vec![
+                            "auto".to_string(),
+                            "anthropic/claude-3.5-sonnet".to_string(),
+                            "openai/gpt-4-turbo".to_string(),
+                            "google/gemini-pro".to_string(),
+                        ],
+                        "anthropic" => vec![
+                            "claude-3-5-sonnet-20241022".to_string(),
+                            "claude-3-opus-20240229".to_string(),
+                            "claude-3-haiku-20240307".to_string(),
+                        ],
+                        "openai" => vec![
+                            "gpt-4-turbo".to_string(),
+                            "gpt-4".to_string(),
+                            "gpt-3.5-turbo".to_string(),
+                        ],
+                        "modal" => vec![
+                            "zai-org/GLM-5-FP8".to_string(),
+                            "glm-4".to_string(),
+                        ],
+                        _ => vec!["default".to_string()],
+                    }
                 };
 
                 ProviderEntry::new(&p.name, key_suffix, enabled).with_models(models)
@@ -362,6 +378,8 @@ impl MinimalApp {
                     .with_models(vec!["claude-3-5-sonnet-20241022".to_string()]),
                 ProviderEntry::new("openai", "none", false)
                     .with_models(vec!["gpt-4-turbo".to_string()]),
+                ProviderEntry::new("modal", "none", false)
+                    .with_models(vec!["zai-org/GLM-5-FP8".to_string()]),
             ]
         } else {
             entries

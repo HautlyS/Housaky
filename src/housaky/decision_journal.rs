@@ -254,9 +254,9 @@ impl FileDecisionJournal {
             return Ok(());
         }
 
-        let entries: Vec<DecisionEntry> = read_msgpack_file(&main_file)
+        let entries: Vec<DecisionEntry> = read_msgpack_file::<Vec<DecisionEntry>>(&main_file)
             .await
-            .map_err(|e| DecisionJournalError::Other(e.to_string()))?;
+            .map_err(|e: anyhow::Error| DecisionJournalError::Other(e.to_string()))?;
 
         let mut stored = self.entries.write().await;
         *stored = entries;
@@ -279,9 +279,9 @@ impl FileDecisionJournal {
             tokio::fs::create_dir_all(parent).await?;
         }
 
-        write_msgpack_file(&main_file, &*entries)
+        write_msgpack_file::<Vec<DecisionEntry>>(&main_file, &*entries)
             .await
-            .map_err(|e| DecisionJournalError::Other(e.to_string()))?;
+            .map_err(|e: anyhow::Error| DecisionJournalError::Other(e.to_string()))?;
 
         Ok(())
     }
@@ -317,9 +317,9 @@ impl FileDecisionJournal {
             *entries = remaining;
         }
 
-        write_msgpack_file(&main_file, &*entries)
+        write_msgpack_file::<Vec<DecisionEntry>>(&main_file, &*entries)
             .await
-            .map_err(|e| DecisionJournalError::Other(e.to_string()))?;
+            .map_err(|e: anyhow::Error| DecisionJournalError::Other(e.to_string()))?;
 
         Ok(())
     }

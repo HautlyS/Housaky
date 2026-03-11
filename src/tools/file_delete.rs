@@ -115,7 +115,7 @@ impl Tool for FileDeleteTool {
         };
 
         // Resolve path before deleting to block symlink escapes
-        let resolved_path = match tokio::fs::canonicalize(&full_path).await {
+        let resolved_path: std::path::PathBuf = match tokio::fs::canonicalize(&full_path).await {
             Ok(p) => p,
             Err(e) => {
                 return Ok(ToolResult {

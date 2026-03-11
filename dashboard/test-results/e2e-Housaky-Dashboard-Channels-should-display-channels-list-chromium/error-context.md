@@ -1,0 +1,265 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e4]:
+  - complementary [ref=e5]:
+    - generic [ref=e7]:
+      - img [ref=e10]
+      - generic [ref=e13]:
+        - generic [ref=e14]: "[ HOUSAKY ]"
+        - generic [ref=e15]:
+          - img [ref=e16]
+          - generic [ref=e23]: offline
+    - navigation [ref=e24]:
+      - link "Dashboard" [ref=e25] [cursor=pointer]:
+        - /url: /
+        - img [ref=e26]
+        - generic [ref=e31]: Dashboard
+      - link "Chat" [ref=e32] [cursor=pointer]:
+        - /url: /chat
+        - img [ref=e33]
+        - generic [ref=e35]: Chat
+      - link "AGI live" [ref=e36] [cursor=pointer]:
+        - /url: /agi
+        - img [ref=e37]
+        - generic [ref=e47]: AGI
+        - generic [ref=e48]: live
+      - link "Skills" [ref=e49] [cursor=pointer]:
+        - /url: /skills
+        - img [ref=e50]
+        - generic [ref=e52]: Skills
+      - link "Channels" [active] [ref=e53] [cursor=pointer]:
+        - /url: /channels
+        - img [ref=e54]
+        - generic [ref=e59]: Channels
+      - link "Integrations" [ref=e60] [cursor=pointer]:
+        - /url: /integrations
+        - img [ref=e61]
+        - generic [ref=e65]: Integrations
+      - link "Hardware" [ref=e66] [cursor=pointer]:
+        - /url: /hardware
+        - img [ref=e67]
+        - generic [ref=e70]: Hardware
+      - link "A2A Network" [ref=e71] [cursor=pointer]:
+        - /url: /a2a-instances
+        - img [ref=e72]
+        - generic [ref=e76]: A2A Network
+      - link "A2A Messages" [ref=e77] [cursor=pointer]:
+        - /url: /a2a-messages
+        - img [ref=e78]
+        - generic [ref=e80]: A2A Messages
+      - link "Security" [ref=e81] [cursor=pointer]:
+        - /url: /security
+        - img [ref=e82]
+        - generic [ref=e84]: Security
+      - link "Keys & Subagents" [ref=e85] [cursor=pointer]:
+        - /url: /keys
+        - img [ref=e86]
+        - generic [ref=e90]: Keys & Subagents
+      - link "Kowalski" [ref=e91] [cursor=pointer]:
+        - /url: /kowalski
+        - img [ref=e92]
+        - generic [ref=e95]: Kowalski
+      - link "Config" [ref=e96] [cursor=pointer]:
+        - /url: /config
+        - img [ref=e97]
+        - generic [ref=e100]: Config
+      - link "Terminal" [ref=e101] [cursor=pointer]:
+        - /url: /terminal
+        - img [ref=e102]
+        - generic [ref=e104]: Terminal
+    - generic [ref=e106]:
+      - generic [ref=e107]: ······························
+      - generic [ref=e108]:
+        - generic [ref=e109]:
+          - img [ref=e110]
+          - generic [ref=e112]: OFFLINE
+        - button "[PATTERN]" [ref=e113]
+      - generic [ref=e114]: 4:16:29 PM
+  - main [ref=e115]:
+    - generic [ref=e117]:
+      - generic [ref=e119]:
+        - generic [ref=e120]: ▸
+        - heading "Channels" [level=2] [ref=e121]
+      - generic [ref=e122]:
+        - button "Setup" [ref=e123]:
+          - img [ref=e124]
+          - text: Setup
+        - button [ref=e126]:
+          - img [ref=e127]
+        - button "2" [ref=e133]:
+          - img [ref=e134]
+          - generic [ref=e137]: "2"
+    - generic [ref=e139]:
+      - generic [ref=e140]:
+        - generic [ref=e141]:
+          - heading "Channels" [level=1] [ref=e142]:
+            - img [ref=e143]
+            - text: Channels
+          - paragraph [ref=e148]:
+            - text: Manage messaging integrations
+            - generic [ref=e149]: Live polling
+        - button "Refresh" [ref=e152]:
+          - img [ref=e153]
+          - text: Refresh
+      - generic [ref=e158]:
+        - generic [ref=e160]:
+          - generic [ref=e161]:
+            - generic [ref=e162]: Configured
+            - img [ref=e163]
+          - generic [ref=e166]: "3"
+          - paragraph [ref=e167]: of 6 total
+        - generic [ref=e169]:
+          - generic [ref=e170]:
+            - generic [ref=e171]: Active
+            - img [ref=e172]
+          - generic [ref=e174]: "2"
+          - paragraph [ref=e175]: channels running
+        - generic [ref=e177]:
+          - generic [ref=e178]:
+            - generic [ref=e179]: Allowed
+            - img [ref=e180]
+          - generic [ref=e185]: "3"
+          - paragraph [ref=e186]: senders total
+        - generic [ref=e188]:
+          - generic [ref=e189]:
+            - generic [ref=e190]: Polling
+            - img [ref=e191]
+          - generic [ref=e194]: 10s
+          - paragraph [ref=e195]: refresh interval
+      - generic [ref=e196]:
+        - generic [ref=e197]:
+          - img [ref=e198]
+          - textbox "Search channels…" [ref=e201]
+        - generic [ref=e202]:
+          - button "all" [ref=e203]
+          - button "active" [ref=e204]
+          - button "configured" [ref=e205]
+          - button "unconfigured" [ref=e206]
+      - generic [ref=e207]:
+        - generic [ref=e208]:
+          - generic [ref=e210]:
+            - generic [ref=e211]:
+              - img [ref=e213]
+              - generic [ref=e216]:
+                - heading "Telegram" [level=3] [ref=e217]
+                - paragraph [ref=e218]: telegram
+            - generic [ref=e221]: Live
+          - generic [ref=e222]:
+            - paragraph [ref=e223]: Receive messages from Telegram users
+            - generic [ref=e224]:
+              - generic [ref=e225]:
+                - img [ref=e226]
+                - text: Configured
+              - generic [ref=e229]:
+                - img [ref=e230]
+                - text: 3 allowed
+              - generic [ref=e235]:
+                - img [ref=e236]
+                - text: 2m ago
+            - generic [ref=e239]:
+              - button "Stop" [disabled]:
+                - img
+                - text: Stop
+              - button "Configure" [ref=e240]:
+                - img [ref=e241]
+        - generic [ref=e244]:
+          - generic [ref=e246]:
+            - generic [ref=e247]:
+              - img [ref=e249]
+              - generic [ref=e252]:
+                - heading "Discord" [level=3] [ref=e253]
+                - paragraph [ref=e254]: discord
+            - generic [ref=e257]: "Off"
+          - generic [ref=e258]:
+            - paragraph [ref=e259]: Bot integration for Discord servers
+            - generic [ref=e261]:
+              - img [ref=e262]
+              - text: Needs setup
+            - generic [ref=e266]:
+              - button "Start" [disabled]:
+                - img
+                - text: Start
+              - button "Configure" [ref=e267]:
+                - img [ref=e268]
+        - generic [ref=e271]:
+          - generic [ref=e273]:
+            - generic [ref=e274]:
+              - img [ref=e276]
+              - generic [ref=e279]:
+                - heading "Slack" [level=3] [ref=e280]
+                - paragraph [ref=e281]: slack
+            - generic [ref=e284]: "Off"
+          - generic [ref=e285]:
+            - paragraph [ref=e286]: Slack workspace bot integration
+            - generic [ref=e288]:
+              - img [ref=e289]
+              - text: Needs setup
+            - generic [ref=e293]:
+              - button "Start" [disabled]:
+                - img
+                - text: Start
+              - button "Configure" [ref=e294]:
+                - img [ref=e295]
+        - generic [ref=e298]:
+          - generic [ref=e300]:
+            - generic [ref=e301]:
+              - img [ref=e303]
+              - generic [ref=e306]:
+                - heading "Email" [level=3] [ref=e307]
+                - paragraph [ref=e308]: email
+            - generic [ref=e311]: "Off"
+          - generic [ref=e312]:
+            - paragraph [ref=e313]: SMTP/IMAP email integration
+            - generic [ref=e315]:
+              - img [ref=e316]
+              - text: Needs setup
+            - generic [ref=e320]:
+              - button "Start" [disabled]:
+                - img
+                - text: Start
+              - button "Configure" [ref=e321]:
+                - img [ref=e322]
+        - generic [ref=e325]:
+          - generic [ref=e327]:
+            - generic [ref=e328]:
+              - img [ref=e330]
+              - generic [ref=e335]:
+                - heading "Webhook" [level=3] [ref=e336]
+                - paragraph [ref=e337]: webhook
+            - generic [ref=e340]: Live
+          - generic [ref=e341]:
+            - paragraph [ref=e342]: Generic HTTP webhook endpoint
+            - generic [ref=e343]:
+              - generic [ref=e344]:
+                - img [ref=e345]
+                - text: Configured
+              - generic [ref=e348]:
+                - img [ref=e349]
+                - text: 15m ago
+            - generic [ref=e352]:
+              - button "Stop" [disabled]:
+                - img
+                - text: Stop
+              - button "Configure" [ref=e353]:
+                - img [ref=e354]
+        - generic [ref=e357]:
+          - generic [ref=e359]:
+            - generic [ref=e360]:
+              - img [ref=e362]
+              - generic [ref=e364]:
+                - heading "CLI" [level=3] [ref=e365]
+                - paragraph [ref=e366]: cli
+            - generic [ref=e369]: "Off"
+          - generic [ref=e370]:
+            - paragraph [ref=e371]: Command-line interface channel
+            - generic [ref=e373]:
+              - img [ref=e374]
+              - text: Configured
+            - generic [ref=e377]:
+              - button "Start" [disabled]:
+                - img
+                - text: Start
+              - button "Configure" [ref=e378]:
+                - img [ref=e379]
+```

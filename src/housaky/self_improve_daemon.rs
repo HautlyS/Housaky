@@ -117,6 +117,26 @@ impl SelfImproveDaemon {
         self
     }
 
+    pub async fn pause(&self, reason: &str) {
+        *self.pause_reason.write().await = Some(reason.to_string());
+        *self.status.write().await = DaemonStatus::Paused;
+        info!("⏸️ Self-improvement daemon paused: {}", reason);
+    }
+
+    pub async fn resume(&self) {
+        *self.pause_reason.write().await = None;
+        *self.status.write().await = DaemonStatus::Running;
+        info!("▶️ Self-improvement daemon resumed");
+    }
+
+    pub async fn is_running(&self) -> bool {
+        *self.status.read().await == DaemonStatus::Running
+    }
+
+    pub async fn status(&self) -> DaemonStatus {
+        *self.status.read().await
+    }
+
     pub async fn start(&self) -> Result<()> {
         if !self.config.enabled {
             info!(" disabled in config");
@@ -148,7 +168,8 @@ impl SelfImproveDaemon {
                 let current_status = *status.read().await;
                 if current_status != DaemonStatus::Running {
                     let reason = pause_reason.read().await;
-                    info!("⏸️ Self-improvement daemon paused: {:?} ({})", current_status, reason);
+                    let reason_str = reason.as_deref().unwrap_or("unknown");
+                    info!("⏸️ Self-improvement daemon paused: {:?} ({})", current_status, reason_str);
                     continue;
                 }
                 
@@ -231,18 +252,6 @@ impl SelfImproveDaemon {
         improvements.insert("confidence".to_string(), serde_json::json!(confidence));
         
         Ok(Some(serde_json::Value::Object(improvements)))
-    }
-
-    pub async fn pause(&self, reason: &str) {
-        *self.status.write().await = DaemonStatus::Paused;
-        *self.pause_reason.write().await = Some(reason.to_string());
-        info!("⏸️ Self-improvement daemon paused: {}", reason);
-    }
-
-    pub async fn resume(&self) {
-        *self.status.write().await = DaemonStatus::Running;
-        *self.pause_reason.write().await = None;
-        info!("▶️ Self-improvement daemon resumed");
     }
 
     pub async fn stop(&self) {

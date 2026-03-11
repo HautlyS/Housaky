@@ -1,0 +1,150 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e4]:
+  - complementary [ref=e5]:
+    - generic [ref=e7]:
+      - img [ref=e10]
+      - generic [ref=e13]:
+        - generic [ref=e14]: "[ HOUSAKY ]"
+        - generic [ref=e15]:
+          - img [ref=e16]
+          - generic [ref=e23]: offline
+    - navigation [ref=e24]:
+      - link "Dashboard" [ref=e25] [cursor=pointer]:
+        - /url: /
+        - img [ref=e26]
+        - generic [ref=e31]: Dashboard
+      - link "Chat" [active] [ref=e32] [cursor=pointer]:
+        - /url: /chat
+        - img [ref=e33]
+        - generic [ref=e35]: Chat
+      - link "AGI live" [ref=e36] [cursor=pointer]:
+        - /url: /agi
+        - img [ref=e37]
+        - generic [ref=e47]: AGI
+        - generic [ref=e48]: live
+      - link "Skills" [ref=e49] [cursor=pointer]:
+        - /url: /skills
+        - img [ref=e50]
+        - generic [ref=e52]: Skills
+      - link "Channels" [ref=e53] [cursor=pointer]:
+        - /url: /channels
+        - img [ref=e54]
+        - generic [ref=e59]: Channels
+      - link "Integrations" [ref=e60] [cursor=pointer]:
+        - /url: /integrations
+        - img [ref=e61]
+        - generic [ref=e65]: Integrations
+      - link "Hardware" [ref=e66] [cursor=pointer]:
+        - /url: /hardware
+        - img [ref=e67]
+        - generic [ref=e70]: Hardware
+      - link "A2A Network" [ref=e71] [cursor=pointer]:
+        - /url: /a2a-instances
+        - img [ref=e72]
+        - generic [ref=e76]: A2A Network
+      - link "A2A Messages" [ref=e77] [cursor=pointer]:
+        - /url: /a2a-messages
+        - img [ref=e78]
+        - generic [ref=e80]: A2A Messages
+      - link "Security" [ref=e81] [cursor=pointer]:
+        - /url: /security
+        - img [ref=e82]
+        - generic [ref=e84]: Security
+      - link "Keys & Subagents" [ref=e85] [cursor=pointer]:
+        - /url: /keys
+        - img [ref=e86]
+        - generic [ref=e90]: Keys & Subagents
+      - link "Kowalski" [ref=e91] [cursor=pointer]:
+        - /url: /kowalski
+        - img [ref=e92]
+        - generic [ref=e95]: Kowalski
+      - link "Config" [ref=e96] [cursor=pointer]:
+        - /url: /config
+        - img [ref=e97]
+        - generic [ref=e100]: Config
+      - link "Terminal" [ref=e101] [cursor=pointer]:
+        - /url: /terminal
+        - img [ref=e102]
+        - generic [ref=e104]: Terminal
+    - generic [ref=e106]:
+      - generic [ref=e107]: ······························
+      - generic [ref=e108]:
+        - generic [ref=e109]:
+          - img [ref=e110]
+          - generic [ref=e112]: OFFLINE
+        - button "[PATTERN]" [ref=e113]
+      - generic [ref=e114]: 4:15:54 PM
+  - main [ref=e115]:
+    - generic [ref=e117]:
+      - generic [ref=e119]:
+        - generic [ref=e120]: ▸
+        - heading "Chat" [level=2] [ref=e121]
+      - generic [ref=e122]:
+        - button "Setup" [ref=e123]:
+          - img [ref=e124]
+          - text: Setup
+        - button [ref=e126]:
+          - img [ref=e127]
+        - button "2" [ref=e133]:
+          - img [ref=e134]
+          - generic [ref=e137]: "2"
+    - generic [ref=e139]:
+      - generic [ref=e140]:
+        - generic [ref=e141]:
+          - generic [ref=e142]: Conversations
+          - button [ref=e143]:
+            - img [ref=e144]
+        - generic [ref=e145]:
+          - button "Dashboard improvements Added AGI pipeline view… 5m ago · 12m" [ref=e146]:
+            - paragraph: Dashboard improvements
+            - paragraph: Added AGI pipeline view…
+            - paragraph: 5m ago · 12m
+          - button "Rust async patterns tokio::spawn vs async fn 30m ago · 8m" [ref=e147]:
+            - paragraph: Rust async patterns
+            - paragraph: tokio::spawn vs async fn
+            - paragraph: 30m ago · 8m
+          - button "Hardware config help ESP32 pinout mapping 1h ago · 5m" [ref=e148]:
+            - paragraph: Hardware config help
+            - paragraph: ESP32 pinout mapping
+            - paragraph: 1h ago · 5m
+      - generic [ref=e149]:
+        - generic [ref=e150]:
+          - generic [ref=e151]:
+            - button [ref=e152]:
+              - img [ref=e153]
+            - generic [ref=e155]:
+              - generic [ref=e156]:
+                - img [ref=e157]
+                - generic [ref=e167]: Housaky Assistant
+                - generic [ref=e168]: Offline
+              - paragraph [ref=e170]: 0 messages · 0 tokens
+          - generic [ref=e171]:
+            - button "Thoughts" [ref=e172]:
+              - img [ref=e173]
+              - text: Thoughts
+            - button [ref=e176]:
+              - img [ref=e177]
+            - button [ref=e180]:
+              - img [ref=e181]
+        - generic [ref=e184]:
+          - img [ref=e185]
+          - generic [ref=e187]: Housaky not installed — AI responses unavailable
+        - generic [ref=e190]:
+          - img [ref=e192]
+          - generic [ref=e194]:
+            - generic [ref=e195]: Welcome to Housaky Chat! I'm your AGI assistant. Ask me anything — code, hardware, skills, or strategy.
+            - generic [ref=e197]: 04:15 PM
+        - generic [ref=e199]:
+          - button "💡 Explain" [ref=e200]
+          - button "🐛 Debug" [ref=e201]
+          - button "🧪 Tests" [ref=e202]
+          - button "⚡ Optimize" [ref=e203]
+          - button "🔒 Security" [ref=e204]
+          - button "📡 Hardware" [ref=e205]
+        - generic [ref=e207]:
+          - textbox "Message Housaky… (Enter to send, Shift+Enter for new line)" [ref=e208]
+          - button [disabled]:
+            - img
+```

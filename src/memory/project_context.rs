@@ -581,7 +581,7 @@ impl FederationAwareContext {
     }
 
     /// Sync context with federation peers
-    pub async fn sync_with_peers(&self) -> Result<Vec<ContextEntry>> {
+    pub async fn sync_with_peers(&self) -> Result<Vec<String>> {
         let peers = self.federation_peers.read().await;
         let mut all_shared = Vec::new();
         

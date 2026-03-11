@@ -144,12 +144,12 @@ impl WebhookTool {
             });
         }
 
-        let mut entries = tokio::fs::read_dir(&webhooks_dir).await?;
+        let mut entries: tokio::fs::ReadDir = tokio::fs::read_dir(&webhooks_dir).await?;
         let mut webhooks = Vec::new();
 
         while let Some(entry) = entries.next_entry().await? {
-            let path = entry.path();
-            if path.extension().map(|e| e == "json").unwrap_or(false) {
+            let path: std::path::PathBuf = entry.path();
+            if path.extension().map(|e: &std::ffi::OsStr| e == "json").unwrap_or(false) {
                 if let Ok(content) = tokio::fs::read_to_string(&path).await {
                     if let Ok(info) = serde_json::from_str::<serde_json::Value>(&content) {
                         let id = info.get("id").and_then(|v| v.as_str()).unwrap_or("?");
@@ -186,7 +186,7 @@ impl WebhookTool {
             .and_then(|v| v.as_str())
             .ok_or_else(|| anyhow::anyhow!("Missing 'webhook_id' parameter"))?;
 
-        let webhook_file = crate::util::expand_path(&format!("~/.housaky/webhooks/{}.json", webhook_id));
+        let webhook_file: std::path::PathBuf = crate::util::expand_path(&format!("~/.housaky/webhooks/{}.json", webhook_id));
 
         if !webhook_file.exists() {
             return Ok(ToolResult {
@@ -213,7 +213,7 @@ impl WebhookTool {
 
         let payload = args.get("payload").cloned().unwrap_or(serde_json::json!({}));
 
-        let webhook_file = crate::util::expand_path(&format!("~/.housaky/webhooks/{}.json", webhook_id));
+        let webhook_file: std::path::PathBuf = crate::util::expand_path(&format!("~/.housaky/webhooks/{}.json", webhook_id));
 
         if !webhook_file.exists() {
             return Ok(ToolResult {
@@ -223,7 +223,7 @@ impl WebhookTool {
             });
         }
 
-        let content = tokio::fs::read_to_string(&webhook_file).await?;
+        let content: String = tokio::fs::read_to_string(&webhook_file).await?;
         let webhook: serde_json::Value = serde_json::from_str(&content)?;
 
         let callback_url = webhook

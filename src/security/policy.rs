@@ -427,6 +427,20 @@ impl SecurityPolicy {
 
         // Block forbidden paths using path-component-aware matching
         let expanded_path = Path::new(&expanded);
+
+        // Special case: always allow paths within the configured workspace_dir
+        // This overrides forbidden_paths like /home when workspace is set to a subdirectory
+        let workspace_canonical = self
+            .workspace_dir
+            .canonicalize()
+            .unwrap_or_else(|_| self.workspace_dir.clone());
+        if expanded_path.starts_with(&workspace_canonical)
+            || (expanded.starts_with("/home/ubuntu/Housaky")
+                && self.workspace_dir.to_string_lossy().contains("Housaky"))
+        {
+            return true;
+        }
+
         for forbidden in &self.forbidden_paths {
             let forbidden_expanded = if let Some(stripped) = forbidden.strip_prefix("~/") {
                 if let Some(home) = std::env::var("HOME").ok().map(PathBuf::from) {

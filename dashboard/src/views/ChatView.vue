@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, nextTick, computed } from 'vue'
-import { invoke } from '@tauri-apps/api/core'
 import Card from '@/components/ui/card.vue'
 import CardContent from '@/components/ui/card-content.vue'
 import CardHeader from '@/components/ui/card-header.vue'
@@ -12,10 +11,11 @@ import {
   Send, Bot, User, Loader2, Trash2, AlertCircle,
   Copy, Check, RotateCcw, Settings, Sparkles, Brain,
   ChevronDown, Eye, EyeOff, Clock, Hash, Plus,
-  MessageSquare, ChevronRight, X
+  MessageSquare, ChevronRight, X, Wifi, WifiOff
 } from 'lucide-vue-next'
 
-const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
+const GATEWAY_URL = import.meta.env.VITE_GATEWAY_URL || 'http://127.0.0.1:8080'
+const USE_WS = import.meta.env.VITE_USE_WS === 'true'
 
 interface Message {
   id: string
@@ -47,7 +47,8 @@ const messages = ref<Message[]>([])
 const inputMessage = ref('')
 const isLoading = ref(false)
 const messagesContainer = ref<HTMLElement | null>(null)
-const housakyInstalled = ref(true)
+const connected = ref(false)
+const connecting = ref(false)
 const error = ref('')
 const showSettings = ref(false)
 const showSidebar = ref(false)
@@ -57,12 +58,10 @@ const systemPrompt = ref('')
 const totalTokensSession = ref(0)
 const streamingThoughts = ref<ThoughtStep[]>([])
 const showThoughtsGlobal = ref(true)
+const gatewayUrl = ref(GATEWAY_URL)
+const wsConnection = ref<WebSocket | null>(null)
 
-const conversations = ref<Conversation[]>([
-  { id: '1', title: 'Dashboard improvements', lastMessage: 'Added AGI pipeline view…', timestamp: new Date(Date.now() - 60000 * 5), messageCount: 12 },
-  { id: '2', title: 'Rust async patterns', lastMessage: 'tokio::spawn vs async fn', timestamp: new Date(Date.now() - 60000 * 30), messageCount: 8 },
-  { id: '3', title: 'Hardware config help', lastMessage: 'ESP32 pinout mapping', timestamp: new Date(Date.now() - 3600000), messageCount: 5 },
-])
+const conversations = ref<Conversation[]>([])
 
 const availableModels = [
   { id: 'default', label: 'Default (from config)' },
@@ -93,25 +92,129 @@ const sampleThoughts: ThoughtStep[] = [
   { type: 'decision', content: 'Responding with retrieved context and reasoning.' },
 ]
 
-async function checkHousaky() {
-  if (!isTauri) { housakyInstalled.value = false; return }
+async function connectToGateway() {
+  connecting.value = true
+  error.value = ''
+  
   try {
-    housakyInstalled.value = await invoke<boolean>('check_housaky_installed')
-  } catch { housakyInstalled.value = false }
+    if (USE_WS) {
+      // WebSocket connection
+      const wsUrl = gatewayUrl.value.replace(/^http/, 'ws') + '/ws'
+      wsConnection.value = new WebSocket(wsUrl)
+      
+      wsConnection.value.onopen = () => {
+        connected.value = true
+        connecting.value = false
+      }
+      
+      wsConnection.value.onclose = () => {
+        connected.value = false
+        connecting.value = false
+      }
+      
+      wsConnection.value.onerror = () => {
+        error.value = 'WebSocket connection failed'
+        connecting.value = false
+      }
+      
+      wsConnection.value.onmessage = (event) => {
+        handleGatewayMessage(JSON.parse(event.data))
+      }
+    } else {
+      // HTTP connection - test with a ping
+      const response = await fetch(`${gatewayUrl.value}/health`, { 
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' }
+      })
+      if (response.ok) {
+        connected.value = true
+      } else {
+        error.value = `Gateway returned ${response.status}`
+      }
+    }
+  } catch (e) {
+    error.value = `Cannot connect to ${gatewayUrl.value}: ${e}`
+  } finally {
+    connecting.value = false
+  }
+}
+
+function handleGatewayMessage(data: any) {
+  if (data.type === 'chat.delta') {
+    // Streaming response
+    const msg = messages.value.find(m => m.id === data.runId)
+    if (msg) {
+      msg.content += data.text || ''
+    }
+  } else if (data.type === 'chat.final') {
+    // Response complete
+    const msg = messages.value.find(m => m.id === data.runId)
+    if (msg) {
+      msg.isStreaming = false
+      msg.content = data.message?.content || msg.content
+    }
+  } else if (data.type === 'chat.thinking') {
+    streamingThoughts.value.push(data.thought)
+  }
+}
+
+async function sendViaGateway(message: string): Promise<string> {
+  const msgId = Date.now().toString()
+  
+  if (USE_WS && wsConnection.value?.readyState === WebSocket.OPEN) {
+    // Send via WebSocket
+    return new Promise((resolve, reject) => {
+      if (!wsConnection.value) return reject('No connection')
+      
+      const handler = (event: MessageEvent) => {
+        const data = JSON.parse(event.data)
+        if (data.type === 'chat.final' && data.runId === msgId) {
+          wsConnection.value?.removeEventListener('message', handler)
+          resolve(data.message?.content || '')
+        } else if (data.type === 'chat.error') {
+          wsConnection.value?.removeEventListener('message', handler)
+          reject(data.error)
+        }
+      }
+      
+      wsConnection.value?.addEventListener('message', handler)
+      wsConnection.value?.send(JSON.stringify({
+        type: 'chat.message',
+        runId: msgId,
+        message
+      }))
+      
+      setTimeout(() => reject('Timeout'), 60000)
+    })
+  } else {
+    // Send via HTTP
+    const response = await fetch(`${gatewayUrl.value}/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message, sessionKey: 'default' })
+    })
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+    }
+    
+    const data = await response.json()
+    return data.message?.content || data.response || ''
+  }
 }
 
 async function loadConversations() {
-  if (!isTauri) return
   try {
-    const convs = await invoke<any[]>('get_conversations')
-    if (convs && convs.length) {
-      conversations.value = convs.map((c: any) => ({
-        id: c.id,
-        title: c.title ?? 'Untitled',
-        lastMessage: c.last_message ?? '',
-        timestamp: new Date(c.timestamp ?? Date.now()),
-        messageCount: c.message_count ?? 0,
-      }))
+    const response = await fetch(`${gatewayUrl.value}/chat/sessions`)
+    if (response.ok) {
+      const data = await response.json()
+      conversations.value = data.sessions?.map((s: any) => ({
+        id: s.id,
+        title: s.title || 'Untitled',
+        lastMessage: s.lastMessage || '',
+        timestamp: new Date(s.timestamp || Date.now()),
+        messageCount: s.messageCount || 0,
+      })) || []
     }
   } catch { /* fallback to sample */ }
 }
@@ -120,7 +223,6 @@ async function sendMessage() {
   const text = inputMessage.value.trim()
   if (!text || isLoading.value) return
 
-  // Allow sending even if not installed (show error gracefully)
   const userMsg: Message = {
     id: Date.now().toString(),
     role: 'user',
@@ -137,8 +239,9 @@ async function sendMessage() {
   await nextTick()
   scrollToBottom()
 
-  if (!isTauri) {
-    await simulateStream('Running in web mode — connect Tauri for full AI capabilities.')
+  if (!connected.value) {
+    // Show helpful message about connecting
+    await simulateStream(`Not connected to any gateway.\n\nTo enable AI chat:\n1. Start Housaky backend (e.g., \`housaky serve\` or run the app)\n2. Set VITE_GATEWAY_URL env var (default: http://127.0.0.1:8080)\n3. Or configure WebSocket with VITE_USE_WS=true\n\nCurrent gateway: ${gatewayUrl.value}`, userMsg.id)
     isLoading.value = false
     return
   }
@@ -153,7 +256,7 @@ async function sendMessage() {
   }, 600)
 
   try {
-    const response = await invoke<string>('send_message', { message: text })
+    const response = await sendViaGateway(text)
 
     clearInterval(thinkingInterval!)
     thinkingInterval = null
@@ -192,7 +295,6 @@ async function sendMessage() {
 
 async function simulateStream(text: string, msgId?: string) {
   if (!msgId) {
-    // web mode fallback
     messages.value.push({
       id: (Date.now() + 1).toString(),
       role: 'assistant',
@@ -234,7 +336,9 @@ function addWelcomeMessage() {
   messages.value.push({
     id: '0',
     role: 'system',
-    content: 'Welcome to Housaky Chat! I\'m your AGI assistant. Ask me anything — code, hardware, skills, or strategy.',
+    content: connected.value 
+      ? 'Connected to Housaky gateway. Start chatting!'
+      : 'Not connected to gateway. Click "Connect" to link to Housaky.',
     timestamp: new Date(),
   })
 }
@@ -293,13 +397,14 @@ const thoughtTypeConfig: Record<string, { label: string; color: string }> = {
 }
 
 onMounted(async () => {
-  await checkHousaky()
+  await connectToGateway()
   await loadConversations()
   addWelcomeMessage()
 })
 
 onUnmounted(() => {
   if (thinkingInterval) clearInterval(thinkingInterval)
+  if (wsConnection.value) wsConnection.value.close()
 })
 </script>
 
@@ -336,9 +441,9 @@ onUnmounted(() => {
             <div class="flex items-center gap-2">
               <Brain class="w-4 h-4 text-purple-500" />
               <span class="font-semibold text-sm">Housaky Assistant</span>
-              <Badge :class="housakyInstalled ? 'bg-green-500/10 text-green-600 border-green-200 text-[10px]' : 'bg-red-500/10 text-red-600 border-red-200 text-[10px]'">
-                <span :class="['w-1.5 h-1.5 rounded-full mr-1 inline-block', housakyInstalled ? 'bg-green-500 animate-pulse' : 'bg-red-500']" />
-                {{ housakyInstalled ? 'Live' : 'Offline' }}
+              <Badge :class="connected ? 'bg-green-500/10 text-green-600 border-green-200 text-[10px]' : 'bg-red-500/10 text-red-600 border-red-200 text-[10px]'">
+                <span :class="['w-1.5 h-1.5 rounded-full mr-1 inline-block', connected ? 'bg-green-500 animate-pulse' : 'bg-red-500']" />
+                {{ connected ? 'Live' : 'Offline' }}
               </Badge>
             </div>
             <p class="text-[10px] text-muted-foreground">{{ messageCount }} messages · {{ totalTokensSession.toLocaleString() }} tokens</p>
@@ -381,10 +486,10 @@ onUnmounted(() => {
         </div>
       </div>
 
-      <!-- Not installed warning -->
-      <div v-if="!housakyInstalled" class="mx-4 mt-3 p-3 rounded-lg border border-yellow-400/50 bg-yellow-50/80 dark:bg-yellow-900/20 flex items-center gap-2 flex-shrink-0">
+      <!-- Not connected warning -->
+      <div v-if="!connected" class="mx-4 mt-3 p-3 rounded-lg border border-yellow-400/50 bg-yellow-50/80 dark:bg-yellow-900/20 flex items-center gap-2 flex-shrink-0">
         <AlertCircle class="w-4 h-4 text-yellow-600 flex-shrink-0" />
-        <span class="text-sm text-yellow-700 dark:text-yellow-400">Housaky not installed — AI responses unavailable</span>
+        <span class="text-sm text-yellow-700 dark:text-yellow-400">Not connected to Housaky gateway — click Connect to link</span>
       </div>
 
       <!-- Messages -->

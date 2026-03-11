@@ -174,16 +174,23 @@ pub struct Integration {
 }
 
 fn get_config_path() -> PathBuf {
-    dirs::config_dir()
+    dirs::home_dir()
         .unwrap_or_else(|| PathBuf::from("."))
-        .join("housaky")
+        .join(".housaky")
         .join("config.toml")
 }
 
-fn get_workspace_path() -> PathBuf {
-    dirs::config_dir()
+fn get_keys_path() -> PathBuf {
+    dirs::home_dir()
         .unwrap_or_else(|| PathBuf::from("."))
-        .join("housaky")
+        .join(".housaky")
+        .join("keys.json")
+}
+
+fn get_workspace_path() -> PathBuf {
+    dirs::home_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join(".housaky")
         .join("workspace")
 }
 
@@ -468,6 +475,336 @@ async fn get_status() -> Result<HousakyStatus, String> {
     };
 
     Ok(status)
+}
+
+// ── Market / Skills Marketplace ───────────────────────────────────────────────
+
+#[derive(serde::Serialize, Clone)]
+pub struct MarketSkill {
+    pub name: String,
+    pub description: String,
+    pub version: String,
+    pub author: String,
+    pub tags: Vec<String>,
+    pub tools_count: u32,
+    pub source: String,
+    pub installed: bool,
+    pub enabled: bool,
+}
+
+#[tauri::command]
+async fn get_marketplace_skills() -> Result<Vec<MarketSkill>, String> {
+    let workspace_path = get_workspace_path();
+    let skills_dir = workspace_path.join("skills");
+    let openclaw_dir = workspace_path.join(".housaky").join("openclaw").join("skills");
+    
+    let mut skills = Vec::new();
+    let mut installed_names: std::collections::HashSet<String> = std::collections::HashSet::new();
+    
+    // Load installed skills
+    if skills_dir.exists() {
+        if let Ok(entries) = fs::read_dir(&skills_dir) {
+            for entry in entries.flatten() {
+                if entry.path().is_dir() {
+                    let name = entry.file_name().to_string_lossy().to_string();
+                    installed_names.insert(name.clone());
+                    skills.push(MarketSkill {
+                        name: name.clone(),
+                        description: format!("Installed skill: {}", name),
+                        version: "1.0.0".to_string(),
+                        author: "Local".to_string(),
+                        tags: vec!["installed".to_string()],
+                        tools_count: 0,
+                        source: "local".to_string(),
+                        installed: true,
+                        enabled: true,
+                    });
+                }
+            }
+        }
+    }
+    
+    // Add OpenClaw vendored skills as available
+    if openclaw_dir.exists() {
+        if let Ok(entries) = fs::read_dir(&openclaw_dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_dir() {
+                    let name = path.file_name()
+                        .and_then(|n| n.to_str())
+                        .unwrap_or("")
+                        .to_string();
+                    
+                    if !installed_names.contains(&name) {
+                        // Check for SKILL.md
+                        let skill_md = path.join("SKILL.md");
+                        let description = if skill_md.exists() {
+                            fs::read_to_string(&skill_md)
+                                .ok()
+                                .and_then(|c| c.lines().skip(2).next().map(|s| s.to_string()))
+                                .unwrap_or_else(|| "No description".to_string())
+                        } else {
+                            format!("OpenClaw skill: {}", name)
+                        };
+                        
+                        skills.push(MarketSkill {
+                            name,
+                            description,
+                            version: "1.0.0".to_string(),
+                            author: "OpenClaw".to_string(),
+                            tags: vec!["openclaw".to_string(), "vendor".to_string()],
+                            tools_count: 0,
+                            source: "openclaw".to_string(),
+                            installed: false,
+                            enabled: false,
+                        });
+                    }
+                }
+            }
+        }
+    }
+    
+    // Add sample marketplace skills if no others found
+    if skills.is_empty() {
+        skills.extend(vec![
+            MarketSkill {
+                name: "Git Helper".to_string(),
+                description: "Automates git workflows, commits, and PR creation".to_string(),
+                version: "1.2.0".to_string(),
+                author: "Housaky Team".to_string(),
+                tags: vec!["git".to_string(), "automation".to_string(), "vcs".to_string()],
+                tools_count: 5,
+                source: "marketplace".to_string(),
+                installed: false,
+                enabled: false,
+            },
+            MarketSkill {
+                name: "Web Scraper".to_string(),
+                description: "Extract data from websites using CSS selectors".to_string(),
+                version: "0.8.0".to_string(),
+                author: "Community".to_string(),
+                tags: vec!["scraping".to_string(), "data".to_string(), "web".to_string()],
+                tools_count: 3,
+                source: "marketplace".to_string(),
+                installed: false,
+                enabled: false,
+            },
+            MarketSkill {
+                name: "Database Helper".to_string(),
+                description: "SQL query builder and database management".to_string(),
+                version: "1.0.0".to_string(),
+                author: "Housaky Team".to_string(),
+                tags: vec!["database".to_string(), "sql".to_string(), "data".to_string()],
+                tools_count: 4,
+                source: "marketplace".to_string(),
+                installed: false,
+                enabled: false,
+            },
+            MarketSkill {
+                name: "Docker Manager".to_string(),
+                description: "Container management and deployment automation".to_string(),
+                version: "0.9.0".to_string(),
+                author: "Community".to_string(),
+                tags: vec!["docker".to_string(), "devops".to_string(), "containers".to_string()],
+                tools_count: 6,
+                source: "marketplace".to_string(),
+                installed: false,
+                enabled: false,
+            },
+            MarketSkill {
+                name: "API Tester".to_string(),
+                description: "REST API testing and debugging tool".to_string(),
+                version: "1.1.0".to_string(),
+                author: "Housaky Team".to_string(),
+                tags: vec!["api".to_string(), "testing".to_string(), "http".to_string()],
+                tools_count: 4,
+                source: "marketplace".to_string(),
+                installed: false,
+                enabled: false,
+            },
+        ]);
+    }
+    
+    Ok(skills)
+}
+
+#[tauri::command]
+async fn install_market_skill(skill_name: String, target_agent: Option<String>) -> Result<String, String> {
+    log::info!("Installing skill '{}' for agent: {:?}", skill_name, target_agent);
+    
+    // Run housaky command to install skill
+    let result = run_housaky_command(&["skills", "install", &skill_name]);
+    
+    match result {
+        Ok(output) => Ok(format!("Skill '{}' installed successfully", skill_name)),
+        Err(e) => {
+            // Still return success if it's already installed
+            if e.contains("already") || e.contains("exists") {
+                return Ok(format!("Skill '{}' is already installed", skill_name));
+            }
+            Err(format!("Failed to install skill: {}", e))
+        }
+    }
+}
+
+#[tauri::command]
+async fn uninstall_skill(skill_name: String) -> Result<String, String> {
+    log::info!("Uninstalling skill '{}'", skill_name);
+    let workspace_path = get_workspace_path();
+    let skill_path = workspace_path.join("skills").join(&skill_name);
+    
+    if skill_path.exists() {
+        fs::remove_dir_all(&skill_path)
+            .map_err(|e| format!("Failed to remove skill: {}", e))?;
+        Ok(format!("Skill '{}' uninstalled", skill_name))
+    } else {
+        Err(format!("Skill '{}' not found", skill_name))
+    }
+}
+
+// ── MCP Servers ───────────────────────────────────────────────────────────────
+
+#[derive(serde::Serialize, Clone)]
+pub struct McpServer {
+    pub name: String,
+    pub description: String,
+    pub command: String,
+    pub args: Vec<String>,
+    pub enabled: bool,
+    pub status: String,
+    pub connected_count: u32,
+}
+
+#[tauri::command]
+async fn get_mcp_servers() -> Result<Vec<McpServer>, String> {
+    let workspace_path = get_workspace_path();
+    let mcp_config_path = workspace_path.join(".housaky").join("mcp.json");
+    
+    let mut servers = Vec::new();
+    
+    // Try to read MCP config
+    if mcp_config_path.exists() {
+        if let Ok(data) = fs::read_to_string(&mcp_config_path) {
+            if let Ok(config) = serde_json::from_str::<serde_json::Value>(&data) {
+                if let Some(svrs) = config.get("servers").and_then(|s| s.as_array()) {
+                    for srv in svrs {
+                        servers.push(McpServer {
+                            name: srv.get("name").and_then(|n| n.as_str()).unwrap_or("unknown").to_string(),
+                            description: srv.get("description").and_then(|d| d.as_str()).unwrap_or("").to_string(),
+                            command: srv.get("command").and_then(|c| c.as_str()).unwrap_or("").to_string(),
+                            args: srv.get("args").and_then(|a| a.as_array())
+                                .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+                                .unwrap_or_default(),
+                            enabled: srv.get("enabled").and_then(|e| e.as_bool()).unwrap_or(true),
+                            status: "configured".to_string(),
+                            connected_count: 0,
+                        });
+                    }
+                }
+            }
+        }
+    }
+    
+    // Add sample MCPs if none configured
+    if servers.is_empty() {
+        servers.extend(vec![
+            McpServer {
+                name: "Filesystem".to_string(),
+                description: "Read, write, and manage files on the system".to_string(),
+                command: "npx".to_string(),
+                args: vec!["-y".to_string(), "@modelcontextprotocol/server-filesystem".to_string(), "/".to_string()],
+                enabled: true,
+                status: "stopped".to_string(),
+                connected_count: 0,
+            },
+            McpServer {
+                name: "Brave Search".to_string(),
+                description: "Web search using Brave Search API".to_string(),
+                command: "npx".to_string(),
+                args: vec!["-y".to_string(), "@modelcontextprotocol/server-brave-search".to_string()],
+                enabled: true,
+                status: "stopped".to_string(),
+                connected_count: 0,
+            },
+            McpServer {
+                name: "GitHub".to_string(),
+                description: "GitHub API integration for repos and issues".to_string(),
+                command: "npx".to_string(),
+                args: vec!["-y".to_string(), "@modelcontextprotocol/server-github".to_string()],
+                enabled: false,
+                status: "stopped".to_string(),
+                connected_count: 0,
+            },
+            McpServer {
+                name: "PostgreSQL".to_string(),
+                description: "Database operations for PostgreSQL".to_string(),
+                command: "npx".to_string(),
+                args: vec!["-y".to_string(), "@modelcontextprotocol/server-postgres".to_string()],
+                enabled: false,
+                status: "stopped".to_string(),
+                connected_count: 0,
+            },
+        ]);
+    }
+    
+    Ok(servers)
+}
+
+#[tauri::command]
+async fn configure_mcp_server(name: String, enabled: bool, command: String, args: Vec<String>) -> Result<String, String> {
+    log::info!("Configuring MCP server '{}': enabled={}", name, enabled);
+    
+    let workspace_path = get_workspace_path();
+    let mcp_config_path = workspace_path.join(".housaky").join("mcp.json");
+    
+    // Read existing config or create new
+    let mut config: serde_json::Value = if mcp_config_path.exists() {
+        serde_json::from_str(&fs::read_to_string(&mcp_config_path).unwrap_or_default()).unwrap_or(serde_json::json!({"servers": []}))
+    } else {
+        serde_json::json!({"servers": []})
+    };
+    
+    let servers = match config.get_mut("servers") {
+        Some(s) => s,
+        None => {
+            config["servers"] = serde_json::json!([]);
+            config.get_mut("servers").unwrap()
+        }
+    };
+    
+    // Find and update or add server
+    let mut found = false;
+    if let Some(arr) = servers.as_array_mut() {
+        for srv in arr.iter_mut() {
+            let srv_name = srv.get("name").and_then(|n: &serde_json::Value| n.as_str());
+            if srv_name == Some(&name) {
+                srv["enabled"] = serde_json::json!(enabled);
+                srv["command"] = serde_json::json!(command);
+                srv["args"] = serde_json::json!(args);
+                found = true;
+                break;
+            }
+        }
+        if !found {
+            arr.push(serde_json::json!({
+                "name": name,
+                "command": command,
+                "args": args,
+                "enabled": enabled,
+                "description": ""
+            }));
+        }
+    }
+    
+    // Ensure directory exists
+    if let Some(parent) = mcp_config_path.parent() {
+        fs::create_dir_all(parent).ok();
+    }
+    
+    fs::write(&mcp_config_path, serde_json::to_string_pretty(&config).unwrap())
+        .map_err(|e| format!("Failed to write MCP config: {}", e))?;
+    
+    Ok(format!("MCP server '{}' configured", name))
 }
 
 #[tauri::command]
@@ -902,6 +1239,390 @@ async fn validate_config(config: HousakyConfig) -> Result<Vec<String>, String> {
     Ok(warnings)
 }
 
+// ── Keys Management ─────────────────────────────────────────────────────────
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ApiKey {
+    pub id: String,
+    pub name: String,
+    pub key: String,
+    pub description: String,
+    pub enabled: bool,
+    pub priority: i32,
+    pub tags: Vec<String>,
+    pub usage: KeyUsage,
+}
+
+#[derive(Debug, Serialize, Deserialize, Default)]
+pub struct KeyUsage {
+    pub total_requests: u64,
+    pub successful_requests: u64,
+    pub failed_requests: u64,
+    pub rate_limited_count: u64,
+    pub tokens_used: u64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ProviderKeys {
+    pub name: String,
+    pub keys: Vec<ApiKey>,
+    pub enabled: bool,
+    pub state: ProviderState,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ProviderState {
+    pub is_healthy: bool,
+    pub consecutive_failures: u32,
+    pub consecutive_successes: u32,
+    pub is_rate_limited: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct KeysData {
+    pub providers: HashMap<String, ProviderKeys>,
+    pub subagents: HashMap<String, SubAgentConfig>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct SubAgentConfig {
+    pub provider: String,
+    pub model: String,
+    pub key_name: String,
+    pub max_concurrent: i32,
+    pub role: String,
+    pub awareness: Vec<String>,
+}
+
+#[tauri::command]
+async fn get_keys() -> Result<KeysData, String> {
+    let keys_path = get_keys_path();
+    if !keys_path.exists() {
+        return Ok(KeysData {
+            providers: HashMap::new(),
+            subagents: HashMap::new(),
+        });
+    }
+    let content = fs::read_to_string(&keys_path)
+        .map_err(|e| format!("Failed to read keys: {}", e))?;
+    let data: serde_json::Value = serde_json::from_str(&content)
+        .map_err(|e| format!("Failed to parse keys: {}", e))?;
+    
+    let mut providers = HashMap::new();
+    if let Some(prov) = data.get("providers").and_then(|p| p.as_object()) {
+        for (name, v) in prov {
+            let keys = v.get("keys")
+                .and_then(|k| k.as_array())
+                .map(|arr| {
+                    arr.iter().filter_map(|k| {
+                        Some(ApiKey {
+                            id: k.get("id")?.as_str()?.to_string(),
+                            name: k.get("name")?.as_str()?.to_string(),
+                            key: k.get("key").and_then(|k| k.as_str()).unwrap_or("").to_string(),
+                            description: k.get("description").and_then(|d| d.as_str()).unwrap_or("").to_string(),
+                            enabled: k.get("enabled").and_then(|e| e.as_bool()).unwrap_or(true),
+                            priority: k.get("priority").and_then(|p| p.as_i64()).unwrap_or(1) as i32,
+                            tags: k.get("tags").and_then(|t| t.as_array()).map(|a| a.iter().filter_map(|s| s.as_str().map(String::from)).collect()).unwrap_or_default(),
+                            usage: KeyUsage {
+                                total_requests: k.get("usage").and_then(|u| u.get("total_requests")).and_then(|v| v.as_u64()).unwrap_or(0),
+                                successful_requests: k.get("usage").and_then(|u| u.get("successful_requests")).and_then(|v| v.as_u64()).unwrap_or(0),
+                                failed_requests: k.get("usage").and_then(|u| u.get("failed_requests")).and_then(|v| v.as_u64()).unwrap_or(0),
+                                rate_limited_count: k.get("usage").and_then(|u| u.get("rate_limited_count")).and_then(|v| v.as_u64()).unwrap_or(0),
+                                tokens_used: k.get("usage").and_then(|u| u.get("tokens_used")).and_then(|v| v.as_u64()).unwrap_or(0),
+                            },
+                        })
+                    }).collect()
+                })
+                .unwrap_or_default();
+            
+            let enabled = v.get("enabled").and_then(|e| e.as_bool()).unwrap_or(false);
+            let state = v.get("state").and_then(|s| s.as_object());
+            
+            providers.insert(name.clone(), ProviderKeys {
+                name: name.clone(),
+                keys,
+                enabled,
+                state: ProviderState {
+                    is_healthy: state.and_then(|s| s.get("is_healthy")).and_then(|v| v.as_bool()).unwrap_or(true),
+                    consecutive_failures: state.and_then(|s| s.get("consecutive_failures")).and_then(|v| v.as_u64()).unwrap_or(0) as u32,
+                    consecutive_successes: state.and_then(|s| s.get("consecutive_successes")).and_then(|v| v.as_u64()).unwrap_or(0) as u32,
+                    is_rate_limited: state.and_then(|s| s.get("is_rate_limited")).and_then(|v| v.as_bool()).unwrap_or(false),
+                },
+            });
+        }
+    }
+    
+    let mut subagents = HashMap::new();
+    if let Some(sa) = data.get("subagents").and_then(|s| s.as_object()) {
+        for (name, v) in sa {
+            subagents.insert(name.clone(), SubAgentConfig {
+                provider: v.get("provider").and_then(|p| p.as_str()).unwrap_or("modal").to_string(),
+                model: v.get("model").and_then(|m| m.as_str()).unwrap_or("").to_string(),
+                key_name: v.get("key_name").and_then(|k| k.as_str()).unwrap_or("").to_string(),
+                max_concurrent: v.get("max_concurrent").and_then(|m| m.as_i64()).unwrap_or(2) as i32,
+                role: v.get("role").and_then(|r| r.as_str()).unwrap_or("").to_string(),
+                awareness: v.get("awareness").and_then(|a| a.as_array()).map(|arr| arr.iter().filter_map(|s| s.as_str().map(String::from)).collect()).unwrap_or_default(),
+            });
+        }
+    }
+    
+    Ok(KeysData { providers, subagents })
+}
+
+#[tauri::command]
+async fn save_key(provider: String, key: ApiKey) -> Result<String, String> {
+    let keys_path = get_keys_path();
+    let mut data: serde_json::Value = if keys_path.exists() {
+        let content = fs::read_to_string(&keys_path)
+            .map_err(|e| format!("Failed to read keys: {}", e))?;
+        serde_json::from_str(&content).unwrap_or(serde_json::json!({}))
+    } else {
+        serde_json::json!({
+            "providers": {},
+            "subagents": {}
+        })
+    };
+    
+    if let Some(providers) = data.get_mut("providers") {
+        if let Some(prov) = providers.get_mut(&provider) {
+            if let Some(keys) = prov.get_mut("keys") {
+                if let Some(arr) = keys.as_array_mut() {
+                    arr.push(serde_json::json!({
+                        "id": key.id,
+                        "key": key.key,
+                        "name": key.name,
+                        "description": key.description,
+                        "enabled": key.enabled,
+                        "priority": key.priority,
+                        "tags": key.tags,
+                        "usage": {
+                            "total_requests": 0,
+                            "successful_requests": 0,
+                            "failed_requests": 0,
+                            "rate_limited_count": 0,
+                            "tokens_used": 0
+                        }
+                    }));
+                }
+            }
+        }
+    }
+    
+    let json = serde_json::to_string_pretty(&data)
+        .map_err(|e| format!("Failed to serialize: {}", e))?;
+    fs::write(&keys_path, json)
+        .map_err(|e| format!("Failed to write keys: {}", e))?;
+    
+    Ok(format!("Key added to {}", provider))
+}
+
+#[tauri::command]
+async fn delete_key(provider: String, key_id: String) -> Result<String, String> {
+    let keys_path = get_keys_path();
+    if !keys_path.exists() {
+        return Err("No keys file found".to_string());
+    }
+    
+    let content = fs::read_to_string(&keys_path)
+        .map_err(|e| format!("Failed to read keys: {}", e))?;
+    let mut data: serde_json::Value = serde_json::from_str(&content)
+        .map_err(|e| format!("Failed to parse keys: {}", e))?;
+    
+    if let Some(providers) = data.get_mut("providers") {
+        if let Some(prov) = providers.get_mut(&provider) {
+            if let Some(keys) = prov.get_mut("keys") {
+                if let Some(arr) = keys.as_array_mut() {
+                    arr.retain(|k| k.get("id").and_then(|id| id.as_str()) != Some(&key_id));
+                }
+            }
+        }
+    }
+    
+    let json = serde_json::to_string_pretty(&data)
+        .map_err(|e| format!("Failed to serialize: {}", e))?;
+    fs::write(&keys_path, json)
+        .map_err(|e| format!("Failed to write keys: {}", e))?;
+    
+    Ok(format!("Key {} deleted", key_id))
+}
+
+#[tauri::command]
+async fn toggle_key(provider: String, key_id: String, enabled: bool) -> Result<String, String> {
+    let keys_path = get_keys_path();
+    if !keys_path.exists() {
+        return Err("No keys file found".to_string());
+    }
+    
+    let content = fs::read_to_string(&keys_path)
+        .map_err(|e| format!("Failed to read keys: {}", e))?;
+    let mut data: serde_json::Value = serde_json::from_str(&content)
+        .map_err(|e| format!("Failed to parse keys: {}", e))?;
+    
+    if let Some(providers) = data.get_mut("providers") {
+        if let Some(prov) = providers.get_mut(&provider) {
+            if let Some(keys) = prov.get_mut("keys") {
+                if let Some(arr) = keys.as_array_mut() {
+                    for k in arr.iter_mut() {
+                        if k.get("id").and_then(|id| id.as_str()) == Some(&key_id) {
+                            k["enabled"] = serde_json::json!(enabled);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    let json = serde_json::to_string_pretty(&data)
+        .map_err(|e| format!("Failed to serialize: {}", e))?;
+    fs::write(&keys_path, json)
+        .map_err(|e| format!("Failed to write keys: {}", e))?;
+    
+    Ok(format!("Key {} {}", key_id, if enabled { "enabled" } else { "disabled" }))
+}
+
+// ── Kowalski Subagents ─────────────────────────────────────────────────────
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct KowalskiAgent {
+    pub name: String,
+    pub agent_type: String,
+    pub enabled: bool,
+    pub status: String,
+    pub role: String,
+    pub awareness: Vec<String>,
+    pub max_concurrent: i32,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct KowalskiStatus {
+    pub installed: bool,
+    pub agents: Vec<KowalskiAgent>,
+    pub path: String,
+}
+
+#[tauri::command]
+async fn get_kowalski_status() -> Result<KowalskiStatus, String> {
+    let keys_data = get_keys().await?;
+    
+    let kowalski_path = dirs::home_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join("vendor")
+        .join("kowalski");
+    
+    let installed = kowalski_path.exists();
+    
+    let mut agents = Vec::new();
+    
+    let agent_types = vec![
+        ("kowalski-code", "code", "Code analysis, refactoring, and documentation"),
+        ("kowalski-web", "web", "Web research and information retrieval"),
+        ("kowalski-academic", "academic", "Academic research and paper analysis"),
+        ("kowalski-data", "data", "Data analysis and processing"),
+        ("kowalski-creative", "creative", "Creative synthesis and idea generation"),
+        ("kowalski-reasoning", "reasoning", "Logical reasoning and deduction"),
+        ("kowalski-federation", "federation", "Multi-agent coordination and federation"),
+    ];
+    
+    for (name, agent_type, _desc) in agent_types {
+        let config = keys_data.subagents.get(name);
+        let enabled = config.is_some();
+        
+        agents.push(KowalskiAgent {
+            name: name.to_string(),
+            agent_type: agent_type.to_string(),
+            enabled,
+            status: if installed && enabled { "available".to_string() } else if !installed { "not_installed".to_string() } else { "disabled".to_string() },
+            role: config.map(|c| c.role.clone()).unwrap_or_default(),
+            awareness: config.map(|c| c.awareness.clone()).unwrap_or_default(),
+            max_concurrent: config.map(|c| c.max_concurrent).unwrap_or(2),
+        });
+    }
+    
+    Ok(KowalskiStatus {
+        installed,
+        agents,
+        path: kowalski_path.to_string_lossy().to_string(),
+    })
+}
+
+#[tauri::command]
+async fn configure_subagent(name: String, config: SubAgentConfig) -> Result<String, String> {
+    let keys_path = get_keys_path();
+    let name_clone = name.clone();
+    let mut data: serde_json::Value = if keys_path.exists() {
+        let content = fs::read_to_string(&keys_path)
+            .map_err(|e| format!("Failed to read keys: {}", e))?;
+        serde_json::from_str(&content).unwrap_or(serde_json::json!({}))
+    } else {
+        serde_json::json!({
+            "providers": {},
+            "subagents": {}
+        })
+    };
+    
+    if let Some(subagents) = data.get_mut("subagents") {
+        subagents[name] = serde_json::json!({
+            "provider": config.provider,
+            "model": config.model,
+            "key_name": config.key_name,
+            "max_concurrent": config.max_concurrent,
+            "role": config.role,
+            "awareness": config.awareness
+        });
+    }
+    
+    let json = serde_json::to_string_pretty(&data)
+        .map_err(|e| format!("Failed to serialize: {}", e))?;
+    fs::write(&keys_path, json)
+        .map_err(|e| format!("Failed to write keys: {}", e))?;
+    
+    Ok(format!("Subagent {} configured", name_clone))
+}
+
+#[tauri::command]
+async fn toggle_subagent(name: String, enabled: bool) -> Result<String, String> {
+    let keys_path = get_keys_path();
+    let name_clone = name.clone();
+    if !keys_path.exists() {
+        return Err("No keys file found".to_string());
+    }
+    
+    let content = fs::read_to_string(&keys_path)
+        .map_err(|e| format!("Failed to read keys: {}", e))?;
+    let mut data: serde_json::Value = serde_json::from_str(&content)
+        .map_err(|e| format!("Failed to parse keys: {}", e))?;
+    
+    if enabled {
+        if let Some(subagents) = data.get_mut("subagents") {
+            let default_config = match name_clone.as_str() {
+                "kowalski-code" => serde_json::json!({"provider": "modal", "model": "zai-org/GLM-5-FP8", "key_name": "housaky", "max_concurrent": 3, "role": "code", "awareness": ["coding", "debugging", "refactoring"]}),
+                "kowalski-web" => serde_json::json!({"provider": "modal", "model": "zai-org/GLM-5-FP8", "key_name": "housaky", "max_concurrent": 2, "role": "web", "awareness": ["web_search", "fetching", "browsing"]}),
+                "kowalski-academic" => serde_json::json!({"provider": "modal", "model": "zai-org/GLM-5-FP8", "key_name": "housaky", "max_concurrent": 2, "role": "academic", "awareness": ["research", "analysis", "writing"]}),
+                "kowalski-data" => serde_json::json!({"provider": "modal", "model": "zai-org/GLM-5-FP8", "key_name": "housaky", "max_concurrent": 2, "role": "data", "awareness": ["data_analysis", "visualization", "statistics"]}),
+                "kowalski-creative" => serde_json::json!({"provider": "modal", "model": "zai-org/GLM-5-FP8", "key_name": "housaky", "max_concurrent": 2, "role": "creative", "awareness": ["creative_writing", "brainstorming", "ideation"]}),
+                "kowalski-reasoning" => serde_json::json!({"provider": "modal", "model": "zai-org/GLM-5-FP8", "key_name": "housaky", "max_concurrent": 2, "role": "reasoning", "awareness": ["logic", "problem_solving", "reasoning"]}),
+                "kowalski-federation" => serde_json::json!({"provider": "modal", "model": "zai-org/GLM-5-FP8", "key_name": "housaky", "max_concurrent": 5, "role": "federation", "awareness": ["multi_agent", "collaboration", "coordination"]}),
+                _ => serde_json::json!({"provider": "modal", "model": "zai-org/GLM-5-FP8", "key_name": "housaky", "max_concurrent": 2, "role": "", "awareness": []}),
+            };
+            subagents[name] = default_config;
+        }
+    } else {
+        if let Some(subagents) = data.get_mut("subagents") {
+            if let Some(obj) = subagents.as_object_mut() {
+                obj.remove(&name_clone);
+            }
+        }
+    }
+    
+    let json = serde_json::to_string_pretty(&data)
+        .map_err(|e| format!("Failed to serialize: {}", e))?;
+    fs::write(&keys_path, json)
+        .map_err(|e| format!("Failed to write keys: {}", e))?;
+    
+    Ok(format!("Subagent {} {}", name_clone, if enabled { "enabled" } else { "disabled" }))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -932,6 +1653,22 @@ pub fn run() {
             get_agent_thoughts,
             get_memory_entries,
             get_conversations,
+            // Keys management
+            get_keys,
+            save_key,
+            delete_key,
+            toggle_key,
+            // Kowalski subagents
+            get_kowalski_status,
+            configure_subagent,
+            toggle_subagent,
+            // Market & Skills
+            get_marketplace_skills,
+            install_market_skill,
+            uninstall_skill,
+            // MCPs
+            get_mcp_servers,
+            configure_mcp_server,
         ])
         .setup(|_app| {
             log::info!("Housaky Dashboard starting...");

@@ -2,7 +2,6 @@
 // Never forget, never bloat - context-aware memory retrieval for LLMs
 // Uses importance classification, semantic deduplication, and context budgeting
 
-use anyhow::Result;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};

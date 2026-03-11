@@ -58,6 +58,10 @@ pub struct KeysPopup {
 
 impl KeysPopup {
     pub fn new() -> Self {
+        Self::with_defaults("modal", "zai-org/GLM-5-FP8")
+    }
+
+    pub fn with_defaults(provider: &str, model: &str) -> Self {
         let mut provider_state = ListState::default();
         provider_state.select(Some(0));
         let mut model_state = ListState::default();
@@ -71,8 +75,8 @@ impl KeysPopup {
             model_index: 0,
             provider_state,
             model_state,
-            current_provider: "openrouter".to_string(),
-            current_model: "auto".to_string(),
+            current_provider: provider.to_string(),
+            current_model: model.to_string(),
         }
     }
 
@@ -97,7 +101,11 @@ impl KeysPopup {
     pub fn set_providers(&mut self, providers: Vec<ProviderEntry>) {
         self.providers = providers;
         // Find current provider index
-        if let Some(idx) = self.providers.iter().position(|p| p.name == self.current_provider) {
+        if let Some(idx) = self
+            .providers
+            .iter()
+            .position(|p| p.name == self.current_provider)
+        {
             self.provider_index = idx;
         }
         self.provider_state.select(Some(self.provider_index));
@@ -106,7 +114,11 @@ impl KeysPopup {
     pub fn set_current(&mut self, provider: &str, model: &str) {
         self.current_provider = provider.to_string();
         self.current_model = model.to_string();
-        if let Some(idx) = self.providers.iter().position(|p| p.name == self.current_provider) {
+        if let Some(idx) = self
+            .providers
+            .iter()
+            .position(|p| p.name == self.current_provider)
+        {
             self.provider_index = idx;
             self.provider_state.select(Some(idx));
         }
@@ -288,8 +300,22 @@ impl KeysPopup {
                 };
 
                 let content = Line::from(vec![
-                    Span::styled(marker, if is_current { theme::style_success() } else { style }),
-                    Span::styled(status, if p.enabled { theme::style_success() } else { theme::style_dim() }),
+                    Span::styled(
+                        marker,
+                        if is_current {
+                            theme::style_success()
+                        } else {
+                            style
+                        },
+                    ),
+                    Span::styled(
+                        status,
+                        if p.enabled {
+                            theme::style_success()
+                        } else {
+                            theme::style_dim()
+                        },
+                    ),
                     Span::raw(" "),
                     Span::styled(&p.name, style),
                     Span::styled(format!(" ...{}", p.key_suffix), theme::style_dim()),
@@ -303,7 +329,14 @@ impl KeysPopup {
             .highlight_style(theme::style_selected())
             .highlight_symbol("> ");
 
-        frame.render_stateful_widget(list, area.inner(Margin { horizontal: 1, vertical: 0 }), &mut self.provider_state);
+        frame.render_stateful_widget(
+            list,
+            area.inner(Margin {
+                horizontal: 1,
+                vertical: 0,
+            }),
+            &mut self.provider_state,
+        );
     }
 
     fn draw_models(&mut self, frame: &mut Frame, area: Rect) {
@@ -338,7 +371,14 @@ impl KeysPopup {
                 };
 
                 let content = Line::from(vec![
-                    Span::styled(marker, if is_current { theme::style_success() } else { style }),
+                    Span::styled(
+                        marker,
+                        if is_current {
+                            theme::style_success()
+                        } else {
+                            style
+                        },
+                    ),
                     Span::raw(" "),
                     Span::styled(m.as_str(), style),
                 ]);
@@ -351,7 +391,14 @@ impl KeysPopup {
             .highlight_style(theme::style_selected())
             .highlight_symbol("> ");
 
-        frame.render_stateful_widget(list, area.inner(Margin { horizontal: 1, vertical: 0 }), &mut self.model_state);
+        frame.render_stateful_widget(
+            list,
+            area.inner(Margin {
+                horizontal: 1,
+                vertical: 0,
+            }),
+            &mut self.model_state,
+        );
     }
 }
 

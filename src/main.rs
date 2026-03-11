@@ -79,6 +79,132 @@ async fn start_full_system(
     result
 }
 
+/// Run non-interactive stdin/stdout chat mode
+async fn start_noninteractive_chat(config: Config) -> Result<()> {
+    use std::io::Write;
+    use housaky::housaky::self_improve_daemon::{SelfImproveDaemon, SelfImproveDaemonConfig};
+    use std::sync::Arc;
+    
+    println!("\n╭──────────────────────────────────────────────────────────╮");
+    println!("│  Housaky CLI Chat - Non-interactive Mode                │");
+    println!("│  Type /help for commands, /quit to exit                  │");
+    println!("╰──────────────────────────────────────────────────────────╯\n");
+    
+    let mut effective_config = config.clone();
+    let provider_name = effective_config.default_provider.clone()
+        .unwrap_or_else(|| "openrouter".to_string());
+    let model_name = effective_config.default_model.clone()
+        .unwrap_or_else(|| "auto".to_string());
+    
+    println!("Using provider: {}, model: {}\n", provider_name, model_name);
+    
+    let enable_daemon = std::env::var("HOUSAKY_SELF_IMPROVEMENT").map(|v| v == "1" || v == "true").unwrap_or(true);
+    
+    let daemon = if enable_daemon {
+        let daemon_config = SelfImproveDaemonConfig {
+            enabled: true,
+            enable_parameter_tuning: true,
+            enable_tool_creation: true,
+            enable_skill_acquisition: true,
+            ..Default::default()
+        };
+        let daemon = Arc::new(SelfImproveDaemon::new(daemon_config, config.workspace_dir.clone()));
+        let daemon_clone = daemon.clone();
+        tokio::spawn(async move {
+            if let Err(e) = daemon_clone.start().await {
+                tracing::error!("Self-improvement daemon error: {}", e);
+            }
+        });
+        println!("🤖 Self-improvement daemon active (resumes when idle)\n");
+        Some(daemon)
+    } else {
+        println!("ℹ️  Self-improvement daemon disabled (set HOUSAKY_SELF_IMPROVEMENT=1 to enable)\n");
+        None
+    };
+    
+    let mut agent = housaky::agent::Agent::from_config(&effective_config)?;
+    
+    let stdin = std::io::stdin();
+    let mut input = String::new();
+    
+    if let Some(ref d) = daemon {
+        d.pause("User interaction started").await;
+    }
+    
+    print!("> ");
+    std::io::stdout().flush()?;
+    
+    while let Ok(bytes_read) = stdin.read_line(&mut input) {
+        if bytes_read == 0 {
+            break;
+        }
+        
+        let trimmed = input.trim();
+        
+        if trimmed.is_empty() {
+            print!("> ");
+            std::io::stdout().flush()?;
+            input.clear();
+            continue;
+        }
+        
+        match trimmed.to_lowercase().as_str() {
+            "/quit" | "/q" | "/exit" => {
+                println!("Goodbye!");
+                break;
+            }
+            "/help" | "/h" | "/?" => {
+                println!("\n╭─ Commands ──────────────────────────────────────────────╮");
+                println!("│ /help, /h, /?   - Show this help                       │");
+                println!("│ /quit, /q, /exit - Exit the chat                       │");
+                println!("│ /clear, /cl       - Clear screen                       │");
+                println!("│ /provider <name>  - Switch provider                    │");
+                println!("│ /model <name>     - Switch model                       │");
+                println!("╰────────────────────────────────────────────────────────╯\n");
+            }
+            "/clear" | "/cl" => {
+                print!("\x1B[2J\x1B[1J");
+                print!("\x1B[H");
+                std::io::stdout().flush()?;
+            }
+            cmd if cmd.starts_with("/provider ") => {
+                let new_provider = cmd.trim_start_matches("/provider ").trim();
+                effective_config.default_provider = Some(new_provider.to_string());
+                println!("Switched to provider: {}\n", new_provider);
+                agent = housaky::agent::Agent::from_config(&effective_config)?;
+            }
+            cmd if cmd.starts_with("/model ") => {
+                let new_model = cmd.trim_start_matches("/model ").trim();
+                effective_config.default_model = Some(new_model.to_string());
+                println!("Switched to model: {}\n", new_model);
+                agent = housaky::agent::Agent::from_config(&effective_config)?;
+            }
+            _ => {
+                if let Some(ref d) = daemon {
+                    d.pause("User interaction started").await;
+                }
+                match agent.turn(trimmed).await {
+                    Ok(response) => {
+                        println!("\n{}\n", response);
+                    }
+                    Err(e) => {
+                        eprintln!("Error: {}\n", e);
+                    }
+                }
+                if let Some(ref d) = daemon {
+                    d.resume().await;
+                }
+            }
+        }
+        
+        print!("> ");
+        std::io::stdout().flush()?;
+        input.clear();
+    }
+    
+    Ok(())
+}
+
 // ============================================================================
 // Main
 // ============================================================================
@@ -94,7 +220,7 @@ async fn main() -> Result<()> {
     let no_subcommand = args.len() == 1 || (args.len() > 1 && args[1].starts_with('-') && !is_help);
 
     if no_subcommand {
-        // Silent logging for TUI
+        // Non-interactive stdin/stdout chat mode
         let subscriber = FmtSubscriber::builder()
             .with_max_level(Level::WARN)
             .with_writer(std::io::sink)
@@ -109,12 +235,12 @@ async fn main() -> Result<()> {
             println!("Welcome to Housaky!");
             println!("Starting setup...\n");
             let config = onboard::run_wizard()?;
-            return start_full_system(config, None, None).await;
+            return start_noninteractive_chat(config).await;
         }
 
         let config = existing_config.unwrap_or_else(|| Config::load_or_init().unwrap_or_default());
         std::env::set_var("HOUSAKY_WORKSPACE", config.workspace_dir.to_string_lossy().to_string());
-        return start_full_system(config, None, None).await;
+        return start_noninteractive_chat(config).await;
     }
 
     // Parse CLI
@@ -746,40 +872,6 @@ async fn main() -> Result<()> {
                                 println!("   Provider: {}", p);
                             }
                             println!("   Status: Ready");
-                        }
-                    }
-                    Ok(())
-                }
-
-                Commands::Web { action } => {
-                    use housaky::commands::WebCommands;
-                    match action {
-                        WebCommands::Search { query, count, country, freshness } => {
-                            println!("🔍 Web Search:");
-                            println!("   Query: {}", query);
-                            println!("   Results: {}", count);
-                            if let Some(c) = country {
-                                println!("   Country: {}", c);
-                            }
-                            if let Some(f) = freshness {
-                                println!("   Freshness: {}", f);
-                            }
-                            println!("   Note: Configure BRAVE_API_KEY for live search");
-                        }
-                        WebCommands::Fetch { url, mode, max_chars } => {
-                            println!("🔍 Fetching URL:");
-                            println!("   URL: {}", url);
-                            println!("   Mode: {}", mode);
-                            println!("   Max chars: {}", max_chars);
-                        }
-                        WebCommands::Ask { question } => {
-                            println!("🔍 Asking web:");
-                            println!("   Question: {}", question);
-                            println!("   Will search and summarize results");
-                        }
-                        WebCommands::Check { url } => {
-                            println!("🔍 Checking URL: {}", url);
-                            println!("   Status: Would check reachability");
                         }
                     }
                     Ok(())

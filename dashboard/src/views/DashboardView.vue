@@ -1,44 +1,21 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, onUnmounted } from 'vue'
-import { invoke } from '@tauri-apps/api/core'
 import { useRouter } from 'vue-router'
-import Card from '@/components/ui/card.vue'
-import CardContent from '@/components/ui/card-content.vue'
-import CardDescription from '@/components/ui/card-description.vue'
-import CardHeader from '@/components/ui/card-header.vue'
-import CardTitle from '@/components/ui/card-title.vue'
-import Button from '@/components/ui/button.vue'
-import Badge from '@/components/ui/badge.vue'
+import SkeletonLoader from '@/components/skeletons/SkeletonLoader.vue'
+import RetroCard from '@/components/ui/RetroCard.vue'
+import AsciiTitle from '@/components/ui/AsciiTitle.vue'
+import AsciiDivider from '@/components/ui/AsciiDivider.vue'
+import { gateway, type HousakyStatus } from '@/lib/gateway'
 import { 
   Activity, Cpu, HardDrive, MessageSquare, Network, Wrench,
   CheckCircle2, AlertCircle, RefreshCw, Settings, Shield, Heart,
   Terminal, Play, Square, Clock, TrendingUp, Database, Brain,
-  Lock, Unlock, ArrowUp, ArrowDown, Minus, FlameKindling,
+  Lock, Unlock, ArrowUp, ArrowDown, FlameKindling,
   BarChart3, Layers, Eye, BotMessageSquare, DollarSign,
   Gauge, GitBranch, Wifi, WifiOff, Package, ChevronRight,
-  Sparkles
+  Sparkles, CpuIcon, Zap, Terminal as TerminalIcon,
+  Box, Cpu as CpuLine, HardDrive as DiskIcon, GaugeIcon
 } from 'lucide-vue-next'
-
-const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
-
-interface HousakyStatus {
-  version: string
-  workspace: string
-  config: string
-  provider: string
-  model: string
-  temperature: number
-  memory_backend: string
-  memory_auto_save: boolean
-  embedding_provider: string
-  autonomy_level: string
-  workspace_only: boolean
-  runtime: string
-  heartbeat_enabled: boolean
-  heartbeat_interval: number
-  channels: Record<string, { configured: boolean; active: boolean; allowlist_count: number }>
-  secrets_encrypted: boolean
-}
 
 interface ActivityEvent {
   id: string
@@ -52,7 +29,6 @@ const router = useRouter()
 const status = ref<HousakyStatus | null>(null)
 const loading = ref(true)
 const error = ref('')
-const housakyInstalled = ref(false)
 const autoRefresh = ref(true)
 const lastRefresh = ref<Date>(new Date())
 const agentRunning = ref(false)
@@ -64,13 +40,14 @@ const costToday = ref(0.42)
 const tokensUsed = ref(18420)
 const uptimeSeconds = ref(0)
 const activityFeed = ref<ActivityEvent[]>([])
+const gatewayHealthy = ref(false)
 let refreshInterval: number | null = null
 let uptimeInterval: number | null = null
 
 const autonomyColors: Record<string, string> = {
-  readonly: 'from-blue-500/10 to-blue-500/5 border-blue-200',
-  supervised: 'from-yellow-500/10 to-yellow-500/5 border-yellow-200',
-  full: 'from-green-500/10 to-green-500/5 border-green-200',
+  readonly: 'border-blue-500/50 bg-blue-500/5',
+  supervised: 'border-yellow-500/50 bg-yellow-500/5',
+  full: 'border-green-500/50 bg-green-500/5',
 }
 
 const securityScore = computed(() => {
@@ -86,10 +63,10 @@ const securityScore = computed(() => {
 
 const securityLabel = computed(() => {
   const s = securityScore.value
-  if (s >= 80) return { text: 'Excellent', color: 'text-green-600', bg: 'bg-green-500' }
-  if (s >= 60) return { text: 'Good', color: 'text-blue-600', bg: 'bg-blue-500' }
-  if (s >= 40) return { text: 'Fair', color: 'text-yellow-600', bg: 'bg-yellow-500' }
-  return { text: 'Weak', color: 'text-red-600', bg: 'bg-red-500' }
+  if (s >= 80) return { text: 'EXCELLENT', color: 'text-green-400', bg: 'bg-green-500' }
+  if (s >= 60) return { text: 'GOOD', color: 'text-blue-400', bg: 'bg-blue-500' }
+  if (s >= 40) return { text: 'FAIR', color: 'text-yellow-400', bg: 'bg-yellow-500' }
+  return { text: 'WEAK', color: 'text-red-400', bg: 'bg-red-500' }
 })
 
 const channelList = computed(() => {
@@ -124,19 +101,15 @@ async function loadStatus() {
   loading.value = true
   error.value = ''
   try {
-    if (!isTauri) {
-      housakyInstalled.value = false
-      loading.value = false
-      pushActivity({ type: 'system', title: 'Web mode', detail: 'Running outside Tauri — limited functionality' })
-      return
-    }
-    housakyInstalled.value = await invoke<boolean>('check_housaky_installed')
-    status.value = await invoke<HousakyStatus>('get_status')
+    status.value = await gateway.getStatus()
+    gatewayHealthy.value = true
     lastRefresh.value = new Date()
-    agentRunning.value = housakyInstalled.value
+    agentRunning.value = status.value.agent_running ?? false
+    uptimeSeconds.value = status.value.uptime_seconds ?? 0
     sparklineData.value = Array.from({ length: 10 }, () => Math.floor(Math.random() * 60) + 30)
-    pushActivity({ type: 'system', title: 'Status refreshed', detail: `v${status.value.version} · ${status.value.provider}` })
+    pushActivity({ type: 'system', title: 'Status refreshed', detail: `v${status.value.version} | ${status.value.provider}` })
   } catch (e) {
+    gatewayHealthy.value = false
     error.value = String(e)
     pushActivity({ type: 'error', title: 'Refresh failed', detail: String(e) })
   } finally {
@@ -145,12 +118,11 @@ async function loadStatus() {
 }
 
 async function runDoctor() {
-  if (!isTauri) return
   showDiagnostics.value = true
-  diagnosticsOutput.value = 'Running diagnostics…'
+  diagnosticsOutput.value = 'Running diagnostics...'
   try {
-    const result = await invoke<string>('run_doctor')
-    diagnosticsOutput.value = result || 'All checks passed ✓'
+    const result = await gateway.runDoctor()
+    diagnosticsOutput.value = result.output || 'All checks passed'
     pushActivity({ type: 'system', title: 'Diagnostics complete', detail: 'All systems checked' })
   } catch (e) {
     diagnosticsOutput.value = `Error: ${e}`
@@ -159,10 +131,9 @@ async function runDoctor() {
 }
 
 async function startAgent() {
-  if (!isTauri) return
   agentActionLoading.value = true
   try {
-    await invoke('run_housaky_command_cmd', { command: 'agent', args: ['--daemon'] })
+    await gateway.startAgent()
     agentRunning.value = true
     uptimeSeconds.value = 0
     pushActivity({ type: 'system', title: 'Agent started', detail: 'Housaky agent is now running' })
@@ -175,10 +146,9 @@ async function startAgent() {
 }
 
 async function stopAgent() {
-  if (!isTauri) return
   agentActionLoading.value = true
   try {
-    await invoke('run_housaky_command_cmd', { command: 'stop', args: [] })
+    await gateway.stopAgent()
     agentRunning.value = false
     pushActivity({ type: 'system', title: 'Agent stopped', detail: 'Housaky agent has been stopped' })
     await loadStatus()
@@ -217,9 +187,9 @@ function getSparklinePath(data: number[]): string {
 
 const activityTypeConfig = {
   message: { color: 'bg-blue-500', label: 'MSG' },
-  skill: { color: 'bg-purple-500', label: 'SKILL' },
+  skill: { color: 'bg-purple-500', label: 'SKL' },
   channel: { color: 'bg-cyan-500', label: 'CH' },
-  system: { color: 'bg-gray-500', label: 'SYS' },
+  system: { color: 'bg-zinc-500', label: 'SYS' },
   error: { color: 'bg-red-500', label: 'ERR' },
   memory: { color: 'bg-amber-500', label: 'MEM' },
 }
@@ -248,466 +218,340 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="space-y-6 max-w-7xl mx-auto">
-    <!-- ── Header ── -->
-    <div class="flex flex-wrap items-center justify-between gap-4">
-      <div class="flex items-center gap-4">
-        <div class="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 flex items-center justify-center shadow-lg shadow-indigo-500/30">
-          <Brain class="w-7 h-7 text-white" />
-        </div>
-        <div>
-          <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Welcome to Housaky</h1>
-          <p class="text-sm text-muted-foreground">Your AI Command Center · v{{ status?.version || '...' }}</p>
-        </div>
-      </div>
-      <div class="flex items-center gap-2 flex-wrap">
-        <div class="flex items-center gap-2 text-xs text-muted-foreground bg-white/50 dark:bg-white/5 px-3 py-1.5 rounded-full border border-gray-200/50 dark:border-white/10">
-          <Clock class="w-3.5 h-3.5" />
-          {{ lastRefresh.toLocaleTimeString() }}
-        </div>
-        <Button 
-          variant="outline" 
-          size="sm" 
-          :class="[
-            'rounded-full px-4 transition-all',
-            autoRefresh 
-              ? 'border-green-300 bg-green-50 text-green-700 hover:bg-green-100 dark:border-green-800 dark:bg-green-900/20 dark:text-green-400' 
-              : 'border-gray-200 dark:border-white/10'
-          ]" 
-          @click="toggleAutoRefresh"
-        >
-          <Activity class="w-3.5 h-3.5 mr-1.5" />
-          {{ autoRefresh ? 'Live' : 'Paused' }}
-        </Button>
-        <Button 
-          size="sm" 
-          class="rounded-full px-4 bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 border-0"
-          @click="loadStatus" 
-          :disabled="loading"
-        >
-          <RefreshCw :class="['w-3.5 h-3.5 mr-1.5', loading && 'animate-spin']" />
-          Refresh
-        </Button>
-      </div>
-    </div>
-
-    <!-- ── Alert Banners ── -->
-    <div v-if="!housakyInstalled && !loading" class="rounded-2xl p-4 bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 border border-amber-200/50 dark:border-amber-700/30">
-      <div class="flex items-center justify-between flex-wrap gap-3">
-        <div class="flex items-center gap-3">
-          <div class="w-10 h-10 rounded-xl bg-amber-100 dark:bg-amber-900/50 flex items-center justify-center">
-            <AlertCircle class="w-5 h-5 text-amber-600 dark:text-amber-400" />
-          </div>
-          <div>
-            <span class="font-semibold text-amber-800 dark:text-amber-300">Housaky not installed</span>
-            <p class="text-sm text-amber-600 dark:text-amber-400">Configure your AI agent to get started</p>
-          </div>
-        </div>
-        <Button size="sm" class="rounded-xl bg-amber-500 hover:bg-amber-600 text-white" @click="router.push('/config')">Configure Now</Button>
-      </div>
-    </div>
-
-    <div v-if="error && !loading" class="rounded-2xl p-4 bg-red-50 dark:bg-red-900/20 border border-red-200/50 dark:border-red-800/30">
-      <div class="flex items-center gap-3 text-red-700 dark:text-red-400">
-        <AlertCircle class="w-5 h-5 flex-shrink-0" />
-        <span class="text-sm">{{ error }}</span>
-      </div>
-    </div>
-
-    <!-- ── Loading ── -->
-    <div v-if="loading && !status" class="flex items-center justify-center py-24">
-      <div class="flex flex-col items-center gap-4">
-        <div class="relative">
-          <div class="w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 flex items-center justify-center shadow-lg shadow-indigo-500/30">
-            <Brain class="w-8 h-8 text-white" />
-          </div>
-          <span class="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full animate-ping" />
-        </div>
-        <p class="text-sm text-muted-foreground animate-pulse">Connecting to Housaky…</p>
-      </div>
+  <div class="space-y-4 perspective-layer">
+    <div v-if="loading" class="space-y-4">
+      <SkeletonLoader variant="random" :count="8" />
     </div>
 
     <template v-else-if="status">
-      <!-- ── KPI Row ── -->
-      <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <!-- Agent Status -->
-        <div class="rounded-2xl p-5 bg-gradient-to-br from-indigo-500/10 to-purple-500/10 border border-gray-200/50 dark:border-white/10 hover-lift apple-shadow">
-          <div class="flex items-start justify-between mb-3">
-            <span class="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Agent</span>
-            <div :class="['w-2.5 h-2.5 rounded-full', agentRunning ? 'bg-green-500 animate-pulse' : 'bg-gray-400']" />
-          </div>
-          <div :class="['text-2xl font-bold', agentRunning ? 'text-green-600 dark:text-green-400' : 'text-gray-500']">
-            {{ agentRunning ? 'Running' : 'Stopped' }}
-          </div>
-          <p class="text-xs text-muted-foreground mt-1">Uptime {{ formattedUptime }}</p>
-          <svg class="mt-3 w-20 h-8" viewBox="0 0 80 28" fill="none">
-            <path :d="getSparklinePath(sparklineData)" stroke="url(#grad1)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-            <defs>
-              <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="0%">
-                <stop offset="0%" stop-color="#6366f1" />
-                <stop offset="100%" stop-color="#a855f7" />
-              </linearGradient>
-            </defs>
-          </svg>
-        </div>
-
-        <!-- AI Provider -->
-        <div class="rounded-2xl p-5 bg-gradient-to-br from-blue-500/10 to-cyan-500/10 border border-gray-200/50 dark:border-white/10 hover-lift apple-shadow">
-          <div class="flex items-start justify-between mb-3">
-            <span class="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Provider</span>
-            <CpuIcon class="w-5 h-5 text-blue-500" />
-          </div>
-          <div class="text-2xl font-bold capitalize text-gray-900 dark:text-white">{{ status.provider }}</div>
-          <p class="text-xs text-muted-foreground mt-1 truncate">{{ status.model || 'default' }}</p>
-          <div class="mt-3 flex items-center gap-1.5 text-xs text-blue-600 font-medium">
-            <Gauge class="w-3.5 h-3.5" />
-            temp {{ status.temperature }}
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-4">
+          <AsciiTitle text="HOUSAKY" variant="minimal" color="cyan" size="md" />
+          <div class="text-xs font-mono text-zinc-500">
+            <span class="text-cyan-400">v{{ status.version }}</span>
+            <span class="mx-2">|</span>
+            <span>{{ status.provider }}</span>
           </div>
         </div>
-
-        <!-- Tokens / Cost -->
-        <div class="rounded-2xl p-5 bg-gradient-to-br from-purple-500/10 to-pink-500/10 border border-gray-200/50 dark:border-white/10 hover-lift apple-shadow">
-          <div class="flex items-start justify-between mb-3">
-            <span class="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Tokens</span>
-            <Zap class="w-5 h-5 text-purple-500" />
-          </div>
-          <div class="text-2xl font-bold text-gray-900 dark:text-white">{{ tokensUsed.toLocaleString() }}</div>
-          <p class="text-xs text-muted-foreground mt-1">Today</p>
-          <div class="mt-3 flex items-center gap-1.5 text-xs text-purple-600 font-medium">
-            <ArrowUp class="w-3.5 h-3.5" />
-            ${{ costToday.toFixed(4) }} est.
-          </div>
-        </div>
-
-        <!-- Security Score -->
-        <div class="rounded-2xl p-5 bg-gradient-to-br from-emerald-500/10 to-teal-500/10 border border-gray-200/50 dark:border-white/10 hover-lift apple-shadow">
-          <div class="flex items-start justify-between mb-3">
-            <span class="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Security</span>
-            <Shield class="w-5 h-5 text-emerald-500" />
-          </div>
-          <div :class="['text-2xl font-bold', securityLabel.color]">{{ securityScore }}%</div>
-          <p :class="['text-xs mt-1 font-medium', securityLabel.color]">{{ securityLabel.text }}</p>
-          <div class="mt-3 h-1.5 rounded-full bg-gray-100 dark:bg-white/10 overflow-hidden">
-            <div :class="['h-full rounded-full transition-all duration-500', securityLabel.bg]" :style="`width: ${securityScore}%`" />
-          </div>
+        <div class="flex items-center gap-2">
+          <button
+            @click="toggleAutoRefresh"
+            :class="[
+              'btn-retro text-xs',
+              autoRefresh 
+                ? 'border-green-500/50 text-green-400 bg-green-500/10' 
+                : 'border-zinc-700 text-zinc-500'
+            ]"
+          >
+            {{ autoRefresh ? '● LIVE' : '○ PAUSED' }}
+          </button>
+          <button 
+            @click="loadStatus" 
+            :disabled="loading"
+            class="btn-retro border-cyan-500/50 text-cyan-400 hover:bg-cyan-500/10"
+          >
+            <RefreshCw :class="['w-3 h-3 mr-1.5 inline', loading && 'animate-spin']" />
+            REFRESH
+          </button>
         </div>
       </div>
 
-      <!-- ── Agent Control + Memory ── -->
-      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <!-- Agent Control -->
-        <div class="lg:col-span-2 rounded-2xl bg-white/50 dark:bg-white/5 border border-gray-200/50 dark:border-white/10 apple-shadow">
-          <CardHeader class="pb-4 pt-5 px-5">
-            <div class="flex items-center justify-between">
-              <div class="flex items-center gap-3">
-                <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center">
-                  <BotMessageSquare class="w-5 h-5 text-white" />
-                </div>
-                <div>
-                  <CardTitle class="text-base">Agent Control</CardTitle>
-                  <CardDescription>Start, stop, and diagnose your AI agent</CardDescription>
-                </div>
-              </div>
-              <Badge :class="[
-                'px-3 py-1 rounded-full text-xs font-medium border-0',
-                agentRunning 
-                  ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' 
-                  : 'bg-gray-100 text-gray-600 dark:bg-white/10 dark:text-gray-400'
-              ]">
-                <span :class="['w-1.5 h-1.5 rounded-full mr-1.5 inline-block', agentRunning ? 'bg-green-500 animate-pulse' : 'bg-gray-400']" />
-                {{ agentRunning ? 'Online' : 'Offline' }}
-              </Badge>
-            </div>
-          </CardHeader>
-          <CardContent class="px-5 pb-5 space-y-4">
-            <div class="flex flex-wrap gap-2">
-              <Button 
-                :disabled="!housakyInstalled || agentRunning || agentActionLoading" 
-                @click="startAgent" 
-                class="rounded-xl gap-2 bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 border-0"
-              >
-                <Play class="w-4 h-4" />
-                {{ agentActionLoading ? 'Starting…' : 'Start Agent' }}
-              </Button>
-              <Button 
-                variant="outline" 
-                :disabled="!housakyInstalled || !agentRunning || agentActionLoading" 
-                @click="stopAgent" 
-                class="rounded-xl gap-2 border-gray-200 dark:border-white/10 hover:bg-gray-100 dark:hover:bg-white/5"
-              >
-                <Square class="w-4 h-4" />
-                {{ agentActionLoading ? 'Stopping…' : 'Stop Agent' }}
-              </Button>
-              <Button 
-                variant="outline" 
-                :disabled="!housakyInstalled" 
-                @click="runDoctor" 
-                class="rounded-xl gap-2 border-gray-200 dark:border-white/10 hover:bg-gray-100 dark:hover:bg-white/5"
-              >
-                <Activity class="w-4 h-4" />
-                Diagnostics
-              </Button>
-              <Button 
-                variant="ghost" 
-                size="sm" 
-                class="ml-auto rounded-xl gap-1.5 text-muted-foreground hover:text-foreground" 
-                @click="navigate('/terminal')"
-              >
-                <Terminal class="w-3.5 h-3.5" />
-                Terminal
-              </Button>
-            </div>
+      <AsciiDivider variant="dots" color="cyan" :length="60" />
 
-            <div v-if="showDiagnostics" class="rounded-xl bg-gray-900 dark:bg-black text-green-400 font-mono text-xs p-4 max-h-36 overflow-auto whitespace-pre-wrap">
-              {{ diagnosticsOutput }}
-            </div>
-
-            <!-- Mini stat row -->
-            <div class="grid grid-cols-3 gap-3 pt-4 border-t border-gray-100 dark:border-white/10">
-              <div class="text-center p-3 rounded-xl bg-gray-50 dark:bg-white/5">
-                <p class="text-xl font-bold text-gray-900 dark:text-white">{{ channelList.length }}</p>
-                <p class="text-xs text-muted-foreground">Channels</p>
-              </div>
-              <div class="text-center p-3 rounded-xl bg-green-50 dark:bg-green-900/10">
-                <p class="text-xl font-bold text-green-600 dark:text-green-400">{{ activeChannelsCount }}</p>
-                <p class="text-xs text-muted-foreground">Active</p>
-              </div>
-              <div class="text-center p-3 rounded-xl bg-indigo-50 dark:bg-indigo-900/10">
-                <p class="text-xl font-bold text-indigo-600 dark:text-indigo-400">{{ status.runtime }}</p>
-                <p class="text-xs text-muted-foreground">Runtime</p>
-              </div>
-            </div>
-          </CardContent>
+      <div v-if="error && !loading" class="p-4 border-2 border-red-500/30 bg-red-500/5">
+        <div class="flex items-center gap-2 text-red-400 text-xs font-mono">
+          <AlertCircle class="w-4 h-4" />
+          {{ error }}
         </div>
+      </div>
 
-        <!-- Memory + Heartbeat -->
-        <div class="rounded-2xl bg-white/50 dark:bg-white/5 border border-gray-200/50 dark:border-white/10 apple-shadow">
-          <CardHeader class="pb-4 pt-5 px-5">
-            <CardTitle class="flex items-center gap-2 text-base">
-              <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
-                <Database class="w-4 h-4 text-white" />
-              </div>
-              Memory Engine
-            </CardTitle>
-          </CardHeader>
-          <CardContent class="px-5 pb-5 space-y-2">
-            <div class="flex items-center justify-between p-3 rounded-xl bg-gray-50 dark:bg-white/5">
-              <span class="text-sm text-muted-foreground">Backend</span>
-              <Badge variant="outline" class="rounded-lg font-mono">{{ status.memory_backend }}</Badge>
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 perspective-layer">
+        <RetroCard :accent="agentRunning ? 'green' : 'cyan'" :glow="agentRunning" :perspective-index="0">
+          <div class="flex items-start justify-between mb-3">
+            <span class="text-xs font-mono uppercase text-zinc-500 tracking-wider">Agent</span>
+            <div :class="['status-dot', agentRunning ? 'status-online' : 'status-offline', agentRunning && 'animate-pulse']" />
+          </div>
+          <div :class="['text-xl font-mono font-bold tracking-wider', agentRunning ? 'text-green-400 text-glow-green' : 'text-zinc-500']">
+            {{ agentRunning ? 'RUNNING' : 'STOPPED' }}
+          </div>
+          <p class="text-xs text-zinc-600 font-mono mt-2">UPTIME {{ formattedUptime }}</p>
+          <svg class="mt-3 w-full h-10" viewBox="0 0 80 28" fill="none">
+            <path :d="getSparklinePath(sparklineData)" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-cyan-400" fill="none" />
+          </svg>
+        </RetroCard>
+
+        <RetroCard accent="cyan" :perspective-index="1">
+          <div class="flex items-start justify-between mb-3">
+            <span class="text-xs font-mono uppercase text-zinc-500 tracking-wider">Provider</span>
+            <CpuLine class="w-4 h-4 text-cyan-400" />
+          </div>
+          <div class="text-xl font-mono font-bold text-zinc-200 uppercase tracking-wider">{{ status.provider }}</div>
+          <p class="text-xs text-zinc-600 font-mono mt-2 truncate">{{ status.model || 'default' }}</p>
+          <div class="mt-3 text-xs text-cyan-400 font-mono">
+            TEMP {{ status.temperature }}
+          </div>
+        </RetroCard>
+
+        <RetroCard accent="magenta" :perspective-index="2">
+          <div class="flex items-start justify-between mb-3">
+            <span class="text-xs font-mono uppercase text-zinc-500 tracking-wider">Tokens</span>
+            <Zap class="w-4 h-4 text-fuchsia-400" />
+          </div>
+          <div class="text-xl font-mono font-bold text-zinc-200">{{ tokensUsed.toLocaleString() }}</div>
+          <p class="text-xs text-zinc-600 font-mono mt-2">TODAY</p>
+          <div class="mt-3 text-xs text-fuchsia-400 font-mono">
+            +${{ costToday.toFixed(4) }}
+          </div>
+        </RetroCard>
+
+        <RetroCard :accent="securityScore >= 60 ? 'green' : 'orange'" :glow="securityScore >= 60" :perspective-index="3">
+          <div class="flex items-start justify-between mb-3">
+            <span class="text-xs font-mono uppercase text-zinc-500 tracking-wider">Security</span>
+            <Shield class="w-4 h-4 text-green-400" />
+          </div>
+          <div :class="['text-xl font-mono font-bold tracking-wider', securityLabel.color]">{{ securityScore }}%</div>
+          <p :class="['text-xs font-mono mt-2', securityLabel.color]">{{ securityLabel.text }}</p>
+          <div class="mt-3 h-2 bg-zinc-800 overflow-hidden border border-zinc-700">
+            <div :class="['h-full transition-all', securityLabel.bg]" :style="`width: ${securityScore}%`" />
+          </div>
+        </RetroCard>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 perspective-layer">
+        <RetroCard accent="cyan" :glow="agentRunning" class="lg:col-span-2" :perspective-index="0">
+          <div class="flex items-center justify-between mb-4">
+            <div class="flex items-center gap-2">
+              <TerminalIcon class="w-5 h-5 text-cyan-400" />
+              <span class="text-sm font-mono uppercase tracking-wider">Agent Control</span>
             </div>
-            <div class="flex items-center justify-between p-3 rounded-xl bg-gray-50 dark:bg-white/5">
-              <span class="text-sm text-muted-foreground">Embeddings</span>
-              <Badge variant="outline" class="rounded-lg font-mono text-xs">{{ status.embedding_provider }}</Badge>
+            <div :class="[
+              'text-xs font-mono px-3 py-1 border',
+              agentRunning 
+                ? 'border-green-500/50 text-green-400 bg-green-500/10' 
+                : 'border-zinc-700 text-zinc-500'
+            ]">
+              {{ agentRunning ? '● ONLINE' : '○ OFFLINE' }}
             </div>
-            <div class="flex items-center justify-between p-3 rounded-xl bg-gray-50 dark:bg-white/5">
-              <span class="text-sm text-muted-foreground">Auto-save</span>
-              <Badge :class="status.memory_auto_save ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 rounded-lg' : 'bg-gray-100 text-gray-500 dark:bg-white/10 rounded-lg'">
-                {{ status.memory_auto_save ? 'On' : 'Off' }}
-              </Badge>
+          </div>
+
+          <div class="flex flex-wrap gap-2 mb-4">
+            <button 
+              :disabled="!gatewayHealthy || agentRunning || agentActionLoading" 
+              @click="startAgent" 
+              class="btn-retro btn-retro-success disabled:opacity-30 disabled:cursor-not-allowed"
+            >
+              <Play class="w-3 h-3 mr-1.5 inline" />
+              {{ agentActionLoading ? 'Starting...' : 'Start' }}
+            </button>
+            <button 
+              :disabled="!gatewayHealthy || !agentRunning || agentActionLoading" 
+              @click="stopAgent" 
+              class="btn-retro border-zinc-700 text-zinc-400 hover:bg-zinc-800 disabled:opacity-30 disabled:cursor-not-allowed"
+            >
+              <Square class="w-3 h-3 mr-1.5 inline" />
+              {{ agentActionLoading ? 'Stopping...' : 'Stop' }}
+            </button>
+            <button 
+              @click="runDoctor" 
+              class="btn-retro border-zinc-700 text-zinc-400 hover:bg-zinc-800"
+            >
+              <Activity class="w-3 h-3 mr-1.5 inline" />
+              Doctor
+            </button>
+          </div>
+
+          <div v-if="showDiagnostics" class="p-3 bg-black border-2 border-zinc-800 font-mono text-xs text-green-400 max-h-28 overflow-auto">
+            {{ diagnosticsOutput }}
+          </div>
+
+          <div class="grid grid-cols-3 gap-2 pt-4 border-t-2 border-zinc-800">
+            <div class="text-center p-3 bg-zinc-900/50 border border-zinc-800">
+              <p class="text-lg font-mono text-zinc-200">{{ channelList.length }}</p>
+              <p class="text-[10px] text-zinc-500 font-mono mt-1">CHANNELS</p>
             </div>
-            <div class="flex items-center justify-between p-3 rounded-xl bg-gray-50 dark:bg-white/5">
-              <span class="text-sm text-muted-foreground flex items-center gap-2">
-                <Heart :class="['w-4 h-4', status.heartbeat_enabled ? 'text-red-500 animate-pulse' : 'text-gray-400']" />
+            <div class="text-center p-3 bg-zinc-900/50 border border-zinc-800">
+              <p class="text-lg font-mono text-green-400">{{ activeChannelsCount }}</p>
+              <p class="text-[10px] text-zinc-500 font-mono mt-1">ACTIVE</p>
+            </div>
+            <div class="text-center p-3 bg-zinc-900/50 border border-zinc-800">
+              <p class="text-lg font-mono text-zinc-200">{{ status.runtime }}</p>
+              <p class="text-[10px] text-zinc-500 font-mono mt-1">RUNTIME</p>
+            </div>
+          </div>
+        </RetroCard>
+
+        <RetroCard accent="magenta" :perspective-index="1">
+          <div class="flex items-center gap-2 mb-4">
+            <Database class="w-5 h-5 text-fuchsia-400" />
+            <span class="text-sm font-mono uppercase tracking-wider">Memory</span>
+          </div>
+          <div class="space-y-2">
+            <div class="flex items-center justify-between p-3 bg-zinc-900/50 border-2 border-zinc-800">
+              <span class="text-xs text-zinc-500 font-mono">Backend</span>
+              <span class="text-xs font-mono text-zinc-300 uppercase">{{ status.memory_backend }}</span>
+            </div>
+            <div class="flex items-center justify-between p-3 bg-zinc-900/50 border-2 border-zinc-800">
+              <span class="text-xs text-zinc-500 font-mono">Embeddings</span>
+              <span class="text-xs font-mono text-zinc-300 uppercase">{{ status.embedding_provider }}</span>
+            </div>
+            <div class="flex items-center justify-between p-3 bg-zinc-900/50 border-2 border-zinc-800">
+              <span class="text-xs text-zinc-500 font-mono">Auto-save</span>
+              <span :class="['text-xs font-mono', status.memory_auto_save ? 'text-green-400' : 'text-zinc-500']">
+                {{ status.memory_auto_save ? 'ON' : 'OFF' }}
+              </span>
+            </div>
+            <div class="flex items-center justify-between p-3 bg-zinc-900/50 border-2 border-zinc-800">
+              <span class="text-xs text-zinc-500 font-mono flex items-center gap-2">
+                <Heart :class="['w-3 h-3', status.heartbeat_enabled ? 'text-red-400 animate-pulse' : 'text-zinc-600']" />
                 Heartbeat
               </span>
-              <span class="text-sm font-medium">
+              <span class="text-xs font-mono">
                 {{ status.heartbeat_enabled ? `/${status.heartbeat_interval}min` : 'off' }}
               </span>
             </div>
-          </CardContent>
-        </div>
+          </div>
+        </RetroCard>
       </div>
 
-      <!-- ── Channels + Security ── -->
-      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div class="rounded-2xl bg-white/50 dark:bg-white/5 border border-gray-200/50 dark:border-white/10 apple-shadow">
-          <CardHeader class="pb-4 pt-5 px-5">
-            <div class="flex items-center justify-between">
-              <CardTitle class="flex items-center gap-2">
-                <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-cyan-500 to-blue-500 flex items-center justify-center">
-                  <Network class="w-4 h-4 text-white" />
-                </div>
-                Channels
-              </CardTitle>
-              <Badge variant="outline" class="rounded-full text-xs">{{ activeChannelsCount }}/{{ channelList.length }} live</Badge>
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 perspective-layer">
+        <RetroCard accent="cyan" :perspective-index="0">
+          <div class="flex items-center justify-between mb-4">
+            <div class="flex items-center gap-2">
+              <Network class="w-5 h-5 text-cyan-400" />
+              <span class="text-sm font-mono uppercase tracking-wider">Channels</span>
             </div>
-          </CardHeader>
-          <CardContent class="px-5 pb-5">
-            <div class="space-y-1.5">
-              <div v-for="ch in channelList" :key="ch.key"
-                class="flex items-center justify-between px-4 py-3 rounded-xl border border-gray-100 dark:border-white/10 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors cursor-pointer"
-                @click="navigate('/channels')"
-              >
-                <div class="flex items-center gap-3">
-                  <div :class="['w-2.5 h-2.5 rounded-full flex-shrink-0', ch.active ? 'bg-green-500 animate-pulse' : ch.configured ? 'bg-yellow-400' : 'bg-gray-300']" />
-                  <span class="text-sm font-medium">{{ ch.name }}</span>
-                </div>
-                <div class="flex items-center gap-2">
-                  <span v-if="ch.allowlist_count > 0" class="text-xs text-muted-foreground">{{ ch.allowlist_count }} users</span>
-                  <Badge :class="ch.active ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 rounded-lg text-xs' : ch.configured ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400 rounded-lg text-xs' : 'rounded-lg text-xs'">
-                    {{ ch.active ? 'Live' : ch.configured ? 'Ready' : 'Setup' }}
-                  </Badge>
-                </div>
+            <span class="text-xs font-mono text-zinc-500">{{ activeChannelsCount }}/{{ channelList.length }}</span>
+          </div>
+          <div class="space-y-2">
+            <div v-for="ch in channelList" :key="ch.key"
+              class="flex items-center justify-between p-3 border-2 border-zinc-800 hover:border-zinc-700 hover:bg-zinc-800/30 transition-all cursor-pointer"
+              @click="navigate('/channels')"
+            >
+              <div class="flex items-center gap-3">
+                <div :class="['status-dot', ch.active ? 'status-online animate-pulse' : ch.configured ? 'status-warning' : 'status-offline']" />
+                <span class="text-xs font-mono text-zinc-300">{{ ch.name }}</span>
               </div>
-            </div>
-          </CardContent>
-        </div>
-
-        <!-- Security & Autonomy -->
-        <div class="rounded-2xl bg-white/50 dark:bg-white/5 border border-gray-200/50 dark:border-white/10 apple-shadow">
-          <CardHeader class="pb-4 pt-5 px-5">
-            <CardTitle class="flex items-center gap-2">
-              <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center">
-                <Shield class="w-4 h-4 text-white" />
-              </div>
-              Security & Autonomy
-            </CardTitle>
-            <CardDescription>Active protection profile</CardDescription>
-          </CardHeader>
-          <CardContent class="px-5 pb-5 space-y-3">
-            <div class="flex items-center justify-between p-4 rounded-xl bg-gradient-to-r border" :class="autonomyColors[status.autonomy_level] || 'from-gray-500/10 to-gray-500/5'">
               <div class="flex items-center gap-2">
-                <Layers class="w-4 h-4" />
-                <span class="text-sm font-medium">Autonomy Level</span>
-              </div>
-              <span class="font-bold capitalize px-3 py-1 rounded-lg bg-white/50 dark:bg-black/20">{{ status.autonomy_level }}</span>
-            </div>
-            <div class="grid grid-cols-2 gap-2">
-              <div class="flex items-center gap-3 p-3 rounded-xl bg-gray-50 dark:bg-white/5 border border-gray-100 dark:border-white/10">
-                <div :class="['w-9 h-9 rounded-lg flex items-center justify-center', status.workspace_only ? 'bg-green-100 dark:bg-green-900/30' : 'bg-yellow-100 dark:bg-yellow-900/30']">
-                  <component :is="status.workspace_only ? Lock : Unlock" :class="['w-4 h-4', status.workspace_only ? 'text-green-600 dark:text-green-400' : 'text-yellow-600 dark:text-yellow-400']" />
-                </div>
-                <div>
-                  <p class="text-xs font-medium">Workspace</p>
-                  <p :class="['text-xs', status.workspace_only ? 'text-green-600 dark:text-green-400' : 'text-yellow-600 dark:text-yellow-400']">{{ status.workspace_only ? 'Sandboxed' : 'Open' }}</p>
-                </div>
-              </div>
-              <div class="flex items-center gap-3 p-3 rounded-xl bg-gray-50 dark:bg-white/5 border border-gray-100 dark:border-white/10">
-                <div :class="['w-9 h-9 rounded-lg flex items-center justify-center', status.secrets_encrypted ? 'bg-green-100 dark:bg-green-900/30' : 'bg-red-100 dark:bg-red-900/30']">
-                  <component :is="status.secrets_encrypted ? Lock : Unlock" :class="['w-4 h-4', status.secrets_encrypted ? 'text-green-600 dark:text-green-400' : 'text-red-500']" />
-                </div>
-                <div>
-                  <p class="text-xs font-medium">Secrets</p>
-                  <p :class="['text-xs', status.secrets_encrypted ? 'text-green-600 dark:text-green-400' : 'text-red-500']">{{ status.secrets_encrypted ? 'Encrypted' : 'Plaintext' }}</p>
-                </div>
-              </div>
-            </div>
-            <div class="flex items-center justify-between p-3 rounded-xl bg-gray-50 dark:bg-white/5">
-              <span class="text-xs text-muted-foreground">Security Score</span>
-              <div class="flex items-center gap-2">
-                <div class="w-24 h-1.5 rounded-full bg-gray-100 dark:bg-white/10 overflow-hidden">
-                  <div :class="['h-full rounded-full transition-all duration-500', securityLabel.bg]" :style="`width: ${securityScore}%`" />
-                </div>
-                <span :class="['text-xs font-bold', securityLabel.color]">{{ securityScore }}%</span>
-              </div>
-            </div>
-          </CardContent>
-        </div>
-      </div>
-
-      <!-- ── Quick Actions + Activity Feed ── -->
-      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <!-- Quick Actions -->
-        <div class="rounded-2xl bg-white/50 dark:bg-white/5 border border-gray-200/50 dark:border-white/10 apple-shadow">
-          <CardHeader class="pb-3 pt-5 px-5">
-            <CardTitle class="text-base">Quick Actions</CardTitle>
-          </CardHeader>
-          <CardContent class="px-5 pb-5">
-            <div class="grid grid-cols-3 gap-2">
-              <button @click="navigate('/chat')" class="flex flex-col items-center gap-2 p-3 rounded-xl border border-gray-100 dark:border-white/10 hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:border-blue-200 dark:hover:border-blue-800 transition-all group">
-                <div class="w-10 h-10 rounded-xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center group-hover:scale-110 transition-transform">
-                  <MessageSquare class="w-5 h-5 text-blue-500" />
-                </div>
-                <span class="text-xs font-medium">Chat</span>
-              </button>
-              <button @click="navigate('/channels')" class="flex flex-col items-center gap-2 p-3 rounded-xl border border-gray-100 dark:border-white/10 hover:bg-cyan-50 dark:hover:bg-cyan-900/20 hover:border-cyan-200 dark:hover:border-cyan-800 transition-all group">
-                <div class="w-10 h-10 rounded-xl bg-cyan-100 dark:bg-cyan-900/30 flex items-center justify-center group-hover:scale-110 transition-transform">
-                  <Network class="w-5 h-5 text-cyan-500" />
-                </div>
-                <span class="text-xs font-medium">Channels</span>
-              </button>
-              <button @click="navigate('/agi')" class="flex flex-col items-center gap-2 p-3 rounded-xl border border-gray-100 dark:border-white/10 hover:bg-purple-50 dark:hover:bg-purple-900/20 hover:border-purple-200 dark:hover:border-purple-800 transition-all group">
-                <div class="w-10 h-10 rounded-xl bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center group-hover:scale-110 transition-transform">
-                  <Brain class="w-5 h-5 text-purple-500" />
-                </div>
-                <span class="text-xs font-medium">AGI</span>
-              </button>
-              <button @click="navigate('/skills')" class="flex flex-col items-center gap-2 p-3 rounded-xl border border-gray-100 dark:border-white/10 hover:bg-amber-50 dark:hover:bg-amber-900/20 hover:border-amber-200 dark:hover:border-amber-800 transition-all group">
-                <div class="w-10 h-10 rounded-xl bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center group-hover:scale-110 transition-transform">
-                  <Wrench class="w-5 h-5 text-amber-500" />
-                </div>
-                <span class="text-xs font-medium">Skills</span>
-              </button>
-              <button @click="navigate('/hardware')" class="flex flex-col items-center gap-2 p-3 rounded-xl border border-gray-100 dark:border-white/10 hover:bg-green-50 dark:hover:bg-green-900/20 hover:border-green-200 dark:hover:border-green-800 transition-all group">
-                <div class="w-10 h-10 rounded-xl bg-green-100 dark:bg-green-900/30 flex items-center justify-center group-hover:scale-110 transition-transform">
-                  <Cpu class="w-5 h-5 text-green-500" />
-                </div>
-                <span class="text-xs font-medium">Hardware</span>
-              </button>
-              <button @click="navigate('/terminal')" class="flex flex-col items-center gap-2 p-3 rounded-xl border border-gray-100 dark:border-white/10 hover:bg-gray-50 dark:hover:bg-white/10 hover:border-gray-200 dark:hover:border-white/20 transition-all group">
-                <div class="w-10 h-10 rounded-xl bg-gray-100 dark:bg-white/10 flex items-center justify-center group-hover:scale-110 transition-transform">
-                  <Terminal class="w-5 h-5 text-gray-500" />
-                </div>
-                <span class="text-xs font-medium">Terminal</span>
-              </button>
-            </div>
-          </CardContent>
-        </div>
-
-        <!-- Activity Feed -->
-        <div class="lg:col-span-2 rounded-2xl bg-white/50 dark:bg-white/5 border border-gray-200/50 dark:border-white/10 apple-shadow">
-          <CardHeader class="pb-3 pt-5 px-5">
-            <CardTitle class="flex items-center gap-2 text-base">
-              <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center">
-                <Activity class="w-4 h-4 text-white" />
-              </div>
-              Live Activity
-              <span class="ml-auto w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-            </CardTitle>
-          </CardHeader>
-          <CardContent class="px-5 pb-5">
-            <div class="space-y-2 max-h-52 overflow-y-auto pr-1">
-              <div v-if="!activityFeed.length" class="text-sm text-muted-foreground text-center py-6">No activity yet</div>
-              <div v-for="ev in activityFeed" :key="ev.id"
-                class="flex items-start gap-3 text-xs group"
-              >
-                <span :class="['mt-0.5 w-8 text-center text-[10px] font-bold text-white rounded-lg px-1 py-0.5 flex-shrink-0', activityTypeConfig[ev.type]?.color || 'bg-gray-500']">
-                  {{ activityTypeConfig[ev.type]?.label }}
+                <span v-if="ch.allowlist_count > 0" class="text-[10px] text-zinc-600 font-mono">{{ ch.allowlist_count }} users</span>
+                <span :class="['text-[10px] font-mono px-2 py-1 border', ch.active ? 'border-green-500/50 text-green-400' : ch.configured ? 'border-yellow-500/50 text-yellow-400' : 'border-zinc-700 text-zinc-600']">
+                  {{ ch.active ? 'LIVE' : ch.configured ? 'READY' : 'SETUP' }}
                 </span>
-                <div class="flex-1 min-w-0">
-                  <p class="font-medium truncate">{{ ev.title }}</p>
-                  <p class="text-muted-foreground truncate">{{ ev.detail }}</p>
-                </div>
-                <span class="text-muted-foreground flex-shrink-0 font-mono">{{ formatTime(ev.time) }}</span>
               </div>
-            </div>
-          </CardContent>
-        </div>
-      </div>
-
-      <!-- ── Paths ── -->
-      <div class="rounded-2xl bg-white/50 dark:bg-white/5 border border-gray-200/50 dark:border-white/10 apple-shadow">
-        <CardHeader class="pb-3 pt-5 px-5">
-          <CardTitle class="flex items-center gap-2 text-base">
-            <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-gray-500 to-slate-500 flex items-center justify-center">
-              <HardDrive class="w-4 h-4 text-white" />
-            </div>
-            Workspace Paths
-          </CardTitle>
-        </CardHeader>
-        <CardContent class="px-5 pb-5">
-          <div class="grid md:grid-cols-2 gap-3">
-            <div class="p-4 rounded-xl bg-gray-50 dark:bg-white/5 border border-gray-100 dark:border-white/10">
-              <p class="text-xs text-muted-foreground mb-2">Workspace</p>
-              <code class="text-xs break-all font-mono bg-transparent">{{ status.workspace }}</code>
-            </div>
-            <div class="p-4 rounded-xl bg-gray-50 dark:bg-white/5 border border-gray-100 dark:border-white/10">
-              <p class="text-xs text-muted-foreground mb-2">Config File</p>
-              <code class="text-xs break-all font-mono bg-transparent">{{ status.config }}</code>
             </div>
           </div>
-        </CardContent>
+        </RetroCard>
+
+        <RetroCard :accent="status.autonomy_level === 'full' ? 'green' : 'cyan'" :perspective-index="1">
+          <div class="flex items-center gap-2 mb-4">
+            <Shield class="w-5 h-5 text-green-400" />
+            <span class="text-sm font-mono uppercase tracking-wider">Security & Autonomy</span>
+          </div>
+          <div class="space-y-3">
+            <div class="flex items-center justify-between p-3 border-2" :class="autonomyColors[status.autonomy_level]">
+              <div class="flex items-center gap-2">
+                <Layers class="w-4 h-4" />
+                <span class="text-xs font-mono uppercase">Autonomy</span>
+              </div>
+              <span class="text-xs font-mono font-bold text-zinc-200 uppercase px-3 py-1 bg-black/30">{{ status.autonomy_level }}</span>
+            </div>
+            <div class="grid grid-cols-2 gap-2">
+              <div class="flex items-center gap-3 p-3 border-2 border-zinc-800">
+                <div :class="['w-10 h-10 flex items-center justify-center border-2', status.workspace_only ? 'bg-green-500/10 border-green-500/30' : 'bg-yellow-500/10 border-yellow-500/30']">
+                  <component :is="status.workspace_only ? Lock : Unlock" :class="['w-5 h-5', status.workspace_only ? 'text-green-400' : 'text-yellow-400']" />
+                </div>
+                <div>
+                  <p class="text-[10px] text-zinc-500 font-mono">WORKSPACE</p>
+                  <p :class="['text-xs font-mono font-bold', status.workspace_only ? 'text-green-400' : 'text-yellow-400']">
+                    {{ status.workspace_only ? 'SANDBOXED' : 'OPEN' }}
+                  </p>
+                </div>
+              </div>
+              <div class="flex items-center gap-3 p-3 border-2 border-zinc-800">
+                <div :class="['w-10 h-10 flex items-center justify-center border-2', status.secrets_encrypted ? 'bg-green-500/10 border-green-500/30' : 'bg-red-500/10 border-red-500/30']">
+                  <component :is="status.secrets_encrypted ? Lock : Unlock" :class="['w-5 h-5', status.secrets_encrypted ? 'text-green-400' : 'text-red-400']" />
+                </div>
+                <div>
+                  <p class="text-[10px] text-zinc-500 font-mono">SECRETS</p>
+                  <p :class="['text-xs font-mono font-bold', status.secrets_encrypted ? 'text-green-400' : 'text-red-400']">
+                    {{ status.secrets_encrypted ? 'ENCRYPTED' : 'PLAINTEXT' }}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </RetroCard>
       </div>
+
+      <RetroCard accent="cyan" :perspective-index="0">
+        <div class="flex items-center gap-2 mb-4">
+          <Sparkles class="w-5 h-5 text-cyan-400" />
+          <span class="text-sm font-mono uppercase tracking-wider">Quick Actions</span>
+        </div>
+        <div class="grid grid-cols-3 md:grid-cols-6 gap-3">
+          <button @click="navigate('/chat')" class="p-4 border-2 border-zinc-800 hover:border-cyan-500/50 hover:bg-cyan-500/5 transition-all text-center group">
+            <MessageSquare class="w-5 h-5 mx-auto mb-2 text-cyan-400 group-hover:text-cyan-300" />
+            <span class="text-[10px] font-mono uppercase">Chat</span>
+          </button>
+          <button @click="navigate('/channels')" class="p-4 border-2 border-zinc-800 hover:border-cyan-500/50 hover:bg-cyan-500/5 transition-all text-center group">
+            <Network class="w-5 h-5 mx-auto mb-2 text-cyan-400 group-hover:text-cyan-300" />
+            <span class="text-[10px] font-mono uppercase">Channels</span>
+          </button>
+          <button @click="navigate('/agi')" class="p-4 border-2 border-zinc-800 hover:border-cyan-500/50 hover:bg-cyan-500/5 transition-all text-center group">
+            <Brain class="w-5 h-5 mx-auto mb-2 text-cyan-400 group-hover:text-cyan-300" />
+            <span class="text-[10px] font-mono uppercase">AGI</span>
+          </button>
+          <button @click="navigate('/skills')" class="p-4 border-2 border-zinc-800 hover:border-cyan-500/50 hover:bg-cyan-500/5 transition-all text-center group">
+            <Wrench class="w-5 h-5 mx-auto mb-2 text-cyan-400 group-hover:text-cyan-300" />
+            <span class="text-[10px] font-mono uppercase">Skills</span>
+          </button>
+          <button @click="navigate('/hardware')" class="p-4 border-2 border-zinc-800 hover:border-cyan-500/50 hover:bg-cyan-500/5 transition-all text-center group">
+            <Cpu class="w-5 h-5 mx-auto mb-2 text-cyan-400 group-hover:text-cyan-300" />
+            <span class="text-[10px] font-mono uppercase">Hardware</span>
+          </button>
+          <button @click="navigate('/terminal')" class="p-4 border-2 border-zinc-800 hover:border-cyan-500/50 hover:bg-cyan-500/5 transition-all text-center group">
+            <TerminalIcon class="w-5 h-5 mx-auto mb-2 text-cyan-400 group-hover:text-cyan-300" />
+            <span class="text-[10px] font-mono uppercase">Terminal</span>
+          </button>
+        </div>
+      </RetroCard>
+
+      <RetroCard accent="magenta" :perspective-index="1">
+        <div class="flex items-center gap-2 mb-4">
+          <Activity class="w-5 h-5 text-fuchsia-400" />
+          <span class="text-sm font-mono uppercase tracking-wider">Live Activity</span>
+          <span class="ml-auto status-dot status-online animate-pulse" />
+        </div>
+        <div class="space-y-2 max-h-52 overflow-y-auto">
+          <div v-if="!activityFeed.length" class="text-xs text-zinc-600 font-mono text-center py-6">NO ACTIVITY</div>
+          <div v-for="ev in activityFeed" :key="ev.id" class="flex items-start gap-3 text-xs">
+            <span :class="['mt-0.5 w-8 text-[9px] font-bold text-center text-black rounded px-1 flex-shrink-0', activityTypeConfig[ev.type]?.color]">
+              {{ activityTypeConfig[ev.type]?.label }}
+            </span>
+            <div class="flex-1 min-w-0">
+              <p class="font-mono text-zinc-300 truncate">{{ ev.title }}</p>
+              <p class="text-zinc-600 font-mono truncate">{{ ev.detail }}</p>
+            </div>
+            <span class="text-zinc-600 font-mono flex-shrink-0">{{ formatTime(ev.time) }}</span>
+          </div>
+        </div>
+      </RetroCard>
+
+      <RetroCard accent="cyan" :perspective-index="2">
+        <div class="flex items-center gap-2 mb-3">
+          <DiskIcon class="w-5 h-5 text-cyan-400" />
+          <span class="text-sm font-mono uppercase tracking-wider">Paths</span>
+        </div>
+        <div class="grid md:grid-cols-2 gap-3">
+          <div class="p-3 bg-zinc-900/50 border-2 border-zinc-800">
+            <p class="text-[10px] text-zinc-500 font-mono mb-2">WORKSPACE</p>
+            <code class="text-xs font-mono text-zinc-400 break-all">{{ status.workspace }}</code>
+          </div>
+          <div class="p-3 bg-zinc-900/50 border-2 border-zinc-800">
+            <p class="text-[10px] text-zinc-500 font-mono mb-2">CONFIG</p>
+            <code class="text-xs font-mono text-zinc-400 break-all">{{ status.config_path }}</code>
+          </div>
+        </div>
+      </RetroCard>
     </template>
   </div>
 </template>

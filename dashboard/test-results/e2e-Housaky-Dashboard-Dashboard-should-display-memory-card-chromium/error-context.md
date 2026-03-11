@@ -1,0 +1,113 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e4]:
+  - complementary [ref=e5]:
+    - generic [ref=e7]:
+      - img [ref=e9]
+      - generic [ref=e19]:
+        - heading "Housaky" [level=1] [ref=e20]
+        - generic [ref=e21]:
+          - img [ref=e22]
+          - generic [ref=e29]: Offline
+    - navigation [ref=e30]:
+      - link "Dashboard" [ref=e31] [cursor=pointer]:
+        - /url: /
+        - img [ref=e32]
+        - generic [ref=e37]: Dashboard
+      - link "Chat" [ref=e38] [cursor=pointer]:
+        - /url: /chat
+        - img [ref=e39]
+        - generic [ref=e41]: Chat
+      - link "AGI live" [ref=e42] [cursor=pointer]:
+        - /url: /agi
+        - img [ref=e43]
+        - generic [ref=e53]: AGI
+        - generic [ref=e54]: live
+      - link "Skills" [ref=e55] [cursor=pointer]:
+        - /url: /skills
+        - img [ref=e56]
+        - generic [ref=e58]: Skills
+      - link "Channels" [ref=e59] [cursor=pointer]:
+        - /url: /channels
+        - img [ref=e60]
+        - generic [ref=e65]: Channels
+      - link "Integrations" [ref=e66] [cursor=pointer]:
+        - /url: /integrations
+        - img [ref=e67]
+        - generic [ref=e71]: Integrations
+      - link "Hardware" [ref=e72] [cursor=pointer]:
+        - /url: /hardware
+        - img [ref=e73]
+        - generic [ref=e76]: Hardware
+      - link "A2A Network" [ref=e77] [cursor=pointer]:
+        - /url: /a2a-instances
+        - img [ref=e78]
+        - generic [ref=e82]: A2A Network
+      - link "A2A Messages" [ref=e83] [cursor=pointer]:
+        - /url: /a2a-messages
+        - img [ref=e84]
+        - generic [ref=e86]: A2A Messages
+      - link "Security" [ref=e87] [cursor=pointer]:
+        - /url: /security
+        - img [ref=e88]
+        - generic [ref=e90]: Security
+      - link "Keys & Subagents" [ref=e91] [cursor=pointer]:
+        - /url: /keys
+        - img [ref=e92]
+        - generic [ref=e96]: Keys & Subagents
+      - link "Kowalski" [ref=e97] [cursor=pointer]:
+        - /url: /kowalski
+        - img [ref=e98]
+        - generic [ref=e101]: Kowalski
+      - link "Config" [ref=e102] [cursor=pointer]:
+        - /url: /config
+        - img [ref=e103]
+        - generic [ref=e106]: Config
+      - link "Terminal" [ref=e107] [cursor=pointer]:
+        - /url: /terminal
+        - img [ref=e108]
+        - generic [ref=e110]: Terminal
+    - generic [ref=e112]:
+      - generic [ref=e113]:
+        - img [ref=e114]
+        - generic [ref=e116]: Stopped
+      - button [ref=e117]:
+        - img [ref=e118]
+  - main [ref=e120]:
+    - generic [ref=e122]:
+      - heading "Dashboard" [level=2] [ref=e124]
+      - generic [ref=e125]:
+        - button "Setup" [ref=e126]:
+          - img [ref=e127]
+          - text: Setup
+        - button [ref=e129]:
+          - img [ref=e130]
+        - button "2" [ref=e136]:
+          - img [ref=e137]
+          - generic [ref=e140]: "2"
+    - generic [ref=e142]:
+      - generic [ref=e143]:
+        - generic [ref=e144]:
+          - img [ref=e146]
+          - generic [ref=e156]:
+            - heading "Welcome to Housaky" [level=1] [ref=e157]
+            - paragraph [ref=e158]: Your AI Command Center · v...
+        - generic [ref=e159]:
+          - generic [ref=e160]:
+            - img [ref=e161]
+            - text: 4:15:22 PM
+          - button "Live" [ref=e164]:
+            - img [ref=e165]
+            - text: Live
+          - button "Refresh" [ref=e167]:
+            - img [ref=e168]
+            - text: Refresh
+      - generic [ref=e174]:
+        - generic [ref=e175]:
+          - img [ref=e177]
+          - generic [ref=e179]:
+            - text: Housaky not installed
+            - paragraph [ref=e180]: Configure your AI agent to get started
+        - button "Configure Now" [ref=e181]
+```

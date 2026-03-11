@@ -1,0 +1,167 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e4]:
+  - complementary [ref=e5]:
+    - generic [ref=e7]:
+      - img [ref=e9]
+      - generic [ref=e19]:
+        - heading "Housaky" [level=1] [ref=e20]
+        - generic [ref=e21]:
+          - img [ref=e22]
+          - generic [ref=e29]: Offline
+    - navigation [ref=e30]:
+      - link "Dashboard" [ref=e31] [cursor=pointer]:
+        - /url: /
+        - img [ref=e32]
+        - generic [ref=e37]: Dashboard
+      - link "Chat" [ref=e38] [cursor=pointer]:
+        - /url: /chat
+        - img [ref=e39]
+        - generic [ref=e41]: Chat
+      - link "AGI live" [ref=e42] [cursor=pointer]:
+        - /url: /agi
+        - img [ref=e43]
+        - generic [ref=e53]: AGI
+        - generic [ref=e54]: live
+      - link "Skills" [active] [ref=e55] [cursor=pointer]:
+        - /url: /skills
+        - img [ref=e56]
+        - generic [ref=e58]: Skills
+      - link "Channels" [ref=e59] [cursor=pointer]:
+        - /url: /channels
+        - img [ref=e60]
+        - generic [ref=e65]: Channels
+      - link "Integrations" [ref=e66] [cursor=pointer]:
+        - /url: /integrations
+        - img [ref=e67]
+        - generic [ref=e71]: Integrations
+      - link "Hardware" [ref=e72] [cursor=pointer]:
+        - /url: /hardware
+        - img [ref=e73]
+        - generic [ref=e76]: Hardware
+      - link "A2A Network" [ref=e77] [cursor=pointer]:
+        - /url: /a2a-instances
+        - img [ref=e78]
+        - generic [ref=e82]: A2A Network
+      - link "A2A Messages" [ref=e83] [cursor=pointer]:
+        - /url: /a2a-messages
+        - img [ref=e84]
+        - generic [ref=e86]: A2A Messages
+      - link "Security" [ref=e87] [cursor=pointer]:
+        - /url: /security
+        - img [ref=e88]
+        - generic [ref=e90]: Security
+      - link "Keys & Subagents" [ref=e91] [cursor=pointer]:
+        - /url: /keys
+        - img [ref=e92]
+        - generic [ref=e96]: Keys & Subagents
+      - link "Kowalski" [ref=e97] [cursor=pointer]:
+        - /url: /kowalski
+        - img [ref=e98]
+        - generic [ref=e101]: Kowalski
+      - link "Config" [ref=e102] [cursor=pointer]:
+        - /url: /config
+        - img [ref=e103]
+        - generic [ref=e106]: Config
+      - link "Terminal" [ref=e107] [cursor=pointer]:
+        - /url: /terminal
+        - img [ref=e108]
+        - generic [ref=e110]: Terminal
+    - generic [ref=e112]:
+      - generic [ref=e113]:
+        - img [ref=e114]
+        - generic [ref=e116]: Stopped
+      - button [ref=e117]:
+        - img [ref=e118]
+  - main [ref=e120]:
+    - generic [ref=e122]:
+      - heading "Skills" [level=2] [ref=e124]
+      - generic [ref=e125]:
+        - button "Setup" [ref=e126]:
+          - img [ref=e127]
+          - text: Setup
+        - button [ref=e129]:
+          - img [ref=e130]
+        - button "2" [ref=e136]:
+          - img [ref=e137]
+          - generic [ref=e140]: "2"
+    - generic [ref=e142]:
+      - generic [ref=e143]:
+        - generic [ref=e144]:
+          - heading "Skills & MCPs" [level=1] [ref=e145]
+          - paragraph [ref=e146]: Extend Housaky with skills and MCP servers
+        - button "Refresh" [ref=e148]:
+          - img [ref=e149]
+          - text: Refresh
+      - generic [ref=e155]:
+        - img [ref=e156]
+        - generic [ref=e160]: Housaky is not installed. Skills and MCPs require Housaky to function.
+      - generic [ref=e161]:
+        - generic [ref=e162]:
+          - img [ref=e163]
+          - textbox "Search skills..." [ref=e166]
+        - generic [ref=e168]:
+          - button "Skills (2)" [ref=e169]:
+            - img [ref=e170]
+            - text: Skills (2)
+          - button "Available (0)" [ref=e172]:
+            - img [ref=e173]
+            - text: Available (0)
+          - button "MCPs (1)" [ref=e176]:
+            - img [ref=e177]
+            - text: MCPs (1)
+      - generic [ref=e181]:
+        - generic [ref=e182]:
+          - generic [ref=e184]:
+            - generic [ref=e185]:
+              - img [ref=e187]
+              - generic [ref=e189]:
+                - heading "Git Helper" [level=3] [ref=e190]
+                - generic [ref=e191]: v1.2.0
+            - generic [ref=e192]: "On"
+          - generic [ref=e193]:
+            - paragraph [ref=e194]: Automates git workflows
+            - generic [ref=e195]:
+              - generic [ref=e196]: git
+              - generic [ref=e197]: automation
+            - generic [ref=e198]:
+              - generic [ref=e199]:
+                - img [ref=e200]
+                - text: 5 tools
+              - generic [ref=e204]: Housaky Team
+            - generic [ref=e205]:
+              - button "Disable" [disabled]:
+                - img
+                - text: Disable
+              - button [ref=e206]:
+                - img [ref=e207]
+              - button [ref=e210]:
+                - img [ref=e211]
+        - generic [ref=e214]:
+          - generic [ref=e216]:
+            - generic [ref=e217]:
+              - img [ref=e219]
+              - generic [ref=e221]:
+                - heading "Web Scraper" [level=3] [ref=e222]
+                - generic [ref=e223]: v0.8.0
+            - generic [ref=e224]: "On"
+          - generic [ref=e225]:
+            - paragraph [ref=e226]: Extract data from websites
+            - generic [ref=e227]:
+              - generic [ref=e228]: scraping
+              - generic [ref=e229]: data
+            - generic [ref=e230]:
+              - generic [ref=e231]:
+                - img [ref=e232]
+                - text: 3 tools
+              - generic [ref=e236]: Community
+            - generic [ref=e237]:
+              - button "Disable" [disabled]:
+                - img
+                - text: Disable
+              - button [ref=e238]:
+                - img [ref=e239]
+              - button [ref=e242]:
+                - img [ref=e243]
+```

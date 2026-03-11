@@ -7,11 +7,14 @@ import ChannelsView from '@/views/ChannelsView.vue'
 import IntegrationsView from '@/views/IntegrationsView.vue'
 import HardwareView from '@/views/HardwareView.vue'
 import ConfigView from '@/views/ConfigView.vue'
+import McpView from '@/views/McpView.vue'
 import TerminalView from '@/views/TerminalView.vue'
 import A2AInstancesView from '@/views/A2AInstancesView.vue'
 import A2AMessagesView from '@/views/A2AMessagesView.vue'
 import SecurityView from '@/views/SecurityView.vue'
 import AIProveView from '@/views/AIProveView.vue'
+import KeysView from '@/views/KeysView.vue'
+import KowalskiView from '@/views/KowalskiView.vue'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -57,6 +60,11 @@ const router = createRouter({
       component: ConfigView,
     },
     {
+      path: '/mcp',
+      name: 'mcp',
+      component: McpView,
+    },
+    {
       path: '/terminal',
       name: 'terminal',
       component: TerminalView,
@@ -80,6 +88,16 @@ const router = createRouter({
       path: '/ai-prove',
       name: 'ai-prove',
       component: AIProveView,
+    },
+    {
+      path: '/keys',
+      name: 'keys',
+      component: KeysView,
+    },
+    {
+      path: '/kowalski',
+      name: 'kowalski',
+      component: KowalskiView,
     },
   ],
 })

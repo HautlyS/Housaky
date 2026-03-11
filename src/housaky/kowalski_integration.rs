@@ -249,14 +249,20 @@ impl KowalskiBridge {
     }
 
     fn find_kowalski_cli(base_path: &PathBuf) -> Option<PathBuf> {
-        let paths_to_check = vec![
+        let cwd = std::env::current_dir().ok();
+        
+        let mut paths_to_check = vec![
             base_path.join("target/release/kowalski-cli"),
             base_path.join("target/debug/kowalski-cli"),
-            PathBuf::from("/home/ubuntu/Housaky/vendor/kowalski/kowalski-cli/target/release/kowalski-cli"),
-            PathBuf::from("/home/ubuntu/Housaky/vendor/kowalski/kowalski-cli/target/debug/kowalski-cli"),
-            PathBuf::from("vendor/kowalski/kowalski-cli/target/release/kowalski-cli"),
-            PathBuf::from("vendor/kowalski/kowalski-cli/target/debug/kowalski-cli"),
         ];
+        
+        if let Some(ref current_dir) = cwd {
+            paths_to_check.push(current_dir.join("vendor").join("kowalski").join("kowalski-cli").join("target").join("release").join("kowalski-cli"));
+            paths_to_check.push(current_dir.join("vendor").join("kowalski").join("kowalski-cli").join("target").join("debug").join("kowalski-cli"));
+        }
+        
+        paths_to_check.push(PathBuf::from("vendor/kowalski/kowalski-cli/target/release/kowalski-cli"));
+        paths_to_check.push(PathBuf::from("vendor/kowalski/kowalski-cli/target/debug/kowalski-cli"));
 
         for path in paths_to_check {
             if path.exists() {
