@@ -1385,6 +1385,173 @@ async fn handle_whatsapp_message(
 }
 */
 
+// ══════════════════════════════════════════════════════════════════════════════
+// STUB HANDLERS - To be fully implemented
+// ══════════════════════════════════════════════════════════════════════════════
+
+/// POST /api/agent/start - Start an agent
+async fn handle_agent_start(
+    State(_state): State<AppState>,
+    _headers: HeaderMap,
+) -> impl IntoResponse {
+    (StatusCode::OK, Json(serde_json::json!({"status": "started"})))
+}
+
+/// POST /api/agent/stop - Stop an agent
+async fn handle_agent_stop(
+    State(_state): State<AppState>,
+    _headers: HeaderMap,
+) -> impl IntoResponse {
+    (StatusCode::OK, Json(serde_json::json!({"status": "stopped"})))
+}
+
+/// GET /api/agent/status - Get agent status
+async fn handle_agent_status(
+    State(_state): State<AppState>,
+    _headers: HeaderMap,
+) -> impl IntoResponse {
+    (StatusCode::OK, Json(serde_json::json!({"status": "idle"})))
+}
+
+/// GET /api/skills - List available skills
+async fn handle_skills_list(
+    State(_state): State<AppState>,
+    _headers: HeaderMap,
+) -> impl IntoResponse {
+    (StatusCode::OK, Json(serde_json::json!({"skills": []})))
+}
+
+/// POST /api/skills/{name}/toggle - Toggle a skill
+async fn handle_skill_toggle(
+    State(_state): State<AppState>,
+    _headers: HeaderMap,
+) -> impl IntoResponse {
+    (StatusCode::OK, Json(serde_json::json!({"status": "toggled"})))
+}
+
+/// POST /api/skills/{name}/install - Install a skill
+async fn handle_skill_install(
+    State(_state): State<AppState>,
+    _headers: HeaderMap,
+) -> impl IntoResponse {
+    (StatusCode::OK, Json(serde_json::json!({"status": "installed"})))
+}
+
+/// DELETE /api/skills/{name} - Uninstall a skill
+async fn handle_skill_uninstall(
+    State(_state): State<AppState>,
+    _headers: HeaderMap,
+) -> impl IntoResponse {
+    (StatusCode::OK, Json(serde_json::json!({"status": "uninstalled"})))
+}
+
+/// GET /api/channels - List channels
+async fn handle_channels_list(
+    State(_state): State<AppState>,
+    _headers: HeaderMap,
+) -> impl IntoResponse {
+    (StatusCode::OK, Json(serde_json::json!({"channels": []})))
+}
+
+/// POST /api/channels/{type}/start - Start a channel
+async fn handle_channel_start(
+    State(_state): State<AppState>,
+    _headers: HeaderMap,
+) -> impl IntoResponse {
+    (StatusCode::OK, Json(serde_json::json!({"status": "started"})))
+}
+
+/// POST /api/channels/{type}/stop - Stop a channel
+async fn handle_channel_stop(
+    State(_state): State<AppState>,
+    _headers: HeaderMap,
+) -> impl IntoResponse {
+    (StatusCode::OK, Json(serde_json::json!({"status": "stopped"})))
+}
+
+/// PUT /api/channels/{type}/config - Configure a channel
+async fn handle_channel_config(
+    State(_state): State<AppState>,
+    _headers: HeaderMap,
+    _body: Json<serde_json::Value>,
+) -> impl IntoResponse {
+    (StatusCode::OK, Json(serde_json::json!({"status": "configured"})))
+}
+
+/// GET /api/keys - List API keys
+async fn handle_keys_list(
+    State(_state): State<AppState>,
+    _headers: HeaderMap,
+) -> impl IntoResponse {
+    (StatusCode::OK, Json(serde_json::json!({"keys": []})))
+}
+
+/// POST /api/keys - Add an API key
+async fn handle_keys_add(
+    State(_state): State<AppState>,
+    _headers: HeaderMap,
+    _body: Json<serde_json::Value>,
+) -> impl IntoResponse {
+    (StatusCode::OK, Json(serde_json::json!({"status": "added"})))
+}
+
+/// DELETE /api/keys/{provider}/{key_id} - Remove an API key
+async fn handle_key_remove(
+    State(_state): State<AppState>,
+    _headers: HeaderMap,
+) -> impl IntoResponse {
+    (StatusCode::OK, Json(serde_json::json!({"status": "removed"})))
+}
+
+/// GET /api/a2a/instances - List A2A instances
+async fn handle_a2a_instances(
+    State(_state): State<AppState>,
+    _headers: HeaderMap,
+) -> impl IntoResponse {
+    (StatusCode::OK, Json(serde_json::json!({"instances": []})))
+}
+
+/// POST /api/a2a/{id}/ping - Ping an A2A instance
+async fn handle_a2a_ping(
+    State(_state): State<AppState>,
+    _headers: HeaderMap,
+) -> impl IntoResponse {
+    (StatusCode::OK, Json(serde_json::json!({"status": "pong"})))
+}
+
+/// GET /api/a2a/messages - Get A2A messages
+async fn handle_a2a_messages(
+    State(_state): State<AppState>,
+    _headers: HeaderMap,
+) -> impl IntoResponse {
+    (StatusCode::OK, Json(serde_json::json!({"messages": []})))
+}
+
+/// POST /api/a2a/messages - Send an A2A message
+async fn handle_a2a_send(
+    State(_state): State<AppState>,
+    _headers: HeaderMap,
+    _body: Json<serde_json::Value>,
+) -> impl IntoResponse {
+    (StatusCode::OK, Json(serde_json::json!({"status": "sent"})))
+}
+
+/// GET /api/hardware - List hardware devices
+async fn handle_hardware_list(
+    State(_state): State<AppState>,
+    _headers: HeaderMap,
+) -> impl IntoResponse {
+    (StatusCode::OK, Json(serde_json::json!({"devices": []})))
+}
+
+/// POST /api/doctor/run - Run doctor diagnostics
+async fn handle_doctor_run(
+    State(_state): State<AppState>,
+    _headers: HeaderMap,
+) -> impl IntoResponse {
+    (StatusCode::OK, Json(serde_json::json!({"status": "healthy", "checks": []})))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
