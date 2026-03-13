@@ -511,6 +511,90 @@ impl HousakyCore {
         })
     }
 
+    /// Create a minimal HousakyCore with only essential components - for graceful degradation
+    pub fn minimal(goal_engine: Arc<GoalEngine>, meta_cognition: Arc<MetaCognitionEngine>) -> Self {
+        let workspace_dir = std::env::temp_dir().join("housaky-minimal");
+        let _ = std::fs::create_dir_all(&workspace_dir);
+
+        let ethical_reasoner = Arc::new(EthicalReasoner::new());
+        let world_model = Arc::new(WorldModel::with_storage(&workspace_dir));
+        let episodic_memory = Arc::new(EpisodicMemory::new(10_000));
+        let working_memory = Arc::new(WorkingMemoryEngine::new());
+        let knowledge_graph = Arc::new(KnowledgeGraphEngine::new(&workspace_dir));
+        let tool_creator = Arc::new(ToolCreator::new(&workspace_dir));
+        let inner_monologue = Arc::new(InnerMonologue::new(&workspace_dir));
+        let reasoning_pipeline = Arc::new(ReasoningPipeline::new());
+        let hierarchical_memory = Arc::new(HierarchicalMemory::new(HierarchicalMemoryConfig::default()));
+        let memory_consolidator = Arc::new(MemoryConsolidator::new(hierarchical_memory.clone(), &workspace_dir));
+        let streaming_manager = Arc::new(StreamingManager::new());
+        let agi_hub = Arc::new(agi_integration::AGIIntegrationHub::new(&workspace_dir));
+        let growth_tracker = Arc::new(CapabilityGrowthTracker::new());
+        let singularity_engine = Arc::new(SingularityEngine::new(growth_tracker.clone()));
+        let cognitive_loop = Arc::new(cognitive::CognitiveLoop::new());
+        let feedback_loop = Arc::new(feedback_loop::UnifiedFeedbackLoop::new());
+        let skill_invocation_engine = Arc::new(skill_invocation::SkillInvocationEngine::new());
+        let consciousness_meter = Arc::new(consciousness::ConsciousnessMeter::new());
+        let goal_task_bridge = Arc::new(GoalTaskBridge::new());
+        let quantum_bridge = None;
+        let neuromorphic_engine = Arc::new(neuromorphic::NeuromorphicEngine::new());
+        let swarm_controller = Arc::new(swarm::SwarmController::new());
+        let architecture_search = Arc::new(architecture_search::ArchitectureSearch::new());
+        let knowledge_acquirer = Arc::new(knowledge_acquisition::KnowledgeAcquirer::new());
+        let perception_system = Arc::new(perception::PerceptionSystem::new());
+        let embodiment = None;
+        let improvement_orchestrator = Arc::new(unified_improvement_orchestrator::UnifiedImprovementOrchestrator::new());
+        let rust_self_improvement = Arc::new(RustSelfImprovement::new(&workspace_dir));
+        let tool_chain_composer = Arc::new(ToolChainComposer::new());
+        let goal_selector = Arc::new(KnowledgeGuidedGoalSelector::new(goal_engine.clone()));
+        let introspector = Arc::new(introspection::Introspector::new());
+        let gsd_orchestrator = Arc::new(GSDOrchestrator::new(
+            workspace_dir.clone(),
+            meta_cognition.clone(),
+            goal_engine.clone(),
+        ));
+
+        Self {
+            agent: None,
+            goal_engine,
+            working_memory,
+            meta_cognition,
+            knowledge_graph,
+            tool_creator,
+            inner_monologue,
+            reasoning_pipeline,
+            hierarchical_memory,
+            memory_consolidator,
+            streaming_manager,
+            agi_hub,
+            singularity_engine,
+            ethical_reasoner,
+            world_model,
+            episodic_memory,
+            cognitive_loop,
+            feedback_loop,
+            skill_invocation_engine,
+            consciousness_meter,
+            goal_task_bridge,
+            quantum_bridge,
+            neuromorphic_engine,
+            swarm_controller,
+            architecture_search,
+            knowledge_acquirer,
+            perception_system,
+            embodiment,
+            improvement_orchestrator,
+            rust_self_improvement,
+            tool_chain_composer,
+            goal_selector,
+            introspector,
+            gsd_orchestrator,
+            activity_log: Arc::new(std::sync::Mutex::new(Vec::new())),
+            state: Arc::new(RwLock::new(HousakyState::default())),
+            config: HousakyCoreConfig::default(),
+            workspace_dir,
+        }
+    }
+
     pub async fn initialize(&self) -> Result<()> {
         info!("Initializing Housaky AGI Core...");
 

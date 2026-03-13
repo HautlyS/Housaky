@@ -250,6 +250,82 @@ impl WaveExecutor {
             )
         })
     }
+
+    /// CAS-inspired: Auto-unblock tasks when their dependencies are closed
+    /// Returns list of newly unblocked task IDs
+    pub async fn auto_unblock_dependent_tasks(&self, completed_task_id: &str) -> Vec<String> {
+        let mut tasks = self.tasks.write().await;
+        let mut unblocked = Vec::new();
+
+        for (task_id, task) in tasks.iter_mut() {
+            if task.dependencies.contains(&completed_task_id.to_string())
+                && task.status == GSDTaskStatus::Pending
+            {
+                // Check if ALL dependencies are now satisfied
+                let all_deps_satisfied = task.dependencies.iter().all(|dep| {
+                    tasks.get(dep).map_or(false, |t| {
+                        matches!(t.status, GSDTaskStatus::Completed | GSDTaskStatus::Verified)
+                    })
+                });
+
+                if all_deps_satisfied {
+                    task.status = GSDTaskStatus::Ready;
+                    unblocked.push(task_id.clone());
+                    info!("Auto-unblocked task {} after dependency {} completed", task_id, completed_task_id);
+                }
+            }
+        }
+
+        unblocked
+    }
+
+    /// List tasks that are ready to execute (all dependencies satisfied)
+    pub async fn list_ready_tasks(&self) -> Vec<GSDTask> {
+        let tasks = self.tasks.read().await;
+        tasks
+            .values()
+            .filter(|task| {
+                if !matches!(task.status, GSDTaskStatus::Pending | GSDTaskStatus::Ready) {
+                    return false;
+                }
+                task.dependencies.iter().all(|dep| {
+                    tasks.get(dep).map_or(false, |t| {
+                        matches!(t.status, GSDTaskStatus::Completed | GSDTaskStatus::Verified)
+                    })
+                })
+            })
+            .cloned()
+            .collect()
+    }
+
+    /// List blocked tasks with their blockers (CAS-inspired visibility)
+    pub async fn list_blocked_tasks(&self) -> Vec<(GSDTask, Vec<String>)> {
+        let tasks = self.tasks.read().await;
+        let mut blocked = Vec::new();
+
+        for task in tasks.values() {
+            if !matches!(task.status, GSDTaskStatus::Pending | GSDTaskStatus::InProgress) {
+                continue;
+            }
+
+            let blockers: Vec<String> = task
+                .dependencies
+                .iter()
+                .filter(|dep| {
+                    tasks.get(dep).map_or(true, |t| {
+                        !matches!(t.status, GSDTaskStatus::Completed | GSDTaskStatus::Verified)
+                    })
+                })
+                .cloned()
+                .collect();
+
+            if !blockers.is_empty() {
+                blocked.push((task.clone(), blockers));
+            }
+        }
+
+        blocked
+    }
 }
 
 impl Default for WaveExecutor {

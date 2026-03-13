@@ -1,8 +1,0 @@
-{
-  "goal_engine": {
-    "learning_value_weight": 0.3
-  },
-  "reasoning_engine": {
-    "max_steps": 25
-  }
-}

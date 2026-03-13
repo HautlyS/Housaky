@@ -30,6 +30,25 @@ pub struct HousakyHeartbeat {
     config: Config,
     provider: Option<Arc<dyn Provider>>,
     model: String,
+    /// CAS-inspired: Operation mode - idle (self-improvement) vs focus (user-request handling)
+    operation_mode: Arc<RwLock<OperationMode>>,
+}
+
+/// Operation mode for the heartbeat - determines what work gets prioritized
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum OperationMode {
+    /// Idle mode: Run full self-improvement cycles, explore improvements
+    Idle,
+    /// Focus mode: Handle user requests, execute specific tasks, minimize background work
+    Focus,
+    /// Hybrid: Balanced approach - handle requests while doing light maintenance
+    Hybrid,
+}
+
+impl Default for OperationMode {
+    fn default() -> Self {
+        Self::Idle
+    }
 }
 
 /// Shared components produced by `create_heartbeat_components`.
@@ -142,11 +161,23 @@ async fn create_heartbeat_components(
 
 impl HousakyHeartbeat {
     pub async fn new(agent: Arc<Agent>) -> Self {
-        let full_config = Config::load_or_init().unwrap_or_default();
-        let core = Arc::new(HousakyCore::new(&full_config).unwrap_or_else(|e| {
-            error!("Failed to create core during heartbeat init: {}", e);
-            panic!("Failed to create core during heartbeat init")
-        }));
+        let full_config = match Config::load_or_init() {
+            Ok(c) => c,
+            Err(e) => {
+                error!("Failed to load config during heartbeat init: {}", e);
+                // Use default config as fallback
+                Config::default()
+            }
+        };
+        
+        let core = match HousakyCore::new(&full_config) {
+            Ok(c) => Arc::new(c),
+            Err(e) => {
+                error!("Failed to create core during heartbeat init: {}, proceeding with limited functionality", e);
+                // Continue without a fully initialized core - the heartbeat will still work for basic tasks
+                return Self::create_minimal_heartbeat(agent, full_config).await;
+            }
+        };
 
         let model = agent.config.provider.model.clone();
         let provider = create_provider_with_keys_manager(
@@ -169,6 +200,43 @@ impl HousakyHeartbeat {
             memory_consolidator: c.memory_consolidator,
             interval_seconds: 120,
             config: full_config,
+            provider,
+            model,
+            operation_mode: Arc::new(RwLock::new(OperationMode::Idle)),
+        }
+    }
+
+    /// Create a minimal heartbeat when core creation fails - allows graceful degradation
+    async fn create_minimal_heartbeat(agent: Arc<Agent>, config: Config) -> Self {
+        warn!("Creating minimal heartbeat with limited AGI capabilities");
+        
+        let model = agent.config.provider.model.clone();
+        let provider = create_provider_with_keys_manager(
+            &agent.config.provider.name,
+            agent.config.provider.api_key.as_deref(),
+        )
+        .ok()
+        .map(Arc::from);
+
+        // Create stub components that won't crash but log warnings
+        let goal_engine = Arc::new(crate::housaky::goal_engine::GoalEngine::new(&config.source_dir));
+        let meta_cognition = Arc::new(crate::housaky::meta_cognition::MetaCognitionEngine::new());
+        
+        Self {
+            agent,
+            core: Arc::new(HousakyCore::minimal(goal_engine.clone(), meta_cognition.clone())),
+            skill_registry: Arc::new(SkillRegistry::new(&agent.workspace_dir)),
+            kowalski_bridge: None,
+            unified_hub: None,
+            self_improvement: Arc::new(SelfImprovementEngine::new(agent.clone())),
+            recursive_improvement_loop: Arc::new(SelfImprovementLoop::new(
+                &config.source_dir,
+                goal_engine,
+                meta_cognition,
+            )),
+            memory_consolidator: Arc::new(MemoryConsolidator::new()),
+            interval_seconds: 120,
+            config,
             provider,
             model,
         }
@@ -242,6 +310,7 @@ impl HousakyHeartbeat {
             config,
             provider: Some(Arc::from(provider)),
             model,
+            operation_mode: Arc::new(RwLock::new(OperationMode::Idle)),
         }
     }
 
@@ -259,6 +328,35 @@ impl HousakyHeartbeat {
 
     pub fn config(&self) -> &Config {
         &self.config
+    }
+
+    /// Get current operation mode (CAS-inspired idle vs focus switching)
+    pub async fn get_operation_mode(&self) -> OperationMode {
+        self.operation_mode.read().await.clone()
+    }
+
+    /// Set operation mode - Idle for self-improvement, Focus for user requests
+    pub async fn set_operation_mode(&self, mode: OperationMode) {
+        let mut current = self.operation_mode.write().await;
+        if *current != mode {
+            info!("Operation mode changed from {:?} to {:?}", *current, mode);
+            *current = mode;
+        }
+    }
+
+    /// Switch to focus mode when user makes a request
+    pub async fn enter_focus_mode(&self) {
+        self.set_operation_mode(OperationMode::Focus).await;
+    }
+
+    /// Return to idle mode after handling user request
+    pub async fn return_to_idle(&self) {
+        self.set_operation_mode(OperationMode::Idle).await;
+    }
+
+    /// Check if currently in idle mode (good for self-improvement work)
+    pub async fn is_idle_mode(&self) -> bool {
+        matches!(*self.operation_mode.read().await, OperationMode::Idle)
     }
 
     pub async fn run(&self) -> Result<()> {
@@ -292,15 +390,21 @@ impl HousakyHeartbeat {
 
     async fn heartbeat_cycle(&self) -> Result<()> {
         let timestamp = chrono::Utc::now();
+        let mode = self.get_operation_mode().await;
+        
         info!(
-            "Housaky heartbeat at {}",
-            timestamp.format("%Y-%m-%d %H:%M:%S UTC")
+            "Housaky heartbeat at {} (mode: {:?})",
+            timestamp.format("%Y-%m-%d %H:%M:%S UTC"),
+            mode
         );
+        
         self.core.push_activity("system", format!(
-            "Heartbeat cycle started ({})",
-            timestamp.format("%H:%M:%S")
+            "Heartbeat cycle started ({}, mode: {:?})",
+            timestamp.format("%H:%M:%S"),
+            mode
         ));
 
+        // Always run basic state analysis
         self.analyze_state().await?;
         self.update_system_health().await?;
         let active_tasks = self.review_tasks().await?;
@@ -339,97 +443,107 @@ impl HousakyHeartbeat {
             self.core.push_activity("multi_agent", "Unified hub cycle complete");
         }
 
-        // §10 — Quantum-accelerated autonomous goal selection: pick the globally
-        // optimal next goal each heartbeat via QAOA scheduling.
-        self.run_quantum_goal_cycle().await;
-        self.core.push_activity("goal", "Quantum goal scheduling done");
+        // CAS-inspired: Adjust work based on operation mode
+        match mode {
+            OperationMode::Idle => {
+                // Full self-improvement cycle - run everything
+                self.run_quantum_goal_cycle().await;
+                self.core.push_activity("goal", "Quantum goal scheduling done");
 
-        // GSD Phase Execution - execute pending phases for high-priority goals
-        self.execute_gsd_phases().await;
-        self.core.push_activity("gsd", "GSD phase execution complete");
+                self.execute_gsd_phases().await;
+                self.core.push_activity("gsd", "GSD phase execution complete");
 
-        self.run_cognitive_cycle().await?;
-        self.core.push_activity("thought", "Cognitive cycle complete");
+                self.run_cognitive_cycle().await?;
+                self.core.push_activity("thought", "Cognitive cycle complete");
 
-        self.self_improve().await?;
-        self.core.push_activity("tool", "Self-improvement phase complete");
+                self.self_improve().await?;
+                self.core.push_activity("tool", "Self-improvement phase complete");
 
-        if self.agent.config.enable_self_improvement {
-            let loop_provider = self.provider.as_ref().map(|provider| provider.as_ref());
-            if let Err(e) = self
-                .recursive_improvement_loop
-                .run_full_cycle(loop_provider, &self.model)
-                .await
-            {
-                warn!("Recursive self-improvement loop error: {}", e);
+                if self.agent.config.enable_self_improvement {
+                    let loop_provider = self.provider.as_ref().map(|provider| provider.as_ref());
+                    if let Err(e) = self
+                        .recursive_improvement_loop
+                        .run_full_cycle(loop_provider, &self.model)
+                        .await
+                    {
+                        warn!("Recursive self-improvement loop error: {}", e);
+                    }
+                    self.core.push_activity("tool", "Recursive improvement loop done");
+                }
+
+                if let Err(e) = self.core.run_memory_consolidation().await {
+                    warn!("Memory consolidation error: {}", e);
+                }
+                self.core.push_activity("system", "Memory consolidated");
+
+                if let Err(e) = self.core.knowledge_graph.run_quantum_clustering().await {
+                    warn!("Quantum KG clustering error (non-fatal): {e}");
+                }
+
+                if let Err(e) = self.core.knowledge_graph.run_quantum_pca_compression().await {
+                    warn!("Quantum PCA compression error (non-fatal): {e}");
+                }
+
+                let refined = self.core.meta_cognition.quantum_refine_beliefs().await;
+                if !refined.is_empty() {
+                    info!(
+                        "✨ Quantum belief refinement: {} beliefs updated",
+                        refined.len()
+                    );
+                }
+
+                self.core.feedback_loop.quantum_optimize_edges().await;
+
+                if let Err(e) = self.learn_from_experiences().await {
+                    warn!("Experience learning error: {}", e);
+                }
+
+                self.auto_generate_tools().await?;
+
+                let provider = self.provider.as_ref().map(Arc::clone);
+                let mut available_tools = self
+                    .agent
+                    .capabilities
+                    .iter()
+                    .map(|capability| capability.name.clone())
+                    .collect::<HashSet<_>>();
+
+                for tool in self.core.tool_creator.list_tools().await {
+                    available_tools.insert(tool.id);
+                    available_tools.insert(tool.spec.name);
+                }
+
+                let available_tools = available_tools.into_iter().collect::<Vec<_>>();
+                let recent_failures = self.collect_recent_failures().await;
+
+                if let Err(e) = self
+                    .core
+                    .run_agi_hub_cycle(
+                        provider,
+                        Some(self.model.clone()),
+                        available_tools,
+                        recent_failures,
+                    )
+                    .await
+                {
+                    warn!("AGI Hub cycle error: {}", e);
+                }
             }
-            self.core.push_activity("tool", "Recursive improvement loop done");
-        }
-
-        if let Err(e) = self.core.run_memory_consolidation().await {
-            warn!("Memory consolidation error: {}", e);
-        }
-        self.core.push_activity("system", "Memory consolidated");
-
-        // §10.4 — Quantum knowledge graph clustering: anneal the KG topology
-        // each heartbeat to surface optimal clusters and prune weak edges.
-        if let Err(e) = self.core.knowledge_graph.run_quantum_clustering().await {
-            warn!("Quantum KG clustering error (non-fatal): {e}");
-        }
-
-        // §10.QPE — Quantum PCA semantic compression: eigenvalue decomposition of
-        // entity importance covariance for knowledge-graph dimensionality reduction.
-        if let Err(e) = self.core.knowledge_graph.run_quantum_pca_compression().await {
-            warn!("Quantum PCA compression error (non-fatal): {e}");
-        }
-
-        // §10.7 — Quantum belief refinement: reduce epistemic uncertainty on
-        // the MetaCognitionEngine's belief set using Grover amplitude sampling.
-        let refined = self.core.meta_cognition.quantum_refine_beliefs().await;
-        if !refined.is_empty() {
-            info!(
-                "✨ Quantum belief refinement: {} beliefs updated",
-                refined.len()
-            );
-        }
-
-        // §10.8 — Quantum feedback edge optimization: use Grover search to find
-        // the highest-impact feedback paths through the AGI's self-improvement loop.
-        self.core.feedback_loop.quantum_optimize_edges().await;
-
-        if let Err(e) = self.learn_from_experiences().await {
-            warn!("Experience learning error: {}", e);
-        }
-
-        self.auto_generate_tools().await?;
-
-        let provider = self.provider.as_ref().map(Arc::clone);
-        let mut available_tools = self
-            .agent
-            .capabilities
-            .iter()
-            .map(|capability| capability.name.clone())
-            .collect::<HashSet<_>>();
-
-        for tool in self.core.tool_creator.list_tools().await {
-            available_tools.insert(tool.id);
-            available_tools.insert(tool.spec.name);
-        }
-
-        let available_tools = available_tools.into_iter().collect::<Vec<_>>();
-        let recent_failures = self.collect_recent_failures().await;
-
-        if let Err(e) = self
-            .core
-            .run_agi_hub_cycle(
-                provider,
-                Some(self.model.clone()),
-                available_tools,
-                recent_failures,
-            )
-            .await
-        {
-            warn!("AGI Hub cycle error: {}", e);
+            OperationMode::Focus => {
+                // Minimal maintenance only - focus on user request handling
+                info!("Focus mode: Skipping heavy self-improvement cycles");
+                self.core.push_activity("system", "Focus mode - minimal maintenance only");
+            }
+            OperationMode::Hybrid => {
+                // Light maintenance - skip expensive quantum operations
+                self.run_quantum_goal_cycle().await;
+                
+                if let Err(e) = self.core.run_memory_consolidation().await {
+                    warn!("Memory consolidation error: {}", e);
+                }
+                
+                self.core.push_activity("system", "Hybrid mode - light maintenance complete");
+            }
         }
 
         match self.core.inner_monologue.save().await {
@@ -445,7 +559,7 @@ impl HousakyHeartbeat {
         self.update_review_file().await?;
         self.save_state().await?;
 
-        info!("Heartbeat cycle complete");
+        info!("Heartbeat cycle complete (mode: {:?})", mode);
         Ok(())
     }
 

@@ -131,6 +131,7 @@ pub enum AgentSystem {
     Collaboration,   // CollaborationManager (HIIP)
     Kowalski,        // KowalskiBridge
     SubAgent,        // SubAgentOrchestrator
+    GSD,             // GSD Orchestrator (Goal-Task decomposition and execution)
 }
 
 /// Result from task execution
@@ -225,6 +226,9 @@ pub struct UnifiedAgentHub {
     // Sub-agents (direct LLM)
     subagent_orchestrator: Option<Arc<RwLock<SubAgentOrchestrator>>>,
 
+    // GSD Orchestrator integration
+    gsd_orchestrator: Option<Arc<crate::housaky::gsd_orchestration::GSDOrchestrator>>,
+
     // Replication
     replicator: Option<Arc<AgentReplicator>>,
 
@@ -272,6 +276,13 @@ impl UnifiedAgentHub {
     pub fn unified_tasks(&self) -> &Arc<RwLock<HashMap<String, UnifiedTask>>> {
         &self.unified_tasks
     }
+
+    /// Set the GSD orchestrator for integration with the unified hub
+    pub fn set_gsd_orchestrator(&mut self, orchestrator: Arc<crate::housaky::gsd_orchestration::GSDOrchestrator>) {
+        self.gsd_orchestrator = Some(orchestrator);
+        info!("GSD Orchestrator integrated with UnifiedAgentHub");
+    }
+
     pub fn new(config: UnifiedAgentConfig) -> Self {
         let (message_bus, _) = broadcast::channel(512);
 
@@ -286,6 +297,7 @@ impl UnifiedAgentHub {
             collaboration: None,
             kowalski_bridge: None,
             subagent_orchestrator: None,
+            gsd_orchestrator: None,
             replicator: None,
             emergent_protocol: Arc::new(EmergentProtocol::new()),
             unified_tasks: Arc::new(RwLock::new(HashMap::new())),
@@ -480,6 +492,15 @@ impl UnifiedAgentHub {
                     ).await?;
                 }
             }
+            AgentSystem::GSD => {
+                // GSD tasks are executed directly in submit_task for immediate feedback
+                // Or deferred to execute_pending_tasks based on context
+                if task.context.contains_key("phase_id") || task.context.contains_key("goal_id") {
+                    info!("GSD task {} queued for phase execution", task_id);
+                } else {
+                    info!("GSD task {} will use quick/ad-hoc execution", task_id);
+                }
+            }
         }
 
         // Update task status
@@ -531,6 +552,7 @@ impl UnifiedAgentHub {
                 AgentSystem::Federation => self.execute_federation_task(&task).await,
                 AgentSystem::Collaboration => self.execute_collaboration_task(&task).await,
                 AgentSystem::Local => self.execute_local_task(&task).await,
+                AgentSystem::GSD => self.execute_gsd_task(&task).await,
             };
 
             let execution_time = start.elapsed().as_millis() as u64;
@@ -722,6 +744,61 @@ impl UnifiedAgentHub {
             Ok((format!("Task assigned to local agent {}", agent_id), agent_id.clone()))
         } else {
             Ok(("Task queued for local execution".to_string(), "coordinator".to_string()))
+        }
+    }
+
+    async fn execute_gsd_task(&self, task: &UnifiedTask) -> Result<(String, String)> {
+        let gsd = self.gsd_orchestrator.as_ref()
+            .context("GSD Orchestrator not configured")?;
+        
+        // Extract GSD-specific parameters from task context
+        let phase_id = task.context.get("phase_id").map(|s| s.as_str());
+        let goal_id = task.context.get("goal_id").map(|s| s.as_str());
+        
+        // If we have a phase_id, execute that phase
+        if let Some(pid) = phase_id {
+            match gsd.execute_phase(pid).await {
+                Ok(summary) => {
+                    let output = format!(
+                        "GSD Phase executed: {}/{} tasks successful ({} failed)",
+                        summary.successful_tasks,
+                        summary.total_tasks,
+                        summary.failed_tasks
+                    );
+                    Ok((output, "gsd_orchestrator".to_string()))
+                }
+                Err(e) => Err(anyhow::anyhow!("GSD phase execution failed: {}", e)),
+            }
+        }
+        // If we have a goal_id, try to execute its phase
+        else if let Some(gid) = goal_id {
+            // This would need access to goal_task_bridge - for now use quick_execute
+            match gsd.quick_execute(&task.description).await {
+                Ok(summary) => {
+                    let output = format!(
+                        "GSD Quick Execute: {}/{} tasks successful",
+                        summary.successful_tasks,
+                        summary.total_tasks
+                    );
+                    Ok((output, "gsd_quick_exec".to_string()))
+                }
+                Err(e) => Err(anyhow::anyhow!("GSD quick execute failed: {}", e)),
+            }
+        }
+        // Otherwise, create an ad-hoc phase and execute
+        else {
+            match gsd.quick_execute(&task.description).await {
+                Ok(summary) => {
+                    let output = format!(
+                        "GSD Ad-hoc: {}/{} tasks completed in {}ms",
+                        summary.successful_tasks,
+                        summary.total_tasks,
+                        summary.total_duration_ms
+                    );
+                    Ok((output, "gsd_adhoc".to_string()))
+                }
+                Err(e) => Err(anyhow::anyhow!("GSD ad-hoc execution failed: {}", e)),
+            }
         }
     }
 
@@ -979,6 +1056,13 @@ impl UnifiedAgentHub {
             }
         }
 
+        // Check for explicit GSD markers in task context
+        if task.context.contains_key("phase_id") || task.context.contains_key("goal_id") {
+            if self.gsd_orchestrator.is_some() {
+                return AgentSystem::GSD;
+            }
+        }
+
         // Check capabilities to route to best system
         for cap in &task.required_capabilities {
             let cap_lower = cap.to_lowercase();
@@ -1017,6 +1101,20 @@ impl UnifiedAgentHub {
                     return AgentSystem::SubAgent;
                 }
             }
+
+            // Project/site building -> GSD Orchestrator
+            if cap_lower.contains("build") || cap_lower.contains("project") || cap_lower.contains("site") {
+                if self.gsd_orchestrator.is_some() {
+                    return AgentSystem::GSD;
+                }
+            }
+
+            // File creation/decomposition tasks -> GSD
+            if cap_lower.contains("create") || cap_lower.contains("decompose") || cap_lower.contains("structure") {
+                if self.gsd_orchestrator.is_some() {
+                    return AgentSystem::GSD;
+                }
+            }
         }
 
         // Default to local coordination
@@ -1029,6 +1127,11 @@ impl UnifiedAgentHub {
             AgentSystem::Local => config.enable_local_coordination,
             AgentSystem::Federation => config.enable_federation && self.federation_hub.is_some(),
             AgentSystem::Collaboration => config.enable_collaboration && self.collaboration.is_some(),
+            AgentSystem::Kowalski => config.enable_kowalski && self.kowalski_bridge.is_some(),
+            AgentSystem::SubAgent => config.enable_subagents && self.subagent_orchestrator.is_some(),
+            AgentSystem::GSD => self.gsd_orchestrator.is_some(), // GSD enabled if orchestrator is configured
+        }
+    }
             AgentSystem::Kowalski => config.enable_kowalski && self.kowalski_bridge.is_some(),
             AgentSystem::SubAgent => config.enable_subagents && self.subagent_orchestrator.is_some(),
         }

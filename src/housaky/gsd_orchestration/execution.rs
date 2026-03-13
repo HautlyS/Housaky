@@ -272,8 +272,9 @@ Respond ONLY with the XML decomposition, no other text."#,
                     .get(5)
                     .map(|m| m.as_str().to_string())
                     .unwrap_or_default(),
+                // FIX: Capture group 6 is done_criteria (was incorrectly using group 5)
                 done_criteria: cap
-                    .get(5)
+                    .get(6)
                     .map(|m| m.as_str().to_string())
                     .unwrap_or_default(),
                 dependencies: deps,

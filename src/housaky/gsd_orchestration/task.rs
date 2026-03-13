@@ -238,6 +238,39 @@ impl GSDTask {
             _ => None,
         }
     }
+
+    /// Check if task is ready for verification (CAS-inspired verification gate)
+    pub fn needs_verification(&self) -> bool {
+        // Task needs verification if:
+        // 1. It has a verify criterion set
+        // 2. It's marked as completed but not verified
+        // 3. No verification record exists yet
+        !self.verify.is_empty()
+            && self.status == GSDTaskStatus::Completed
+            && self.verification.is_none()
+    }
+
+    /// Check if task is blocked by pending verification (verification jail)
+    pub fn is_in_verification_jail(&self) -> bool {
+        self.verification.as_ref().map(|v| !v.passed.unwrap_or(false)).unwrap_or(false)
+            && self.status == GSDTaskStatus::Completed
+    }
+
+    /// Get verification status description
+    pub fn verification_status(&self) -> VerificationStatus {
+        match &self.verification {
+            None => VerificationStatus::Pending,
+            Some(v) if v.passed.unwrap_or(false) => VerificationStatus::Passed,
+            Some(v) => VerificationStatus::Failed(v.notes.clone()),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum VerificationStatus {
+    Pending,
+    Passed,
+    Failed(String),
 }
 
 impl Default for GSDTask {

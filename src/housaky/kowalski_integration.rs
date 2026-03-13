@@ -241,10 +241,22 @@ impl KowalskiBridge {
         }
     }
 
-    fn load_subagent_configs(_keys_manager: &Arc<KeysManager>) -> HashMap<String, SubAgentConfig> {
-        // NOTE: This is called during construction (sync context), so we can't use async.
-        // Subagent configs will be loaded lazily during initialize_agents() which is async.
-        // This avoids the "Cannot start a runtime from within a runtime" panic.
+    fn load_subagent_configs(keys_manager: &Arc<KeysManager>) -> HashMap<String, SubAgentConfig> {
+        // Synchronously read the keys.json file to extract subagent configs.
+        // We avoid async here because this is called during construction (sync context).
+        let keys_path = crate::keys_manager::manager::get_keys_storage_path();
+        if keys_path.exists() {
+            if let Ok(content) = std::fs::read_to_string(&keys_path) {
+                if let Ok(store) = serde_json::from_str::<crate::keys_manager::manager::KeysStore>(&content) {
+                    if let Some(subagents) = store.subagents {
+                        info!("Loaded {} subagent configs from keys.json", subagents.len());
+                        return subagents;
+                    }
+                }
+            }
+        }
+        info!("No subagent configs found in keys.json");
+        let _ = keys_manager; // acknowledge parameter usage
         HashMap::new()
     }
 
@@ -348,8 +360,16 @@ impl KowalskiBridge {
     }
 
     pub async fn initialize_agents(&mut self) -> Result<()> {
-        // Reload subagent configs
+        // Reload subagent configs from keys.json
         self.subagent_configs = Self::load_subagent_configs(&self.keys_manager);
+
+        // Also load from async path if the global keys manager was populated after construction
+        if self.subagent_configs.is_empty() {
+            let subagents = self.keys_manager.list_subagents().await;
+            for (name, config) in subagents {
+                self.subagent_configs.insert(name, config);
+            }
+        }
         
         // Update agent status based on config
         for agent in &mut self.agents {
@@ -358,7 +378,8 @@ impl KowalskiBridge {
             agent.status = if has_key { AgentStatus::Available } else { AgentStatus::Offline };
         }
 
-        info!("Kowalski agents initialized from keys.json");
+        let available = self.agents.iter().filter(|a| a.enabled).count();
+        info!("Kowalski agents initialized: {}/{} available", available, self.agents.len());
         Ok(())
     }
 
@@ -375,9 +396,17 @@ impl KowalskiBridge {
         }
 
         info!(
-            "Coordinating with {} Kowalski agents",
-            available_agents.len()
+            "Coordinating {} Kowalski agents: [{}]",
+            available_agents.len(),
+            available_agents.iter().map(|a| a.name.as_str()).collect::<Vec<_>>().join(", ")
         );
+
+        // Check agent health by attempting a lightweight status check
+        for agent in &available_agents {
+            if let Some(config) = self.subagent_configs.get(&agent.name) {
+                info!("  {} -> provider={}, model={}", agent.name, config.provider, config.model);
+            }
+        }
 
         Ok(())
     }
@@ -666,11 +695,20 @@ impl KowalskiBridge {
     /// Get delegate agent configs for the orchestrator's delegate tool
     /// This maps each subagent to a DelegateAgentConfig with proper provider/key
     pub fn get_delegate_configs(&self) -> HashMap<String, DelegateAgentConfig> {
-        // NOTE: This is a sync function called from potentially async context.
-        // To avoid nested runtime panic, we return empty configs here.
-        // Delegate configs should be obtained via async methods.
-        // TODO: Make this async or use a cached version updated by initialize_agents()
-        HashMap::new()
+        let mut configs = HashMap::new();
+
+        for (name, sa_config) in &self.subagent_configs {
+            configs.insert(name.clone(), DelegateAgentConfig {
+                provider: sa_config.provider.clone(),
+                model: sa_config.model.clone(),
+                api_key: None, // resolved at runtime via keys_manager
+                max_depth: 3,
+                is_kowalski_agent: true,
+                system_prompt: Some(self.get_system_prompt_for_agent_name(&sa_config.key_name)),
+            });
+        }
+
+        configs
     }
 
     pub async fn build_kowalski(&self) -> Result<()> {

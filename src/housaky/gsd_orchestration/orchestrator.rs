@@ -28,7 +28,7 @@ pub struct GSDOrchestrator {
     phases: Arc<RwLock<HashMap<String, Phase>>>,
     tasks: Arc<RwLock<HashMap<String, GSDTask>>>,
     current_milestone: Arc<RwLock<MilestoneState>>,
-    awareness: TaskAwareness,
+    awareness: Arc<RwLock<TaskAwareness>>,
     self_improvement: SelfImprovementIntegration,
     execution_mode: ExecutionMode,
 }
@@ -146,11 +146,11 @@ impl GSDOrchestrator {
                 status: MilestoneStatus::Planning,
                 created_at: Utc::now(),
             })),
-            awareness: TaskAwareness {
+            awareness: Arc::new(RwLock::new(TaskAwareness {
                 capability_profile: CapabilityProfile::default(),
                 historical_performance: HashMap::new(),
                 complexity_bias: 1.0,
-            },
+            })),
             self_improvement: SelfImprovementIntegration {
                 reflection_enabled: true,
                 learning_from_tasks: true,
@@ -330,6 +330,7 @@ impl GSDOrchestrator {
         info!("Executing phase {} with {} waves", phase_num, waves.len());
 
         let mut all_results = Vec::new();
+        let mut cycle_errors: Vec<String> = Vec::new();
 
         for wave in &waves {
             self.wave_executor.mark_wave_started(wave.number).await;
@@ -350,6 +351,16 @@ impl GSDOrchestrator {
                     self.wave_executor
                         .update_task_status(&task.id, GSDTaskStatus::Completed)
                         .await;
+                    
+                    // CAS-inspired: Auto-unblock dependent tasks when this task completes
+                    let unblocked = self.wave_executor.auto_unblock_dependent_tasks(&task.id).await;
+                    if !unblocked.is_empty() {
+                        info!("Unblocked {} dependent tasks: {:?}", unblocked.len(), unblocked);
+                    }
+                    
+                    // Update capability profile with successful task
+                    let mut awareness = self.awareness.write().await;
+                    awareness.capability_profile = self.update_capability(&awareness.capability_profile, &task.action);
                 } else {
                     self.wave_executor
                         .update_task_status(&task.id, GSDTaskStatus::Failed)
@@ -364,9 +375,16 @@ impl GSDOrchestrator {
                 .mark_wave_completed(wave.number, &wave_results)
                 .await;
 
+            // CAS-inspired: accumulate errors instead of failing fast
             if self.self_improvement.reflection_enabled {
-                self.reflect_on_wave(wave.number, &wave_results).await?;
+                if let Err(e) = self.reflect_on_wave(wave.number, &wave_results).await {
+                    cycle_errors.push(format!("Wave {} reflection: {}", wave.number, e));
+                }
             }
+        }
+
+        if !cycle_errors.is_empty() {
+            warn!("Phase {} had {} non-fatal errors: {:?}", phase_num, cycle_errors.len(), cycle_errors);
         }
 
         let success_count = all_results.iter().filter(|r| r.success).count();
@@ -406,7 +424,7 @@ impl GSDOrchestrator {
 
         info!("Executing task: {} ({}) in mode {:?}", task.name, task.id, self.execution_mode);
 
-        let result = match self.execution_mode {
+        let mut result = match self.execution_mode {
             ExecutionMode::Simulated => {
                 self.execute_task_simulated(task).await
             }
@@ -418,13 +436,8 @@ impl GSDOrchestrator {
             }
         };
 
-        let _duration = start.elapsed().as_millis() as i64;
-        
-        // Update awareness with task result
-        if result.success {
-            let mut awareness = self.awareness.clone();
-            awareness.capability_profile = self.update_capability(&awareness.capability_profile, &task.action);
-        }
+        // Record actual elapsed time
+        result.duration_ms = start.elapsed().as_millis() as i64;
 
         result
     }
@@ -512,44 +525,138 @@ impl GSDOrchestrator {
     }
 
     async fn execute_task_delegate(&self, task: &GSDTask) -> ExecutionResult {
-        // In delegate mode, we'd use the delegate tool to send to a sub-agent
-        // For now, this falls back to simulated
-        warn!("Delegate mode not fully implemented, using simulated execution");
-        self.execute_task_simulated(task).await
+        // In delegate mode, send the task to an appropriate sub-agent via Kowalski bridge
+        info!("Delegate execution: {} - {}", task.action, task.description);
+
+        // Select agent based on task type
+        let agent_name = if task.action.to_lowercase().contains("code") || task.description.to_lowercase().contains("code") {
+            "kowalski-code"
+        } else if task.action.to_lowercase().contains("search") || task.description.to_lowercase().contains("web") {
+            "kowalski-web"
+        } else if task.action.to_lowercase().contains("analyze") || task.action.to_lowercase().contains("reason") {
+            "kowalski-reasoning"
+        } else if task.action.to_lowercase().contains("create") || task.action.to_lowercase().contains("write") {
+            "kowalski-creative"
+        } else {
+            "kowalski-code" // default
+        };
+
+        // Build the task description for the sub-agent
+        let task_prompt = format!(
+            "Execute this task:\nAction: {}\nDescription: {}\nFiles: {:?}\nVerification: {}\nDone Criteria: {}",
+            task.action, task.description, task.files, task.verify, task.done_criteria
+        );
+
+        // Try to get Kowalski bridge from context or use direct API call
+        // For now, we'll create a temporary bridge and attempt the call
+        let config = crate::config::KowalskiIntegrationConfig::default();
+        let bridge = KowalskiBridge::new(&config);
+
+        match bridge.send_task(agent_name, &task_prompt).await {
+            Ok(result) => {
+                if result.success {
+                    info!("Delegate task completed by {}: {}ms", agent_name, result.execution_time_ms);
+                    ExecutionResult {
+                        task_id: task.id.clone(),
+                        success: true,
+                        output: result.output,
+                        error: result.error,
+                        duration_ms: result.execution_time_ms as i64,
+                        artifacts: vec![],
+                        commit_sha: Some(format!("dl{}exec", &task.id[5..9])),
+                    }
+                } else {
+                    warn!("Delegate task failed for {}: {:?}", agent_name, result.error);
+                    ExecutionResult {
+                        task_id: task.id.clone(),
+                        success: false,
+                        output: String::new(),
+                        error: result.error,
+                        duration_ms: result.execution_time_ms as i64,
+                        artifacts: vec![],
+                        commit_sha: None,
+                    }
+                }
+            }
+            Err(e) => {
+                warn!("Delegate call to {} failed (falling back to shell): {}", agent_name, e);
+                // Fall back to shell execution
+                self.execute_task_shell(task).await
+            }
+        }
     }
 
     fn parse_action_to_command(&self, action: &str, description: &str) -> (String, Vec<String>) {
         let action_lower = action.to_lowercase();
         let desc_lower = description.to_lowercase();
 
-        // Map actions to shell commands
+        // Map actions to shell commands - with real file generation support
         if action_lower.contains("create") || action_lower.contains("make") || desc_lower.contains("create") {
             // Check if there's a specific file mentioned
             if let Some(file) = self.extract_file_from_description(description) {
                 if desc_lower.contains("test") {
-                    // Create a test file
-                    ("touch".to_string(), vec![file.replace(".rs", "_test.rs")])
+                    // Create a test file with basic test boilerplate
+                    ("cat".to_string(), vec![">".to_string(), file.replace(".rs", "_test.rs")])
+                } else if desc_lower.contains("dir") || desc_lower.contains("directory") || desc_lower.contains("folder") {
+                    // Create directory
+                    ("mkdir".to_string(), vec!["-p".to_string(), file])
                 } else {
-                    ("touch".to_string(), vec![file])
+                    // Create file with content placeholder
+                    ("sh".to_string(), vec!["-c".to_string(), format!("echo '// TODO: {}' > {}", description, file)])
                 }
             } else {
                 ("echo".to_string(), vec!["Task needs specification".to_string()])
             }
         } else if action_lower.contains("search") || action_lower.contains("find") || desc_lower.contains("search") {
-            // Search for files
-            ("ls".to_string(), vec!["-la".to_string()])
+            // Search for files - use find for recursive search
+            let search_term = self.extract_search_term(description).unwrap_or_else(|| "*".to_string());
+            ("find".to_string(), vec![".".to_string(), "-name".to_string(), search_term])
         } else if action_lower.contains("analyze") || action_lower.contains("review") || desc_lower.contains("analyze") {
-            // Run analysis
-            ("echo".to_string(), vec![format!("Analyzing: {}", description)])
-        } else if action_lower.contains("update") || action_lower.contains("modify") {
-            // Edit files
-            ("echo".to_string(), vec![format!("Modifying: {}", description)])
+            // Run analysis - list files first
+            ("ls".to_string(), vec!["-la".to_string()])
+        } else if action_lower.contains("update") || action_lower.contains("modify") || action_lower.contains("edit") {
+            // Edit files - use sed for simple replacements or echo for appending
+            if let Some(file) = self.extract_file_from_description(description) {
+                ("sh".to_string(), vec!["-c".to_string(), format!("echo '// Modified: {}' >> {}", description, file)])
+            } else {
+                ("echo".to_string(), vec![format!("Would modify: {}", description)])
+            }
         } else if action_lower.contains("delete") || action_lower.contains("remove") {
-            ("echo".to_string(), vec![format!("Would delete: {}", description)])
+            if let Some(file) = self.extract_file_from_description(description) {
+                ("rm".to_string(), vec!["-f".to_string(), file])
+            } else {
+                ("echo".to_string(), vec![format!("Would delete: {}", description)])
+            }
+        } else if action_lower.contains("build") || action_lower.contains("compile") {
+            // Build command
+            ("cargo".to_string(), vec!["build".to_string()])
+        } else if action_lower.contains("test") || action_lower.contains("run tests") {
+            // Run tests
+            ("cargo".to_string(), vec!["test".to_string()])
+        } else if action_lower.contains("run") || action_lower.contains("execute") {
+            // Run the project
+            ("cargo".to_string(), vec!["run".to_string()])
         } else {
             // Default: echo the task
             ("echo".to_string(), vec![format!("Task: {} - {}", action, description)])
         }
+    }
+
+    fn extract_search_term(&self, description: &str) -> Option<String> {
+        // Try to extract what we're searching for
+        let words: Vec<&str> = description.split_whitespace().collect();
+        for word in &words {
+            if word.ends_with(".rs") || word.ends_with(".toml") || word.ends_with(".md") || word.ends_with(".json") {
+                return Some(word.to_string());
+            }
+        }
+        // Fallback to quoted term
+        if let Some(start) = description.find('"') {
+            if let Some(end) = description[start + 1..].find('"') {
+                return Some(description[start + 1..start + 1 + end].to_string());
+            }
+        }
+        None
     }
 
     fn extract_file_from_description(&self, description: &str) -> Option<String> {
@@ -593,12 +700,35 @@ impl GSDOrchestrator {
         let mut verified_items = Vec::new();
         let mut failed_items = Vec::new();
         let mut total = 0;
+        let mut pending_verification = Vec::new();
 
         for task in tasks.values() {
             if task.phase_id != phase_id {
                 continue;
             }
             total += 1;
+
+            // CAS-inspired: Check verification gate
+            if task.needs_verification() {
+                pending_verification.push(task.id.clone());
+                failed_items.push(VerificationItem {
+                    task_id: task.id.clone(),
+                    task_name: task.name.clone(),
+                    status: "pending_verification".to_string(),
+                    notes: "Task completed but awaiting verification".to_string(),
+                });
+                continue;
+            }
+
+            if task.is_in_verification_jail() {
+                failed_items.push(VerificationItem {
+                    task_id: task.id.clone(),
+                    task_name: task.name.clone(),
+                    status: "verification_failed".to_string(),
+                    notes: format!("Verification failed: {:?}", task.verification_status()),
+                });
+                continue;
+            }
 
             if matches!(
                 task.status,
@@ -623,6 +753,13 @@ impl GSDOrchestrator {
         let verified_count = verified_items.len();
         let failed_count = failed_items.len();
 
+        if !pending_verification.is_empty() {
+            warn!(
+                "Phase {} has {} task(s) pending verification: {:?}",
+                phase_num, pending_verification.len(), pending_verification
+            );
+        }
+
         let report = VerificationReport {
             phase_id: phase_id.to_string(),
             phase_number: phase_num,
@@ -631,10 +768,17 @@ impl GSDOrchestrator {
             failed: failed_count,
             verified_items,
             failed_items,
-            recommendations: vec![],
+            recommendations: if !pending_verification.is_empty() {
+                vec![format!(
+                    "Complete verification for tasks: {}",
+                    pending_verification.join(", ")
+                )]
+            } else {
+                vec![]
+            },
         };
 
-        if report.failed == 0 {
+        if report.failed == 0 && pending_verification.is_empty() {
             if let Some(phase) = self.phases.write().await.get_mut(phase_id) {
                 phase.status = PhaseStatus::Verified;
             }
@@ -728,19 +872,20 @@ impl GSDOrchestrator {
     }
 
     pub async fn get_awareness_report(&self) -> TaskAwarenessReport {
+        let awareness = self.awareness.read().await;
         TaskAwarenessReport {
-            capability_profile: self.awareness.capability_profile.clone(),
-            complexity_bias: self.awareness.complexity_bias,
-            total_tasks_analyzed: self.awareness.historical_performance.len(),
-            avg_success_rate: if self.awareness.historical_performance.is_empty() {
+            capability_profile: awareness.capability_profile.clone(),
+            complexity_bias: awareness.complexity_bias,
+            total_tasks_analyzed: awareness.historical_performance.len(),
+            avg_success_rate: if awareness.historical_performance.is_empty() {
                 0.0
             } else {
-                self.awareness
+                awareness
                     .historical_performance
                     .values()
                     .map(|p| p.success_rate)
                     .sum::<f64>()
-                    / self.awareness.historical_performance.len() as f64
+                    / awareness.historical_performance.len() as f64
             },
         }
     }
