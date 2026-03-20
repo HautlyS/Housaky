@@ -9,6 +9,8 @@
 //! - OpenClaw-style WebSocket gateway for real-time communication
 //! - REST API for config, MCP, chat, agent, skills, channels, keys, A2A, hardware, doctor
 
+pub mod session_storage;
+
 // use crate::channels::Channel;
 // use crate::channels::WhatsAppChannel;
 use crate::config::Config;
@@ -268,6 +270,8 @@ pub struct AppState {
     pub heartbeat_config: crate::config::HeartbeatConfig,
     pub channels_config: crate::config::ChannelsConfig,
     pub secrets_config: crate::config::SecretsConfig,
+    /// Session storage for chat history
+    pub sessions: Arc<std::sync::Mutex<session_storage::SessionStorage>>,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -443,6 +447,11 @@ pub async fn run_gateway(host: &str, port: u16, config: Config) -> Result<()> {
 
     // Build shared state
     let (events, _rx) = broadcast::channel(256);
+    
+    // Initialize session storage
+    let sessions_dir = config.workspace_dir.join("sessions");
+    let sessions = session_storage::SessionStorage::new(sessions_dir);
+    
     let state = AppState {
         provider,
         model,
@@ -465,6 +474,7 @@ pub async fn run_gateway(host: &str, port: u16, config: Config) -> Result<()> {
         heartbeat_config: config.heartbeat.clone(),
         channels_config: config.channels_config.clone(),
         secrets_config: config.secrets.clone(),
+        sessions: Arc::new(std::sync::Mutex::new(sessions)),
     };
 
     // Build router with middleware
@@ -874,11 +884,22 @@ async fn handle_chat(
         }
     };
 
+    let session_id = chat_req.session_key.clone().unwrap_or_else(|| "default".to_string());
     let model = chat_req.model.as_deref().unwrap_or(&state.model);
     let temp = chat_req.temperature.unwrap_or(state.temperature);
 
+    // Save user message to session
+    if let Ok(mut sessions) = state.sessions.lock() {
+        let _ = sessions.add_message(&session_id, "user", &chat_req.message);
+    }
+
     match state.provider.simple_chat(&chat_req.message, model, temp).await {
         Ok(response) => {
+            // Save assistant response to session
+            if let Ok(mut sessions) = state.sessions.lock() {
+                let _ = sessions.add_message(&session_id, "assistant", &response);
+            }
+            
             let msg = ChatMessage {
                 id: uuid::Uuid::new_v4().to_string(),
                 role: "assistant".to_string(),
@@ -888,10 +909,10 @@ async fn handle_chat(
             };
             let resp = ChatResponse {
                 message: msg,
-                session_id: chat_req.session_key.unwrap_or_else(|| "default".to_string()),
+                session_id: session_id.clone(),
                 model: model.to_string(),
             };
-            (StatusCode::OK, Json(serde_json::json!({"message": resp.message, "model": resp.model})))
+            (StatusCode::OK, Json(serde_json::json!({"message": resp.message, "model": resp.model, "session_id": session_id})))
         }
         Err(e) => {
             let err = serde_json::json!({"error": format!("LLM error: {}", providers::sanitize_api_error(&e.to_string()))});
@@ -917,16 +938,41 @@ async fn handle_chat_sessions(
         }
     }
 
-    // Return sample sessions - in real implementation would load from memory
-    let sessions: Vec<ChatSession> = vec![
-        ChatSession {
+    // Load sessions from persistent storage
+    let sessions: Vec<ChatSession> = match state.sessions.lock() {
+        Ok(mut storage) => {
+            match storage.list_sessions() {
+                Ok(list) => list.into_iter().map(|s| {
+                    let id = s.id.clone();
+                    let title = s.title.clone();
+                    let last_msg = s.last_message();
+                    let timestamp = s.updated_at;
+                    let msg_count = s.message_count();
+                    ChatSession {
+                        id,
+                        title,
+                        last_message: last_msg,
+                        timestamp,
+                        message_count: msg_count,
+                    }
+                }).collect(),
+                Err(_) => vec![ChatSession {
+                    id: "default".to_string(),
+                    title: "New Conversation".to_string(),
+                    last_message: "".to_string(),
+                    timestamp: chrono::Utc::now().timestamp(),
+                    message_count: 0,
+                }]
+            }
+        }
+        Err(_) => vec![ChatSession {
             id: "default".to_string(),
             title: "New Conversation".to_string(),
             last_message: "".to_string(),
             timestamp: chrono::Utc::now().timestamp(),
             message_count: 0,
-        }
-    ];
+        }]
+    };
     
     (StatusCode::OK, Json(serde_json::json!({"sessions": sessions})))
 }
