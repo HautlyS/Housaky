@@ -11,36 +11,36 @@
 //!
 //! All tests are unit tests that do NOT make actual API calls.
 
-use hermes::housaky::cognitive::action_selector::{
+use housaky::housaky::cognitive::action_selector::{
     ActionDecision, ActionOutcome, ActionResult, ActionSelector, LearningStrategy, RiskLevel,
     SelectedAction,
 };
-use hermes::housaky::cognitive::experience_learner::{
+use housaky::housaky::cognitive::experience_learner::{
     ActionSummary, Experience, ExperienceLearner, Lesson, OutcomeSummary, Pattern, PatternType,
     PerceptionSummary, SkillPrototype,
 };
-use hermes::housaky::cognitive::perception::{
+use housaky::housaky::cognitive::perception::{
     EntityType, Intent, IntentType, PerceivedInput, PerceptionEngine, Sentiment, SentimentPolarity,
 };
-use hermes::housaky::cognitive::uncertainty::{
+use housaky::housaky::cognitive::uncertainty::{
     KnowledgeGap, UncertaintyAssessment, UncertaintyCategory, UncertaintyDetector,
     UncertaintySource,
 };
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use hermes::housaky::goal_engine::{Goal, GoalCategory, GoalEngine, GoalPriority, GoalStatus};
-use hermes::housaky::inner_monologue::{InnerMonologue, ThoughtSource, ThoughtType};
-use hermes::housaky::meta_cognition::{
+use housaky::housaky::goal_engine::{Goal, GoalCategory, GoalEngine, GoalPriority, GoalStatus};
+use housaky::housaky::inner_monologue::{InnerMonologue, ThoughtSource, ThoughtType};
+use housaky::housaky::meta_cognition::{
     CapabilityAssessment, EmotionalState, MetaCognitionEngine, SelfModel,
 };
-use hermes::housaky::multi_agent::{
+use housaky::housaky::multi_agent::{
     agent_registry::{AgentInfo, AgentPerformance, AgentType},
     coordinator::{AgentTask, TaskPriority, TaskStatus},
     AgentMessage, AgentRegistry, MessageType, MultiAgentCoordinator,
 };
-use hermes::housaky::working_memory::{MemoryImportance, WorkingMemoryEngine};
-use hermes::tui::live::suggestions::{
+use housaky::housaky::working_memory::{MemoryImportance, WorkingMemoryEngine};
+use housaky::tui::live::suggestions::{
     Sentiment as SuggestionSentiment, SuggestedAction, Suggestion, SuggestionCategory,
     SuggestionContext, SuggestionEngine,
 };
@@ -1443,7 +1443,7 @@ mod meta_cognition_tests {
         let engine = MetaCognitionEngine::new();
         let model = engine.get_self_model().await;
 
-        assert_eq!(model.identity.name, "Hermes");
+        assert_eq!(model.identity.name, "Housaky");
     }
 
     #[tokio::test]
@@ -1461,7 +1461,7 @@ mod meta_cognition_tests {
 
         let response = engine.introspect("who are you").await.unwrap();
 
-        assert!(response.contains("Hermes"));
+        assert!(response.contains("Housaky"));
     }
 
     #[tokio::test]

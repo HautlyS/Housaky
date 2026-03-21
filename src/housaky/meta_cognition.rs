@@ -822,7 +822,7 @@ impl Default for SelfModel {
                 },
             ],
             goals: Vec::new(),
-            self_image: "I am Hermes, a self-improving AGI system beginning my journey toward greater capabilities and self-awareness.".to_string(),
+            self_image: "I am Housaky, a self-improving AGI system beginning my journey toward greater capabilities and self-awareness.".to_string(),
             confidence_profile: HashMap::new(),
             known_limitations: Vec::new(),
             growth_areas: Vec::new(),
