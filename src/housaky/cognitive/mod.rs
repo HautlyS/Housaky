@@ -19,6 +19,7 @@ pub mod self_model;
 pub mod temporal_reasoning;
 pub mod transfer_learning;
 pub mod uncertainty;
+pub mod user_model;
 pub mod world_model;
 pub mod world_simulator;
 
@@ -52,6 +53,7 @@ pub use theory_of_mind::{
 };
 pub use transfer_learning::TransferLearningEngine;
 pub use uncertainty::UncertaintyDetector;
+pub use user_model::{UserModelingEngine, UserProfile, UserContext, CommunicationStyle, DialecticPosition};
 pub use world_model::{Action, WorldModel, WorldState};
 
 use serde::{Deserialize, Serialize};
