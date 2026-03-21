@@ -487,7 +487,7 @@ impl ActionExecutor {
 
         // Check for command substitution that might bypass filters
         // These patterns could hide dangerous commands
-        if command.contains("$(") || command.contains("`") {
+        if command.contains("$(") || command.contains('`') {
             // Allow simple command substitution but block recursive/complex ones
             let subcommand_count = command.matches("$(").count() + command.matches('`').count();
             if subcommand_count > 2 {

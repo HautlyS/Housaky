@@ -154,7 +154,7 @@ impl CapabilityDetector {
         };
 
         if let Ok(response) = provider.simple_chat("test", "gpt-4", 0.0).await {
-            if response.contains("{") || response.contains("JSON") {
+            if response.contains('{') || response.contains("JSON") {
                 capabilities.supports_json_mode = true;
             }
         }

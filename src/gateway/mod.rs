@@ -1038,15 +1038,12 @@ async fn handle_put_config(
         }
     };
 
-    match std::fs::write(state.config_path.as_ref(), &toml_str) {
-        Ok(_) => {
-            let resp = serde_json::json!({"success": true, "message": "Config saved. Restart may be required."});
-            (StatusCode::OK, Json(resp))
-        }
-        Err(e) => {
-            let err = serde_json::json!({"error": format!("Failed to write config: {}", e)});
-            (StatusCode::INTERNAL_SERVER_ERROR, Json(err))
-        }
+    if let Err(e) = std::fs::write(state.config_path.as_ref(), &toml_str) {
+        let err = serde_json::json!({"error": format!("Failed to write config: {}", e)});
+        (StatusCode::INTERNAL_SERVER_ERROR, Json(err))
+    } else {
+        let resp = serde_json::json!({"success": true, "message": "Config saved. Restart may be required."});
+        (StatusCode::OK, Json(resp))
     }
 }
 
@@ -1144,15 +1141,12 @@ async fn handle_add_mcp(
         let _ = std::fs::create_dir_all(parent);
     }
 
-    match std::fs::write(&mcp_file, serde_json::to_string_pretty(&config).unwrap_or_default()) {
-        Ok(_) => {
-            let resp = serde_json::json!({"success": true, "message": format!("MCP server '{}' added", server.name)});
-            (StatusCode::OK, Json(resp))
-        }
-        Err(e) => {
-            let err = serde_json::json!({"error": format!("Failed to save MCP config: {}", e)});
-            (StatusCode::INTERNAL_SERVER_ERROR, Json(err))
-        }
+    if let Err(e) = std::fs::write(&mcp_file, serde_json::to_string_pretty(&config).unwrap_or_default()) {
+        let err = serde_json::json!({"error": format!("Failed to save MCP config: {}", e)});
+        (StatusCode::INTERNAL_SERVER_ERROR, Json(err))
+    } else {
+        let resp = serde_json::json!({"success": true, "message": format!("MCP server '{}' added", server.name)});
+        (StatusCode::OK, Json(resp))
     }
 }
 
