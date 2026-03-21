@@ -1,6 +1,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::fmt::Write;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum PhaseStatus {
@@ -174,32 +175,32 @@ impl PhaseContext {
         let mut ctx = String::new();
 
         if let Some(layout) = &self.visual_layout {
-            ctx.push_str(&format!("Visual Layout: {}\n", layout));
+            let _ = write!(ctx, "Visual Layout: {}\n", layout);
         }
         if let Some(format) = &self.api_response_format {
-            ctx.push_str(&format!("API Response Format: {}\n", format));
+            let _ = write!(ctx, "API Response Format: {}\n", format);
         }
         if let Some(error) = &self.error_handling {
-            ctx.push_str(&format!("Error Handling: {}\n", error));
+            let _ = write!(ctx, "Error Handling: {}\n", error);
         }
         if let Some(structure) = &self.content_structure {
-            ctx.push_str(&format!("Content Structure: {}\n", structure));
+            let _ = write!(ctx, "Content Structure: {}\n", structure);
         }
         if let Some(criteria) = &self.organization_criteria {
-            ctx.push_str(&format!("Organization Criteria: {}\n", criteria));
+            let _ = write!(ctx, "Organization Criteria: {}\n", criteria);
         }
 
         if !self.decided_items.is_empty() {
             ctx.push_str("\nDecisions:\n");
             for decision in &self.decided_items {
-                ctx.push_str(&format!("  - {}\n", decision));
+                let _ = write!(ctx, "  - {}\n", decision);
             }
         }
 
         if !self.gray_areas.is_empty() {
             ctx.push_str("\nGray Areas (needs clarification):\n");
             for area in &self.gray_areas {
-                ctx.push_str(&format!("  - {}\n", area));
+                let _ = write!(ctx, "  - {}\n", area);
             }
         }
 

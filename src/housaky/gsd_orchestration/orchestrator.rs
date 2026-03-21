@@ -861,21 +861,15 @@ impl GSDOrchestrator {
     fn render_verification(&self, summary: &ExecutionSummary) -> String {
         let mut md = String::new();
 
-        md.push_str(&format!(
-            "# Phase {} Verification\n\n",
-            summary.phase_number
-        ));
-        md.push_str(&format!("Total Tasks: {}\n", summary.total_tasks));
-        md.push_str(&format!("Successful: {}\n", summary.successful_tasks));
-        md.push_str(&format!("Failed: {}\n\n", summary.failed_tasks));
+        let _ = write!(md, "# Phase {} Verification\n\n", summary.phase_number);
+        let _ = write!(md, "Total Tasks: {}\n", summary.total_tasks);
+        let _ = write!(md, "Successful: {}\n", summary.successful_tasks);
+        let _ = write!(md, "Failed: {}\n\n", summary.failed_tasks);
 
         md.push_str("## Results\n\n");
         for result in &summary.results {
             let status = if result.success { "✓" } else { "✗" };
-            md.push_str(&format!(
-                "{} {} - {}ms\n",
-                status, result.task_id, result.duration_ms
-            ));
+            let _ = write!(md, "{} {} - {}ms\n", status, result.task_id, result.duration_ms);
         }
 
         md
