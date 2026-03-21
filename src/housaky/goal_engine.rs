@@ -1173,13 +1173,10 @@ impl GoalEngine {
                 GoalStatus::Completed => {
                     new_completed.push(goal_id.clone());
                 }
-                GoalStatus::Failed => {
+                GoalStatus::Failed | GoalStatus::Cancelled => {
                     new_failed.push(goal_id.clone());
                 }
                 GoalStatus::Deferred => {}
-                GoalStatus::Cancelled => {
-                    new_failed.push(goal_id.clone());
-                }
             }
 
             new_goals.insert(goal_id, goal);

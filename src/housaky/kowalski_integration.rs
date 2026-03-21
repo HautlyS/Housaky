@@ -525,10 +525,9 @@ impl KowalskiBridge {
         let base_url = match config.provider.as_str() {
             "modal" => "https://api.us-west-2.modal.direct/v1",
             "openrouter" => "https://openrouter.ai/api/v1",
-            "openai" => "https://api.openai.com/v1",
             "anthropic" => "https://api.anthropic.com/v1",
             "ollama" => "http://localhost:11434/api/chat",
-            _ => "https://api.openai.com/v1",
+            "openai" | _ => "https://api.openai.com/v1",
         };
 
         let client = reqwest::Client::builder()
