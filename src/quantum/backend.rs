@@ -7,6 +7,7 @@ use aws_sdk_s3::Client as S3Client;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::fmt::Write;
 use tracing::{debug, info, warn};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -795,68 +796,47 @@ impl AmazonBraketBackend {
 
     fn circuit_to_openqasm(&self, circuit: &QuantumCircuit) -> String {
         let mut qasm = String::from("OPENQASM 3;\n");
-        qasm.push_str(&format!("qubit[{}] q;\n", circuit.qubits));
-        qasm.push_str(&format!("bit[{}] c;\n", circuit.qubits));
+        let _ = write!(qasm, "qubit[{}] q;\n", circuit.qubits);
+        let _ = write!(qasm, "bit[{}] c;\n", circuit.qubits);
 
         for gate in &circuit.gates {
             match &gate.gate_type {
-                GateType::H => qasm.push_str(&format!("h q[{}];\n", gate.qubits[0])),
-                GateType::X => qasm.push_str(&format!("x q[{}];\n", gate.qubits[0])),
-                GateType::Y => qasm.push_str(&format!("y q[{}];\n", gate.qubits[0])),
-                GateType::Z => qasm.push_str(&format!("z q[{}];\n", gate.qubits[0])),
-                GateType::S => qasm.push_str(&format!("s q[{}];\n", gate.qubits[0])),
-                GateType::Sdg => qasm.push_str(&format!("si q[{}];\n", gate.qubits[0])),
-                GateType::T => qasm.push_str(&format!("t q[{}];\n", gate.qubits[0])),
-                GateType::Tdg => qasm.push_str(&format!("ti q[{}];\n", gate.qubits[0])),
-                GateType::CNOT => qasm.push_str(&format!(
-                    "cnot q[{}], q[{}];\n",
-                    gate.qubits[0], gate.qubits[1]
-                )),
-                GateType::CZ => qasm.push_str(&format!(
-                    "cz q[{}], q[{}];\n",
-                    gate.qubits[0], gate.qubits[1]
-                )),
-                GateType::Swap => qasm.push_str(&format!(
-                    "swap q[{}], q[{}];\n",
-                    gate.qubits[0], gate.qubits[1]
-                )),
+                GateType::H => { let _ = write!(qasm, "h q[{}];\n", gate.qubits[0]); }
+                GateType::X => { let _ = write!(qasm, "x q[{}];\n", gate.qubits[0]); }
+                GateType::Y => { let _ = write!(qasm, "y q[{}];\n", gate.qubits[0]); }
+                GateType::Z => { let _ = write!(qasm, "z q[{}];\n", gate.qubits[0]); }
+                GateType::S => { let _ = write!(qasm, "s q[{}];\n", gate.qubits[0]); }
+                GateType::Sdg => { let _ = write!(qasm, "si q[{}];\n", gate.qubits[0]); }
+                GateType::T => { let _ = write!(qasm, "t q[{}];\n", gate.qubits[0]); }
+                GateType::Tdg => { let _ = write!(qasm, "ti q[{}];\n", gate.qubits[0]); }
+                GateType::CNOT => { let _ = write!(qasm, "cnot q[{}], q[{}];\n", gate.qubits[0], gate.qubits[1]); }
+                GateType::CZ => { let _ = write!(qasm, "cz q[{}], q[{}];\n", gate.qubits[0], gate.qubits[1]); }
+                GateType::Swap => { let _ = write!(qasm, "swap q[{}], q[{}];\n", gate.qubits[0], gate.qubits[1]); }
                 GateType::Rx(theta) => {
-                    qasm.push_str(&format!("rx({}) q[{}];\n", theta, gate.qubits[0]));
+                    let _ = write!(qasm, "rx({}) q[{}];\n", theta, gate.qubits[0]);
                 }
                 GateType::Ry(theta) => {
-                    qasm.push_str(&format!("ry({}) q[{}];\n", theta, gate.qubits[0]));
+                    let _ = write!(qasm, "ry({}) q[{}];\n", theta, gate.qubits[0]);
                 }
                 GateType::Rz(theta) => {
-                    qasm.push_str(&format!("rz({}) q[{}];\n", theta, gate.qubits[0]));
+                    let _ = write!(qasm, "rz({}) q[{}];\n", theta, gate.qubits[0]);
                 }
                 GateType::U1(lam) => {
-                    qasm.push_str(&format!("phaseshift({}) q[{}];\n", lam, gate.qubits[0]));
+                    let _ = write!(qasm, "phaseshift({}) q[{}];\n", lam, gate.qubits[0]);
                 }
                 GateType::U2(phi, lam) => {
-                    qasm.push_str(&format!("u(pi/2,{},{}) q[{}];\n", phi, lam, gate.qubits[0]));
+                    let _ = write!(qasm, "u(pi/2,{},{}) q[{}];\n", phi, lam, gate.qubits[0]);
                 }
-                GateType::U3(th, phi, lam) => qasm.push_str(&format!(
-                    "u({},{},{}) q[{}];\n",
-                    th, phi, lam, gate.qubits[0]
-                )),
-                GateType::CP(theta) => qasm.push_str(&format!(
-                    "cphaseshift({}) q[{}], q[{}];\n",
-                    theta, gate.qubits[0], gate.qubits[1]
-                )),
-                GateType::Toffoli => qasm.push_str(&format!(
-                    "ccnot q[{}], q[{}], q[{}];\n",
-                    gate.qubits[0], gate.qubits[1], gate.qubits[2]
-                )),
-                GateType::Fredkin => qasm.push_str(&format!(
-                    "cswap q[{}], q[{}], q[{}];\n",
-                    gate.qubits[0], gate.qubits[1], gate.qubits[2]
-                )),
+                GateType::U3(th, phi, lam) => { let _ = write!(qasm, "u({},{},{}) q[{}];\n", th, phi, lam, gate.qubits[0]); }
+                GateType::CP(theta) => { let _ = write!(qasm, "cphaseshift({}) q[{}], q[{}];\n", theta, gate.qubits[0], gate.qubits[1]); }
+                GateType::Toffoli => { let _ = write!(qasm, "ccnot q[{}], q[{}], q[{}];\n", gate.qubits[0], gate.qubits[1], gate.qubits[2]); }
+                GateType::Fredkin => { let _ = write!(qasm, "cswap q[{}], q[{}], q[{}];\n", gate.qubits[0], gate.qubits[1], gate.qubits[2]); }
                 GateType::Measure => {
                     let q = gate.qubits.get(0).copied().unwrap_or(0);
                     let c = gate.classical_bits.get(0).copied().unwrap_or(q);
-                    qasm.push_str(&format!("c[{}] = measure q[{}];\n", c, q));
+                    let _ = write!(qasm, "c[{}] = measure q[{}];\n", c, q);
                 }
-                GateType::Reset => qasm.push_str(&format!("reset q[{}];\n", gate.qubits[0])),
+                GateType::Reset => { let _ = write!(qasm, "reset q[{}];\n", gate.qubits[0]); }
                 GateType::Barrier => {} // no-op in OpenQASM 3 for Braket
             }
         }
