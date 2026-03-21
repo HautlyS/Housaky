@@ -96,7 +96,7 @@ async fn start_noninteractive_chat(config: Config) -> Result<()> {
     let model_name = effective_config.default_model.clone()
         .unwrap_or_else(|| "auto".to_string());
     
-    println!("Using provider: {}, model: {}\n", provider_name, model_name);
+    println!("Using provider: {provider_name}, model: {model_name}\n");
     
     let enable_daemon = std::env::var("HOUSAKY_SELF_IMPROVEMENT").map(|v| v == "1" || v == "true").unwrap_or(true);
     
@@ -170,13 +170,13 @@ async fn start_noninteractive_chat(config: Config) -> Result<()> {
             cmd if cmd.starts_with("/provider ") => {
                 let new_provider = cmd.trim_start_matches("/provider ").trim();
                 effective_config.default_provider = Some(new_provider.to_string());
-                println!("Switched to provider: {}\n", new_provider);
+                println!("Switched to provider: {new_provider}\n");
                 agent = housaky::agent::Agent::from_config(&effective_config)?;
             }
             cmd if cmd.starts_with("/model ") => {
                 let new_model = cmd.trim_start_matches("/model ").trim();
                 effective_config.default_model = Some(new_model.to_string());
-                println!("Switched to model: {}\n", new_model);
+                println!("Switched to model: {new_model}\n");
                 agent = housaky::agent::Agent::from_config(&effective_config)?;
             }
             _ => {
@@ -188,7 +188,7 @@ async fn start_noninteractive_chat(config: Config) -> Result<()> {
                         println!("\n{}\n", response);
                     }
                     Err(e) => {
-                        eprintln!("Error: {}\n", e);
+                        eprintln!("Error: {e}\n");
                     }
                 }
                 if let Some(ref d) = daemon {
@@ -473,12 +473,12 @@ async fn main() -> Result<()> {
                         }
                         BrowserCommands::Start { headless, profile } => {
                             println!("🌐 Starting browser...");
-                            println!("   Headless: {}", headless);
-                            println!("   Profile: {}", profile);
+                            println!("   Headless: {headless}");
+                            println!("   Profile: {profile}");
                             println!("   Note: Full implementation requires chromium/chrome installed");
                         }
                         BrowserCommands::Open { url } => {
-                            println!("🌐 Opening URL: {}", url);
+                            println!("🌐 Opening URL: {url}");
                             println!("   Note: Open URL in your browser manually");
                         }
                         BrowserCommands::Tabs => {
@@ -487,12 +487,12 @@ async fn main() -> Result<()> {
                         BrowserCommands::Screenshot { output, full_page } => {
                             println!("🌐 Screenshot requested");
                             println!("   Output: {:?}", output);
-                            println!("   Full page: {}", full_page);
+                            println!("   Full page: {full_page}");
                         }
                         BrowserCommands::Snapshot { format, limit } => {
                             println!("🌐 Accessibility snapshot");
-                            println!("   Format: {}", format);
-                            println!("   Limit: {}", limit);
+                            println!("   Format: {format}");
+                            println!("   Limit: {limit}");
                         }
                         _ => {
                             println!("🌐 Browser command: {:?}", action);
@@ -515,7 +515,7 @@ async fn main() -> Result<()> {
                                     .map(|h| format!("{}/.lucid/memory.db", h))
                                     .unwrap_or_else(|| "N/A".to_string());
                                 println!("   Backend: Lucid (SQLite + Vector)");
-                                println!("   Path: {}", lucid_path);
+                                println!("   Path: {lucid_path}");
                                 if std::path::Path::new(&lucid_path).exists() {
                                     println!("   Status: ✓ Connected");
                                 } else {
@@ -524,10 +524,10 @@ async fn main() -> Result<()> {
                             }
                         }
                         MemoryCommands::Search { query, limit, min_score } => {
-                            println!("🧠 Searching memory: '{}'", query);
-                            println!("   Limit: {}", limit);
+                            println!("🧠 Searching memory: '{query}'");
+                            println!("   Limit: {limit}");
                             if let Some(score) = min_score {
-                                println!("   Min score: {}", score);
+                                println!("   Min score: {score}");
                             }
                             println!("   Note: Run `lucid search \"{}\"` for full search", query);
                         }
