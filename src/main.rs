@@ -529,7 +529,7 @@ async fn main() -> Result<()> {
                             if let Some(score) = min_score {
                                 println!("   Min score: {score}");
                             }
-                            println!("   Note: Run `lucid search \"{}\"` for full search", query);
+                            println!("   Note: Run `lucid search \"{query}\"` for full search");
                         }
                         MemoryCommands::Index { force } => {
                             println!("🧠 Indexing memory...");
@@ -539,14 +539,14 @@ async fn main() -> Result<()> {
                             println!("   Note: Run `lucid index` to rebuild index");
                         }
                         MemoryCommands::Get { path, lines } => {
-                            println!("🧠 Getting memory entry: {}", path);
+                            println!("🧠 Getting memory entry: {path}");
                             if let Some(l) = lines {
-                                println!("   Lines: {}", l);
+                                println!("   Lines: {l}");
                             }
                         }
                         MemoryCommands::List { limit } => {
                             println!("🧠 Recent memory files:");
-                            println!("   Limit: {}", limit);
+                            println!("   Limit: {limit}");
                             println!("   Files: 0");
                         }
                     }
@@ -562,22 +562,22 @@ async fn main() -> Result<()> {
                                 println!("[]");
                             } else {
                                 if let Some(mins) = active {
-                                    println!("   Active in last {} minutes", mins);
+                                    println!("   Active in last {mins} minutes");
                                 }
                                 println!("   Sessions: 0 (no active sessions)");
                             }
                         }
                         SessionsCommands::Show { id, messages } => {
                             println!("💬 Session Details:");
-                            println!("   ID: {}", id);
-                            println!("   Messages: {}", messages);
+                            println!("   ID: {id}");
+                            println!("   Messages: {messages}");
                             println!("   Status: Not found");
                         }
                         SessionsCommands::Delete { id } => {
-                            println!("💬 Session deleted: {}", id);
+                            println!("💬 Session deleted: {id}");
                         }
                         SessionsCommands::Export { id, output } => {
-                            println!("💬 Exporting session '{}' to: {}", id, output);
+                            println!("💬 Exporting session '{}' to: {output}", id);
                         }
                     }
                     Ok(())
@@ -588,8 +588,8 @@ async fn main() -> Result<()> {
                     match action {
                         SecurityCommands::Audit { deep, fix } => {
                             println!("🔒 Security Audit:");
-                            println!("   Deep scan: {}", deep);
-                            println!("   Auto-fix: {}", fix);
+                            println!("   Deep scan: {deep}");
+                            println!("   Auto-fix: {fix}");
                             println!();
                             println!("   ✓ Config permissions: OK");
                             println!("   ✓ API keys: Encrypted at rest");
