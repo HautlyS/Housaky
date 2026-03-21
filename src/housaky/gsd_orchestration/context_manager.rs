@@ -32,16 +32,12 @@ pub enum ContextFileType {
 impl ContextFile {
     pub fn new(name: String, path: PathBuf, file_type: ContextFileType) -> Self {
         let max_tokens = match file_type {
-            ContextFileType::Project => 2000,
+            ContextFileType::Project | ContextFileType::Roadmap => 2000,
             ContextFileType::Requirements => 3000,
-            ContextFileType::Roadmap => 2000,
-            ContextFileType::State => 1500,
-            ContextFileType::PhaseContext => 1500,
+            ContextFileType::State | ContextFileType::PhaseContext | ContextFileType::Plan => 1500,
             ContextFileType::Research => 5000,
-            ContextFileType::Plan => 1500,
             ContextFileType::Summary => 1000,
-            ContextFileType::Verification => 2000,
-            ContextFileType::Uat => 2000,
+            ContextFileType::Verification | ContextFileType::Uat => 2000,
         };
 
         Self {

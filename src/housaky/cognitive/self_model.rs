@@ -85,10 +85,9 @@ pub enum EpistemicFeeling {
 impl EpistemicFeeling {
     pub fn intensity(&self) -> f64 {
         match self {
-            EpistemicFeeling::Certainty { strength, .. } => *strength,
+            EpistemicFeeling::Certainty { strength, .. } | EpistemicFeeling::Familiarity { strength, .. } => *strength,
             EpistemicFeeling::Confusion { severity, .. } => *severity,
             EpistemicFeeling::Surprise { magnitude, .. } => *magnitude,
-            EpistemicFeeling::Familiarity { strength, .. } => *strength,
             EpistemicFeeling::CuriosityPull { intensity, .. } => *intensity,
             EpistemicFeeling::TipOfTongue { .. } => 0.6,
             EpistemicFeeling::DejaVu { similarity, .. } => *similarity,
