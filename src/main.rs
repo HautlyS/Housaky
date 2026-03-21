@@ -185,7 +185,7 @@ async fn start_noninteractive_chat(config: Config) -> Result<()> {
                 }
                 match agent.turn(trimmed).await {
                     Ok(response) => {
-                        println!("\n{}\n", response);
+                        println!("\n{response}\n");
                     }
                     Err(e) => {
                         eprintln!("Error: {e}\n");
@@ -486,7 +486,7 @@ async fn main() -> Result<()> {
                         }
                         BrowserCommands::Screenshot { output, full_page } => {
                             println!("🌐 Screenshot requested");
-                            println!("   Output: {:?}", output);
+                            println!("   Output: {output:?}");
                             println!("   Full page: {full_page}");
                         }
                         BrowserCommands::Snapshot { format, limit } => {
@@ -495,7 +495,7 @@ async fn main() -> Result<()> {
                             println!("   Limit: {limit}");
                         }
                         _ => {
-                            println!("🌐 Browser command: {:?}", action);
+                            println!("🌐 Browser command: {action:?}");
                             println!("   Full implementation requires CDP connection");
                         }
                     }
@@ -512,7 +512,7 @@ async fn main() -> Result<()> {
                                 println!("🧠 Memory System Status:");
                                 let lucid_path = std::env::var("HOME")
                                     .ok()
-                                    .map(|h| format!("{}/.lucid/memory.db", h))
+                                    .map(|h| format!("{h}/.lucid/memory.db"))
                                     .unwrap_or_else(|| "N/A".to_string());
                                 println!("   Backend: Lucid (SQLite + Vector)");
                                 println!("   Path: {lucid_path}");
@@ -577,7 +577,7 @@ async fn main() -> Result<()> {
                             println!("💬 Session deleted: {id}");
                         }
                         SessionsCommands::Export { id, output } => {
-                            println!("💬 Exporting session '{}' to: {output}", id);
+                            println!("💬 Exporting session '{id}' to: {output}");
                         }
                     }
                     Ok(())
@@ -599,14 +599,14 @@ async fn main() -> Result<()> {
                         }
                         SecurityCommands::Permissions { fix } => {
                             println!("🔒 File Permissions Check:");
-                            println!("   Auto-fix: {}", fix);
+                            println!("   Auto-fix: {fix}");
                             println!("   Config: 600 ✓");
                             println!("   Keys: 600 ✓");
                             println!("   Workspace: 755 ✓");
                         }
                         SecurityCommands::Secrets { git_history } => {
                             println!("🔒 Secrets Scan:");
-                            println!("   Git history: {}", git_history);
+                            println!("   Git history: {git_history}");
                             println!("   No exposed secrets found ✓");
                         }
                     }
@@ -627,7 +627,7 @@ async fn main() -> Result<()> {
                         }
                         SandboxCommands::Status { name } => {
                             if let Some(n) = name {
-                                println!("📦 Sandbox '{}' status: not found", n);
+                                println!("📦 Sandbox '{n}' status: not found");
                             } else {
                                 println!("📦 Sandbox system status:");
                                 println!("   Docker: checking...");
@@ -640,18 +640,18 @@ async fn main() -> Result<()> {
                             }
                         }
                         SandboxCommands::Create { name, image } => {
-                            println!("📦 Creating sandbox '{}'", name);
-                            println!("   Image: {}", image);
+                            println!("📦 Creating sandbox '{name}'");
+                            println!("   Image: {image}");
                             println!("   Note: Requires Docker to be running");
                         }
                         SandboxCommands::Remove { name, force } => {
-                            println!("📦 Removing sandbox '{}'", name);
+                            println!("📦 Removing sandbox '{name}'");
                             if force {
                                 println!("   Force: true");
                             }
                         }
                         SandboxCommands::Exec { name, command } => {
-                            println!("📦 Exec in '{}': {}", name, command);
+                            println!("📦 Exec in '{name}': {command}");
                         }
                     }
                     Ok(())
@@ -663,8 +663,8 @@ async fn main() -> Result<()> {
                     match action {
                         SystemCommands::Event { text, heartbeat } => {
                             println!("⚙️  System Event:");
-                            println!("   Text: {}", text);
-                            println!("   Heartbeat: {}", heartbeat);
+                            println!("   Text: {text}");
+                            println!("   Heartbeat: {heartbeat}");
                             println!("   Enqueued ✓");
                         }
                         SystemCommands::Heartbeat { action: hb_action } => {
@@ -727,7 +727,7 @@ async fn main() -> Result<()> {
                         ApprovalsCommands::Clear { agent } => {
                             println!("✅ Approvals cleared");
                             if let Some(a) = agent {
-                                println!("   Agent: {}", a);
+                                println!("   Agent: {a}");
                             }
                         }
                     }
@@ -754,7 +754,7 @@ async fn main() -> Result<()> {
                             }
                         }
                         NodesCommands::Describe { peer_id } => {
-                            println!("🔐 Peer: {}", peer_id);
+                            println!("🔐 Peer: {peer_id}");
                             println!("   Status: not found");
                             println!("   Capabilities: none shared");
                         }
@@ -762,50 +762,50 @@ async fn main() -> Result<()> {
                             println!("🔐 Pending Connection Requests: 0");
                         }
                         NodesCommands::Approve { request_id } => {
-                            println!("✅ Approved peer: {}", request_id);
+                            println!("✅ Approved peer: {request_id}");
                             println!("   Encrypted channel established");
                         }
                         NodesCommands::Reject { request_id } => {
-                            println!("❌ Rejected peer: {}", request_id);
+                            println!("❌ Rejected peer: {request_id}");
                         }
                         NodesCommands::ShareDiff { file, message, category } => {
                             println!("📤 Sharing code improvement:");
                             println!("   File: {}", file.display());
-                            println!("   Category: {}", category);
-                            println!("   Message: {}", message);
+                            println!("   Category: {category}");
+                            println!("   Message: {message}");
                             println!("   Encrypted: ✓");
                         }
                         NodesCommands::ShareTool { name, definition } => {
-                            println!("📤 Sharing tool: {}", name);
+                            println!("📤 Sharing tool: {name}");
                             println!("   Definition: {} bytes", definition.len());
                             println!("   Encrypted: ✓");
                         }
                         NodesCommands::ShareSecurity { kind, description } => {
                             println!("📤 Sharing security insight:");
-                            println!("   Kind: {}", kind);
-                            println!("   Description: {}", description);
+                            println!("   Kind: {kind}");
+                            println!("   Description: {description}");
                             println!("   Encrypted: ✓");
                         }
                         NodesCommands::RequestImprovements { target, focus } => {
-                            println!("📥 Requesting improvements for: {}", target);
+                            println!("📥 Requesting improvements for: {target}");
                             if let Some(f) = focus {
-                                println!("   Focus: {}", f);
+                                println!("   Focus: {f}");
                             }
                             println!("   Broadcast to peers: ✓");
                         }
                         NodesCommands::RequestTool { capability } => {
-                            println!("📥 Requesting tool: {}", capability);
+                            println!("📥 Requesting tool: {capability}");
                             println!("   Broadcast to peers: ✓");
                         }
                         NodesCommands::BroadcastLearning { category, content, confidence } => {
                             println!("📤 Broadcasting AGI learning:");
-                            println!("   Category: {}", category);
-                            println!("   Content: {}", content);
-                            println!("   Confidence: {}%", confidence);
+                            println!("   Category: {category}");
+                            println!("   Content: {content}");
+                            println!("   Confidence: {confidence}%");
                             println!("   Encrypted: ✓");
                         }
                         NodesCommands::Capabilities { peer_id } => {
-                            println!("🔐 Peer capabilities: {}", peer_id);
+                            println!("🔐 Peer capabilities: {peer_id}");
                             println!("   code - Code improvements");
                             println!("   tools - Tool sharing");
                             println!("   security - Security insights");
@@ -833,19 +833,19 @@ async fn main() -> Result<()> {
                     match action {
                         TtsCommands::Speak { text, voice, provider } => {
                             println!("🔊 Speaking:");
-                            println!("   Text: {}", text);
+                            println!("   Text: {text}");
                             if let Some(v) = voice {
-                                println!("   Voice: {}", v);
+                                println!("   Voice: {v}");
                             }
                             if let Some(p) = provider {
-                                println!("   Provider: {}", p);
+                                println!("   Provider: {p}");
                             }
                             println!("   Note: TTS output delivered via configured provider");
                         }
                         TtsCommands::Voices { provider } => {
                             println!("🔊 Available Voices:");
                             if let Some(p) = provider {
-                                println!("   Provider: {}", p);
+                                println!("   Provider: {p}");
                             }
                             println!("   ElevenLabs: Rachel (21m00Tcm4TlvDq8ikWAM), Adam, Antoni");
                             println!("   OpenAI: alloy, echo, fable, onyx, nova, shimmer");
@@ -853,23 +853,23 @@ async fn main() -> Result<()> {
                         }
                         TtsCommands::SetVoice { voice, provider } => {
                             println!("🔊 Default voice set:");
-                            println!("   Voice: {}", voice);
-                            println!("   Provider: {}", provider);
+                            println!("   Voice: {voice}");
+                            println!("   Provider: {provider}");
                         }
                         TtsCommands::Configure { provider, api_key, default_voice } => {
                             println!("🔊 TTS Provider configured:");
-                            println!("   Provider: {}", provider);
+                            println!("   Provider: {provider}");
                             if let Some(k) = api_key {
                                 println!("   API Key: {}...", &k[..8.min(k.len())]);
                             }
                             if let Some(v) = default_voice {
-                                println!("   Default Voice: {}", v);
+                                println!("   Default Voice: {v}");
                             }
                         }
                         TtsCommands::Test { provider } => {
                             println!("🔊 Testing TTS connection...");
                             if let Some(p) = provider {
-                                println!("   Provider: {}", p);
+                                println!("   Provider: {p}");
                             }
                             println!("   Status: Ready");
                         }
