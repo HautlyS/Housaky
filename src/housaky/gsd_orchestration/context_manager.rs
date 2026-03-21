@@ -1,6 +1,7 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::fmt::Write;
 use std::path::PathBuf;
 use tokio::fs;
 use tracing::info;
@@ -317,32 +318,32 @@ impl ContextManager {
     fn render_project(ctx: &ProjectContext) -> String {
         let mut md = String::new();
 
-        md.push_str(&format!("# {}\n\n", ctx.name));
-        md.push_str(&format!("## Vision\n{}\n\n", ctx.vision));
+        let _ = write!(md, "# {}\n\n", ctx.name);
+        let _ = write!(md, "## Vision\n{}\n\n", ctx.vision);
 
         md.push_str("## Goals\n");
         for goal in &ctx.goals {
-            md.push_str(&format!("- {}\n", goal));
+            let _ = write!(md, "- {}\n", goal);
         }
         md.push_str("\n");
 
         if !ctx.constraints.is_empty() {
             md.push_str("## Constraints\n");
             for constraint in &ctx.constraints {
-                md.push_str(&format!("- {}\n", constraint));
+                let _ = write!(md, "- {}\n", constraint);
             }
             md.push_str("\n");
         }
 
         md.push_str("## Tech Preferences\n");
         for pref in &ctx.tech_preferences {
-            md.push_str(&format!("- {}\n", pref));
+            let _ = write!(md, "- {}\n", pref);
         }
         md.push_str("\n");
 
         md.push_str("## Success Criteria\n");
         for criteria in &ctx.success_criteria {
-            md.push_str(&format!("- {}\n", criteria));
+            let _ = write!(md, "- {}\n", criteria);
         }
 
         md
@@ -351,29 +352,29 @@ impl ContextManager {
     fn render_requirements(reqs: &RequirementsContext, phase: u32) -> String {
         let mut md = String::new();
 
-        md.push_str(&format!("# Requirements - Phase {}\n\n", phase));
+        let _ = write!(md, "# Requirements - Phase {}\n\n", phase);
 
         md.push_str("## Must Have (v1)\n");
         for req in &reqs.must_haves {
-            md.push_str(&format!("- [ ] {}\n", req));
+            let _ = write!(md, "- [ ] {}\n", req);
         }
         md.push_str("\n");
 
         md.push_str("## Should Have (v2)\n");
         for req in &reqs.should_haves {
-            md.push_str(&format!("- [ ] {}\n", req));
+            let _ = write!(md, "- [ ] {}\n", req);
         }
         md.push_str("\n");
 
         md.push_str("## Could Have\n");
         for req in &reqs.could_haves {
-            md.push_str(&format!("- [ ] {}\n", req));
+            let _ = write!(md, "- [ ] {}\n", req);
         }
         md.push_str("\n");
 
         md.push_str("## Out of Scope\n");
         for req in &reqs.out_of_scope {
-            md.push_str(&format!("- {}\n", req));
+            let _ = write!(md, "- {}\n", req);
         }
 
         md
@@ -385,11 +386,8 @@ impl ContextManager {
         md.push_str("# Roadmap\n\n");
 
         for milestone in &roadmap.milestones {
-            md.push_str(&format!(
-                "## {} (v{})\n\n",
-                milestone.name, milestone.version
-            ));
-            md.push_str(&format!("Status: {:?}\n\n", milestone.status));
+            let _ = write!(md, "## {} (v{})\n\n", milestone.name, milestone.version);
+            let _ = write!(md, "Status: {:?}\n\n", milestone.status);
 
             md.push_str("Phases:\n");
             for phase in &milestone.phases {
@@ -400,7 +398,7 @@ impl ContextManager {
                 } else {
                     "○ Pending"
                 };
-                md.push_str(&format!("- Phase {}: {}\n", phase, status));
+                let _ = write!(md, "- Phase {}: {}\n", phase, status);
             }
             md.push_str("\n");
         }
@@ -415,23 +413,23 @@ impl ContextManager {
 
         md.push_str("## Decisions\n");
         for decision in &state.decisions {
-            md.push_str(&format!("### {} - {}\n", decision.id, decision.timestamp));
-            md.push_str(&format!("{}\n\n", decision.description));
-            md.push_str(&format!("Rationale: {}\n\n", decision.rationale));
+            let _ = write!(md, "### {} - {}\n", decision.id, decision.timestamp);
+            let _ = write!(md, "{}\n\n", decision.description);
+            let _ = write!(md, "Rationale: {}\n\n", decision.rationale);
         }
 
         if !state.blockers.is_empty() {
             md.push_str("## Blockers\n");
             for blocker in &state.blockers {
-                md.push_str(&format!("- {}\n", blocker));
+                let _ = write!(md, "- {}\n", blocker);
             }
             md.push_str("\n");
         }
 
-        md.push_str(&format!("## Position\n{}\n", state.position));
+        let _ = write!(md, "## Position\n{}\n", state.position);
 
         if let Some(last) = state.last_phase {
-            md.push_str(&format!("\nLast Phase: {}\n", last));
+            let _ = write!(md, "\nLast Phase: {}\n", last);
         }
 
         md

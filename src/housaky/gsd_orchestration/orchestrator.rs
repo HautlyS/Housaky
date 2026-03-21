@@ -15,6 +15,7 @@ use anyhow::Result;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::fmt::Write;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -829,28 +830,29 @@ impl GSDOrchestrator {
     fn render_plan(&self, result: &DecompositionResult) -> String {
         let mut md = String::new();
 
-        md.push_str(&format!("# Plan - Strategy: {:?}\n\n", result.strategy));
-        md.push_str(&format!("Confidence: {:.0}%\n", result.confidence * 100.0));
-        md.push_str(&format!(
+        let _ = write!(md, "# Plan - Strategy: {:?}\n\n", result.strategy);
+        let _ = write!(md, "Confidence: {:.0}%\n", result.confidence * 100.0);
+        let _ = write!(
+            md,
             "Estimated Duration: {} minutes\n\n",
             result.estimated_total_mins
-        ));
+        );
 
         md.push_str("## Steps\n\n");
         for step in &result.steps {
-            md.push_str(&format!("### {}. {}\n", step.order, step.description));
-            md.push_str(&format!("**Action:** {}\n\n", step.action));
+            let _ = write!(md, "### {}. {}\n", step.order, step.description);
+            let _ = write!(md, "**Action:** {}\n\n", step.action);
 
             if !step.files.is_empty() {
                 md.push_str("**Files:**\n");
                 for file in &step.files {
-                    md.push_str(&format!("- {}\n", file));
+                    let _ = write!(md, "- {}\n", file);
                 }
                 md.push_str("\n");
             }
 
-            md.push_str(&format!("**Verification:** {}\n", step.verification));
-            md.push_str(&format!("**Done:** {}\n\n", step.done_criteria));
+            let _ = write!(md, "**Verification:** {}\n", step.verification);
+            let _ = write!(md, "**Done:** {}\n\n", step.done_criteria);
         }
 
         md

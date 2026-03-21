@@ -3,6 +3,7 @@
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
+use std::fmt::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use tokio::fs;
@@ -510,15 +511,16 @@ impl SelfImprovementEngine {
     /// Generate a report for subagent processing
     pub fn generate_report(&self) -> String {
         let mut report = String::new();
-        
+
         report.push_str("# Housaky Self-Improvement Report\n\n");
-        report.push_str(&format!("Total opportunities found: {}\n\n", self.improvements.len()));
-        
+        let _ = write!(report, "Total opportunities found: {}\n\n", self.improvements.len());
+
         let top = self.get_top_improvements(10);
         report.push_str("## Top 10 Priority Improvements\n\n");
-        
+
         for (i, imp) in top.iter().enumerate() {
-            report.push_str(&format!(
+            let _ = write!(
+                report,
                 "{}. **{}** (priority: {:.2})\n   - File: {}\n   - Effort: {}\n   - Category: {}\n\n",
                 i + 1,
                 imp.description,
@@ -526,9 +528,9 @@ impl SelfImprovementEngine {
                 imp.file,
                 imp.effort,
                 imp.category
-            ));
+            );
         }
-        
+
         report
     }
 }

@@ -3,6 +3,7 @@ use anyhow::{bail, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
+use std::fmt::Write;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -917,14 +918,14 @@ impl GoalEngine {
             "markdown" => {
                 let mut md = String::from("# Goals Export\n\n");
                 for goal in &goals_vec {
-                    md.push_str(&format!("## {} ({})\n", goal.title, goal.id));
-                    md.push_str(&format!("- **Status:** {:?}\n", goal.status));
-                    md.push_str(&format!("- **Priority:** {:?}\n", goal.priority));
-                    md.push_str(&format!("- **Progress:** {:.0}%\n", goal.progress * 100.0));
-                    md.push_str(&format!("- **Category:** {:?}\n", goal.category));
-                    md.push_str(&format!("- **Description:** {}\n", goal.description));
+                    let _ = write!(md, "## {} ({})\n", goal.title, goal.id);
+                    let _ = write!(md, "- **Status:** {:?}\n", goal.status);
+                    let _ = write!(md, "- **Priority:** {:?}\n", goal.priority);
+                    let _ = write!(md, "- **Progress:** {:.0}%\n", goal.progress * 100.0);
+                    let _ = write!(md, "- **Category:** {:?}\n", goal.category);
+                    let _ = write!(md, "- **Description:** {}\n", goal.description);
                     if !goal.subtask_ids.is_empty() {
-                        md.push_str(&format!("- **Subtasks:** {}\n", goal.subtask_ids.len()));
+                        let _ = write!(md, "- **Subtasks:** {}\n", goal.subtask_ids.len());
                     }
                     md.push('\n');
                 }
