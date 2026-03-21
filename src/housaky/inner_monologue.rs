@@ -406,10 +406,14 @@ impl InnerMonologue {
 
         let old_len = stream.thoughts.len();
 
+        // Retain thoughts that are:
+        // - High importance (> 0.2)
+        // - Not yet processed (need action)
+        // - Recent (< 24h) AND somewhat important (> 0.1)
         stream.thoughts.retain(|t| {
             t.importance > 0.2
                 || !t.processed
-                || t.created_at > Utc::now() - chrono::Duration::hours(24)
+                || (t.importance > 0.1 && t.created_at > Utc::now() - chrono::Duration::hours(24))
         });
 
         stream.last_compacted = Utc::now();

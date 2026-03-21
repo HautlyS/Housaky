@@ -545,10 +545,7 @@ impl MetaCognitionEngine {
 
         let query_lower = query.to_lowercase();
 
-        if query_lower.contains("who are you") || query_lower.contains("what are you") {
-            return Ok(self_model.self_image.clone());
-        }
-
+        // Check capabilities FIRST (more specific) before generic "what are you"
         if query_lower.contains("capabilities") || query_lower.contains("abilities") {
             return Ok(format!(
                 "My current capabilities:\n\
@@ -573,6 +570,10 @@ impl MetaCognitionEngine {
                 self_model.capabilities.knowledge_depth * 100.0,
                 self_model.capabilities.adaptability * 100.0,
             ));
+        }
+
+        if query_lower.contains("who are you") || query_lower.contains("what are you") {
+            return Ok(self_model.self_image.clone());
         }
 
         if query_lower.contains("limitation") || query_lower.contains("cannot") {
