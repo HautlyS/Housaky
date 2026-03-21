@@ -705,6 +705,10 @@ impl KowalskiBridge {
                 max_depth: 3,
                 is_kowalski_agent: true,
                 system_prompt: Some(self.get_system_prompt_for_agent_name(&sa_config.key_name)),
+                glm_api_key: None,
+                glm_model: "glm-4-plus".to_string(),
+                glm_per_agent: std::collections::HashMap::new(),
+                temperature: None,
             });
         }
 

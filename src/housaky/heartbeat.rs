@@ -5,6 +5,7 @@ use crate::housaky::agent::{Agent, Task, TaskCategory, TaskPriority, TaskStatus}
 use crate::housaky::core::HousakyCore;
 use crate::housaky::kowalski_integration::KowalskiBridge;
 use crate::housaky::memory::consolidation::MemoryConsolidator;
+use crate::housaky::memory::hierarchical::{HierarchicalMemory, HierarchicalMemoryConfig};
 use crate::housaky::self_improvement_loop::SelfImprovementLoop;
 use crate::housaky::self_improvement_mod::SelfImprovementEngine;
 use crate::housaky::skills::{SkillCreator, SkillRegistry};
@@ -14,6 +15,7 @@ use crate::util::write_toml_file;
 use anyhow::Result;
 use std::collections::HashSet;
 use std::sync::Arc;
+use tokio::sync::RwLock;
 use tokio::time::{interval, Duration};
 use tracing::{debug, error, info, warn};
 
@@ -222,23 +224,28 @@ impl HousakyHeartbeat {
         let goal_engine = Arc::new(crate::housaky::goal_engine::GoalEngine::new(&config.source_dir));
         let meta_cognition = Arc::new(crate::housaky::meta_cognition::MetaCognitionEngine::new());
         
+        let agent_clone = agent.clone();
         Self {
             agent,
             core: Arc::new(HousakyCore::minimal(goal_engine.clone(), meta_cognition.clone())),
-            skill_registry: Arc::new(SkillRegistry::new(&agent.workspace_dir)),
+            skill_registry: Arc::new(SkillRegistry::new(&agent_clone.workspace_dir)),
             kowalski_bridge: None,
             unified_hub: None,
-            self_improvement: Arc::new(SelfImprovementEngine::new(agent.clone())),
+            self_improvement: Arc::new(SelfImprovementEngine::new(agent_clone.clone())),
             recursive_improvement_loop: Arc::new(SelfImprovementLoop::new(
                 &config.source_dir,
                 goal_engine,
                 meta_cognition,
             )),
-            memory_consolidator: Arc::new(MemoryConsolidator::new()),
+            memory_consolidator: Arc::new(MemoryConsolidator::new(
+                Arc::new(HierarchicalMemory::new(HierarchicalMemoryConfig::default())),
+                &config.source_dir,
+            )),
             interval_seconds: 120,
             config,
             provider,
             model,
+            operation_mode: Arc::new(RwLock::new(OperationMode::Idle)),
         }
     }
 
@@ -266,6 +273,7 @@ impl HousakyHeartbeat {
             config: config.clone(),
             provider,
             model,
+            operation_mode: Arc::new(RwLock::new(OperationMode::Idle)),
         }
     }
 

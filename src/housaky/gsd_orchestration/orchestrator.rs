@@ -8,6 +8,8 @@ use super::step_decomposer::{
 use super::task::{GSDTask, GSDTaskStatus};
 use super::wave_executor::{ExecutionResult, WaveExecutor};
 use crate::housaky::goal_engine::GoalEngine;
+use crate::housaky::housaky_agent::KowalskiIntegrationConfig;
+use crate::housaky::kowalski_integration::KowalskiBridge;
 use crate::housaky::meta_cognition::MetaCognitionEngine;
 use anyhow::Result;
 use chrono::{DateTime, Utc};
@@ -31,6 +33,8 @@ pub struct GSDOrchestrator {
     awareness: Arc<RwLock<TaskAwareness>>,
     self_improvement: SelfImprovementIntegration,
     execution_mode: ExecutionMode,
+    provider: Option<Arc<dyn crate::providers::Provider>>,
+    model: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -158,7 +162,16 @@ impl GSDOrchestrator {
                 improvement_suggestions: Vec::new(),
             },
             execution_mode: ExecutionMode::default(),
+            provider: None,
+            model: String::new(),
         }
+    }
+
+    /// Set provider and model for LLM-based execution
+    pub fn with_provider(mut self, provider: Option<Arc<dyn crate::providers::Provider>>, model: String) -> Self {
+        self.provider = provider;
+        self.model = model;
+        self
     }
 
     /// Set the execution mode
@@ -549,7 +562,26 @@ impl GSDOrchestrator {
 
         // Try to get Kowalski bridge from context or use direct API call
         // For now, we'll create a temporary bridge and attempt the call
-        let config = crate::config::KowalskiIntegrationConfig::default();
+        let config = KowalskiIntegrationConfig {
+            enabled: true,
+            kowalski_path: std::path::PathBuf::from("kowalski"),
+            enable_federation: true,
+            enable_code_agent: true,
+            enable_web_agent: true,
+            enable_academic_agent: true,
+            enable_data_agent: true,
+            enable_creative_agent: true,
+            enable_reasoning_agent: true,
+            glm_api_key: None,
+            glm_model: "zai-org/GLM-5-FP8".to_string(),
+            code_agent_glm_key: None,
+            web_agent_glm_key: None,
+            academic_agent_glm_key: None,
+            data_agent_glm_key: None,
+            creative_agent_glm_key: None,
+            reasoning_agent_glm_key: None,
+            federation_glm_key: None,
+        };
         let bridge = KowalskiBridge::new(&config);
 
         match bridge.send_task(agent_name, &task_prompt).await {
@@ -888,6 +920,17 @@ impl GSDOrchestrator {
                     / awareness.historical_performance.len() as f64
             },
         }
+    }
+
+    /// Quick execute a task without creating a formal phase
+    pub async fn quick_execute(&self, task: &str) -> Result<ExecutionSummary> {
+        // Use the execution engine for quick tasks
+        let engine = crate::housaky::gsd_orchestration::GSDExecutionEngine::new(
+            self.workspace_dir.clone(),
+            self.provider.clone(),
+            self.model.clone(),
+        );
+        engine.quick_execute(task).await
     }
 }
 

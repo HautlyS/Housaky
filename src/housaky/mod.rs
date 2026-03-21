@@ -24,7 +24,7 @@ pub mod alignment;
 pub mod a2a;
 pub mod cognitive;
 pub mod collaboration;
-pub mod core;
+// core moved after all its dependencies
 pub mod decision_journal;
 pub mod goal_engine;
 pub mod heartbeat;
@@ -94,11 +94,27 @@ pub mod quantum;
 pub mod subagent_system;
 pub mod swarm;
 
+// Feedback and Skill Invocation
+
 // Phase 3 — Consciousness Substrate & Self-Awareness
 pub mod consciousness;
 
+// Feedback and skill invocation
+
+// Feedback and skill invocation
+
+// Feedback Loop and Skill Invocation
+
+// Feedback loop module
+
+// Skill invocation module
+
 // Phase 4 — Unbounded Self-Improvement
 pub mod architecture_search;
+
+// Feedback and skill invocation modules
+pub mod feedback_loop;
+pub mod skill_invocation;
 
 // Enhanced A2A with Discovery
 pub mod a2a_discovery;
@@ -124,7 +140,7 @@ pub mod verification;
 pub mod embodiment;
 pub mod perception;
 
-// Phase 6 — Singularity Convergence (Cycles 10 000–∞)
+// Core module (must come after all its dependencies)
 pub mod singularity;
 
 // Phase 7 — Collective Global Intelligence (Global Agent Contribution + Voting)
@@ -132,6 +148,9 @@ pub mod collective;
 
 // Phase 8 — Seed Mind: Living Intelligence Core (HDIN)
 pub mod seed_mind;
+
+// Core module (must come after all dependencies)
+pub mod core;
 
 // Re-export runtime WASM plugin functionality
 pub use crate::runtime::wasm::{WasmCapabilities, WasmExecutionResult, WasmRuntime};
@@ -816,8 +835,8 @@ async fn handle_gsd_command(command: GSDCommands, config: &Config) -> Result<()>
         .clone()
         .unwrap_or_else(|| "arcee-ai/trinity-large-preview:free".to_string());
 
-    let boxed_provider: Box<dyn Provider> = provider;
-    let engine = GSDExecutionEngine::new(config.workspace_dir.clone(), Some(boxed_provider), model);
+    let arc_provider: Arc<dyn Provider> = provider.into();
+    let engine = GSDExecutionEngine::new(config.workspace_dir.clone(), Some(arc_provider), model);
 
     engine.initialize().await?;
 

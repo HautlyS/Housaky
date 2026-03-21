@@ -15,14 +15,14 @@ use crate::providers::{ChatMessage, ChatRequest};
 
 pub struct GSDExecutionEngine {
     orchestrator: Arc<GSDOrchestrator>,
-    provider: Option<Box<dyn Provider>>,
+    provider: Option<Arc<dyn Provider>>,
     model: String,
     temperature: f64,
     workspace_dir: PathBuf,
 }
 
 impl GSDExecutionEngine {
-    pub fn new(workspace_dir: PathBuf, provider: Option<Box<dyn Provider>>, model: String) -> Self {
+    pub fn new(workspace_dir: PathBuf, provider: Option<Arc<dyn Provider>>, model: String) -> Self {
         let meta_cognition = Arc::new(MetaCognitionEngine::new());
         let goal_engine = Arc::new(GoalEngine::new(&workspace_dir));
         let orchestrator = Arc::new(GSDOrchestrator::new(

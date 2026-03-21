@@ -1132,10 +1132,6 @@ impl UnifiedAgentHub {
             AgentSystem::GSD => self.gsd_orchestrator.is_some(), // GSD enabled if orchestrator is configured
         }
     }
-            AgentSystem::Kowalski => config.enable_kowalski && self.kowalski_bridge.is_some(),
-            AgentSystem::SubAgent => config.enable_subagents && self.subagent_orchestrator.is_some(),
-        }
-    }
 
     fn convert_to_coordinator_task(&self, task: &UnifiedTask) -> AgentTask {
         AgentTask {

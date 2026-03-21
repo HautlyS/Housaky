@@ -257,16 +257,19 @@ impl WaveExecutor {
         let mut tasks = self.tasks.write().await;
         let mut unblocked = Vec::new();
 
+        // Collect completed task IDs first to avoid borrow conflict
+        let completed_ids: std::collections::HashSet<String> = tasks
+            .iter()
+            .filter(|(_, t)| matches!(t.status, GSDTaskStatus::Completed | GSDTaskStatus::Verified))
+            .map(|(id, _)| id.clone())
+            .collect();
+
         for (task_id, task) in tasks.iter_mut() {
             if task.dependencies.contains(&completed_task_id.to_string())
                 && task.status == GSDTaskStatus::Pending
             {
                 // Check if ALL dependencies are now satisfied
-                let all_deps_satisfied = task.dependencies.iter().all(|dep| {
-                    tasks.get(dep).map_or(false, |t| {
-                        matches!(t.status, GSDTaskStatus::Completed | GSDTaskStatus::Verified)
-                    })
-                });
+                let all_deps_satisfied = task.dependencies.iter().all(|dep| completed_ids.contains(dep));
 
                 if all_deps_satisfied {
                     task.status = GSDTaskStatus::Ready;
@@ -312,7 +315,7 @@ impl WaveExecutor {
                 .dependencies
                 .iter()
                 .filter(|dep| {
-                    tasks.get(dep).map_or(true, |t| {
+                    tasks.get(&**dep).map_or(true, |t| {
                         !matches!(t.status, GSDTaskStatus::Completed | GSDTaskStatus::Verified)
                     })
                 })

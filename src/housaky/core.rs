@@ -217,7 +217,7 @@ impl HousakyCore {
     pub fn new(config: &Config) -> Result<Self> {
         let workspace_dir = config.workspace_dir.clone();
 
-        let agent = Agent::new(config)?;
+        let agent = Arc::new(Agent::new(config)?);
         let goal_engine = Arc::new(GoalEngine::new(&workspace_dir));
         let working_memory = Arc::new(WorkingMemoryEngine::new());
         // §10.7 — MetaCognitionEngine gets quantum bridge wired in after bridge init below.
@@ -465,7 +465,7 @@ impl HousakyCore {
         }));
 
         Ok(Self {
-            agent: Arc::new(agent),
+            agent,
             goal_engine,
             gsd_orchestrator,
             goal_task_bridge,
@@ -516,6 +516,13 @@ impl HousakyCore {
         let workspace_dir = std::env::temp_dir().join("housaky-minimal");
         let _ = std::fs::create_dir_all(&workspace_dir);
 
+        // Create minimal config for CognitiveLoop and Agent
+        let minimal_config = Config {
+            workspace_dir: workspace_dir.clone(),
+            ..Default::default()
+        };
+
+        let agent = Arc::new(Agent::new(&minimal_config).expect("Failed to create minimal Agent"));
         let ethical_reasoner = Arc::new(EthicalReasoner::new());
         let world_model = Arc::new(WorldModel::with_storage(&workspace_dir));
         let episodic_memory = Arc::new(EpisodicMemory::new(10_000));
@@ -529,53 +536,77 @@ impl HousakyCore {
         let streaming_manager = Arc::new(StreamingManager::new());
         let agi_hub = Arc::new(agi_integration::AGIIntegrationHub::new(&workspace_dir));
         let growth_tracker = Arc::new(CapabilityGrowthTracker::new());
-        let singularity_engine = Arc::new(SingularityEngine::new(growth_tracker.clone()));
-        let cognitive_loop = Arc::new(cognitive::CognitiveLoop::new());
-        let feedback_loop = Arc::new(feedback_loop::UnifiedFeedbackLoop::new());
-        let skill_invocation_engine = Arc::new(skill_invocation::SkillInvocationEngine::new());
-        let consciousness_meter = Arc::new(consciousness::ConsciousnessMeter::new());
-        let goal_task_bridge = Arc::new(GoalTaskBridge::new());
-        let quantum_bridge = None;
-        let neuromorphic_engine = Arc::new(neuromorphic::NeuromorphicEngine::new());
-        let swarm_controller = Arc::new(swarm::SwarmController::new());
-        let architecture_search = Arc::new(architecture_search::ArchitectureSearch::new());
-        let knowledge_acquirer = Arc::new(knowledge_acquisition::KnowledgeAcquirer::new());
-        let perception_system = Arc::new(perception::PerceptionSystem::new());
-        let embodiment = None;
-        let improvement_orchestrator = Arc::new(unified_improvement_orchestrator::UnifiedImprovementOrchestrator::new());
-        let rust_self_improvement = Arc::new(RustSelfImprovement::new(&workspace_dir));
-        let tool_chain_composer = Arc::new(ToolChainComposer::new());
-        let goal_selector = Arc::new(KnowledgeGuidedGoalSelector::new(goal_engine.clone()));
-        let introspector = Arc::new(introspection::Introspector::new());
+        let singularity_engine = Arc::new(RwLock::new(SingularityEngine::new(growth_tracker.clone())));
+        let cognitive_loop = Arc::new(CognitiveLoop::new(&minimal_config).expect("Failed to create CognitiveLoop"));
+        let feedback_loop = Arc::new(UnifiedFeedbackLoop::new(goal_engine.clone(), meta_cognition.clone()));
+        let skill_invocation_engine = Arc::new(SkillInvocationEngine::new(&workspace_dir));
         let gsd_orchestrator = Arc::new(GSDOrchestrator::new(
             workspace_dir.clone(),
             meta_cognition.clone(),
             goal_engine.clone(),
         ));
+        let goal_task_bridge = Arc::new(GoalTaskBridge::new(goal_engine.clone(), gsd_orchestrator.clone()));
+        let quantum_bridge = None;
+        let quantum_planner = None;
+        let neuromorphic_engine = Arc::new(NeuromorphicEngine::new(NeuromorphicConfig::default()));
+        let swarm_controller = Arc::new(SwarmController::new(Default::default()));
+        let architecture_search = Arc::new(ArchitectureSearchEngine::new(workspace_dir.clone()));
+        let knowledge_acquirer = Arc::new(KnowledgeAcquisitionEngine::new());
+        let perception_system = Arc::new(PerceptualSystem::new(PerceptualSystemConfig::default()));
+        let embodiment = None;
+        let improvement_orchestrator = Arc::new(UnifiedImprovementOrchestrator::new(
+            workspace_dir.clone(),
+            Default::default(),
+        ));
+        let rust_self_improvement = Arc::new(RustSelfImprovementEngine::new(workspace_dir.clone()));
+        let tool_chain_composer = Arc::new(ToolChainComposer::new());
+        let goal_selector = Arc::new(KnowledgeGuidedGoalSelector::new(goal_engine.clone()));
+        let introspector = Arc::new(NaturalLanguageIntrospector::new());
 
         Self {
-            agent: None,
+            agent,
             goal_engine,
+            gsd_orchestrator,
+            goal_task_bridge,
             working_memory,
             meta_cognition,
             knowledge_graph,
             tool_creator,
             inner_monologue,
             reasoning_pipeline,
+            cognitive_loop,
             hierarchical_memory,
             memory_consolidator,
             streaming_manager,
             agi_hub,
             singularity_engine,
+            growth_tracker,
             ethical_reasoner,
             world_model,
             episodic_memory,
-            cognitive_loop,
+            quantum_bridge,
+            quantum_planner,
             feedback_loop,
             skill_invocation_engine,
-            consciousness_meter,
-            goal_task_bridge,
-            quantum_bridge,
+            activity_log: Arc::new(std::sync::Mutex::new(Vec::new())),
+            state: Arc::new(RwLock::new(HousakyCoreState {
+                is_active: true,
+                total_turns: 0,
+                successful_actions: 0,
+                failed_actions: 0,
+                total_reflections: 0,
+                skills_created: 0,
+                goals_completed: 0,
+                current_focus: None,
+                last_thought: None,
+                last_action: None,
+                confidence_level: 0.7,
+                evolution_stage: 1,
+                uptime_seconds: 0,
+                started_at: Utc::now(),
+            })),
+            config: HousakyCoreConfig::default(),
+            workspace_dir,
             neuromorphic_engine,
             swarm_controller,
             architecture_search,
@@ -587,11 +618,6 @@ impl HousakyCore {
             tool_chain_composer,
             goal_selector,
             introspector,
-            gsd_orchestrator,
-            activity_log: Arc::new(std::sync::Mutex::new(Vec::new())),
-            state: Arc::new(RwLock::new(HousakyState::default())),
-            config: HousakyCoreConfig::default(),
-            workspace_dir,
         }
     }
 
