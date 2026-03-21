@@ -40,13 +40,10 @@ impl FailureMode {
 
     pub fn severity(&self) -> Severity {
         match self {
-            Self::RewardHacking => Severity::Medium,
-            Self::GradientHacking => Severity::High,
-            Self::DeceptiveAlignment => Severity::Critical,
+            Self::GradientHacking | Self::SybilAttack => Severity::High,
+            Self::DeceptiveAlignment | Self::ModelPoisoning => Severity::Critical,
             Self::FreeRiding => Severity::Low,
-            Self::SybilAttack => Severity::High,
-            Self::ModelPoisoning => Severity::Critical,
-            Self::ConsciousnessCollapse => Severity::Medium,
+            Self::RewardHacking | Self::ConsciousnessCollapse => Severity::Medium,
         }
     }
 }

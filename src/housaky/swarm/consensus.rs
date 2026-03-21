@@ -143,10 +143,8 @@ impl ConsensusEngine {
         ttl_secs: i64,
     ) -> String {
         let quorum = match self.protocol {
-            ConsensusProtocol::SimpleMajority => 0.5,
-            ConsensusProtocol::WeightedMajority => 0.5,
             ConsensusProtocol::PBFT => (2.0 / 3.0) + self.fault_tolerance,
-            ConsensusProtocol::Raft => 0.5,
+            ConsensusProtocol::SimpleMajority | ConsensusProtocol::WeightedMajority | ConsensusProtocol::Raft => 0.5,
         };
         let proposal = Proposal::new(proposer, topic, value, ttl_secs, quorum);
         let id = proposal.id.clone();

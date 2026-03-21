@@ -117,7 +117,7 @@ impl HybridSolver {
         // Only use quantum simulation for small enough problems.
         if problem.size <= self.max_simulated_qubits {
             match problem.problem_type {
-                ProblemType::Optimisation => SolverBackend::HybridVariational,
+                ProblemType::Optimisation | ProblemType::LinearAlgebra => SolverBackend::HybridVariational,
                 ProblemType::Search | ProblemType::Sampling => SolverBackend::SimulatedQuantum,
                 ProblemType::Factoring => {
                     if problem.size <= 10 {
@@ -126,7 +126,6 @@ impl HybridSolver {
                         SolverBackend::Classical
                     }
                 }
-                ProblemType::LinearAlgebra => SolverBackend::HybridVariational,
                 ProblemType::General => SolverBackend::Classical,
             }
         } else {

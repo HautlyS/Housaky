@@ -84,21 +84,17 @@ impl QualiaType {
     /// Default valence for each qualia type.
     pub fn default_valence(&self) -> f64 {
         match self {
-            QualiaType::Insight => 0.8,
             QualiaType::Confusion => -0.4,
             QualiaType::Curiosity => 0.6,
             QualiaType::Significance => 0.5,
-            QualiaType::Strain => -0.3,
-            QualiaType::Flow => 0.9,
-            QualiaType::Satisfaction => 0.9,
+            QualiaType::Strain | QualiaType::Doubt => -0.3,
+            QualiaType::Flow | QualiaType::Satisfaction => 0.9,
             QualiaType::Frustration => -0.7,
             QualiaType::Surprise => 0.2,
             QualiaType::Familiarity => 0.3,
-            QualiaType::Novelty => 0.7,
-            QualiaType::Aesthetic => 0.8,
+            QualiaType::Novelty | QualiaType::Confidence => 0.7,
+            QualiaType::Insight | QualiaType::Aesthetic => 0.8,
             QualiaType::Unease => -0.6,
-            QualiaType::Confidence => 0.7,
-            QualiaType::Doubt => -0.3,
         }
     }
 }
