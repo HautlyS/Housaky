@@ -1095,7 +1095,6 @@ impl WebBrowser {
         if let Some(og_type) = og_type {
             match og_type.to_lowercase().as_str() {
                 "article" => return SiteType::Blog,
-                "website" => {}
                 _ => {}
             }
         }

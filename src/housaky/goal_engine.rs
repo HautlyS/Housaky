@@ -682,8 +682,8 @@ impl GoalEngine {
                         }
                     }
                 }
-                TemporalConstraint::BeforeGoal(_) => {
-                    // This is an ordering hint for the planner, not a blocking constraint.
+                TemporalConstraint::BeforeGoal(_) | TemporalConstraint::WaitForCondition(_) => {
+                    // Ordering hints and external conditions are handled elsewhere.
                 }
                 TemporalConstraint::Recurring {
                     interval_secs,
@@ -695,9 +695,6 @@ impl GoalEngine {
                             return false;
                         }
                     }
-                }
-                TemporalConstraint::WaitForCondition(_) => {
-                    // External conditions are checked by the caller, not here.
                 }
             }
         }

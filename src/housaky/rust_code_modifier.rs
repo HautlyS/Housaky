@@ -238,7 +238,6 @@ impl RustCodeParser {
         let name = item_fn.sig.ident.to_string();
         let is_async = item_fn.sig.asyncness.is_some();
         let visibility = match &item_fn.vis {
-            syn::Visibility::Public(_) => "pub".to_string(),
             syn::Visibility::Inherited => String::new(),
             _ => "pub".to_string(),
         };
