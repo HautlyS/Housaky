@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::fmt::Write;
 use tracing::info;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -748,18 +749,18 @@ impl StepDecomposer {
 
         prompt.push_str("## Context\n");
         if let Some(tech) = &context.technology {
-            prompt.push_str(&format!("Technology: {}\n", tech));
+            let _ = write!(prompt, "Technology: {}\n", tech);
         }
         if !context.requirements.is_empty() {
             prompt.push_str("Requirements:\n");
             for req in &context.requirements {
-                prompt.push_str(&format!("- {}\n", req));
+                let _ = write!(prompt, "- {}\n", req);
             }
         }
         if !context.constraints.is_empty() {
             prompt.push_str("Constraints:\n");
             for constraint in &context.constraints {
-                prompt.push_str(&format!("- {}\n", constraint));
+                let _ = write!(prompt, "- {}\n", constraint);
             }
         }
 
