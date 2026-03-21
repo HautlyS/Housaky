@@ -393,7 +393,7 @@ pub fn run_quick_setup(
     let default_ctx = ProjectContext {
         user_name: std::env::var("USER").unwrap_or_else(|_| "User".into()),
         timezone: "UTC".into(),
-        agent_name: "Housaky".into(),
+        agent_name: "Hermes".into(),
         communication_style:
             "Be warm, natural, and clear. Use occasional relevant emojis (1-2 max) and avoid robotic phrasing."
                 .into(),
@@ -2168,7 +2168,7 @@ fn setup_project_context() -> Result<ProjectContext> {
 
     let agent_name: String = Input::new()
         .with_prompt("  Agent name")
-        .default("Housaky".into())
+        .default("Hermes".into())
         .interact_text()?;
 
     let style_options = vec![
@@ -3372,7 +3372,7 @@ fn setup_tunnel() -> Result<crate::config::TunnelConfig> {
 #[allow(clippy::too_many_lines)]
 fn scaffold_workspace(workspace_dir: &Path, ctx: &ProjectContext) -> Result<()> {
     let agent = if ctx.agent_name.is_empty() {
-        "Housaky"
+        "Hermes"
     } else {
         &ctx.agent_name
     };

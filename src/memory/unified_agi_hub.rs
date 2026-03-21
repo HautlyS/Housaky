@@ -347,7 +347,7 @@ impl UnifiedAGIMemoryHub {
             ))),
             collective_mind: Arc::new(RwLock::new(CollectiveMindState {
                 instance_id: instance_id.clone(),
-                instance_name: "Housaky".to_string(),
+                instance_name: "Hermes".to_string(),
                 peers: HashMap::new(),
                 shared_insights: Vec::new(),
                 consensus_topics: Vec::new(),

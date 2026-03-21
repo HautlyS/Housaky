@@ -1,4 +1,4 @@
-//! CLI argument definitions for Housaky
+//! CLI argument definitions for Hermes AGI
 //!
 //! Clean, organized CLI structure with no duplicates.
 
@@ -16,12 +16,12 @@ use crate::commands::{
 // Main CLI
 // ============================================================================
 
-/// Housaky - Zero overhead. Zero compromise. 100% Rust.
+/// Hermes AGI - Zero overhead. Zero compromise. 100% Rust. Measurable AGI capabilities.
 #[derive(Parser, Debug)]
-#[command(name = "housaky")]
+#[command(name = "hermes")]
 #[command(author = "theonlyhennygod")]
 #[command(version = "0.1.0")]
-#[command(about = "The fastest, smallest AI assistant.", long_about = None)]
+#[command(about = "Hermes AGI - Measurable AGI capabilities", long_about = None)]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Option<Commands>,

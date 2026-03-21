@@ -73,7 +73,7 @@ impl Role {
     pub fn label(&self) -> &'static str {
         match self {
             Role::User => "You",
-            Role::Assistant => "Housaky",
+            Role::Assistant => "Hermes",
             Role::System => "SYS",
         }
     }
@@ -717,7 +717,7 @@ impl ChatPane {
                 Span::styled("]", style_assistant_badge()),
                 Span::styled("  ", style_muted()),
                 Span::styled(
-                    "Housaky",
+                    "Hermes",
                     style_assistant_msg().add_modifier(Modifier::BOLD),
                 ),
                 Span::styled("  ", style_muted()),
@@ -745,7 +745,7 @@ impl ChatPane {
                 Span::styled("]", style_assistant_badge()),
                 Span::styled("  ", style_muted()),
                 Span::styled(
-                    "Housaky",
+                    "Hermes",
                     style_assistant_msg().add_modifier(Modifier::BOLD),
                 ),
                 Span::styled(" ", style_muted()),

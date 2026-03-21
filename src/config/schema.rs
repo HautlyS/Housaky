@@ -246,7 +246,7 @@ fn default_peer_instance() -> String {
 
 fn default_shared_dir() -> PathBuf {
     if let Some(user_dirs) = UserDirs::new() {
-        user_dirs.home_dir().join("housaky").join("shared")
+        user_dirs.home_dir().join("hermes").join("shared")
     } else {
         PathBuf::from("shared")
     }
@@ -319,11 +319,11 @@ impl Default for AGISystemConfig {
 
 pub fn default_source_dir() -> PathBuf {
     if let Some(user_dirs) = UserDirs::new() {
-        user_dirs.home_dir().join("housaky")
+        user_dirs.home_dir().join("hermes")
     } else if let Ok(home) = std::env::var("HOME") {
-        PathBuf::from(home).join("housaky")
+        PathBuf::from(home).join("hermes")
     } else {
-        PathBuf::from("housaky")
+        PathBuf::from("hermes")
     }
 }
 
@@ -1759,7 +1759,7 @@ pub struct ObservabilityConfig {
     #[serde(default)]
     pub otel_endpoint: Option<String>,
 
-    /// Service name reported to the OTel collector. Defaults to "housaky".
+    /// Service name reported to the OTel collector. Defaults to "hermes".
     #[serde(default)]
     pub otel_service_name: Option<String>,
 }

@@ -57,7 +57,7 @@ impl Default for Phase3Config {
             forgetting_interval_cycles: 50,
             enable_tom: true,
             episodic_capacity: 10_000,
-            agent_name: "Housaky".to_string(),
+            agent_name: "Hermes".to_string(),
         }
     }
 }

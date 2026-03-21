@@ -314,7 +314,7 @@ impl Default for VoiceConfig {
         Self {
             stt_model: "whisper-tiny".to_string(),
             tts_engine: "elevenlabs".to_string(),
-            tts_voice: "Housaky".to_string(),
+            tts_voice: "Hermes".to_string(),
             wake_word: "hey housaky".to_string(),
             input_device: "default".to_string(),
             output_device: "default".to_string(),
