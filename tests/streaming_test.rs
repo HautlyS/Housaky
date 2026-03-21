@@ -10,7 +10,7 @@
 //! - Ratatui TUI rendering simulation
 //! - Real-time streaming simulation
 
-use housaky::housaky::streaming::{
+use hermes::housaky::streaming::{
     StreamChunk, StreamState, StreamStats, StreamingManager, StreamingSession,
 };
 use std::sync::Arc;
