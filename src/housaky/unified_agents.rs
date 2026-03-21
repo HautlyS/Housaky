@@ -771,7 +771,7 @@ impl UnifiedAgentHub {
             }
         }
         // If we have a goal_id, try to execute its phase
-        else if let Some(gid) = goal_id {
+        else if let Some(_gid) = goal_id {
             // This would need access to goal_task_bridge - for now use quick_execute
             match gsd.quick_execute(&task.description).await {
                 Ok(summary) => {
