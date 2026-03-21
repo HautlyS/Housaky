@@ -4,6 +4,7 @@ use crate::util::expand_path;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use std::fmt::Write;
 use std::sync::Arc;
 
 /// Get detailed file or directory information
@@ -228,9 +229,9 @@ fn format_size(size: u64) -> String {
 
 fn format_file_info(info: &FileMetadata) -> String {
     let mut output = String::new();
-    output.push_str(&format!("File: {}\n", info.name));
-    output.push_str(&format!("Path: {}\n", info.path));
-    output.push_str(&format!("Exists: {}\n", info.exists));
+    let _ = write!(output, "File: {}\n", info.name);
+    let _ = write!(output, "Path: {}\n", info.path);
+    let _ = write!(output, "Exists: {}\n", info.exists);
 
     if info.is_symlink {
         output.push_str("Type: Symbolic Link\n");
@@ -241,27 +242,27 @@ fn format_file_info(info: &FileMetadata) -> String {
     }
 
     if let Some(size) = info.size {
-        output.push_str(&format!("Size: {} bytes ({}\n", size, info.size_human.as_deref().unwrap_or("?")));
+        let _ = write!(output, "Size: {} bytes ({}\n", size, info.size_human.as_deref().unwrap_or("?"));
     }
 
     if let Some(count) = info.children_count {
-        output.push_str(&format!("Entries: {}\n", count));
+        let _ = write!(output, "Entries: {}\n", count);
     }
 
     if let Some(perm) = &info.permissions {
-        output.push_str(&format!("Permissions: {}\n", perm));
+        let _ = write!(output, "Permissions: {}\n", perm);
     }
 
     if let Some(created) = &info.created {
-        output.push_str(&format!("Created: {}\n", created));
+        let _ = write!(output, "Created: {}\n", created);
     }
 
     if let Some(modified) = &info.modified {
-        output.push_str(&format!("Modified: {}\n", modified));
+        let _ = write!(output, "Modified: {}\n", modified);
     }
 
     if let Some(accessed) = &info.accessed {
-        output.push_str(&format!("Accessed: {}\n", accessed));
+        let _ = write!(output, "Accessed: {}\n", accessed);
     }
 
     output
