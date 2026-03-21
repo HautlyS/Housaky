@@ -10,6 +10,7 @@ pub mod autobiographical;
 pub mod emotional_tags;
 pub mod episodic;
 pub mod forgetting;
+pub mod nudge;
 pub mod reconsolidation;
 pub mod schema;
 
@@ -32,5 +33,6 @@ pub use episodic::{
     Episode, EpisodicContext, EpisodicEvent, EpisodicEventType, EpisodicMemory, EpisodicStats,
 };
 pub use forgetting::{AdaptiveForgetting, ForgettingConfig, ForgettingReport};
+pub use nudge::{MemoryNudge, NudgeConfig, NudgeEngine, NudgeType, ExperienceEntry};
 pub use reconsolidation::{MemoryReconsolidator, ReconsolidationRecord, ReconsolidationTrigger};
 pub use schema::{ForgettingCurve, MemorySchema, SchemaLibrary, SchemaStats};
