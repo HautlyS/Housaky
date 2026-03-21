@@ -286,22 +286,27 @@ fn has_supervised_channels(config: &Config) -> bool {
 }
 
 /// Run A2A WebSocket server for inter-agent communication
-async fn run_a2a_server(host: &str, _config: Config) -> Result<()> {
+async fn run_a2a_server(host: &str, config: Config) -> Result<()> {
     use crate::housaky::a2a_websocket::{A2AWebSocketConfig, A2AWebSocketServer};
 
     let bind_addr = format!("{}:8765", host);
-    let config = A2AWebSocketConfig {
+    let tls_enabled = config.tls.is_configured();
+    
+    let ws_config = A2AWebSocketConfig {
         bind_addr,
-        tls_enabled: false, // TODO: Configure TLS
+        tls_enabled,
+        tls_cert_path: config.tls.cert_path.as_ref().map(|p| p.to_string_lossy().to_string()),
+        tls_key_path: config.tls.key_path.as_ref().map(|p| p.to_string_lossy().to_string()),
         ..Default::default()
     };
 
     // Generate instance ID
     let instance_id = format!("housaky-{}", uuid::Uuid::new_v4().to_string().chars().take(8).collect::<String>());
 
-    let server = A2AWebSocketServer::new(config, instance_id.clone());
+    let server = A2AWebSocketServer::new(ws_config, instance_id.clone());
 
-    tracing::info!("☸️ A2A WebSocket server starting on ws://{}:8765", host);
+    let protocol = if tls_enabled { "wss" } else { "ws" };
+    tracing::info!("☸️ A2A WebSocket server starting on {}://{}:8765", protocol, host);
 
     crate::health::mark_component_ok("a2a_websocket");
 

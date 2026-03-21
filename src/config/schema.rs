@@ -27,6 +27,9 @@ pub struct Config {
     pub observability: ObservabilityConfig,
 
     #[serde(default)]
+    pub tls: TlsConfig,
+
+    #[serde(default)]
     pub autonomy: AutonomyConfig,
 
     #[serde(default)]
@@ -1771,6 +1774,41 @@ impl Default for ObservabilityConfig {
     }
 }
 
+// ── TLS Configuration ─────────────────────────────────────────────
+
+/// TLS configuration for secure connections (A2A WebSocket, Gateway, etc.)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TlsConfig {
+    /// Enable TLS for secure connections
+    #[serde(default)]
+    pub enabled: bool,
+    
+    /// Path to TLS certificate file (PEM format)
+    #[serde(default)]
+    pub cert_path: Option<PathBuf>,
+    
+    /// Path to TLS private key file (PEM format)
+    #[serde(default)]
+    pub key_path: Option<PathBuf>,
+}
+
+impl Default for TlsConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            cert_path: None,
+            key_path: None,
+        }
+    }
+}
+
+impl TlsConfig {
+    /// Check if TLS is properly configured
+    pub fn is_configured(&self) -> bool {
+        self.enabled && self.cert_path.is_some() && self.key_path.is_some()
+    }
+}
+
 // ── Autonomy / Security ──────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -3225,6 +3263,7 @@ impl Default for Config {
             default_model: Some("arcee-ai/trinity-large-preview:free".to_string()),
             default_temperature: 0.7,
             observability: ObservabilityConfig::default(),
+            tls: TlsConfig::default(),
             autonomy: AutonomyConfig::default(),
             runtime: RuntimeConfig::default(),
             reliability: ReliabilityConfig::default(),
