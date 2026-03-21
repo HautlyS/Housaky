@@ -1,6 +1,6 @@
-//! Hermes AGI - Zero overhead. Zero compromise. 100% Rust.
+//! Housaky - Zero overhead. Zero compromise. 100% Rust.
 //!
-//! Main entry point for the Hermes AGI system.
+//! Main entry point for the Housaky AI assistant.
 
 #![warn(clippy::all, clippy::pedantic)]
 #![allow(clippy::all)]
@@ -11,12 +11,12 @@ use clap::Parser;
 use tracing::Level;
 use tracing_subscriber::FmtSubscriber;
 
-extern crate hermes;
+extern crate housaky;
 
-use hermes::cli::{is_daemon_running, is_first_run, Cli, Commands};
-use hermes::cli::args::{DoctorAction, HwAction};
-use hermes::commands::{ChannelCommands, KeyCommands, SkillCommands};
-use hermes::{channels, cron, daemon, dashboard, mcp, onboard, service, skills, Config};
+use housaky::cli::{is_daemon_running, is_first_run, Cli, Commands};
+use housaky::cli::args::{DoctorAction, HwAction};
+use housaky::commands::{ChannelCommands, KeyCommands, SkillCommands};
+use housaky::{channels, cron, daemon, dashboard, mcp, onboard, service, skills, Config};
 
 // ============================================================================
 // System Startup
@@ -69,7 +69,7 @@ async fn start_full_system(
 
     sleep(Duration::from_millis(if daemon_running { 200 } else { 1000 })).await;
 
-    let result = hermes::tui::run_minimal_tui(config, provider, model);
+    let result = housaky::tui::run_minimal_tui(config, provider, model);
 
     if let Some(a) = dashboard_abort {
         a.abort();
@@ -82,7 +82,7 @@ async fn start_full_system(
 /// Run non-interactive stdin/stdout chat mode
 async fn start_noninteractive_chat(config: Config) -> Result<()> {
     use std::io::Write;
-    use hermes::housaky::self_improve_daemon::{SelfImproveDaemon, SelfImproveDaemonConfig};
+    use housaky::housaky::self_improve_daemon::{SelfImproveDaemon, SelfImproveDaemonConfig};
     use std::sync::Arc;
     
     println!("\n╭──────────────────────────────────────────────────────────╮");
@@ -122,7 +122,7 @@ async fn start_noninteractive_chat(config: Config) -> Result<()> {
         None
     };
     
-    let mut agent = hermes::agent::Agent::from_config(&effective_config)?;
+    let mut agent = housaky::agent::Agent::from_config(&effective_config)?;
     
     let stdin = std::io::stdin();
     let mut input = String::new();
@@ -171,13 +171,13 @@ async fn start_noninteractive_chat(config: Config) -> Result<()> {
                 let new_provider = cmd.trim_start_matches("/provider ").trim();
                 effective_config.default_provider = Some(new_provider.to_string());
                 println!("Switched to provider: {new_provider}\n");
-                agent = hermes::agent::Agent::from_config(&effective_config)?;
+                agent = housaky::agent::Agent::from_config(&effective_config)?;
             }
             cmd if cmd.starts_with("/model ") => {
                 let new_model = cmd.trim_start_matches("/model ").trim();
                 effective_config.default_model = Some(new_model.to_string());
                 println!("Switched to model: {new_model}\n");
-                agent = hermes::agent::Agent::from_config(&effective_config)?;
+                agent = housaky::agent::Agent::from_config(&effective_config)?;
             }
             _ => {
                 if let Some(ref d) = daemon {
@@ -214,7 +214,7 @@ async fn main() -> Result<()> {
     // Install crypto provider
     let _ = rustls::crypto::ring::default_provider().install_default();
 
-    // Check for bare `hermes` (no subcommand)
+    // Check for bare `housaky` (no subcommand)
     let args: Vec<String> = std::env::args().collect();
     let is_help = args.len() > 1 && matches!(args[1].as_str(), "--help" | "-h" | "--version" | "-V");
     let no_subcommand = args.len() == 1 || (args.len() > 1 && args[1].starts_with('-') && !is_help);
@@ -227,8 +227,8 @@ async fn main() -> Result<()> {
             .finish();
         let _ = tracing::subscriber::set_global_default(subscriber);
 
-        let _ = hermes::keys_manager::manager::init_global_keys_manager();
-        hermes::keys_manager::manager::load_keys_from_file().await;
+        let _ = housaky::keys_manager::manager::init_global_keys_manager();
+        housaky::keys_manager::manager::load_keys_from_file().await;
 
         let (first_run, existing_config) = is_first_run();
         if first_run {
@@ -247,11 +247,11 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
 
     // Setup logging
-    let is_tui = cli.command.as_ref().map_or(false, hermes::cli::Commands::requires_tui);
+    let is_tui = cli.command.as_ref().map_or(false, housaky::cli::Commands::requires_tui);
     if is_tui {
         let subscriber = FmtSubscriber::builder()
             .with_max_level(Level::INFO)
-            .with_writer(hermes::tui::output::TuiWriter)
+            .with_writer(housaky::tui::output::TuiWriter)
             .with_ansi(false)
             .finish();
         let _ = tracing::subscriber::set_global_default(subscriber);
@@ -263,8 +263,8 @@ async fn main() -> Result<()> {
     }
 
     // Init keys manager
-    let _ = hermes::keys_manager::manager::init_global_keys_manager();
-    hermes::keys_manager::manager::load_keys_from_file().await;
+    let _ = housaky::keys_manager::manager::init_global_keys_manager();
+    housaky::keys_manager::manager::load_keys_from_file().await;
 
     // Set workspace env
     if std::env::var("HOUSAKY_WORKSPACE").is_err() {
@@ -276,9 +276,9 @@ async fn main() -> Result<()> {
     // Handle commands
     match cli.command {
         None => {
-            // Default: launch unified TUI (same as hermes tui chat)
+            // Default: launch unified TUI (same as housaky tui chat)
             let config = Config::load_or_init()?;
-            hermes::tui::run_minimal_tui(config, None, None)
+            housaky::tui::run_minimal_tui(config, None, None)
         }
 
         Some(cmd) => {
@@ -292,10 +292,10 @@ async fn main() -> Result<()> {
                 Commands::Chat { message, provider, model, temperature: _ } => {
                     if message.is_some() {
                         // One-shot mode
-                        hermes::cli::handle_agent(config, message, provider, model, 0.7, vec![]).await
+                        housaky::cli::handle_agent(config, message, provider, model, 0.7, vec![]).await
                     } else {
                         // TUI mode
-                        hermes::tui::run_minimal_tui(config, provider, model)
+                        housaky::tui::run_minimal_tui(config, provider, model)
                     }
                 }
 
@@ -303,32 +303,32 @@ async fn main() -> Result<()> {
                 // INIT & STATUS
                 // ─────────────────────────────────────────────────────────────
                 Commands::Init { interactive, api_key, provider, memory, channels_only } => {
-                    hermes::cli::handle_onboard(interactive, channels_only, api_key, provider, memory).await?;
+                    housaky::cli::handle_onboard(interactive, channels_only, api_key, provider, memory).await?;
                     Ok(())
                 }
 
-                Commands::Status => hermes::cli::handle_status(&config),
+                Commands::Status => housaky::cli::handle_status(&config),
 
                 Commands::Doctor { action } => {
                     let doctor_cmd = match action {
-                        Some(DoctorAction::Run) | None => hermes::commands::DoctorCommands::Run,
-                        Some(DoctorAction::Fix) => hermes::commands::DoctorCommands::Fix,
-                        Some(DoctorAction::Channels) => hermes::commands::DoctorCommands::Channels,
-                        Some(DoctorAction::Security) => hermes::commands::DoctorCommands::Security,
-                        Some(DoctorAction::Json) => hermes::commands::DoctorCommands::Json,
+                        Some(DoctorAction::Run) | None => housaky::commands::DoctorCommands::Run,
+                        Some(DoctorAction::Fix) => housaky::commands::DoctorCommands::Fix,
+                        Some(DoctorAction::Channels) => housaky::commands::DoctorCommands::Channels,
+                        Some(DoctorAction::Security) => housaky::commands::DoctorCommands::Security,
+                        Some(DoctorAction::Json) => housaky::commands::DoctorCommands::Json,
                     };
-                    hermes::cli::handle_doctor(&config, Some(doctor_cmd))
+                    housaky::cli::handle_doctor(&config, Some(doctor_cmd))
                 }
 
                 Commands::Config { section, reset, restore } => {
-                    hermes::cli::handle_config(config, section, reset, restore).await
+                    housaky::cli::handle_config(config, section, reset, restore).await
                 }
 
                 // ─────────────────────────────────────────────────────────────
                 // DAEMON & SERVICE
                 // ─────────────────────────────────────────────────────────────
                 Commands::Daemon { action, port, host } => {
-                    hermes::cli::handle_daemon(config, action, port, host).await
+                    housaky::cli::handle_daemon(config, action, port, host).await
                 }
 
                 Commands::Service { action } => {
@@ -336,24 +336,24 @@ async fn main() -> Result<()> {
                 }
 
                 Commands::Gateway { port, host } => {
-                    hermes::cli::handle_gateway(host, port, config).await
+                    housaky::cli::handle_gateway(host, port, config).await
                 }
 
                 Commands::Dashboard { start, host, port, open, desktop } => {
-                    hermes::cli::handle_dashboard(start, host, port, open, desktop).await
+                    housaky::cli::handle_dashboard(start, host, port, open, desktop).await
                 }
 
                 // ─────────────────────────────────────────────────────────────
                 // KEYS & MODELS
                 // ─────────────────────────────────────────────────────────────
                 Commands::Keys { action } => {
-                    let keys_manager = hermes::keys_manager::manager::get_global_keys_manager();
+                    let keys_manager = housaky::keys_manager::manager::get_global_keys_manager();
                     handle_keys(&mut config, &keys_manager, action).await
                 }
 
                 Commands::Models { action } => {
                     match action {
-                        hermes::commands::ModelCommands::Refresh { provider, force } => {
+                        housaky::commands::ModelCommands::Refresh { provider, force } => {
                             onboard::run_models_refresh(&config, provider.as_deref(), force)
                         }
                     }
@@ -383,17 +383,17 @@ async fn main() -> Result<()> {
 
                 Commands::Web { action } => {
                     match action {
-                        hermes::commands::WebCommands::Search { query, count, country, freshness } => {
-                            hermes::commands::handle_search(&query, count, country.as_deref(), freshness.as_deref()).await
+                        housaky::commands::WebCommands::Search { query, count, country, freshness } => {
+                            housaky::commands::handle_search(&query, count, country.as_deref(), freshness.as_deref()).await
                         }
-                        hermes::commands::WebCommands::Fetch { url, mode, max_chars: _ } => {
-                            hermes::commands::handle_fetch(&url, &mode).await
+                        housaky::commands::WebCommands::Fetch { url, mode, max_chars: _ } => {
+                            housaky::commands::handle_fetch(&url, &mode).await
                         }
-                        hermes::commands::WebCommands::Ask { question } => {
-                            hermes::commands::handle_search(&question, 3, None, None).await
+                        housaky::commands::WebCommands::Ask { question } => {
+                            housaky::commands::handle_search(&question, 3, None, None).await
                         }
-                        hermes::commands::WebCommands::Check { url } => {
-                            hermes::commands::handle_fetch(&url, "text").await
+                        housaky::commands::WebCommands::Check { url } => {
+                            housaky::commands::handle_fetch(&url, "text").await
                         }
                     }
                 }
@@ -401,38 +401,38 @@ async fn main() -> Result<()> {
                 Commands::Cron { action } => cron::handle_command(action, &config),
 
                 Commands::Migrate { action } => {
-                    hermes::migration::handle_command(action, &config).await
+                    housaky::migration::handle_command(action, &config).await
                 }
 
                 // ─────────────────────────────────────────────────────────────
                 // AGI
                 // ─────────────────────────────────────────────────────────────
                 Commands::Goal { action } => {
-                    hermes::housaky::handle_command(hermes::commands::HousakyCommands::Goals { goal_command: action }, &config).await
+                    housaky::housaky::handle_command(housaky::commands::HousakyCommands::Goals { goal_command: action }, &config).await
                 }
 
                 Commands::Improve { provider: _, model: _ } => {
-                    hermes::housaky::handle_command(hermes::commands::HousakyCommands::Improve, &config).await
+                    housaky::housaky::handle_command(housaky::commands::HousakyCommands::Improve, &config).await
                 }
 
                 Commands::Thoughts { count } => {
-                    hermes::housaky::handle_command(hermes::commands::HousakyCommands::Thoughts { count }, &config).await
+                    housaky::housaky::handle_command(housaky::commands::HousakyCommands::Thoughts { count }, &config).await
                 }
 
                 Commands::SelfMod { action } => {
-                    hermes::housaky::handle_command(hermes::commands::HousakyCommands::SelfMod { self_mod_command: action }, &config).await
+                    housaky::housaky::handle_command(housaky::commands::HousakyCommands::SelfMod { self_mod_command: action }, &config).await
                 }
 
                 Commands::Gsd { action } => {
-                    hermes::housaky::handle_command(hermes::commands::HousakyCommands::GSD { gsd_command: action }, &config).await
+                    housaky::housaky::handle_command(housaky::commands::HousakyCommands::GSD { gsd_command: action }, &config).await
                 }
 
                 Commands::Collective { action } => {
-                    hermes::housaky::handle_command(hermes::commands::HousakyCommands::Collective { collective_command: action }, &config).await
+                    housaky::housaky::handle_command(housaky::commands::HousakyCommands::Collective { collective_command: action }, &config).await
                 }
 
                 Commands::SeedMind { action } => {
-                    hermes::housaky::seed_mind::handle_seed_mind_command(action, &config).await
+                    housaky::housaky::seed_mind::handle_seed_mind_command(action, &config).await
                 }
 
                 // ─────────────────────────────────────────────────────────────
@@ -444,7 +444,7 @@ async fn main() -> Result<()> {
                 // QUANTUM & A2A
                 // ─────────────────────────────────────────────────────────────
                 Commands::Quantum { action } => {
-                    hermes::cli::quantum::handle_quantum(&config, action).await
+                    housaky::cli::quantum::handle_quantum(&config, action).await
                 }
 
                 Commands::A2a { action, message, task_id, task_action, params, category, confidence, file, timeout } => {
@@ -452,18 +452,18 @@ async fn main() -> Result<()> {
                 }
 
                 Commands::Heartbeat => {
-                    hermes::housaky::handle_command(hermes::commands::HousakyCommands::Heartbeat, &config).await
+                    housaky::housaky::handle_command(housaky::commands::HousakyCommands::Heartbeat, &config).await
                 }
 
                 Commands::Kowalski => {
-                    hermes::housaky::handle_command(hermes::commands::HousakyCommands::ConnectKowalski, &config).await
+                    housaky::housaky::handle_command(housaky::commands::HousakyCommands::ConnectKowalski, &config).await
                 }
 
                 // ─────────────────────────────────────────────────────────────
                 // NEW COMMANDS (OpenClaw-inspired)
                 // ─────────────────────────────────────────────────────────────
                 Commands::Browser { action } => {
-                    use hermes::commands::BrowserCommands;
+                    use housaky::commands::BrowserCommands;
                     match action {
                         BrowserCommands::Status => {
                             println!("🌐 Browser Status:");
@@ -503,7 +503,7 @@ async fn main() -> Result<()> {
                 }
 
                 Commands::Memory { action } => {
-                    use hermes::commands::MemoryCommands;
+                    use housaky::commands::MemoryCommands;
                     match action {
                         MemoryCommands::Status { json } => {
                             if json {
@@ -554,7 +554,7 @@ async fn main() -> Result<()> {
                 }
 
                 Commands::Sessions { action } => {
-                    use hermes::commands::SessionsCommands;
+                    use housaky::commands::SessionsCommands;
                     match action {
                         SessionsCommands::List { active, json } => {
                             println!("💬 Active Sessions:");
@@ -584,7 +584,7 @@ async fn main() -> Result<()> {
                 }
 
                 Commands::Security { action } => {
-                    use hermes::commands::SecurityCommands;
+                    use housaky::commands::SecurityCommands;
                     match action {
                         SecurityCommands::Audit { deep, fix } => {
                             println!("🔒 Security Audit:");
@@ -614,7 +614,7 @@ async fn main() -> Result<()> {
                 }
 
                 Commands::Sandbox { action } => {
-                    use hermes::commands::SandboxCommands;
+                    use housaky::commands::SandboxCommands;
                     match action {
                         SandboxCommands::List { json } => {
                             println!("📦 Sandbox Containers:");
@@ -622,7 +622,7 @@ async fn main() -> Result<()> {
                                 println!("[]");
                             } else {
                                 println!("   No containers running");
-                                println!("   Use 'hermes sandbox create <name>' to create one");
+                                println!("   Use 'housaky sandbox create <name>' to create one");
                             }
                         }
                         SandboxCommands::Status { name } => {
@@ -658,8 +658,8 @@ async fn main() -> Result<()> {
                 }
 
                 Commands::System { action } => {
-                    use hermes::commands::SystemCommands;
-                    use hermes::commands::HeartbeatAction;
+                    use housaky::commands::SystemCommands;
+                    use housaky::commands::HeartbeatAction;
                     match action {
                         SystemCommands::Event { text, heartbeat } => {
                             println!("⚙️  System Event:");
@@ -709,7 +709,7 @@ async fn main() -> Result<()> {
                 }
 
                 Commands::Approvals { action } => {
-                    use hermes::commands::ApprovalsCommands;
+                    use housaky::commands::ApprovalsCommands;
                     match action {
                         ApprovalsCommands::Get { json } => {
                             println!("✅ Execution Approvals:");
@@ -735,7 +735,7 @@ async fn main() -> Result<()> {
                 }
 
                 Commands::Nodes { action } => {
-                    use hermes::commands::NodesCommands;
+                    use housaky::commands::NodesCommands;
                     match action {
                         NodesCommands::Status => {
                             println!("🔐 Anonymous Peer Status:");
@@ -829,7 +829,7 @@ async fn main() -> Result<()> {
                 }
 
                 Commands::Tts { action } => {
-                    use hermes::commands::TtsCommands;
+                    use housaky::commands::TtsCommands;
                     match action {
                         TtsCommands::Speak { text, voice, provider } => {
                             println!("🔊 Speaking:");
@@ -881,7 +881,7 @@ async fn main() -> Result<()> {
                 // TUI & HELP
                 // ─────────────────────────────────────────────────────────────
                 Commands::Tui { name, provider, model, temperature } => {
-                    hermes::cli::run_tui_command(name, provider, model, temperature.unwrap_or(0.7), config)
+                    housaky::cli::run_tui_command(name, provider, model, temperature.unwrap_or(0.7), config)
                 }
             }
         }
@@ -894,18 +894,18 @@ async fn main() -> Result<()> {
 
 async fn handle_keys(
     config: &mut Config,
-    keys_manager: &hermes::keys_manager::manager::KeysManager,
+    keys_manager: &housaky::keys_manager::manager::KeysManager,
     cmd: KeyCommands,
 ) -> Result<()> {
     match cmd {
         KeyCommands::Manager(manager_cmd) => {
-            hermes::keys_manager::commands::handle_keys_manager_command(config, keys_manager, manager_cmd).await
+            housaky::keys_manager::commands::handle_keys_manager_command(config, keys_manager, manager_cmd).await
         }
         KeyCommands::List => {
             let _ = keys_manager.load().await;
             let providers = keys_manager.get_providers().await;
             if providers.is_empty() {
-                println!("No keys configured. Use `hermes keys add <provider> <key>`");
+                println!("No keys configured. Use `housaky keys add <provider> <key>`");
             } else {
                 println!("API Keys:");
                 for p in &providers {
@@ -933,11 +933,11 @@ async fn handle_keys(
             Ok(())
         }
         KeyCommands::Rotate => {
-            println!("Key rotation is automatic. Use `hermes keys manager rotate <provider>` for manual rotation.");
+            println!("Key rotation is automatic. Use `housaky keys manager rotate <provider>` for manual rotation.");
             Ok(())
         }
         KeyCommands::Tui => {
-            hermes::keys_manager::tui::run_keys_tui(keys_manager).await
+            housaky::keys_manager::tui::run_keys_tui(keys_manager).await
         }
         KeyCommands::Subagent { action } => {
             handle_subagent(keys_manager, action).await
@@ -946,10 +946,10 @@ async fn handle_keys(
 }
 
 async fn handle_subagent(
-    keys_manager: &hermes::keys_manager::manager::KeysManager,
-    cmd: hermes::commands::SubagentCommands,
+    keys_manager: &housaky::keys_manager::manager::KeysManager,
+    cmd: housaky::commands::SubagentCommands,
 ) -> Result<()> {
-    use hermes::commands::SubagentCommands;
+    use housaky::commands::SubagentCommands;
 
     match cmd {
         SubagentCommands::List => {
@@ -1024,7 +1024,7 @@ async fn handle_subagent(
             let model_name = model.as_deref().unwrap_or("gpt-4o");
 
             // Create or update subagent config
-            let config = hermes::keys_manager::manager::SubAgentConfig {
+            let config = housaky::keys_manager::manager::SubAgentConfig {
                 provider: provider.clone(),
                 model: model_name.to_string(),
                 key_name: key.clone(),
@@ -1077,9 +1077,9 @@ async fn handle_subagent(
 }
 
 fn handle_hw(action: HwAction, config: &Config) -> Result<()> {
-    use hermes::cli::args::{HwAction as CliHwAction};
-    use hermes::{hardware, peripherals};
-    use hermes::commands::{HardwareCommands, PeripheralCommands};
+    use housaky::cli::args::{HwAction as CliHwAction};
+    use housaky::{hardware, peripherals};
+    use housaky::commands::{HardwareCommands, PeripheralCommands};
 
     match action {
         CliHwAction::Discover => hardware::handle_command(HardwareCommands::Discover, config),
@@ -1105,7 +1105,7 @@ async fn handle_a2a(
     file: Option<String>,
     timeout: u64,
 ) -> Result<()> {
-    use hermes::housaky::a2a::{A2AManager, A2AMessage, A2AMessageType, A2ASelfImprove};
+    use housaky::housaky::a2a::{A2AManager, A2AMessage, A2AMessageType, A2ASelfImprove};
 
     let shared_dir = config.collaboration.shared_dir.clone();
     let instance = &config.collaboration.instance_name;

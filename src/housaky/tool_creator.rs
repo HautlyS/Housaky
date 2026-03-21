@@ -271,7 +271,7 @@ impl ToolCreator {
             usage_count: 0,
             success_rate: 0.0,
             avg_execution_time_ms: 0.0,
-            author: "Hermes".to_string(),
+            author: "Housaky".to_string(),
             tags: vec!["auto-generated".to_string()],
         };
 

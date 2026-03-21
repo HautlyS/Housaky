@@ -355,7 +355,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_autobiographical_memory() {
-        let mem = AutobiographicalMemory::new("Hermes");
+        let mem = AutobiographicalMemory::new("Housaky");
         mem.record_activation().await;
         mem.record_capability_acquired("reasoning", "CoT + ReAct + ToT reasoning", 0.65)
             .await;
@@ -372,7 +372,7 @@ mod tests {
         assert_eq!(stats.relationships_count, 1);
 
         let bio = mem.generate_autobiography().await;
-        assert!(bio.contains("Hermes"));
+        assert!(bio.contains("Housaky"));
         assert!(bio.contains("reasoning"));
     }
 }

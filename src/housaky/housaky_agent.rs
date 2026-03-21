@@ -271,7 +271,7 @@ impl Agent {
         };
 
         Ok(Self {
-            name: "Hermes".to_string(),
+            name: "Housaky".to_string(),
             version: "3.0.0-AGI".to_string(),
             state,
             config: housaky_config,

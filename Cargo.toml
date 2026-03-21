@@ -1,18 +1,14 @@
 [package]
-name = "hermes"
+name = "housaky"
 version = "0.1.0"
 edition = "2021"
 authors = ["theonlyhennygod"]
 license = "MIT"
-description = "Hermes AGI - Zero overhead. Zero compromise. 100% Rust. Measurable AGI capabilities."
-repository = "https://github.com/HautlyS/Hermes"
+description = "Zero overhead. Zero compromise. 100% Rust. The fastest, smallest AI assistant."
+repository = "https://github.com/HautlyS/Housaky"
 readme = "README.md"
-keywords = ["ai", "agent", "cli", "assistant", "chatbot", "agi", "hermes"]
+keywords = ["ai", "agent", "cli", "assistant", "chatbot", "agi"]
 categories = ["command-line-utilities", "api-bindings"]
-
-[[bin]]
-name = "hermes"
-path = "src/main.rs"
 
 [dependencies]
 # CLI - minimal and fast

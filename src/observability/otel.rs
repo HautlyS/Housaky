@@ -35,7 +35,7 @@ impl OtelObserver {
     /// Falls back to `http://localhost:4318` if no endpoint is provided.
     pub fn new(endpoint: Option<&str>, service_name: Option<&str>) -> Result<Self, String> {
         let endpoint = endpoint.unwrap_or("http://localhost:4318");
-        let service_name = service_name.unwrap_or("hermes");
+        let service_name = service_name.unwrap_or("housaky");
 
         // ── Trace exporter ──────────────────────────────────────
         let span_exporter = opentelemetry_otlp::SpanExporter::builder()
@@ -78,7 +78,7 @@ impl OtelObserver {
         global::set_meter_provider(meter_provider);
 
         // ── Create metric instruments ────────────────────────────
-        let meter = global::meter("hermes");
+        let meter = global::meter("housaky");
 
         let agent_starts = meter
             .u64_counter("housaky.agent.starts")
@@ -171,7 +171,7 @@ impl OtelObserver {
 
 impl Observer for OtelObserver {
     fn record_event(&self, event: &ObserverEvent) {
-        let tracer = global::tracer("hermes");
+        let tracer = global::tracer("housaky");
 
         match event {
             ObserverEvent::AgentStart { provider, model } => {

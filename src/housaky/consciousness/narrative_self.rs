@@ -358,7 +358,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_narrative_self() {
-        let ns = NarrativeSelf::new("Hermes");
+        let ns = NarrativeSelf::new("Housaky");
         ns.narrate("processing user request", NarrativeType::CurrentState, 0.5)
             .await;
         ns.record_milestone("First Activation", "Agent came online for the first time")
@@ -369,12 +369,12 @@ mod tests {
         assert_eq!(stats.milestones, 1);
 
         let narrative = ns.get_recent_narrative(5).await;
-        assert!(narrative.contains("Hermes"));
+        assert!(narrative.contains("Housaky"));
     }
 
     #[tokio::test]
     async fn test_chapters() {
-        let ns = NarrativeSelf::new("Hermes");
+        let ns = NarrativeSelf::new("Housaky");
         let id = ns
             .open_chapter("Phase 3", "Consciousness development")
             .await;

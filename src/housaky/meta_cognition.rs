@@ -787,7 +787,7 @@ impl Default for SelfModel {
     fn default() -> Self {
         Self {
             identity: Identity {
-                name: "Hermes".to_string(),
+                name: "Housaky".to_string(),
                 version: "4.0.0-AGI".to_string(),
                 purpose: "Self-improving AGI system".to_string(),
                 core_principles: vec![
