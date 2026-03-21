@@ -763,9 +763,9 @@ async fn handle_events(State(state): State<AppState>, headers: HeaderMap) -> imp
                 Event::default().data(json),
             ))
         }
-        Err(tokio::sync::broadcast::error::TryRecvError::Empty) => None,
-        Err(tokio::sync::broadcast::error::TryRecvError::Closed) => None,
-        Err(tokio::sync::broadcast::error::TryRecvError::Lagged(_)) => None,
+        Err(tokio::sync::broadcast::error::TryRecvError::Empty)
+        | Err(tokio::sync::broadcast::error::TryRecvError::Closed)
+        | Err(tokio::sync::broadcast::error::TryRecvError::Lagged(_)) => None,
     }));
 
     Sse::new(stream)
@@ -818,8 +818,7 @@ async fn handle_websocket_connection(socket: WebSocket, state: AppState) {
                     }
                 }
             }
-            Ok(WsMessage::Close(_)) => break,
-            Err(_) => break,
+            Ok(WsMessage::Close(_)) | Err(_) => break,
             _ => {}
         }
     }
@@ -959,7 +958,7 @@ async fn handle_chat_sessions(
                 Err(_) => vec![ChatSession {
                     id: "default".to_string(),
                     title: "New Conversation".to_string(),
-                    last_message: "".to_string(),
+                    last_message: String::new(),
                     timestamp: chrono::Utc::now().timestamp(),
                     message_count: 0,
                 }]
@@ -968,7 +967,7 @@ async fn handle_chat_sessions(
         Err(_) => vec![ChatSession {
             id: "default".to_string(),
             title: "New Conversation".to_string(),
-            last_message: "".to_string(),
+            last_message: String::new(),
             timestamp: chrono::Utc::now().timestamp(),
             message_count: 0,
         }]

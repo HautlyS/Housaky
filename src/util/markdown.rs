@@ -317,11 +317,10 @@ pub fn render_markdown_with_config(text: &str, config: &StyledOutput) -> String 
                 result.push_str(")");
                 result.push_str(RESET);
                 continue;
-            } else {
-                result.push('[');
-                result.push_str(&link_text);
-                continue;
             }
+            result.push('[');
+            result.push_str(&link_text);
+            continue;
         }
 
         // Strikethrough ~~text~~
