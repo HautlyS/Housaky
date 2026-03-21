@@ -9,6 +9,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::fmt::Write;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{info, warn};
@@ -436,10 +437,11 @@ impl EthicalReasoner {
         );
 
         for v in &violations {
-            explanation.push_str(&format!(
+            let _ = write!(
+                explanation,
                 "  - {} ({:?}, severity: {:.2}): {}\n",
                 v.principle_name, v.category, v.severity, v.explanation
-            ));
+            );
         }
 
         explanation

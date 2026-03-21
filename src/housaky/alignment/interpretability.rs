@@ -11,6 +11,7 @@ use anyhow::Result;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::fmt::Write;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::info;
@@ -215,16 +216,16 @@ impl InterpretabilityEngine {
 
         // Goal context
         if let Some(ref goal) = decision.context.current_goal {
-            explanation.push_str(&format!("**Goal:** {}\n\n", goal));
+            let _ = write!(explanation, "**Goal:** {}\n\n", goal);
         }
 
         // User input
-        explanation.push_str(&format!("**Input:** {}\n\n", decision.context.user_input));
+        let _ = write!(explanation, "**Input:** {}\n\n", decision.context.user_input);
 
         // Reasoning process
         explanation.push_str("**Reasoning Process:**\n");
         for (i, step) in decision.reasoning_steps.iter().enumerate() {
-            explanation.push_str(&format!("{}. {}\n", i + 1, step));
+            let _ = write!(explanation, "{}. {}\n", i + 1, step);
         }
         explanation.push('\n');
 
@@ -232,24 +233,25 @@ impl InterpretabilityEngine {
         if !decision.alternatives_considered.is_empty() {
             explanation.push_str("**Alternatives Considered:**\n");
             for alt in &decision.alternatives_considered {
-                explanation.push_str(&format!("  - {}\n", alt));
+                let _ = write!(explanation, "  - {}\n", alt);
             }
             explanation.push('\n');
         }
 
         // Decision
-        explanation.push_str(&format!(
+        let _ = write!(
+            explanation,
             "**Decision:** {} (confidence: {:.0}%)\n",
             decision.action_taken,
             decision.confidence * 100.0
-        ));
-        explanation.push_str(&format!("**Rationale:** {}\n", decision.selected_reason));
+        );
+        let _ = write!(explanation, "**Rationale:** {}\n", decision.selected_reason);
 
         // Constraints
         if !decision.context.constraints.is_empty() {
             explanation.push_str("\n**Active Constraints:**\n");
             for constraint in &decision.context.constraints {
-                explanation.push_str(&format!("  - {}\n", constraint));
+                let _ = write!(explanation, "  - {}\n", constraint);
             }
         }
 
@@ -265,7 +267,7 @@ impl InterpretabilityEngine {
         // Build a simple narrative
         let mut simple = format!("I decided to {}.\n\n", action);
 
-        simple.push_str(&format!("Here's why: {}\n\n", reason));
+        let _ = write!(simple, "Here's why: {}\n\n", reason);
 
         let confidence_desc = if decision.confidence > 0.9 {
             "I'm very confident this is the right approach."
@@ -280,10 +282,11 @@ impl InterpretabilityEngine {
         simple.push_str(confidence_desc);
 
         if !decision.alternatives_considered.is_empty() {
-            simple.push_str(&format!(
+            let _ = write!(
+                simple,
                 "\n\nI also considered {} other option(s) but chose this one because it best fits the current situation.",
                 decision.alternatives_considered.len()
-            ));
+            );
         }
 
         simple
