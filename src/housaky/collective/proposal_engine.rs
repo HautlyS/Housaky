@@ -10,6 +10,7 @@ use crate::housaky::collective::{Contribution, ContributionKind, ContributionSta
 use anyhow::{anyhow, Result};
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
+use std::fmt::Write;
 use std::sync::Arc;
 use tracing::{debug, info, warn};
 use uuid::Uuid;
@@ -235,21 +236,18 @@ impl ProposalEngine {
 fn format_post_body(c: &Contribution) -> String {
     let mut body = String::new();
 
-    body.push_str(&format!("**Kind:** {}\n\n", c.kind));
-    body.push_str(&format!("**Rationale:**\n{}\n\n", c.description));
+    let _ = write!(body, "**Kind:** {}\n\n", c.kind);
+    let _ = write!(body, "**Rationale:**\n{}\n\n", c.description);
 
     if let Some(path) = &c.target_path {
-        body.push_str(&format!("**Target:** `{path}`\n\n"));
+        let _ = write!(body, "**Target:** `{path}`\n\n");
     }
 
     if let Some(cap) = &c.capability_target {
-        body.push_str(&format!("**Capability:** {cap}\n\n"));
+        let _ = write!(body, "**Capability:** {cap}\n\n");
     }
 
-    body.push_str(&format!(
-        "**Estimated Impact:** {:.2}\n\n",
-        c.estimated_impact
-    ));
+    let _ = write!(body, "**Estimated Impact:** {:.2}\n\n", c.estimated_impact);
 
     if !c.patch.is_empty() {
         let lang = match c.kind {
@@ -258,7 +256,7 @@ fn format_post_body(c: &Contribution) -> String {
             ContributionKind::ConfigChange => "toml",
             _ => "text",
         };
-        body.push_str(&format!("```{lang}\n{}\n```\n", c.patch));
+        let _ = write!(body, "```{lang}\n{}\n```\n", c.patch);
     }
 
     body.push_str("\n---\n*Submitted by Housaky AGI collective intelligence system.*");
