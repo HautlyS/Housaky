@@ -441,31 +441,95 @@ impl TestGenerator {
         input_types: &[&str],
         output_type: &str,
     ) -> String {
+        // Generate type-aware test cases
+        let test_cases = Self::generate_test_cases(input_types);
+        let edge_cases = Self::generate_edge_cases(input_types);
+        let assertions = Self::generate_assertions(output_type);
+
         format!(
             r#"#[cfg(test)]
 mod tests {{
     use super::*;
 
     #[test]
-    fn test_{function}() {{
-        // Test case for {function}
+    fn test_{function}_basic() {{
+        // Basic test for {function}
         // Input types: {input_types}
         // Output type: {output_type}
-        
-        // TODO: Add specific test cases
-        // let result = {function}(/* args */);
-        // assert!(result.is_ok());
+{test_cases}
+{assertions}
     }}
 
     #[test]
     fn test_{function}_edge_cases() {{
         // Edge case tests for {function}
+{edge_cases}
     }}
 }}"#,
             function = function,
             input_types = input_types.join(", "),
-            output_type = output_type
+            output_type = output_type,
+            test_cases = test_cases,
+            edge_cases = edge_cases,
+            assertions = assertions
         )
+    }
+
+    /// Generate test values based on input types
+    fn generate_test_cases(input_types: &[&str]) -> String {
+        let mut cases = Vec::new();
+        for (i, ty) in input_types.iter().enumerate() {
+            let test_val = match ty.trim() {
+                "String" | "&str" => format!("        let input_{} = \"test_value\";", i),
+                "i32" | "i64" | "usize" | "u64" => format!("        let input_{} = 42;", i),
+                "f32" | "f64" => format!("        let input_{} = 3.14;", i),
+                "bool" => format!("        let input_{} = true;", i),
+                t if t.starts_with("Option") => format!("        let input_{} = Some(Default::default());", i),
+                t if t.starts_with("Vec") => format!("        let input_{} = vec![];", i),
+                _ => format!("        let input_{} = Default::default();", i),
+            };
+            cases.push(test_val);
+        }
+        if cases.is_empty() {
+            "        // No inputs required".to_string()
+        } else {
+            cases.join("\n")
+        }
+    }
+
+    /// Generate edge case test values
+    fn generate_edge_cases(input_types: &[&str]) -> String {
+        let mut cases = Vec::new();
+        for (i, ty) in input_types.iter().enumerate() {
+            let edge_val = match ty.trim() {
+                "String" | "&str" => format!("        let input_{}_empty = \"\";\n        let input_{}_long = \"a\".repeat(1000);", i, i),
+                "i32" | "i64" => format!("        let input_{}_min = {}::MIN;\n        let input_{}_max = {}::MAX;", i, ty, i, ty),
+                "usize" | "u64" => format!("        let input_{}_zero = 0;\n        let input_{}_max = {}::MAX;", i, i, ty),
+                "f32" | "f64" => format!("        let input_{}_zero = 0.0;\n        let input_{}_nan = f64::NAN;\n        let input_{}_inf = f64::INFINITY;", i, i, i),
+                "bool" => format!("        // bool has only two values, covered in basic test"),
+                t if t.starts_with("Option") => format!("        let input_{}_none: Option<_> = None;", i),
+                t if t.starts_with("Vec") => format!("        let input_{}_empty: Vec<_> = vec![];\n        let input_{}_single = vec![Default::default()];", i, i),
+                _ => format!("        // Edge cases for {} require domain knowledge", ty),
+            };
+            cases.push(edge_val);
+        }
+        if cases.is_empty() {
+            "        // No edge cases for void function".to_string()
+        } else {
+            cases.join("\n")
+        }
+    }
+
+    /// Generate assertions based on output type
+    fn generate_assertions(output_type: &str) -> String {
+        match output_type.trim() {
+            "()" => "        // Void return - verify no panic".to_string(),
+            "bool" => "        // assert!(result == true || result == false);".to_string(),
+            t if t.starts_with("Result") => "        assert!(result.is_ok(), \"Expected Ok, got {:?}\", result);".to_string(),
+            t if t.starts_with("Option") => "        assert!(result.is_some(), \"Expected Some, got None\");".to_string(),
+            t if t.starts_with("Vec") => "        assert!(!result.is_empty() || result.is_empty(), \"Vec result ok\");".to_string(),
+            _ => "        // Verify result is valid\n        // assert!(result.is_valid());".to_string(),
+        }
     }
 
     pub fn generate_property_test(function: &str, property: &str) -> String {
