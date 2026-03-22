@@ -1,0 +1,94 @@
+// Main SCSS styles for Psychedelic 2077 Gallery
+
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;500;700&display=swap');
+
+// Color Variables
+$neon-cyan: #00ffff;
+$neon-magenta: #ff00ff;
+$neon-purple: #8a2be2;
+$dark-bg: #0a0a0a;
+
+// Global Styles
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: 'Rajdhani', sans-serif;
+  background: $dark-bg;
+  color: #fff;
+  overflow-x: hidden;
+  line-height: 1.6;
+}
+
+// Scrollbar Styling
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.5);
+}
+
+::-webkit-scrollbar-thumb {
+  background: linear-gradient($neon-cyan, $neon-magenta);
+  border-radius: 4px;
+}
+
+// Selection Styling
+::selection {
+  background: rgba($neon-magenta, 0.3);
+  color: $neon-cyan;
+}
+
+// Vuetify Overrides
+.v-application {
+  background: transparent !important;
+}
+
+.v-main {
+  padding: 0 !important;
+}
+
+// Utility Classes
+.glow-text {
+  text-shadow: 0 0 10px currentColor;
+}
+
+.neon-border {
+  border: 1px solid $neon-cyan;
+  box-shadow: 0 0 10px rgba($neon-cyan, 0.3);
+}
+
+.gradient-text {
+  background: linear-gradient(90deg, $neon-magenta, $neon-cyan);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+// Animations
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-20px); }
+}
+
+@keyframes glow {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+@keyframes rotate {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes scanline {
+  0% { transform: translateY(-100%); }
+  100% { transform: translateY(100vh); }
+}

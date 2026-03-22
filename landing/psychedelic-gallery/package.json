@@ -1,0 +1,31 @@
+{
+  "name": "psychedelic-2077-psycho-buddhist-gallery",
+  "version": "1.0.0",
+  "description": "A 2077 psychedelic cyberpunk Buddhist gallery of articles and videos",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "lint": "eslint . --ext .vue,.js,.jsx,.cjs,.mjs --fix"
+  },
+  "dependencies": {
+    "vue": "^3.4.0",
+    "vue-router": "^4.2.5",
+    "pinia": "^2.1.7",
+    "vuex": "^4.1.0",
+    "vuetify": "^3.4.0",
+    "@mdi/font": "^7.4.47",
+    "gsap": "^3.12.4",
+    "three": "^0.160.0",
+    "@vueuse/core": "^10.7.0",
+    "animate.css": "^4.1.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^4.6.0",
+    "vite": "^5.0.10",
+    "vite-plugin-vuetify": "^2.0.1",
+    "sass": "^1.69.5",
+    "@mdi/js": "^7.4.47"
+  }
+}
