@@ -479,6 +479,21 @@ impl KeysManager {
             },
         );
 
+        // Modal.com GLM-5 provider
+        templates.insert(
+            "modal".to_string(),
+            ProviderTemplate {
+                name: "modal".to_string(),
+                base_url: "https://api.us-west-2.modal.direct/v1".to_string(),
+                auth_method: "bearer".to_string(),
+                default_models: vec![
+                    "zai-org/GLM-5-FP8".to_string(),
+                ],
+                headers: HashMap::new(),
+                is_openai_compatible: true,
+            },
+        );
+
         templates.insert(
             "google".to_string(),
             ProviderTemplate {

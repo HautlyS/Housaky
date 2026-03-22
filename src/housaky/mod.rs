@@ -63,6 +63,7 @@ pub mod self_improve_interface;
 
 // Missing module declarations
 pub mod a2a_secure;
+pub mod hermes_router;
 pub mod a2a_websocket;
 pub mod fitness_evaluator;
 pub mod goal_task_bridge;
