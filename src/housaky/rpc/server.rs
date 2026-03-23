@@ -66,13 +66,17 @@ impl RpcServer {
 
 /// Default RPC handler that uses housaky subsystems
 pub struct DefaultRpcHandler {
-    // We'll add references to housaky subsystems as needed
-    // For now, we'll just return placeholder responses
+    workspace_dir: PathBuf,
 }
 
 impl DefaultRpcHandler {
-    pub fn new() -> Self {
-        Self {}
+    pub fn new(workspace_dir: PathBuf) -> Self {
+        Self { workspace_dir }
+    }
+    
+    fn get_memory_store(&self) -> RpcResult<crate::housaky::memory::AgentMemoryStore> {
+        crate::housaky::memory::AgentMemoryStore::open(&self.workspace_dir)
+            .map_err(|e| ErrorObject::owned(-32000, format!("Failed to open memory store: {}", e), None::<()>))
     }
 }
 
@@ -80,134 +84,344 @@ impl DefaultRpcHandler {
 impl RpcHandler for DefaultRpcHandler {
     // Memory methods
     async fn memory_store(&self, key: String, value: String) -> RpcResult<()> {
-        // TODO: Implement using housaky memory
         info!("RPC memory_store: {} = {}", key, value);
+        
+        let store = self.get_memory_store()?;
+        let record = crate::housaky::memory::AgentMemoryRecord {
+            id: key.clone(),
+            kind: crate::housaky::memory::MemoryKind::Fact,
+            content: value,
+            source: "rpc".to_string(),
+            confidence: 1.0,
+            importance: 0.5,
+            tags: vec![],
+            created_at: chrono::Utc::now(),
+            accessed_at: chrono::Utc::now(),
+            access_count: 0,
+        };
+        
+        store.store(&record)
+            .map_err(|e| ErrorObject::owned(-32001, format!("Failed to store memory: {}", e), None::<()>))?;
+        
         Ok(())
     }
 
     async fn memory_recall(&self, query: String) -> RpcResult<Option<String>> {
-        // TODO: Implement using housaky memory
         info!("RPC memory_recall: {}", query);
-        Ok(None)
+        
+        let store = self.get_memory_store()?;
+        let results = store.search(&query, 1)
+            .map_err(|e| ErrorObject::owned(-32002, format!("Failed to recall memory: {}", e), None::<()>))?;
+        
+        Ok(results.first().map(|r| r.content.clone()))
     }
 
     async fn memory_search(&self, query: String, limit: usize) -> RpcResult<Vec<String>> {
-        // TODO: Implement using housaky memory
         info!("RPC memory_search: {} (limit: {})", query, limit);
-        Ok(vec![])
+        
+        let store = self.get_memory_store()?;
+        let results = store.search(&query, limit)
+            .map_err(|e| ErrorObject::owned(-32003, format!("Failed to search memory: {}", e), None::<()>))?;
+        
+        Ok(results.iter().map(|r| format!("{}: {}", r.id, r.content)).collect())
     }
 
     // Skill methods
     async fn skill_list(&self) -> RpcResult<Vec<String>> {
-        // TODO: Implement using housaky skills
         info!("RPC skill_list");
-        Ok(vec![])
+        
+        let skills_dir = self.workspace_dir.join("skills");
+        let mut skills = Vec::new();
+        
+        if let Ok(entries) = std::fs::read_dir(&skills_dir) {
+            for entry in entries.flatten() {
+                if entry.path().is_dir() {
+                    if let Some(name) = entry.file_name().to_str() {
+                        skills.push(name.to_string());
+                    }
+                }
+            }
+        }
+        
+        Ok(skills)
     }
 
     async fn skill_get(&self, name: String) -> RpcResult<Option<String>> {
-        // TODO: Implement using housaky skills
         info!("RPC skill_get: {}", name);
-        Ok(None)
+        
+        let skill_file = self.workspace_dir.join("skills").join(&name).join("SKILL.md");
+        
+        if skill_file.exists() {
+            match std::fs::read_to_string(&skill_file) {
+                Ok(content) => Ok(Some(content)),
+                Err(e) => Err(ErrorObject::owned(-32004, format!("Failed to read skill: {}", e), None::<()>)),
+            }
+        } else {
+            Ok(None)
+        }
     }
 
     async fn skill_run(&self, name: String, inputs: serde_json::Value) -> RpcResult<serde_json::Value> {
-        // TODO: Implement using housaky skills
         info!("RPC skill_run: {} with inputs: {}", name, inputs);
-        Ok(serde_json::json!({}))
+        
+        // For now, return a placeholder - skill execution requires more infrastructure
+        Ok(serde_json::json!({
+            "status": "skill_execution_not_implemented",
+            "skill": name,
+            "inputs": inputs
+        }))
     }
 
     // A2A methods
     async fn a2a_send(&self, message: String, target: String) -> RpcResult<()> {
-        // TODO: Implement using housaky A2A
         info!("RPC a2a_send to {}: {}", target, message);
+        
+        let shared_dir = self.workspace_dir.join("shared").join("a2a");
+        let endpoint = crate::housaky::a2a::A2AEndpoint::new(shared_dir, "rpc", &target);
+        
+        let msg = crate::housaky::a2a::A2AMessage::learning("rpc", &target, "message", &message, 1.0);
+        
+        endpoint.send(&msg).await
+            .map_err(|e| ErrorObject::owned(-32005, format!("Failed to send A2A: {}", e), None::<()>))?;
+        
         Ok(())
     }
 
     async fn a2a_recv(&self, from: String) -> RpcResult<Option<String>> {
-        // TODO: Implement using housaky A2A
         info!("RPC a2a_recv from {}", from);
-        Ok(None)
+        
+        let shared_dir = self.workspace_dir.join("shared").join("a2a");
+        let endpoint = crate::housaky::a2a::A2AEndpoint::new(shared_dir, "rpc", &from);
+        
+        let messages = endpoint.read_from(&from)
+            .map_err(|e| ErrorObject::owned(-32006, format!("Failed to recv A2A: {}", e), None::<()>))?;
+        
+        Ok(messages.first().map(|m| m.to_compact_json().unwrap_or_default()))
     }
 
     async fn a2a_delegate(&self, task_id: String, action: String, params: serde_json::Value) -> RpcResult<()> {
-        // TODO: Implement using housaky A2A
         info!("RPC a2a_delegate: {} {} {:?}", task_id, action, params);
+        
+        let shared_dir = self.workspace_dir.join("shared").join("a2a");
+        let endpoint = crate::housaky::a2a::A2AEndpoint::new(shared_dir, "rpc", "peer");
+        
+        let msg = crate::housaky::a2a::A2AMessage::task("rpc", "peer", &task_id, &action, params);
+        
+        endpoint.send(&msg).await
+            .map_err(|e| ErrorObject::owned(-32007, format!("Failed to delegate: {}", e), None::<()>))?;
+        
         Ok(())
     }
 
     async fn a2a_sync(&self, timeout: u64) -> RpcResult<Option<String>> {
-        // TODO: Implement using housaky A2A
         info!("RPC a2a_sync: timeout {}", timeout);
-        Ok(None)
+        
+        let shared_dir = self.workspace_dir.join("shared").join("a2a");
+        let endpoint = crate::housaky::a2a::A2AEndpoint::new(shared_dir, "rpc", "peer");
+        
+        let msg = crate::housaky::a2a::A2AMessage::sync_request("rpc", "peer");
+        
+        match endpoint.send_and_wait(&msg, timeout).await {
+            Ok(Some(response)) => Ok(Some(response.to_compact_json().unwrap_or_default())),
+            Ok(None) => Ok(None),
+            Err(e) => Err(ErrorObject::owned(-32008, format!("Sync failed: {}", e), None::<()>)),
+        }
     }
 
     async fn a2a_share_learning(&self, category: String, content: String, confidence: f32) -> RpcResult<()> {
-        // TODO: Implement using housaky A2A
         info!("RPC a2a_share_learning: {} (confidence: {})", category, confidence);
+        
+        let shared_dir = self.workspace_dir.join("shared").join("a2a");
+        let endpoint = crate::housaky::a2a::A2AEndpoint::new(shared_dir, "rpc", "peer");
+        
+        let msg = crate::housaky::a2a::A2AMessage::learning("rpc", "peer", &category, &content, confidence);
+        
+        endpoint.send(&msg).await
+            .map_err(|e| ErrorObject::owned(-32009, format!("Failed to share learning: {}", e), None::<()>))?;
+        
         Ok(())
     }
 
     // Goal methods
     async fn goal_set(&self, description: String) -> RpcResult<()> {
-        // TODO: Implement using housaky goals
         info!("RPC goal_set: {}", description);
+        
+        let goal_engine = crate::housaky::goal_engine::GoalEngine::new(&self.workspace_dir);
+        
+        let goal = crate::housaky::goal_engine::Goal {
+            id: format!("rpc-{}", chrono::Utc::now().timestamp()),
+            title: description.clone(),
+            description,
+            priority: crate::housaky::goal_engine::GoalPriority::Medium,
+            status: crate::housaky::goal_engine::GoalStatus::Pending,
+            category: crate::housaky::goal_engine::GoalCategory::UserRequest,
+            progress: 0.0,
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
+            deadline: None,
+            parent_id: None,
+            subtask_ids: vec![],
+            dependencies: vec![],
+            estimated_effort: None,
+            actual_effort: None,
+            tags: vec!["rpc".to_string()],
+            metadata: serde_json::json!({}),
+        };
+        
+        goal_engine.add_goal(goal).await
+            .map_err(|e| ErrorObject::owned(-32010, format!("Failed to set goal: {}", e), None::<()>))?;
+        
         Ok(())
     }
 
     async fn goal_list(&self) -> RpcResult<Vec<String>> {
-        // TODO: Implement using housaky goals
         info!("RPC goal_list");
-        Ok(vec![])
+        
+        let goal_engine = crate::housaky::goal_engine::GoalEngine::new(&self.workspace_dir);
+        let goals = goal_engine.get_active_goals().await;
+        
+        Ok(goals.iter().map(|g| format!("{}: {} ({:.0}%)", g.id, g.title, g.progress * 100.0)).collect())
     }
 
     async fn goal_progress(&self, description: String) -> RpcResult<f32> {
-        // TODO: Implement using housaky goals
         info!("RPC goal_progress: {}", description);
-        Ok(0.0)
+        
+        let goal_engine = crate::housaky::goal_engine::GoalEngine::new(&self.workspace_dir);
+        let goals = goal_engine.get_active_goals().await;
+        
+        let progress = goals
+            .iter()
+            .find(|g| g.description == description || g.title == description)
+            .map(|g| g.progress as f32)
+            .unwrap_or(0.0);
+        
+        Ok(progress)
     }
 
     async fn goal_evaluate(&self, description: String) -> RpcResult<bool> {
-        // TODO: Implement using housaky goals
         info!("RPC goal_evaluate: {}", description);
-        Ok(false)
+        
+        let goal_engine = crate::housaky::goal_engine::GoalEngine::new(&self.workspace_dir);
+        let goals = goal_engine.get_active_goals().await;
+        
+        let completed = goals
+            .iter()
+            .find(|g| g.description == description || g.title == description)
+            .map(|g| g.status == crate::housaky::goal_engine::GoalStatus::Completed)
+            .unwrap_or(false);
+        
+        Ok(completed)
     }
 
     // Heartbeat methods
     async fn heartbeat_trigger(&self) -> RpcResult<()> {
-        // TODO: Implement using housaky heartbeat
         info!("RPC heartbeat_trigger");
+        let heartbeat_file = self.workspace_dir.join(".housaky").join("heartbeat_trigger");
+        std::fs::write(&heartbeat_file, chrono::Utc::now().to_rfc3339())
+            .map_err(|e| ErrorObject::owned(-32011, format!("Failed to trigger heartbeat: {}", e), None::<()>))?;
         Ok(())
     }
 
     async fn heartbeat_status(&self) -> RpcResult<bool> {
-        // TODO: Implement using housaky heartbeat
         info!("RPC heartbeat_status");
+        let heartbeat_file = self.workspace_dir.join(".housaky").join("heartbeat_last");
+        if heartbeat_file.exists() {
+            if let Ok(content) = std::fs::read_to_string(&heartbeat_file) {
+                if let Ok(last) = chrono::DateTime::parse_from_rfc3339(&content) {
+                    let elapsed = (chrono::Utc::now() - last.with_timezone(&chrono::Utc)).num_seconds();
+                    return Ok(elapsed < 300);
+                }
+            }
+        }
         Ok(false)
     }
 
     async fn heartbeat_configure(&self, interval_seconds: u64) -> RpcResult<()> {
-        // TODO: Implement using housaky heartbeat
         info!("RPC heartbeat_configure: interval {}", interval_seconds);
+        let config_file = self.workspace_dir.join(".housaky").join("heartbeat_config.json");
+        let config = serde_json::json!({ "interval_seconds": interval_seconds });
+        std::fs::write(&config_file, serde_json::to_string_pretty(&config).unwrap())
+            .map_err(|e| ErrorObject::owned(-32012, format!("Failed to configure heartbeat: {}", e), None::<()>))?;
         Ok(())
     }
 
     // Configuration methods
     async fn config_get(&self, key: String) -> RpcResult<Option<String>> {
-        // TODO: Implement using housaky config
         info!("RPC config_get: {}", key);
+        let config_file = self.workspace_dir.join("config.toml");
+        if let Ok(content) = std::fs::read_to_string(&config_file) {
+            if let Ok(config) = content.parse::<toml::Value>() {
+                // Support nested keys like "skills.enabled.my-skill"
+                let parts: Vec<&str> = key.split('.').collect();
+                let mut current = Some(&config);
+                for part in &parts[..parts.len()-1] {
+                    current = current.and_then(|v| v.get(part));
+                }
+                if let Some(value) = current.and_then(|v| v.get(parts.last().unwrap())) {
+                    return Ok(Some(value.to_string()));
+                }
+            }
+        }
         Ok(None)
     }
 
     async fn config_set(&self, key: String, value: String) -> RpcResult<()> {
-        // TODO: Implement using housaky config
         info!("RPC config_set: {} = {}", key, value);
+        let config_file = self.workspace_dir.join("config.toml");
+        let config_content = std::fs::read_to_string(&config_file)
+            .map_err(|e| ErrorObject::owned(-32013, format!("Failed to read config: {}", e), None::<()>))?;
+        
+        let mut config: toml::Value = config_content.parse()
+            .map_err(|e| ErrorObject::owned(-32014, format!("Failed to parse config: {}", e), None::<()>))?;
+        
+        // Support nested keys
+        let parts: Vec<&str> = key.split('.').collect();
+        if parts.len() == 1 {
+            if let Some(table) = config.as_table_mut() {
+                table.insert(key.clone(), toml::Value::String(value));
+            }
+        } else {
+            let mut current = Some(&mut config);
+            for part in &parts[..parts.len()-1] {
+                current = current.and_then(|v| v.get_mut(part));
+            }
+            if let Some(table) = current.and_then(|v| v.as_table_mut()) {
+                table.insert(parts.last().unwrap().to_string(), toml::Value::String(value));
+            }
+        }
+        
+        let new_config = toml::to_string_pretty(&config)
+            .map_err(|e| ErrorObject::owned(-32015, format!("Failed to serialize config: {}", e), None::<()>))?;
+        
+        std::fs::write(&config_file, new_config)
+            .map_err(|e| ErrorObject::owned(-32016, format!("Failed to write config: {}", e), None::<()>))?;
+        
         Ok(())
     }
 
     async fn config_list(&self) -> RpcResult<Vec<(String, String)>> {
-        // TODO: Implement using housaky config
         info!("RPC config_list");
-        Ok(vec![])
+        let config_file = self.workspace_dir.join("config.toml");
+        let mut result = Vec::new();
+        
+        if let Ok(content) = std::fs::read_to_string(&config_file) {
+            if let Ok(config) = content.parse::<toml::Value>() {
+                fn flatten_table(table: &toml::map::Map<String, toml::Value>, prefix: &str, result: &mut Vec<(String, String)>) {
+                    for (k, v) in table {
+                        let key = if prefix.is_empty() { k.clone() } else { format!("{}.{}", prefix, k) };
+                        match v {
+                            toml::Value::Table(t) => flatten_table(t, &key, result),
+                            other => result.push((key, other.to_string())),
+                        }
+                    }
+                }
+                if let Some(table) = config.as_table() {
+                    flatten_table(table, "", &mut result);
+                }
+            }
+        }
+        
+        Ok(result)
     }
 
     // System methods
@@ -218,9 +432,13 @@ impl RpcHandler for DefaultRpcHandler {
     }
 
     async fn system_stats(&self) -> RpcResult<String> {
-        // TODO: Implement using housaky stats
         info!("RPC system_stats");
-        Ok("{}".to_string())
+        let stats = serde_json::json!({
+            "version": env!("CARGO_PKG_VERSION"),
+            "workspace": self.workspace_dir.to_string_lossy(),
+            "timestamp": chrono::Utc::now().to_rfc3339(),
+        });
+        Ok(stats.to_string())
     }
 }
 
