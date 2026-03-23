@@ -17,6 +17,7 @@ use crate::housaky::self_improve_daemon::{SelfImproveDaemon, SelfImproveDaemonCo
 use crate::housaky::weighted_consensus::WeightedConsensusEngine;
 use crate::housaky::performance_benchmark::PerformanceBenchmarker;
 use crate::housaky::unified_agents::UnifiedAgentHub;
+use crate::housaky::rpc::{RpcServer, DefaultRpcHandler};
 
 #[derive(Debug, Clone)]
 pub struct UnifiedAGIConfig {
@@ -54,6 +55,8 @@ pub struct UnifiedAGISystem {
     benchmarker: Option<Arc<PerformanceBenchmarker>>,
     daemon: Option<Arc<SelfImproveDaemon>>,
     unified_agents: Option<Arc<UnifiedAgentHub>>,
+    // RPC server for Hermes-Housaky integration
+    rpc_server: Option<RpcServer>,
     status: Arc<RwLock<HashMap<String, SystemStatus>>>,
 }
 
@@ -77,15 +80,16 @@ impl UnifiedAGISystem {
             benchmarker: None,
             daemon: None,
             unified_agents: None,
+            rpc_server: None,
             status: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
     pub async fn initialize(&mut self) -> Result<()> {
         info!("🚀 Initializing Unified AGI System...");
-        
+
         self.status.write().await.insert("core".to_string(), SystemStatus::Initializing);
-        
+
         if self.config.enable_a2a_discovery {
             info!("📡 Initializing A2A Agent Discovery...");
             let discovery = Arc::new(AgentDiscoveryService::default());
@@ -93,7 +97,7 @@ impl UnifiedAGISystem {
             self.agent_discovery = Some(discovery);
             self.status.write().await.insert("a2a_discovery".to_string(), SystemStatus::Running);
         }
-        
+
         if self.config.enable_federation {
             info!("🌐 Initializing Federation Transport...");
             let fed_config = FederationConfig {
@@ -105,7 +109,7 @@ impl UnifiedAGISystem {
             self.federation = Some(federation);
             self.status.write().await.insert("federation".to_string(), SystemStatus::Running);
         }
-        
+
         if self.config.enable_weighted_consensus {
             info!("⚖️ Initializing Weighted Consensus Engine...");
             let consensus = Arc::new(WeightedConsensusEngine::default());
@@ -113,7 +117,7 @@ impl UnifiedAGISystem {
             self.consensus = Some(consensus);
             self.status.write().await.insert("consensus".to_string(), SystemStatus::Running);
         }
-        
+
         if self.config.enable_collective {
             info!("🤝 Initializing Collective Mind...");
             let collective_config = CollectiveConfig::default();
@@ -121,13 +125,13 @@ impl UnifiedAGISystem {
             self.collective = Some(collective);
             self.status.write().await.insert("collective".to_string(), SystemStatus::Running);
         }
-        
+
         if self.config.enable_benchmarking {
             info!("🧪 Initializing Performance Benchmarking...");
             self.benchmarker = Some(Arc::new(PerformanceBenchmarker::default()));
             self.status.write().await.insert("benchmarking".to_string(), SystemStatus::Running);
         }
-        
+
         if self.config.enable_24_7_mode {
             info!("⏰ Initializing 24/7 Self-Improvement Daemon...");
             let daemon_config = SelfImproveDaemonConfig {
@@ -144,11 +148,23 @@ impl UnifiedAGISystem {
             self.daemon = Some(daemon);
             self.status.write().await.insert("daemon".to_string(), SystemStatus::Running);
         }
-        
+
+        // Initialize RPC server for Hermes-Housaky integration
+        if self.config.enable_24_7_mode {
+            info!("🔌 Initializing Hermes-Housaky RPC server...");
+            let socket_path = self.config.workspace_dir.join(".housaky/rpc.sock");
+            let mut rpc_server = RpcServer::new(socket_path);
+            // Start with the default handler (placeholder)
+            let handler = Arc::new(DefaultRpcHandler::new());
+            rpc_server.start(handler).await?;
+            self.rpc_server = Some(rpc_server);
+            self.status.write().await.insert("rpc_server".to_string(), SystemStatus::Running);
+        }
+
         self.status.write().await.insert("core".to_string(), SystemStatus::Running);
-        
+
         info!("✅ Unified AGI System initialized successfully!");
-        
+
         Ok(())
     }
 
@@ -156,14 +172,14 @@ impl UnifiedAGISystem {
         self.daemon.clone()
     }
 
-    pub async fn get_system_status(&self) -> serde_json::Value {
+    pub async def get_system_status(&self) -> serde_json::Value {
         let status = self.status.read().await.clone();
-        
+
         let mut components = HashMap::new();
         for (name, s) in status.iter() {
             components.insert(name, format!("{:?}", s));
         }
-        
+
         serde_json::json!({
             "unified_agi": {
                 "components": components,
@@ -187,29 +203,34 @@ impl UnifiedAGISystem {
     pub async fn get_consensus_stats(&self) -> serde_json::Value {
         match &self.consensus {
             Some(c) => c.get_consensus_stats().await,
-            None => serde_json::json!({"error": "Consensus engine not initialized"}),
+            None => serde_json::json!({ "error": "Consensus engine not initialized" }),
         }
     }
 
     pub async fn get_federation_stats(&self) -> serde_json::Value {
         match &self.federation {
             Some(f) => f.get_network_stats().await,
-            None => serde_json::json!({"error": "Federation not initialized"}),
+            None => serde_json::json!({ "error": "Federation not initialized" }),
         }
     }
 
     pub async fn shutdown(&self) -> Result<()> {
         info!("🛑 Shutting down Unified AGI System...");
-        
+
+        // Stop RPC server first
+        if let Some(mut rpc_server) = &self.rpc_server {
+            rpc_server.stop().await;
+        }
+
         if let Some(daemon) = &self.daemon {
             daemon.stop().await;
         }
-        
+
         for (name, status) in self.status.write().await.iter_mut() {
             *status = SystemStatus::Stopped;
-            debug!("[SYSTEM] Stopped subsystem: {}", name);
+            debug!("[SYSTEM] Stopped subsystem: {name}");
         }
-        
+
         info!("✅ Unified AGI System shutdown complete");
         Ok(())
     }
@@ -218,10 +239,11 @@ impl UnifiedAGISystem {
 pub async fn create_unified_agi_system(workspace_dir: PathBuf) -> Result<UnifiedAGISystem> {
     let mut config = UnifiedAGIConfig::default();
     config.workspace_dir = workspace_dir;
-    
+
     let mut system = UnifiedAGISystem::new(config);
     system.initialize().await?;
-    
+
     Ok(system)
 }
 // Cycle 48 - Autonomous improvement - 2026-03-09T23:12:47+00:00
+EOF; __hermes_rc=$?; printf '__HERMES_FENCE_a9f7b3__'; exit $__hermes_rc

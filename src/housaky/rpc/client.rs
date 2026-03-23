@@ -1,146 +1,159 @@
+use jsonrpsee::http_client::HttpClientBuilder;
+use jsonrpsee::rpc_params;
+use jsonrpsee::core::client::ClientT;
+use jsonrpsee::core::Error as JsonRpcSeeError;
+use std::sync::Arc;
+use tokio::sync::Mutex;
 use std::path::PathBuf;
-use std::time::Duration;
-use tokio::net::UnixStream;
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-use serde_json::{Value, json};
-use tracing::{debug, error, info, warn};
+use serde::de::DeserializeOwned;
+use serde::Serialize;
+use tracing::{info, error};
 
-/// JSON-RPC client for communicating with the Housaky daemon.
+/// RPC client for communicating with housaky daemon
 pub struct RpcClient {
-    socket_path: PathBuf,
-    request_id: u64,
+    client: HttpClient,
 }
+
+type HttpClient = jsonrpsee::http_client::HttpClient;
 
 impl RpcClient {
-    /// Create a new RPC client.
-    pub fn new(socket_path: PathBuf) -> Self {
-        Self {
-            socket_path,
-            request_id: 0,
-        }
+    /// Create a new RPC client that connects to the given socket path
+    pub fn new(socket_path: PathBuf) -> Result<Self, JsonRpcSeeError> {
+        let url = format!("http://localhost/",); // dummy URL, we'll override the transport
+        let client = HttpClientBuilder::default()
+            .build(url)?
+            .replace_transport(jsonrpsee::client_transport::local::UnixSocketTransport::new(
+                socket_path,
+            )?);
+
+        Ok(Self { client })
     }
 
-    /// Send a request and wait for the response.
-    async fn call_method<T: for<'de> serde::Deserialize<'de>>(
-        &mut self,
-        method: &str,
-        params: Value,
-    ) -> Result<T, Box<dyn std::error::Error + Send + Sync>> {
-        // Connect to the socket
-        let stream = UnixStream::connect(&self.socket_path).await?;
-        let mut stream = BufReader::new(stream);
-
-        // Prepare the request
-        self.request_id += 1;
-        let request = json!({
-            "jsonrpc": "2.0",
-            "method": method,
-            "params": params,
-            "id": self.request_id,
-        });
-
-        // Send the request
-        let mut writer = stream.get_mut();
-        writer.write_all(request.to_string().as_bytes()).await?;
-        writer.write_all(b"\n").await?;
-        writer.flush().await?;
-
-        // Read the response
-        let mut line = String::new();
-        stream.read_line(&mut line).await?;
-        let response: Value = serde_json::from_str(&line)?;
-
-        // Check for error
-        if let Some(error) = response.get("error") {
-            return Err(Box::new(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("RPC error: {}", error),
-            )));
-        }
-
-        // Extract the result
-        let result = response.get("result")
-            .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::Other, "Missing result in response"))?;
-        
-        // Deserialize the result
-        let result: T = serde_json::from_value(result.clone())?;
-        Ok(result)
+    /// Call an RPC method and deserialize the result
+    async fn call<R: DeserializeOwned>(&self, method: &str, params: rpc_params::None) -> Result<R, JsonRpcSeeError> {
+        self.client.request(method, params).await
     }
 
-    // Memory operations
-    pub async fn memory_store(&mut self, key: String, value: String) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
-        let params = json!({ "key": key, "value": value });
-        self.call_method("memory_store", params).await
-    }
-
-    pub async fn memory_recall(&mut self, query: String) -> Result<Option<String>, Box<dyn std::error::Error + Send + Sync>> {
-        let params = json!({ "query": query });
-        self.call_method("memory_recall", params).await
-    }
-
-    pub async fn memory_search(&mut self, query: String, limit: usize) -> Result<Vec<Value>, Box<dyn std::error::Error + Send + Sync>> {
-        let params = json!({ "query": query, "limit": limit as u64 });
-        self.call_method("memory_search", params).await
-    }
-
-    pub async fn memory_forget(&mut self, key: String) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
-        let params = json!({ "key": key });
-        self.call_method("memory_forget", params).await
-    }
-
-    // Skills operations
-    pub async fn skill_list(&mut self) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
-        let params = json!({});
-        self.call_method("skill_list", params).await
-    }
-
-    pub async fn skill_get(&mut self, name: String) -> Result<Option<Value>, Box<dyn std::error::Error + Send + Sync>> {
-        let params = json!({ "name": name });
-        self.call_method("skill_get", params).await
-    }
-
-    pub async fn skill_run(&mut self, name: String, inputs: Value) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
-        let params = json!({ "name": name, "inputs": inputs });
-        self.call_method("skill_run", params).await
-    }
-
-    // A2A operations
-    pub async fn a2a_send(&mut self, message: String, target: String) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
-        let params = json!({ "message": message, "target": target });
-        self.call_method("a2a_send", params).await
-    }
-
-    // Goals operations
-    pub async fn goal_set(&mut self, description: String) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
-        let params = json!({ "description": description });
-        self.call_method("goal_set", params).await
-    }
-
-    pub async fn goal_list(&mut self) -> Result<Vec<Value>, Box<dyn std::error::Error + Send + Sync>> {
-        let params = json!({});
-        self.call_method("goal_list", params).await
-    }
-
-    // Heartbeat operations
-    pub async fn heartbeat_trigger(&mut self) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
-        let params = json!({});
-        self.call_method("heartbeat_trigger", params).await
-    }
-
-    // Configuration operations
-    pub async fn config_get(&mut self, key: String) -> Result<Option<Value>, Box<dyn std::error::Error + Send + Sync>> {
-        let params = json!({ "key": key });
-        self.call_method("config_get", params).await
-    }
-
-    pub async fn config_set(&mut self, key: String, value: Option<Value>) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
-        let params = json!({ "key": key, "value": value });
-        self.call_method("config_set", params).await
-    }
-
-    // System operations
-    pub async fn system_version(&mut self) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
-        let params = json!({});
-        self.call_method("system_version", params).await
+    /// Call an RPC method with parameters and deserialize the result
+    async fn call_with_params<P, R>(&self, method: &str, params: P) -> Result<R, JsonRpcSeeError>
+    where
+        P: Serde + Send + Sync,
+        R: DeserializeOwned,
+    {
+        self.client.request(method, params).await
     }
 }
+
+// Memory methods
+impl RpcClient {
+    pub async fn memory_store(&self, key: String, value: String) -> Result<(), JsonRpcSeeError> {
+        self.client.request("memory_store", rpc_params![key, value]).await
+    }
+
+    pub async fn memory_recall(&self, query: String) -> Result<Option<String>, JsonRpcSeeError> {
+        self.client.request("memory_recall", rpc_params![query]).await
+    }
+
+    pub async fn memory_search(&self, query: String, limit: usize) -> Result<Vec<String>, JsonRpcSeeError> {
+        self.client.request("memory_search", rpc_params![query, limit]).await
+    }
+}
+
+// Skill methods
+impl RpcClient {
+    pub async fn skill_list(&self) -> Result<Vec<String>, JsonRpcSeeError> {
+        self.client.request("skill_list", rpc_params![]).await
+    }
+
+    pub async fn skill_get(&self, name: String) -> Result<Option<String>, JsonRpcSeeError> {
+        self.client.request("skill_get", rpc_params![name]).await
+    }
+
+    pub async fn skill_run(&self, name: String, inputs: serde_json::Value) -> Result<serde_json::Value, JsonRpcSeeError> {
+        self.client.request("skill_run", rpc_params![name, inputs]).await
+    }
+}
+
+// A2A methods
+impl RpcClient {
+    pub async fn a2a_send(&self, message: String, target: String) -> Result<(), JsonRpcSeeError> {
+        self.client.request("a2a_send", rpc_params![message, target]).await
+    }
+
+    pub async fn a2a_recv(&self, from: String) -> Result<Option<String>, JsonRpcSeeError> {
+        self.client.request("a2a_recv", rpc_params![from]).await
+    }
+
+    pub async fn a2a_delegate(&self, task_id: String, action: String, params: serde_json::Value) -> Result<(), JsonRpcSeeError> {
+        self.client.request("a2a_delegate", rpc_params![task_id, action, params]).await
+    }
+
+    pub async fn a2a_sync(&self, timeout: u64) -> Result<Option<String>, JsonRpcSeeError> {
+        self.client.request("a2a_sync", rpc_params![timeout]).await
+    }
+
+    pub async fn a2a_share_learning(&self, category: String, content: String, confidence: f32) -> Result<(), JsonRpcSeeError> {
+        self.client.request("a2a_share_learning", rpc_params![category, content, confidence]).await
+    }
+}
+
+// Goal methods
+impl RpcClient {
+    pub async fn goal_set(&self, description: String) -> Result<(), JsonRpcSeeError> {
+        self.client.request("goal_set", rpc_params![description]).await
+    }
+
+    pub async fn goal_list(&self) -> Result<Vec<String>, JsonRpcSeeError> {
+        self.client.request("goal_list", rpc_params![]).await
+    }
+
+    pub async fn goal_progress(&self, description: String) -> Result<f32, JsonRpcSeeError> {
+        self.client.request("goal_progress", rpc_params![description]).await
+    }
+
+    pub async fn goal_evaluate(&self, description: String) -> Result<bool, JsonRpcSeeError> {
+        self.client.request("goal_evaluate", rpc_params![description]).await
+    }
+}
+
+// Heartbeat methods
+impl RpcClient {
+    pub async fn heartbeat_trigger(&self) -> Result<(), JsonRpcSeeError> {
+        self.client.request("heartbeat_trigger", rpc_params![]).await
+    }
+
+    pub async fn heartbeat_status(&self) -> Result<bool, JsonRpcSeeError> {
+        self.client.request("heartbeat_status", rpc_params![]).await
+    }
+
+    pub async fn heartbeat_configure(&self, interval_seconds: u64) -> Result<(), JsonRpcSeeError> {
+        self.client.request("heartbeat_configure", rpc_params![interval_seconds]).await
+    }
+}
+
+// Configuration methods
+impl RpcClient {
+    pub async fn config_get(&self, key: String) -> Result<Option<String>, JsonRpcSeeError> {
+        self.client.request("config_get", rpc_params![key]).await
+    }
+
+    pub async fn config_set(&self, key: String, value: String) -> Result<(), JsonRpcSeeError> {
+        self.client.request("config_set", rpc_params![key, value]).await
+    }
+
+    pub async fn config_list(&self) -> Result<Vec<(String, String)>, JsonRpcSeeError> {
+        self.client.request("config_list", rpc_params![]).await
+    }
+}
+
+// System methods
+impl RpcClient {
+    pub async fn system_version(&self) -> Result<String, JsonRpcSeeError> {
+        self.client.request("system_version", rpc_params![]).await
+    }
+
+    pub async fn system_stats(&self) -> Result<String, JsonRpcSeeError> {
+        self.client.request("system_stats", rpc_params![]).await
+    }
+}
+EOF; __hermes_rc=$?; printf '__HERMES_FENCE_a9f7b3__'; exit $__hermes_rc
