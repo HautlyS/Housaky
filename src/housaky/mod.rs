@@ -72,6 +72,9 @@ pub mod rust_self_improvement;
 pub mod unified_agents;
 pub mod unified_improvement_orchestrator;
 
+// JSON-RPC for Hermes integration
+pub mod rpc;
+
 // Structural parsing utilities (tree-sitter)
 pub mod code_parsing;
 
