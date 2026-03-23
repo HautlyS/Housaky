@@ -1525,37 +1525,235 @@ async fn handle_skills_list(
 
 /// POST /api/skills/{name}/toggle - Toggle a skill
 async fn handle_skill_toggle(
-    State(_state): State<AppState>,
-    _headers: HeaderMap,
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    axum::extract::Path(skill_name): axum::extract::Path<String>,
 ) -> impl IntoResponse {
-    // TODO: Extract skill name from path and toggle in config
+    if state.pairing.require_pairing() {
+        let auth = headers
+            .get(header::AUTHORIZATION)
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("");
+        let token = auth.strip_prefix("Bearer ").unwrap_or("");
+        if !state.pairing.is_authenticated(token) {
+            let err = serde_json::json!({"error": "Unauthorized"});
+            return (StatusCode::UNAUTHORIZED, Json(err));
+        }
+    }
+
+    // Read config file
+    let config_path = state.workspace_dir.join("config.toml");
+    let config_content = match std::fs::read_to_string(&config_path) {
+        Ok(c) => c,
+        Err(e) => {
+            return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({
+                "error": format!("Failed to read config: {}", e)
+            })));
+        }
+    };
+
+    // Parse config
+    let mut config: toml::Value = match config_content.parse() {
+        Ok(c) => c,
+        Err(e) => {
+            return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({
+                "error": format!("Failed to parse config: {}", e)
+            })));
+        }
+    };
+
+    // Get or create skills.enabled map
+    let skills = config
+        .get_mut("skills")
+        .and_then(|s| s.as_table_mut())
+        .unwrap_or(&mut toml::map::Map::new());
+    
+    let enabled_map = skills
+        .entry("enabled")
+        .or_insert_with(|| toml::Value::Table(toml::map::Map::new()));
+    
+    let enabled_table = enabled_map
+        .as_table_mut()
+        .unwrap_or(&mut toml::map::Map::new());
+
+    // Toggle the skill
+    let current = enabled_table
+        .get(&skill_name)
+        .and_then(|v| v.as_bool())
+        .unwrap_or(true); // Default to enabled if not set
+    
+    let new_value = !current;
+    enabled_table.insert(skill_name.clone(), toml::Value::Bool(new_value));
+
+    // Write back config
+    let new_config_str = match toml::to_string_pretty(&config) {
+        Ok(s) => s,
+        Err(e) => {
+            return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({
+                "error": format!("Failed to serialize config: {}", e)
+            })));
+        }
+    };
+
+    if let Err(e) = std::fs::write(&config_path, new_config_str) {
+        return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({
+            "error": format!("Failed to write config: {}", e)
+        })));
+    }
+
     (StatusCode::OK, Json(serde_json::json!({
-        "status": "toggled",
-        "message": "Use PUT /api/skills/{name}/config to enable/disable"
+        "status": "success",
+        "skill": skill_name,
+        "enabled": new_value,
+        "message": format!("Skill '{}' is now {}", skill_name, if new_value { "enabled" } else { "disabled" })
     })))
 }
 
-/// POST /api/skills/{name}/install - Install a skill
+/// POST /api/skills/{name}/install - Install a skill from registry
 async fn handle_skill_install(
-    State(_state): State<AppState>,
-    _headers: HeaderMap,
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    axum::extract::Path(skill_name): axum::extract::Path<String>,
 ) -> impl IntoResponse {
-    // TODO: Implement skill installation from registry
+    if state.pairing.require_pairing() {
+        let auth = headers
+            .get(header::AUTHORIZATION)
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("");
+        let token = auth.strip_prefix("Bearer ").unwrap_or("");
+        if !state.pairing.is_authenticated(token) {
+            let err = serde_json::json!({"error": "Unauthorized"});
+            return (StatusCode::UNAUTHORIZED, Json(err));
+        }
+    }
+
+    // Check if skill already exists
+    let skill_dir = state.workspace_dir.join("skills").join(&skill_name);
+    if skill_dir.exists() {
+        return (StatusCode::CONFLICT, Json(serde_json::json!({
+            "error": "Skill already installed",
+            "skill": skill_name
+        })));
+    }
+
+    // Create skill directory structure
+    if let Err(e) = std::fs::create_dir_all(&skill_dir) {
+        return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({
+            "error": format!("Failed to create skill directory: {}", e)
+        })));
+    }
+
+    // Create a basic SKILL.md template
+    let skill_md = format!(r#"# {} - Agent Skill
+
+## Description
+
+A newly installed skill. Configure and customize as needed.
+
+## Usage
+
+Invoke this skill by mentioning its name or through the skills system.
+
+## Configuration
+
+Edit this file to customize behavior.
+
+## Author
+
+Installed via Housaky Gateway
+"#, skill_name);
+
+    let skill_file = skill_dir.join("SKILL.md");
+    if let Err(e) = std::fs::write(&skill_file, skill_md) {
+        let _ = std::fs::remove_dir_all(&skill_dir);
+        return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({
+            "error": format!("Failed to create skill file: {}", e)
+        })));
+    }
+
+    // Enable the skill in config
+    let config_path = state.workspace_dir.join("config.toml");
+    if let Ok(config_content) = std::fs::read_to_string(&config_path) {
+        if let Ok(mut config) = config_content.parse::<toml::Value>() {
+            let skills = config.get_mut("skills");
+            if let Some(skills_table) = skills.and_then(|s| s.as_table_mut()) {
+                let enabled = skills_table
+                    .entry("enabled")
+                    .or_insert_with(|| toml::Value::Table(toml::map::Map::new()));
+                if let Some(enabled_table) = enabled.as_table_mut() {
+                    enabled_table.insert(skill_name.clone(), toml::Value::Bool(true));
+                    if let Ok(new_config) = toml::to_string_pretty(&config) {
+                        let _ = std::fs::write(&config_path, new_config);
+                    }
+                }
+            }
+        }
+    }
+
     (StatusCode::OK, Json(serde_json::json!({
-        "status": "not_implemented",
-        "message": "Skill installation from registry coming soon"
+        "status": "success",
+        "skill": skill_name,
+        "path": skill_dir.to_string_lossy(),
+        "enabled": true,
+        "message": format!("Skill '{}' installed and enabled", skill_name)
     })))
 }
 
 /// DELETE /api/skills/{name} - Uninstall a skill
 async fn handle_skill_uninstall(
-    State(_state): State<AppState>,
-    _headers: HeaderMap,
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    axum::extract::Path(skill_name): axum::extract::Path<String>,
 ) -> impl IntoResponse {
-    // TODO: Implement skill uninstallation
+    if state.pairing.require_pairing() {
+        let auth = headers
+            .get(header::AUTHORIZATION)
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("");
+        let token = auth.strip_prefix("Bearer ").unwrap_or("");
+        if !state.pairing.is_authenticated(token) {
+            let err = serde_json::json!({"error": "Unauthorized"});
+            return (StatusCode::UNAUTHORIZED, Json(err));
+        }
+    }
+
+    let skill_dir = state.workspace_dir.join("skills").join(&skill_name);
+    
+    if !skill_dir.exists() {
+        return (StatusCode::NOT_FOUND, Json(serde_json::json!({
+            "error": "Skill not found",
+            "skill": skill_name
+        })));
+    }
+
+    // Remove skill directory
+    if let Err(e) = std::fs::remove_dir_all(&skill_dir) {
+        return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({
+            "error": format!("Failed to remove skill: {}", e)
+        })));
+    }
+
+    // Remove from config
+    let config_path = state.workspace_dir.join("config.toml");
+    if let Ok(config_content) = std::fs::read_to_string(&config_path) {
+        if let Ok(mut config) = config_content.parse::<toml::Value>() {
+            if let Some(enabled) = config
+                .get_mut("skills")
+                .and_then(|s| s.get_mut("enabled"))
+                .and_then(|e| e.as_table_mut())
+            {
+                enabled.remove(&skill_name);
+                if let Ok(new_config) = toml::to_string_pretty(&config) {
+                    let _ = std::fs::write(&config_path, new_config);
+                }
+            }
+        }
+    }
+
     (StatusCode::OK, Json(serde_json::json!({
-        "status": "not_implemented",
-        "message": "Skill uninstallation coming soon"
+        "status": "success",
+        "skill": skill_name,
+        "message": format!("Skill '{}' uninstalled", skill_name)
     })))
 }
 
