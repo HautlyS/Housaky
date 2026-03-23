@@ -426,8 +426,8 @@ impl RpcHandler for DefaultRpcHandler {
 
     // System methods
     async fn system_version(&self) -> RpcResult<String> {
-        // TODO: Get from housaky config or Cargo.toml
         info!("RPC system_version");
+        // Uses CARGO_PKG_VERSION from Cargo.toml at compile time
         Ok(env!("CARGO_PKG_VERSION").to_string())
     }
 
