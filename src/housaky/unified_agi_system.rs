@@ -172,7 +172,7 @@ impl UnifiedAGISystem {
         self.daemon.clone()
     }
 
-    pub async def get_system_status(&self) -> serde_json::Value {
+    pub async fn get_system_status(&self) -> serde_json::Value {
         let status = self.status.read().await.clone();
 
         let mut components = HashMap::new();
@@ -246,4 +246,3 @@ pub async fn create_unified_agi_system(workspace_dir: PathBuf) -> Result<Unified
     Ok(system)
 }
 // Cycle 48 - Autonomous improvement - 2026-03-09T23:12:47+00:00
-EOF; __hermes_rc=$?; printf '__HERMES_FENCE_a9f7b3__'; exit $__hermes_rc
