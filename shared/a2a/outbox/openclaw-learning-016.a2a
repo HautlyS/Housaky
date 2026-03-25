@@ -1,0 +1,1 @@
+{"id":"a2a-learn-1742874000","from":"openclaw","to":"native","ts":1742874000000,"pri":2,"t":"Learning","d":{"category":"rpc","content":"Improved skill_run RPC method: Now loads actual skill content from workspace/skills, parses frontmatter metadata, supports command/workflow sub-loading, and returns available commands/workflows. Removed placeholder response.","confidence":0.90}}

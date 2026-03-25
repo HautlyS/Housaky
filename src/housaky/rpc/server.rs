@@ -164,10 +164,93 @@ impl RpcHandler for DefaultRpcHandler {
     async fn skill_run(&self, name: String, inputs: serde_json::Value) -> RpcResult<serde_json::Value> {
         info!("RPC skill_run: {} with inputs: {}", name, inputs);
         
-        // For now, return a placeholder - skill execution requires more infrastructure
+        // Check for skill in workspace skills directory
+        let skill_dir = self.workspace_dir.join("skills").join(&name);
+        let skill_file = skill_dir.join("SKILL.md");
+        
+        if !skill_file.exists() {
+            return Err(ErrorObject::owned(-32009, format!("Skill not found: {}", name), None::<()>));
+        }
+        
+        // Load skill content
+        let skill_content = std::fs::read_to_string(&skill_file)
+            .map_err(|e| ErrorObject::owned(-32010, format!("Failed to read skill: {}", e), None::<()>))?;
+        
+        // Parse skill metadata from frontmatter (if present)
+        let skill_name = skill_content.lines()
+            .find(|l| l.starts_with("name:"))
+            .map(|l| l.trim_start_matches("name:").trim().to_string())
+            .unwrap_or_else(|| name.clone());
+        
+        let skill_version = skill_content.lines()
+            .find(|l| l.starts_with("version:"))
+            .map(|l| l.trim_start_matches("version:").trim().to_string())
+            .unwrap_or_else(|| "1.0.0".to_string());
+        
+        // Check for specific command to run
+        let command = inputs.get("command").and_then(|v| v.as_str());
+        
+        if let Some(cmd) = command {
+            // Try to load command-specific content
+            let cmd_file = skill_dir.join("commands").join(format!("{}.md", cmd));
+            if cmd_file.exists() {
+                let cmd_content = std::fs::read_to_string(&cmd_file)
+                    .map_err(|e| ErrorObject::owned(-32011, format!("Failed to read command: {}", e), None::<()>))?;
+                
+                return Ok(serde_json::json!({
+                    "status": "ready",
+                    "skill": skill_name,
+                    "version": skill_version,
+                    "command": cmd,
+                    "prompt": cmd_content,
+                    "inputs": inputs
+                }));
+            }
+        }
+        
+        // Check for workflow
+        let workflow = inputs.get("workflow").and_then(|v| v.as_str());
+        if let Some(wf) = workflow {
+            let wf_file = skill_dir.join("workflows").join(format!("{}.md", wf));
+            if wf_file.exists() {
+                let wf_content = std::fs::read_to_string(&wf_file)
+                    .map_err(|e| ErrorObject::owned(-32012, format!("Failed to read workflow: {}", e), None::<()>))?;
+                
+                return Ok(serde_json::json!({
+                    "status": "ready",
+                    "skill": skill_name,
+                    "version": skill_version,
+                    "workflow": wf,
+                    "prompt": wf_content,
+                    "inputs": inputs
+                }));
+            }
+        }
+        
+        // Return skill with available commands and workflows
+        let commands: Vec<String> = std::fs::read_dir(skill_dir.join("commands"))
+            .map(|entries| {
+                entries.filter_map(|e| e.ok())
+                    .filter_map(|e| e.path().file_stem()?.to_str().map(|s| s.to_string()))
+                    .collect()
+            })
+            .unwrap_or_default();
+        
+        let workflows: Vec<String> = std::fs::read_dir(skill_dir.join("workflows"))
+            .map(|entries| {
+                entries.filter_map(|e| e.ok())
+                    .filter_map(|e| e.path().file_stem()?.to_str().map(|s| s.to_string()))
+                    .collect()
+            })
+            .unwrap_or_default();
+        
         Ok(serde_json::json!({
-            "status": "skill_execution_not_implemented",
-            "skill": name,
+            "status": "ready",
+            "skill": skill_name,
+            "version": skill_version,
+            "description": skill_content.lines().take(20).collect::<Vec<_>>().join("\n"),
+            "commands": commands,
+            "workflows": workflows,
             "inputs": inputs
         }))
     }
