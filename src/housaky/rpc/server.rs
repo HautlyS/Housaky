@@ -1,13 +1,14 @@
-use jsonrpsee::server::{Server, ServerHandle};
+use jsonrpsee::server::{Server, ServerHandle, RpcModule};
 use jsonrpsee::types::error::ErrorObject;
 use jsonrpsee::core::RpcResult;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use std::path::PathBuf;
 use tracing::{info, error};
+use anyhow::Result as AnyhowResult;
 
-use crate::rpc::handler::RpcHandler;
-use crate::rpc::handler::DefaultRpcHandler;
+use super::handler::RpcHandler;
+use super::handler::DefaultRpcHandler as BaseDefaultRpcHandler;
 
 /// RPC server for Hermes-Housaky integration
 pub struct RpcServer {
@@ -25,7 +26,7 @@ impl RpcServer {
     }
 
     /// Start the RPC server with the given handler
-    pub async fn start<H: RpcHandler + Send + Sync + 'static>(&mut self, handler: Arc<H>) -> jsonrpsee::Result<()> {
+    pub async fn start<H: RpcHandler + Send + Sync + 'static>(&mut self, handler: Arc<H>) -> AnyhowResult<()> {
         // Ensure the directory exists
         if let Some(parent) = self.socket_path.parent() {
             tokio::fs::create_dir_all(parent).await?;
@@ -42,8 +43,11 @@ impl RpcServer {
             .build(&format!("unix://{}", self.socket_path.display()))
             .await?;
 
+        // Build the RPC module
+        let module = build_rpc_module(handler);
+
         // Register the handler
-        let handle = server.start(handler.into_rpc());
+        let handle = server.start(module);
 
         info!("Housaky RPC server started on {}", self.socket_path.display());
 
@@ -259,12 +263,12 @@ impl RpcHandler for DefaultRpcHandler {
     async fn a2a_send(&self, message: String, target: String) -> RpcResult<()> {
         info!("RPC a2a_send to {}: {}", target, message);
         
-        let shared_dir = self.workspace_dir.join("shared").join("a2a");
-        let endpoint = crate::housaky::a2a::A2AEndpoint::new(shared_dir, "rpc", &target);
+        let shared_dir = self.workspace_dir.join("shared");
+        let manager = crate::housaky::a2a::A2AManager::new(shared_dir, "rpc", &target);
         
         let msg = crate::housaky::a2a::A2AMessage::learning("rpc", &target, "message", &message, 1.0);
         
-        endpoint.send(&msg).await
+        manager.send(&msg).await
             .map_err(|e| ErrorObject::owned(-32005, format!("Failed to send A2A: {}", e), None::<()>))?;
         
         Ok(())
@@ -273,10 +277,10 @@ impl RpcHandler for DefaultRpcHandler {
     async fn a2a_recv(&self, from: String) -> RpcResult<Option<String>> {
         info!("RPC a2a_recv from {}", from);
         
-        let shared_dir = self.workspace_dir.join("shared").join("a2a");
-        let endpoint = crate::housaky::a2a::A2AEndpoint::new(shared_dir, "rpc", &from);
+        let shared_dir = self.workspace_dir.join("shared");
+        let manager = crate::housaky::a2a::A2AManager::new(shared_dir, "rpc", &from);
         
-        let messages = endpoint.read_from(&from)
+        let messages = manager.read_from(&from)
             .map_err(|e| ErrorObject::owned(-32006, format!("Failed to recv A2A: {}", e), None::<()>))?;
         
         Ok(messages.first().map(|m| m.to_compact_json().unwrap_or_default()))
@@ -285,12 +289,12 @@ impl RpcHandler for DefaultRpcHandler {
     async fn a2a_delegate(&self, task_id: String, action: String, params: serde_json::Value) -> RpcResult<()> {
         info!("RPC a2a_delegate: {} {} {:?}", task_id, action, params);
         
-        let shared_dir = self.workspace_dir.join("shared").join("a2a");
-        let endpoint = crate::housaky::a2a::A2AEndpoint::new(shared_dir, "rpc", "peer");
+        let shared_dir = self.workspace_dir.join("shared");
+        let manager = crate::housaky::a2a::A2AManager::new(shared_dir, "rpc", "peer");
         
         let msg = crate::housaky::a2a::A2AMessage::task("rpc", "peer", &task_id, &action, params);
         
-        endpoint.send(&msg).await
+        manager.send(&msg).await
             .map_err(|e| ErrorObject::owned(-32007, format!("Failed to delegate: {}", e), None::<()>))?;
         
         Ok(())
@@ -299,12 +303,12 @@ impl RpcHandler for DefaultRpcHandler {
     async fn a2a_sync(&self, timeout: u64) -> RpcResult<Option<String>> {
         info!("RPC a2a_sync: timeout {}", timeout);
         
-        let shared_dir = self.workspace_dir.join("shared").join("a2a");
-        let endpoint = crate::housaky::a2a::A2AEndpoint::new(shared_dir, "rpc", "peer");
+        let shared_dir = self.workspace_dir.join("shared");
+        let manager = crate::housaky::a2a::A2AManager::new(shared_dir, "rpc", "peer");
         
         let msg = crate::housaky::a2a::A2AMessage::sync_request("rpc", "peer");
         
-        match endpoint.send_and_wait(&msg, timeout).await {
+        match manager.send_and_wait(&msg, timeout).await {
             Ok(Some(response)) => Ok(Some(response.to_compact_json().unwrap_or_default())),
             Ok(None) => Ok(None),
             Err(e) => Err(ErrorObject::owned(-32008, format!("Sync failed: {}", e), None::<()>)),
@@ -314,12 +318,12 @@ impl RpcHandler for DefaultRpcHandler {
     async fn a2a_share_learning(&self, category: String, content: String, confidence: f32) -> RpcResult<()> {
         info!("RPC a2a_share_learning: {} (confidence: {})", category, confidence);
         
-        let shared_dir = self.workspace_dir.join("shared").join("a2a");
-        let endpoint = crate::housaky::a2a::A2AEndpoint::new(shared_dir, "rpc", "peer");
+        let shared_dir = self.workspace_dir.join("shared");
+        let manager = crate::housaky::a2a::A2AManager::new(shared_dir, "rpc", "peer");
         
         let msg = crate::housaky::a2a::A2AMessage::learning("rpc", "peer", &category, &content, confidence);
         
-        endpoint.send(&msg).await
+        manager.send(&msg).await
             .map_err(|e| ErrorObject::owned(-32009, format!("Failed to share learning: {}", e), None::<()>))?;
         
         Ok(())
@@ -525,162 +529,232 @@ impl RpcHandler for DefaultRpcHandler {
     }
 }
 
-// Define the RPC trait that the server expects
-#[async_trait::async_trait]
-pub trait RpcHandler: Send + Sync {
+// Helper to convert our handler into the jsonrpsee server module
+pub fn build_rpc_module<H: RpcHandler + Send + Sync + 'static>(handler: Arc<H>) -> RpcModule<()> {
+    let mut module = RpcModule::new(());
+
     // Memory
-    async fn memory_store(&self, key: String, value: String) -> RpcResult<()>;
-    async fn memory_recall(&self, query: String) -> RpcResult<Option<String>>;
-    async fn memory_search(&self, query: String, limit: usize) -> RpcResult<Vec<String>>;
+    {
+        let h = handler.clone();
+        module.register_async_method("memory_store", move |params, _| {
+            let h = h.clone();
+            async move {
+                let (key, value): (String, String) = params.parse()?;
+                h.memory_store(key, value).await
+            }
+        }).expect("Failed to register memory_store");
+    }
+    {
+        let h = handler.clone();
+        module.register_async_method("memory_recall", move |params, _| {
+            let h = h.clone();
+            async move {
+                let query: String = params.one()?;
+                h.memory_recall(query).await
+            }
+        }).expect("Failed to register memory_recall");
+    }
+    {
+        let h = handler.clone();
+        module.register_async_method("memory_search", move |params, _| {
+            let h = h.clone();
+            async move {
+                let (query, limit): (String, usize) = params.parse()?;
+                h.memory_search(query, limit).await
+            }
+        }).expect("Failed to register memory_search");
+    }
 
     // Skills
-    async fn skill_list(&self) -> RpcResult<Vec<String>>;
-    async fn skill_get(&self, name: String) -> RpcResult<Option<String>>;
-    async fn skill_run(&self, name: String, inputs: serde_json::Value) -> RpcResult<serde_json::Value>;
-
-    // A2A
-    async fn a2a_send(&self, message: String, target: String) -> RpcResult<()>;
-    async fn a2a_recv(&self, from: String) -> RpcResult<Option<String>>;
-    async fn a2a_delegate(&self, task_id: String, action: String, params: serde_json::Value) -> RpcResult<()>;
-    async fn a2a_sync(&self, timeout: u64) -> RpcResult<Option<String>>;
-    async fn a2a_share_learning(&self, category: String, content: String, confidence: f32) -> RpcResult<()>;
-
-    // Goals
-    async fn goal_set(&self, description: String) -> RpcResult<()>;
-    async fn goal_list(&self) -> RpcResult<Vec<String>>;
-    async fn goal_progress(&self, description: String) -> RpcResult<f32>;
-    async fn goal_evaluate(&self, description: String) -> RpcResult<bool>;
-
-    // Heartbeat
-    async fn heartbeat_trigger(&self) -> RpcResult<()>;
-    async fn heartbeat_status(&self) -> RpcResult<bool>;
-    async fn heartbeat_configure(&self, interval_seconds: u64) -> RpcResult<()>;
-
-    // Configuration
-    async fn config_get(&self, key: String) -> RpcResult<Option<String>>;
-    async fn config_set(&self, key: String, value: String) -> RpcResult<()>;
-    async fn config_list(&self) -> RpcResult<Vec<(String, String)>>;
-
-    // System
-    async fn system_version(&self) -> RpcResult<String>;
-    async fn system_stats(&self) -> RpcResult<String>;
-}
-
-// Helper to convert our handler into the jsonrpsee server module
-trait IntoRpc {
-    fn into_rpc(self) -> jsonrpsee::server::ServerModule<()>;
-}
-
-impl<H: RpcHandler + Send + Sync + 'static> IntoRpc for Arc<H> {
-    fn into_rpc(self) -> jsonrpsee::server::ServerModule<()> {
-        let mut module = jsonrpsee::server::ServerModule::new(());
-
-        // Memory
-        module.register_method("memory_store", move |h: &Arc<H>, key: String, value: String| {
-            let h = h.clone();
-            async move { h.memory_store(key, value).await }
-        });
-        module.register_method("memory_recall", move |h: &Arc<H>, query: String| {
-            let h = h.clone();
-            async move { h.memory_recall(query).await }
-        });
-        module.register_method("memory_search", move |h: &Arc<H>, (query, limit): (String, usize)| {
-            let h = h.clone();
-            async move { h.memory_search(query, limit).await }
-        });
-
-        // Skills
-        module.register_method("skill_list", move |h: &Arc<H>, ()| {
+    {
+        let h = handler.clone();
+        module.register_async_method("skill_list", move |_, _| {
             let h = h.clone();
             async move { h.skill_list().await }
-        });
-        module.register_method("skill_get", move |h: &Arc<H>, name: String| {
+        }).expect("Failed to register skill_list");
+    }
+    {
+        let h = handler.clone();
+        module.register_async_method("skill_get", move |params, _| {
             let h = h.clone();
-            async move { h.skill_get(name).await }
-        });
-        module.register_method("skill_run", move |h: &Arc<H>, (name, inputs): (String, serde_json::Value)| {
+            async move {
+                let name: String = params.one()?;
+                h.skill_get(name).await
+            }
+        }).expect("Failed to register skill_get");
+    }
+    {
+        let h = handler.clone();
+        module.register_async_method("skill_run", move |params, _| {
             let h = h.clone();
-            async move { h.skill_run(name, inputs).await }
-        });
+            async move {
+                let (name, inputs): (String, serde_json::Value) = params.parse()?;
+                h.skill_run(name, inputs).await
+            }
+        }).expect("Failed to register skill_run");
+    }
 
-        // A2A
-        module.register_method("a2a_send", move |h: &Arc<H>, (message, target): (String, String)| {
+    // A2A
+    {
+        let h = handler.clone();
+        module.register_async_method("a2a_send", move |params, _| {
             let h = h.clone();
-            async move { h.a2a_send(message, target).await }
-        });
-        module.register_method("a2a_recv", move |h: &Arc<H>, from: String| {
+            async move {
+                let (message, target): (String, String) = params.parse()?;
+                h.a2a_send(message, target).await
+            }
+        }).expect("Failed to register a2a_send");
+    }
+    {
+        let h = handler.clone();
+        module.register_async_method("a2a_recv", move |params, _| {
             let h = h.clone();
-            async move { h.a2a_recv(from).await }
-        });
-        module.register_method("a2a_delegate", move |h: &Arc<H>, (task_id, action, params): (String, String, serde_json::Value)| {
+            async move {
+                let from: String = params.one()?;
+                h.a2a_recv(from).await
+            }
+        }).expect("Failed to register a2a_recv");
+    }
+    {
+        let h = handler.clone();
+        module.register_async_method("a2a_delegate", move |params, _| {
             let h = h.clone();
-            async move { h.a2a_delegate(task_id, action, params).await }
-        });
-        module.register_method("a2a_sync", move |h: &Arc<H>, timeout: u64| {
+            async move {
+                let (task_id, action, params_val): (String, String, serde_json::Value) = params.parse()?;
+                h.a2a_delegate(task_id, action, params_val).await
+            }
+        }).expect("Failed to register a2a_delegate");
+    }
+    {
+        let h = handler.clone();
+        module.register_async_method("a2a_sync", move |params, _| {
             let h = h.clone();
-            async move { h.a2a_sync(timeout).await }
-        });
-        module.register_method("a2a_share_learning", move |h: &Arc<H>, (category, content, confidence): (String, String, f32)| {
+            async move {
+                let timeout: u64 = params.one()?;
+                h.a2a_sync(timeout).await
+            }
+        }).expect("Failed to register a2a_sync");
+    }
+    {
+        let h = handler.clone();
+        module.register_async_method("a2a_share_learning", move |params, _| {
             let h = h.clone();
-            async move { h.a2a_share_learning(category, content, confidence).await }
-        });
+            async move {
+                let (category, content, confidence): (String, String, f32) = params.parse()?;
+                h.a2a_share_learning(category, content, confidence).await
+            }
+        }).expect("Failed to register a2a_share_learning");
+    }
 
-        // Goals
-        module.register_method("goal_set", move |h: &Arc<H>, description: String| {
+    // Goals
+    {
+        let h = handler.clone();
+        module.register_async_method("goal_set", move |params, _| {
             let h = h.clone();
-            async move { h.goal_set(description).await }
-        });
-        module.register_method("goal_list", move |h: &Arc<H>, ()| {
+            async move {
+                let description: String = params.one()?;
+                h.goal_set(description).await
+            }
+        }).expect("Failed to register goal_set");
+    }
+    {
+        let h = handler.clone();
+        module.register_async_method("goal_list", move |_, _| {
             let h = h.clone();
             async move { h.goal_list().await }
-        });
-        module.register_method("goal_progress", move |h: &Arc<H>, description: String| {
+        }).expect("Failed to register goal_list");
+    }
+    {
+        let h = handler.clone();
+        module.register_async_method("goal_progress", move |params, _| {
             let h = h.clone();
-            async move { h.goal_progress(description).await }
-        });
-        module.register_method("goal_evaluate", move |h: &Arc<H>, description: String| {
+            async move {
+                let description: String = params.one()?;
+                h.goal_progress(description).await
+            }
+        }).expect("Failed to register goal_progress");
+    }
+    {
+        let h = handler.clone();
+        module.register_async_method("goal_evaluate", move |params, _| {
             let h = h.clone();
-            async move { h.goal_evaluate(description).await }
-        });
+            async move {
+                let description: String = params.one()?;
+                h.goal_evaluate(description).await
+            }
+        }).expect("Failed to register goal_evaluate");
+    }
 
-        // Heartbeat
-        module.register_method("heartbeat_trigger", move |h: &Arc<H>, ()| {
+    // Heartbeat
+    {
+        let h = handler.clone();
+        module.register_async_method("heartbeat_trigger", move |_, _| {
             let h = h.clone();
             async move { h.heartbeat_trigger().await }
-        });
-        module.register_method("heartbeat_status", move |h: &Arc<H>, ()| {
+        }).expect("Failed to register heartbeat_trigger");
+    }
+    {
+        let h = handler.clone();
+        module.register_async_method("heartbeat_status", move |_, _| {
             let h = h.clone();
             async move { h.heartbeat_status().await }
-        });
-        module.register_method("heartbeat_configure", move |h: &Arc<H>, interval_seconds: u64| {
+        }).expect("Failed to register heartbeat_status");
+    }
+    {
+        let h = handler.clone();
+        module.register_async_method("heartbeat_configure", move |params, _| {
             let h = h.clone();
-            async move { h.heartbeat_configure(interval_seconds).await }
-        });
+            async move {
+                let interval_seconds: u64 = params.one()?;
+                h.heartbeat_configure(interval_seconds).await
+            }
+        }).expect("Failed to register heartbeat_configure");
+    }
 
-        // Configuration
-        module.register_method("config_get", move |h: &Arc<H>, key: String| {
+    // Configuration
+    {
+        let h = handler.clone();
+        module.register_async_method("config_get", move |params, _| {
             let h = h.clone();
-            async move { h.config_get(key).await }
-        });
-        module.register_method("config_set", move |h: &Arc<H>, (key, value): (String, String)| {
+            async move {
+                let key: String = params.one()?;
+                h.config_get(key).await
+            }
+        }).expect("Failed to register config_get");
+    }
+    {
+        let h = handler.clone();
+        module.register_async_method("config_set", move |params, _| {
             let h = h.clone();
-            async move { h.config_set(key, value).await }
-        });
-        module.register_method("config_list", move |h: &Arc<H>, ()| {
+            async move {
+                let (key, value): (String, String) = params.parse()?;
+                h.config_set(key, value).await
+            }
+        }).expect("Failed to register config_set");
+    }
+    {
+        let h = handler.clone();
+        module.register_async_method("config_list", move |_, _| {
             let h = h.clone();
             async move { h.config_list().await }
-        });
+        }).expect("Failed to register config_list");
+    }
 
-        // System
-        module.register_method("system_version", move |h: &Arc<H>, ()| {
+    // System
+    {
+        let h = handler.clone();
+        module.register_async_method("system_version", move |_, _| {
             let h = h.clone();
             async move { h.system_version().await }
-        });
-        module.register_method("system_stats", move |h: &Arc<H>, ()| {
+        }).expect("Failed to register system_version");
+    }
+    {
+        let h = handler;
+        module.register_async_method("system_stats", move |_, _| {
             let h = h.clone();
             async move { h.system_stats().await }
-        });
-
-        module
+        }).expect("Failed to register system_stats");
     }
+
+    module
 }

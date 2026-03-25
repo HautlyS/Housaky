@@ -2,12 +2,7 @@ use jsonrpsee::http_client::HttpClientBuilder;
 use jsonrpsee::rpc_params;
 use jsonrpsee::core::client::ClientT;
 use jsonrpsee::core::Error as JsonRpcSeeError;
-use std::sync::Arc;
-use tokio::sync::Mutex;
 use std::path::PathBuf;
-use serde::de::DeserializeOwned;
-use serde::Serialize;
-use tracing::{info, error};
 
 /// RPC client for communicating with housaky daemon
 pub struct RpcClient {
@@ -27,20 +22,6 @@ impl RpcClient {
             )?);
 
         Ok(Self { client })
-    }
-
-    /// Call an RPC method and deserialize the result
-    async fn call<R: DeserializeOwned>(&self, method: &str, params: rpc_params::None) -> Result<R, JsonRpcSeeError> {
-        self.client.request(method, params).await
-    }
-
-    /// Call an RPC method with parameters and deserialize the result
-    async fn call_with_params<P, R>(&self, method: &str, params: P) -> Result<R, JsonRpcSeeError>
-    where
-        P: Serde + Send + Sync,
-        R: DeserializeOwned,
-    {
-        self.client.request(method, params).await
     }
 }
 
